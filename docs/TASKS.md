@@ -86,7 +86,7 @@ that shells out to a system `gradle`.
 
 ---
 
-### T-002 — Dependency-free `core` module foundations · `TODO`
+### T-002 — Dependency-free `core` module foundations · `WIP`
 **Depends:** T-001 · **Files:** `core/src/main/kotlin/dev/jdx/core/model/*`
 
 The domain model. **`core` must not depend on ASM, SQLite, JavaParser, or any IO.** It is the
