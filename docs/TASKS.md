@@ -49,7 +49,7 @@ be fiction.
 | **M6** | Serving: daemon, MCP, HTTP, `batch` | TODO |
 | **M7** | Polish: token budgets, AppCDS, mutation gates, docs, install | TODO |
 
-**T-001 is in progress.** Everything else is `TODO`.
+**T-001 is `DONE`.** Next unblocked task: **T-002** (dependency-free `core` foundations).
 
 ---
 
@@ -58,7 +58,7 @@ be fiction.
 Goal: a build that produces a runnable `jdx` binary that can report on its own environment.
 Everything after this assumes it exists.
 
-### T-001 — Gradle multi-project skeleton · `WIP`
+### T-001 — Gradle multi-project skeleton · `DONE` (session 2)
 **Depends:** — · **Files:** `settings.gradle.kts`, `build.gradle.kts`, `gradle/libs.versions.toml`, `gradle/wrapper/*`, `*/build.gradle.kts`
 
 Create the Gradle wrapper and the module structure from CLAUDE.md §4: `core`, `index`,
