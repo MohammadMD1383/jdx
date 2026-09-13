@@ -116,7 +116,7 @@ Model at minimum:
 
 ---
 
-### T-003 — Symbol reference parser and printer · `TODO`
+### T-003 — Symbol reference parser and printer · `WIP`
 **Depends:** T-002 · **Files:** `core/.../ref/SymbolRefParser.kt`, `SymbolRefPrinter.kt`
 
 Implement PROPOSAL.md §6 exactly. Generous input, canonical output.
