@@ -256,11 +256,16 @@ convenience (e.g. do not "just use reflection" to read a class — it is not equ
 
 ---
 
-## D-018 — GitHub repository name
-**Status:** open · **Date:** 2026-09-13
+## D-018 — GitHub repository name: `jdx`
+**Status:** locked · **Date:** 2026-09-13 · **Decided by:** owner
 
-D-012 authorises a public repo but the name is unchosen. Candidates: `jdx`,
-`jdx-cli`, `java-source-cli` (the current directory name). **Ask the owner before creating.**
+Offered `jdx`, `jdx-cli`, `java-source-cli`. Owner chose **`jdx`**, matching the command name
+(D-005).
+
+**Repository:** <https://github.com/MohammadMD1383/jdx> — public, Apache-2.0.
+
+Note the local working directory is still `java-source-cli` on the owner's machine; that is
+cosmetic and does not need to match.
 
 ---
 

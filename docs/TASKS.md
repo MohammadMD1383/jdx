@@ -40,7 +40,7 @@ be fiction.
 
 | Milestone | Goal | Status |
 |---|---|---|
-| **M0** | Skeleton: build, launcher, `doctor`, `version`, **test spine** | TODO |
+| **M0** | Skeleton: build, launcher, `doctor`, `version`, **test spine** | WIP |
 | **M1** | Read path: model, refs, `show`/`outline`/`members --inherited` | TODO |
 | **M2** | Index: SQLite, `search`, workspaces, auto-discovery | TODO |
 | **M3** | Bodies: sources, JavaParser, Vineflower, `body`/`source`/`doc` | TODO |
@@ -49,7 +49,7 @@ be fiction.
 | **M6** | Serving: daemon, MCP, HTTP, `batch` | TODO |
 | **M7** | Polish: token budgets, AppCDS, mutation gates, docs, install | TODO |
 
-Nothing is implemented yet. **T-001 is the next task.**
+**T-001 is in progress.** Everything else is `TODO`.
 
 ---
 
@@ -58,7 +58,7 @@ Nothing is implemented yet. **T-001 is the next task.**
 Goal: a build that produces a runnable `jdx` binary that can report on its own environment.
 Everything after this assumes it exists.
 
-### T-001 — Gradle multi-project skeleton · `TODO`
+### T-001 — Gradle multi-project skeleton · `WIP`
 **Depends:** — · **Files:** `settings.gradle.kts`, `build.gradle.kts`, `gradle/libs.versions.toml`, `gradle/wrapper/*`, `*/build.gradle.kts`
 
 Create the Gradle wrapper and the module structure from CLAUDE.md §4: `core`, `index`,
@@ -493,5 +493,8 @@ the unreachable code.
 
 Add here when blocked. Format: `Q-nnn`, the question, why it blocks, and what you did instead.
 
-- **Q-001 — GitHub repository name?** (D-018) Blocks `gh repo create`. Candidates: `jdx`,
-  `jdx-cli`, `java-source-cli`. *Nothing done; waiting on owner.*
+*(none open)*
+
+**Resolved**
+- ~~**Q-001 — GitHub repository name?**~~ Answered 2026-09-13: **`jdx`**. Repo created at
+  <https://github.com/MohammadMD1383/jdx>. See D-018.

@@ -13,13 +13,14 @@ Never edit or delete a past entry — if it turned out to be wrong, say so in a 
 | | |
 |---|---|
 | **Last updated** | 2026-09-13 (session 1) |
-| **Phase** | Design complete, **implementation not started** |
+| **Repository** | <https://github.com/MohammadMD1383/jdx> (public, Apache-2.0) |
+| **Phase** | Design complete; **M0 implementation in progress** |
 | **Active milestone** | M0 — Skeleton |
-| **Next task** | **T-001 — Gradle multi-project skeleton** (`docs/TASKS.md`) |
+| **Next task** | **T-001 — Gradle multi-project skeleton** (`WIP`) |
 | **Task count** | 58 tasks defined (T-001…T-060, M0–M2 in full detail, M3–M7 as one-liners) |
 | **Build status** | No build exists yet. `./gradlew` is not present. |
 | **Test status** | No tests exist yet. |
-| **Blocked on** | Nothing blocks implementation. One non-blocking question: **Q-001** (GitHub repo name). |
+| **Blocked on** | Nothing. (Q-001 resolved: repo name is `jdx`.) |
 
 ### What exists right now
 Documentation only. No source code, no build files, no git remote.
