@@ -1,0 +1,66 @@
+# Single source of truth for every dependency version in this build.
+#
+# RULE (T-001, CONTRIBUTING.md): no module build file may declare an inline version.
+# If you need a new dependency, add it here first. This is what lets a contributor
+# upgrade something without grepping eight build files.
+
+[versions]
+# --- language & build ---
+kotlin               = "2.4.20"
+java                 = "21"        # toolchain target; must build on JDK 21+
+
+# --- bytecode (index/) ---
+asm                  = "9.10.1"
+
+# --- source parsing (sources/) ---
+javaparser           = "3.28.2"
+# kotlin-compiler-embeddable is deliberately NOT a normal dependency: it is side-loaded at
+# runtime into an isolated classloader (D-008). Pinned here so the download and checksum
+# check have one place to look.
+kotlinCompiler       = "2.4.20"
+
+# --- decompilation (decompile/) ---
+vineflower           = "1.12.0"
+
+# --- index storage (index/) ---
+sqlite               = "3.53.4.0"
+
+# --- cli / serialization ---
+clikt                = "5.1.0"
+kotlinxSerialization = "1.11.0"
+
+# --- mcp ---
+mcpKotlinSdk         = "0.15.0"
+
+# --- test ---
+junit                = "6.1.3"
+kotest               = "6.2.5"
+pitest               = "1.30.0"
+
+[libraries]
+kotlin-stdlib               = { module = "org.jetbrains.kotlin:kotlin-stdlib",       version.ref = "kotlin" }
+kotlin-metadata-jvm         = { module = "org.jetbrains.kotlin:kotlin-metadata-jvm", version.ref = "kotlin" }
+
+asm                         = { module = "org.ow2.asm:asm",                          version.ref = "asm" }
+asm-tree                    = { module = "org.ow2.asm:asm-tree",                     version.ref = "asm" }
+asm-util                    = { module = "org.ow2.asm:asm-util",                     version.ref = "asm" }
+
+javaparser-core             = { module = "com.github.javaparser:javaparser-core",    version.ref = "javaparser" }
+
+vineflower                  = { module = "org.vineflower:vineflower",                version.ref = "vineflower" }
+
+sqlite-jdbc                 = { module = "org.xerial:sqlite-jdbc",                   version.ref = "sqlite" }
+
+clikt                       = { module = "com.github.ajalt.clikt:clikt",             version.ref = "clikt" }
+kotlinx-serialization-json  = { module = "org.jetbrains.kotlinx:kotlinx-serialization-json", version.ref = "kotlinxSerialization" }
+
+mcp-kotlin-sdk              = { module = "io.modelcontextprotocol:kotlin-sdk",       version.ref = "mcpKotlinSdk" }
+
+junit-jupiter               = { module = "org.junit.jupiter:junit-jupiter",          version.ref = "junit" }
+junit-platform-launcher     = { module = "org.junit.platform:junit-platform-launcher", version.ref = "junit" }
+kotest-assertions           = { module = "io.kotest:kotest-assertions-core",         version.ref = "kotest" }
+kotest-property             = { module = "io.kotest:kotest-property",                version.ref = "kotest" }
+
+[plugins]
+kotlin-jvm                  = { id = "org.jetbrains.kotlin.jvm",                     version.ref = "kotlin" }
+kotlin-serialization        = { id = "org.jetbrains.kotlin.plugin.serialization",    version.ref = "kotlin" }
