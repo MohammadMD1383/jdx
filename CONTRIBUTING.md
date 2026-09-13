@@ -18,7 +18,7 @@ cat docs/PROGRESS.md            # CURRENT STATE block = where the project is
 cat docs/TASKS.md               # pick the lowest-numbered unblocked TODO
 # ... do the work ...
 ./gradlew check                 # tests + lint must pass
-# update docs/TASKS.md status, append to docs/PROGRESS.md, commit
+# update docs/TASKS.md status, append a session entry to docs/progress/, commit
 ```
 
 ---
@@ -29,9 +29,10 @@ cat docs/TASKS.md               # pick the lowest-numbered unblocked TODO
 |---|---|
 | What is this project and what are its rules? | `CLAUDE.md` |
 | Why is it designed this way? What does each command do? | `docs/PROPOSAL.md` |
-| Why was X chosen over Y? May I change it? | `docs/DECISIONS.md` |
+| Why was X chosen over Y? May I change it? | `docs/DECISIONS.md` (index → `docs/decisions/` shards) |
 | What should I work on next? | `docs/TASKS.md` |
-| What happened before I got here? | `docs/PROGRESS.md` |
+| What happened before I got here? | `docs/PROGRESS.md` (CURRENT STATE) + `docs/progress/` shards |
+| What mistakes have already been made here? | `docs/LESSONS.md` (index → `docs/lessons/` shards) |
 | How do I write code that fits in? | this file |
 
 **Keep them accurate.** A stale doc in this project is worse than a missing one, because the
@@ -201,16 +202,21 @@ that you have no memory of yesterday.
 3. **Ask the owner about genuine ambiguity instead of picking.** This is an explicit standing
    instruction from the owner. A wrong guess propagates silently through a codebase that
    nobody fully reads. Record the answer as a new `D-nnn`.
-4. **Append a session entry to `docs/PROGRESS.md` before you stop** — use the template at the
-   bottom of that file. Include the exact commands a successor can run to verify your work.
-   A session that changed files and left no log entry is an incomplete session (D-019).
-5. **Update the CURRENT STATE block.** The next agent reads it first and trusts it. If it is
+4. **Append a session entry before you stop** — to the newest `docs/progress/` shard
+   (index and template in `docs/PROGRESS.md`), and update the `CURRENT STATE` block there.
+   Include the exact commands a successor can run to verify your work. A session that
+   changed files and left no log entry is an incomplete session (D-019).
+5. **Distill lessons (D-024).** Anything that cost you time and could cost another
+   contributor the same becomes an `L-nnn` entry in the newest `docs/lessons/` shard,
+   indexed from `docs/LESSONS.md`. A session that learned something and logged no lesson
+   is incomplete.
+6. **Update the CURRENT STATE block.** The next agent reads it first and trusts it. If it is
    stale, you have actively misled someone.
-6. **Report honestly.** If tests fail, say so and paste the output. If you skipped part of a
+7. **Report honestly.** If tests fail, say so and paste the output. If you skipped part of a
    task, say which part and why. Half-finished work that is *documented* as half-finished is
    useful; half-finished work reported as done is a trap that costs the next contributor more
    than the work was worth.
-7. **Do not expand scope silently.** If you find adjacent work, add a task to
+8. **Do not expand scope silently.** If you find adjacent work, add a task to
    `docs/TASKS.md`; do not fold it into the current one.
-8. **Leave the build green.** If you cannot, say so loudly in the progress entry and in the
+9. **Leave the build green.** If you cannot, say so loudly in the progress entry and in the
    CURRENT STATE block, with the exact failing command.

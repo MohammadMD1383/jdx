@@ -1,0 +1,44 @@
+# Lessons learned
+
+> The durable log of mistakes already made, so no contributor — human or agent — pays for
+> them twice (**D-024**). Skim the index below before fighting a toolchain, a spec, or
+> this repo's own machinery; entries live in shards under `docs/lessons/` (25 per shard,
+> **D-023**) — open a shard only when an entry is relevant to you.
+
+## What belongs here
+
+- A mistake you made, its cause, and its fix — if it could bite someone else the same way.
+- Non-obvious toolchain/platform behaviour (Gradle, kotlinc, javap, the shell, this OS).
+- JVM spec gotchas (JVMS/JLS) that cost time.
+- **Not** here: environment facts → `CLAUDE.md` §8; design rationale → `docs/DECISIONS.md`;
+  session narrative → `docs/progress/`. Reference those instead of restating them.
+
+## Entry format
+
+```
+### L-00n — short title `tag`
+<symptom / mistake> → <cause> → <fix>. Learned in <session/task, pointer if useful>.
+```
+
+One fact per entry, ≤ 10 lines. Numbering (`L-001`, `L-002`, …) is global, append-only
+and never reused. Tags in use: `build` · `tooling` · `jvm-spec` · `kotlin` · `process`.
+
+## Index
+
+| Tag | Entries |
+|---|---|
+| `build` | L-001, L-004 |
+| `tooling` | L-002, L-003 |
+| `jvm-spec` | L-005, L-006 |
+| `kotlin` | L-009 |
+| `process` | L-007, L-008 |
+
+| Shard | Entries | Status |
+|---|---|---|
+| `docs/lessons/L-001-025.md` | L-001…L-009 | open (16 free) |
+
+## Adding an entry
+
+Append to the shard that still has capacity, update the index above (tags and shard
+table), and mention the new `L-nnn` in your session entry's "Lessons distilled" section.
+When a shard is full, create the next one (`L-026-050.md`) and update the shard table.

@@ -20,7 +20,9 @@
    covered by at least one test family that *generates* cases — property, differential,
    metamorphic, fault-injection or corpus — not only hand-written examples. `core` is
    written **test-first**.
-5. Set status to `DONE`, append a session entry to `docs/PROGRESS.md`, commit.
+5. Set status to `DONE`, append a session entry to the newest `docs/progress/` shard,
+   distill any new lessons into the newest `docs/lessons/` shard (D-023/D-024), update
+   `docs/PROGRESS.md`'s CURRENT STATE, commit.
 6. If you discover new work, **add a task here** rather than doing it silently. New tasks get
    the next free number, even if they belong to an earlier milestone.
 
@@ -49,8 +51,9 @@ be fiction.
 | **M6** | Serving: daemon, MCP, HTTP, `batch` | TODO |
 | **M7** | Polish: token budgets, AppCDS, mutation gates, docs, install | TODO |
 
-**T-001 and T-002 are `DONE`.** Next unblocked task: **T-003** (symbol reference parser and
-printer). **T-004, T-006 and T-053 are also unblocked** — they depend only on T-001/T-002.
+**T-001, T-002 and T-061 are `DONE`.** Next unblocked task: **T-003** (symbol reference
+parser and printer). **T-004, T-006 and T-053 are also unblocked** — they depend only on
+T-001/T-002.
 
 ---
 
@@ -293,6 +296,23 @@ index bugs that example-based tests never reach. Start with the resolver relatio
 - [ ] Determinism relations (`run twice ⟹ identical bytes`, `index twice ⟹ identical rows`)
       are included — they protect the D-007 promise
 - [ ] Runs over the fixture corpus in tier 2 and a corpus sample in tier 3
+
+### T-061 — Shard the growing docs; add the lessons log (D-023, D-024) · `DONE` (session 4)
+**Depends:** — · **Files:** `docs/PROGRESS.md`, `docs/progress/*`, `docs/DECISIONS.md`,
+`docs/decisions/*`, `docs/LESSONS.md`, `docs/lessons/*`, `CLAUDE.md`, `CONTRIBUTING.md`
+
+*(Owner-directed, added in session 4.)* Append-only logs are split into shard files
+behind small entry files (index + rules), so agents read only what they need. Session
+shards hold 10 sessions; lessons and decisions shards hold 25 entries each.
+
+**Acceptance**
+- [x] `docs/PROGRESS.md` holds only CURRENT STATE + shard index + template
+- [x] Sessions 1–4 live in `docs/progress/sessions-001-010.md`; 1–3 byte-identical to
+      the pre-shard file
+- [x] `docs/LESSONS.md` exists, seeded with L-001…L-009 distilled from sessions 1–3
+- [x] `docs/DECISIONS.md` is an index; D-001…D-024 live in `docs/decisions/D-001-025.md`
+- [x] All cross-references (CLAUDE.md, CONTRIBUTING.md, this file) point to the new
+      structure
 
 ---
 

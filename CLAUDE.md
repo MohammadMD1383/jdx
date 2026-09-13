@@ -4,10 +4,13 @@
 > 1. **This file** — the rules. Short.
 > 2. **`docs/PROGRESS.md`** — the `CURRENT STATE` block at the top is the handoff: what
 >    exists, what is next, what is broken.
-> 3. **`docs/DECISIONS.md`** — why things are the way they are. Entries marked `locked` were
->    decided explicitly by the project owner; **do not re-litigate them.**
-> 4. **`docs/TASKS.md`** — pick your task here, following the rules at the top of that file.
-> 5. **`docs/TESTING.md`** — required before you write a test. **`CONTRIBUTING.md`** — required
+> 3. **`docs/DECISIONS.md`** — why things are the way they are (index; full entries live in
+>    `docs/decisions/` shards — read the index, open only what your task needs). Entries
+>    marked `locked` were decided explicitly by the project owner; **do not re-litigate them.**
+> 4. **`docs/LESSONS.md`** — mistakes already made and paid for, so you don't repeat them
+>    (D-024). Skim the index; it points into `docs/lessons/` shards.
+> 5. **`docs/TASKS.md`** — pick your task here, following the rules at the top of that file.
+> 6. **`docs/TESTING.md`** — required before you write a test. **`CONTRIBUTING.md`** — required
 >    before you write code.
 >
 > The full design lives in `docs/PROPOSAL.md`; read it lazily, when a task sends you there.
@@ -101,10 +104,14 @@ jdx/
 ├── CONTRIBUTING.md            conventions, code style, definition of done
 ├── docs/
 │   ├── PROPOSAL.md            full design document (the spec)
-│   ├── DECISIONS.md           locked decisions + rationale (ADR-lite)
+│   ├── DECISIONS.md           decision index + rules; entries in decisions/ shards (D-023)
 │   ├── TESTING.md             testing strategy — read before writing tests
 │   ├── TASKS.md               ** the backlog — pick your next task here **
-│   └── PROGRESS.md            ** running work log — APPEND EVERY SESSION **
+│   ├── PROGRESS.md            ** CURRENT STATE handoff + shard index — LOG EVERY SESSION **
+│   ├── progress/              session-log shards (10 sessions each, newest first)
+│   ├── LESSONS.md             lessons index + rules (D-024)
+│   ├── lessons/               L-nnn lesson shards (25 each) — mistakes already paid for
+│   └── decisions/             D-nnn decision shards (25 each)
 ├── gradle/libs.versions.toml  version catalog (single source of dependency versions)
 ├── core/                      model, symbol refs, resolution, rendering. Pure Kotlin, no IO.
 ├── index/                     ASM readers, Kotlin metadata, SQLite store, indexer
@@ -159,10 +166,15 @@ Gson#toJson                                       short form → resolved, or ex
 
 ## 7. Working agreements (full details in `CONTRIBUTING.md`)
 
-- **Append to `docs/PROGRESS.md` at the end of every working session**, using the template at
-  the bottom of that file, and **update its `CURRENT STATE` block**. Another contributor
+- **Append a session entry at the end of every working session** — to the newest shard in
+  `docs/progress/` (index + template in `docs/PROGRESS.md`; 10 sessions per shard, D-023) —
+  and **update the `CURRENT STATE` block** in `docs/PROGRESS.md`. Another contributor
   resumes from it and trusts it; leaving it stale actively misleads someone. A session that
   changed files and left no log entry is an incomplete session (D-019).
+- **Distill what cost you time into `docs/LESSONS.md`** (D-024). Any mistake, toolchain
+  quirk or spec gotcha that could bite another contributor becomes an `L-nnn` entry —
+  short, tagged, referenced from your session log. A session that learned something and
+  logged no lesson is incomplete.
 - **Claim your task by committing the `TODO`→`WIP` change** in `docs/TASKS.md` *before* you
   start, so parallel contributors don't collide.
 - **Ask the owner about genuine ambiguity** rather than picking. Record the answer as a new
