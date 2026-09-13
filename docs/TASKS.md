@@ -49,7 +49,8 @@ be fiction.
 | **M6** | Serving: daemon, MCP, HTTP, `batch` | TODO |
 | **M7** | Polish: token budgets, AppCDS, mutation gates, docs, install | TODO |
 
-**T-001 is `DONE`.** Next unblocked task: **T-002** (dependency-free `core` foundations).
+**T-001 and T-002 are `DONE`.** Next unblocked task: **T-003** (symbol reference parser and
+printer). **T-004, T-006 and T-053 are also unblocked** — they depend only on T-001/T-002.
 
 ---
 
@@ -86,7 +87,7 @@ that shells out to a system `gradle`.
 
 ---
 
-### T-002 — Dependency-free `core` module foundations · `WIP`
+### T-002 — Dependency-free `core` module foundations · `DONE` (session 3)
 **Depends:** T-001 · **Files:** `core/src/main/kotlin/dev/jdx/core/model/*`
 
 The domain model. **`core` must not depend on ASM, SQLite, JavaParser, or any IO.** It is the

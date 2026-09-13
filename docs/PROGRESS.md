@@ -12,18 +12,32 @@ Never edit or delete a past entry — if it turned out to be wrong, say so in a 
 
 | | |
 |---|---|
-| **Last updated** | 2026-09-13 (session 2) |
+| **Last updated** | 2026-09-13 (session 3) |
 | **Repository** | <https://github.com/MohammadMD1383/jdx> (public, Apache-2.0) |
 | **Phase** | Design complete; **M0 implementation in progress** |
 | **Active milestone** | M0 — Skeleton |
-| **Next task** | **T-002 — dependency-free `core` foundations** (`docs/TASKS.md`) |
+| **Next task** | **T-003 — symbol reference parser and printer** (`docs/TASKS.md`) |
 | **Task count** | 58 tasks defined (T-001…T-060, M0–M2 in full detail, M3–M7 as one-liners) |
-| **Build status** | **Green.** `./gradlew build` passes, verified from a fresh clone of the public repo. |
-| **Test status** | No tests exist yet — T-002 is the first test-first task, harnesses are T-053…T-058. |
+| **Build status** | **Green.** `./gradlew build` passes. |
+| **Test status** | **75 tests in `core`, all green**, ~10 s for the full tier-1 run. |
 | **Blocked on** | Nothing. (Q-001 resolved: repo name is `jdx`.) |
-
 ### What exists right now
-Documentation plus a building (but empty) Gradle skeleton. **No behaviour is implemented.**
+
+Documentation, the Gradle skeleton, and **the first implemented behaviour: the `core`
+domain model** (`core/src/main/kotlin/dev/jdx/core/model/`):
+
+- `TypeName` (class/array/primitive, binary/FQN/simple names) + `typeNameFromBinaryName`,
+  `arrayTypeName`
+- `JvmDescriptor` (field/method descriptors, parse & print, null-on-malformed)
+- `GenericSignature` (full JVMS §4.7.9.1 grammar: class/method/field signatures, type
+  variables, nested generics, all three wildcard kinds, throws clauses, void return)
+- `Access`/`AccessFlag`/`Visibility`, `TypeKind`, `ClassInfo`, `MemberInfo`
+  (`FieldInfo`/`MethodInfo`), `AnnotationInfo`
+- `SymbolRef` hierarchy (`TypeSymbolRef`, `MemberSymbolRef`, `PackageSymbolRef`,
+  `ModuleSymbolRef`, `MavenCoordinate`) — structure only; parsing is T-003
+- `Provenance`/`Origin`, `Warning`/`WarningCode` (closed enum set)
+
+All 75 tests are round-trip / structural tests written **test-first** (D-020).
 
 ```
 CLAUDE.md            project instructions — the entry point, read first
@@ -89,6 +103,60 @@ contributor.
 # Session log
 
 <!-- newest first -->
+
+## Session 3 — 2026-09-13 — T-002 core domain model, test-first
+**Agent:** GLM (via opencode) · **Commits:** `e024333` (claim) … this session
+
+### Goal
+**T-002 — dependency-free `core` module foundations**, the first behavioural task,
+developed test-first (D-020).
+
+### What I did
+1. Claimed T-002 (`chore: claim T-002`) and pushed, per the D-022 cadence.
+2. **RED:** wrote 5 test files (75 tests) defining the API: `TypeNameTest`,
+   `JvmDescriptorTest`, `GenericSignatureTest`, `AccessTest`, `ModelTest`. Verified the
+   suite fails to compile for exactly the right reason (types don't exist).
+3. **GREEN:** implemented 9 files under `core/src/main/kotlin/dev/jdx/core/model/`:
+   `TypeName.kt`, `JvmDescriptor.kt`, `GenericSignature.kt`, `Access.kt`,
+   `MemberInfo.kt`, `ClassInfo.kt`, `SymbolRef.kt`, `Provenance.kt`, `Warning.kt`.
+   Every public type has a KDoc line (what it represents, who produces it). All 75 tests
+   pass; `./gradlew build` green for the whole project.
+
+### Decisions made
+None new at decision-log level. Two design notes worth recording here:
+- **`V` is not a field type.** My first test round-tripped `V` as a field descriptor;
+  JVMS §4.3.2 permits void only as a method return type. The *test* was wrong and was
+  fixed; the parser deliberately rejects `V` in field position.
+- **Signature grammar ambiguity:** `LFoo;` is both a valid field signature and a valid
+  parameterless class signature. `GenericSignature.parse` prefers the field reading and
+  falls back to the class reading only when input remains unconsumed. Documented on the
+  `parse` KDoc.
+
+### Tasks moved
+- **T-002: `TODO` → `WIP` → `DONE`.** All four acceptance criteria verified below.
+
+### What works now (and how to verify it yourself)
+```bash
+./gradlew :core:test                              # 75 tests, green, ~10 s
+./gradlew build                                   # whole project green
+./gradlew :core:dependencies --configuration compileClasspath
+                                                  # kotlin-stdlib only — core stays dependency-free
+```
+
+### What is broken / half-done
+Nothing broken. Half-done by design: `SymbolRef` is structure-only — the parser/printer
+(`SymbolRefParser`/`SymbolRefPrinter`) is T-003 and was deliberately not leaked into this
+task. Property-based generators (`Arb<TypeName>` etc., T-055) will extend the round-trip
+tests to generated cases later; today they cover a hand-picked nasty set (nested generics,
+all wildcard kinds, recursive bounds, `$` nesting, arrays of arrays).
+
+### Open questions / blockers
+None.
+
+### Next action
+**T-003 — symbol reference parser and printer.** Builds directly on `TypeName` and
+`MavenCoordinate`; implements PROPOSAL.md §6. Note T-004, T-006 and T-053 are also
+unblocked if a contributor prefers them.
 
 ## Session 2 — 2026-09-13 — repo published, T-001 build skeleton
 **Agent:** Claude Opus 5 (1M context) · **Commits:** `af32f73`…`81ead50`
