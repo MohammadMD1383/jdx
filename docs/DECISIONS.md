@@ -52,3 +52,4 @@ needs. Context efficiency is the point — don't read the whole log.
 | D-022 | Work cadence: one small task → commit → push → log → next | locked | `D-001-025.md` |
 | D-023 | Ever-growing docs are sharded; entry files stay small | locked | `D-001-025.md` |
 | D-024 | Every hard-won lesson recorded in `docs/LESSONS.md` | locked | `D-001-025.md` |
+| D-025 | Reference-grammar disambiguation rules (T-003) | proposed-by-implementer | `D-001-025.md` |

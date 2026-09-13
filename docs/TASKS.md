@@ -51,9 +51,9 @@ be fiction.
 | **M6** | Serving: daemon, MCP, HTTP, `batch` | TODO |
 | **M7** | Polish: token budgets, AppCDS, mutation gates, docs, install | TODO |
 
-**T-001, T-002 and T-061 are `DONE`.** Next unblocked task: **T-003** (symbol reference
-parser and printer). **T-004, T-006 and T-053 are also unblocked** — they depend only on
-T-001/T-002.
+**T-001, T-002, T-003 and T-061 are `DONE`.** Next unblocked task: **T-004** (`app`
+module: fat jar + `jdx` launcher script). **T-006 and T-053 are also unblocked** — they
+depend only on T-001.
 
 ---
 
@@ -116,18 +116,23 @@ Model at minimum:
 
 ---
 
-### T-003 — Symbol reference parser and printer · `WIP`
+### T-003 — Symbol reference parser and printer · `DONE` (session 5)
 **Depends:** T-002 · **Files:** `core/.../ref/SymbolRefParser.kt`, `SymbolRefPrinter.kt`
 
 Implement PROPOSAL.md §6 exactly. Generous input, canonical output.
 
 **Acceptance**
-- [ ] Every row of the "Accepted forms" table in PROPOSAL.md §6 parses to the right thing
-- [ ] Property test: `parse(print(ref)) == ref` for generated refs
-- [ ] Parse failures return a structured error naming the offending position, not an exception
-- [ ] Ambiguity is *representable* (a ref may be under-specified) — resolution is a later,
+- [x] Every row of the "Accepted forms" table in PROPOSAL.md §6 parses to the right thing
+- [x] Property test: `parse(print(ref)) == ref` for generated refs
+- [x] Parse failures return a structured error naming the offending position, not an exception
+- [x] Ambiguity is *representable* (a ref may be under-specified) — resolution is a later,
       separate concern and must not leak into the parser
-- [ ] `Map.Entry`, `Map$Entry`, and `java.util.Map$Entry` all normalise identically
+- [x] `Map.Entry`, `Map$Entry`, and `java.util.Map$Entry` all normalise identically
+
+*Disambiguation rules for the generous grammar are recorded as D-025 (package vs nesting
+on `.`, `.`-as-member-separator, descriptor-vs-param-list, globs). Supporting model
+change: `MemberSymbolRef.parameterTypes` is now `List<TypeName>?` (`null` = no parameter
+list, `[]` = zero parameters).*
 
 ---
 

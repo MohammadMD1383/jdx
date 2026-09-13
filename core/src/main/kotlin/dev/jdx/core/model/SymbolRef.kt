@@ -24,14 +24,17 @@ public data class TypeSymbolRef(
 ) : SymbolRef
 
 /**
- * A reference to a field, method or constructor. [parameterTypes] empty means
- * "all overloads" (under-specified); [returnType] disambiguates covariant overloads.
- * Constructors are referenced by the name `<init>`.
+ * A reference to a field, method or constructor. [parameterTypes] is `null` when the
+ * reference carries no parameter list at all — the under-specified "all overloads"
+ * form that resolution later disambiguates (D-016); an **empty list** means an
+ * explicitly zero-parameter member. [returnType] (rarely needed) disambiguates
+ * covariant/bridge overloads. Constructors and static initialisers are referenced by
+ * the names `<init>` / `<clinit>`. Fields never carry a parameter list.
  */
 public data class MemberSymbolRef(
     public val declaringType: TypeName,
     public val name: String,
-    public val parameterTypes: List<TypeName> = emptyList(),
+    public val parameterTypes: List<TypeName>? = null,
     public val returnType: TypeName? = null,
     public val coordinate: MavenCoordinate? = null,
 ) : SymbolRef

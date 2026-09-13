@@ -5,4 +5,9 @@ kotlin {
     explicitApi()
 }
 
-// No dependencies by design — see ModuleInfo.kt in this module.
+// No production dependencies by design — see ModuleInfo.kt in this module.
+// Test-only: property testing (TESTING.md §4); T-055 promotes the shared generators
+// in src/test/kotlin/.../gen/ to a project-wide generator library.
+dependencies {
+    testImplementation(libs.kotest.property)
+}

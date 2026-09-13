@@ -30,12 +30,12 @@ and never reused. Tags in use: `build` · `tooling` · `jvm-spec` · `kotlin` ·
 | `build` | L-001, L-004 |
 | `tooling` | L-002, L-003 |
 | `jvm-spec` | L-005, L-006 |
-| `kotlin` | L-009 |
+| `kotlin` | L-009, L-010 |
 | `process` | L-007, L-008 |
 
 | Shard | Entries | Status |
 |---|---|---|
-| `docs/lessons/L-001-025.md` | L-001…L-009 | open (16 free) |
+| `docs/lessons/L-001-025.md` | L-001…L-010 | open (15 free) |
 
 ## Adding an entry
 

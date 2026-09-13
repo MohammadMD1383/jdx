@@ -14,34 +14,44 @@ or delete a past entry — if one turned out to be wrong, say so in a *new* entr
 
 | | |
 |---|---|
-| **Last updated** | 2026-09-13 (session 4) |
+| **Last updated** | 2026-09-13 (session 5) |
 | **Repository** | <https://github.com/MohammadMD1383/jdx> (public, Apache-2.0) |
 | **Phase** | Design complete; **M0 implementation in progress** |
 | **Active milestone** | M0 — Skeleton |
-| **Next task** | **T-003 — symbol reference parser and printer** (`docs/TASKS.md`) |
+| **Next task** | **T-004 — `app` module: fat jar + `jdx` launcher script** (`docs/TASKS.md`) |
 | **Task count** | 59 tasks defined (T-001…T-061; M0–M2 in full detail, M3–M7 as one-liners) |
 | **Build status** | **Green.** `./gradlew build` passes. |
-| **Test status** | **75 tests in `core`, all green**, ~10 s for the full tier-1 run. |
+| **Test status** | **142 tests in `core`, all green**, ~3 s for the full tier-1 run. |
 | **Docs** | Append-only logs sharded (D-023): sessions → `docs/progress/`, decisions → `docs/decisions/`, lessons → `docs/lessons/`. Every hard-won lesson goes to `docs/LESSONS.md` (D-024). |
-| **Blocked on** | Nothing. (Q-001 resolved: repo name is `jdx`.) |
+| **Blocked on** | Nothing. |
 
 ### What exists right now
 
-Documentation, the Gradle skeleton, and **the first implemented behaviour: the `core`
-domain model** (`core/src/main/kotlin/dev/jdx/core/model/`):
+Documentation, the Gradle skeleton, and **two layers of implemented behaviour**:
 
-- `TypeName` (class/array/primitive, binary/FQN/simple names) + `typeNameFromBinaryName`,
-  `arrayTypeName`
-- `JvmDescriptor` (field/method descriptors, parse & print, null-on-malformed)
-- `GenericSignature` (full JVMS §4.7.9.1 grammar: class/method/field signatures, type
-  variables, nested generics, all three wildcard kinds, throws clauses, void return)
-- `Access`/`AccessFlag`/`Visibility`, `TypeKind`, `ClassInfo`, `MemberInfo`
-  (`FieldInfo`/`MethodInfo`), `AnnotationInfo`
-- `SymbolRef` hierarchy (`TypeSymbolRef`, `MemberSymbolRef`, `PackageSymbolRef`,
-  `ModuleSymbolRef`, `MavenCoordinate`) — structure only; parsing is T-003
-- `Provenance`/`Origin`, `Warning`/`WarningCode` (closed enum set)
+1. **The `core` domain model** (`core/src/main/kotlin/dev/jdx/core/model/`):
+   - `TypeName` (class/array/primitive, binary/FQN/simple names) + `typeNameFromBinaryName`,
+     `arrayTypeName`
+   - `JvmDescriptor` (field/method descriptors, parse & print, null-on-malformed)
+   - `GenericSignature` (full JVMS §4.7.9.1 grammar: class/method/field signatures, type
+     variables, nested generics, all three wildcard kinds, throws clauses, void return)
+   - `Access`/`AccessFlag`/`Visibility`, `TypeKind`, `ClassInfo`, `MemberInfo`
+     (`FieldInfo`/`MethodInfo`), `AnnotationInfo`
+   - `SymbolRef` hierarchy (`TypeSymbolRef`, `MemberSymbolRef`, `PackageSymbolRef`,
+     `ModuleSymbolRef`, `MavenCoordinate`) — `MemberSymbolRef.parameterTypes` is
+     `List<TypeName>?`: `null` = no parameter list, `[]` = zero parameters (D-025)
+   - `Provenance`/`Origin`, `Warning`/`WarningCode` (closed enum set)
 
-All 75 tests are round-trip / structural tests written **test-first** (D-020).
+2. **The symbol reference parser and printer** (`core/src/main/kotlin/dev/jdx/core/ref/`,
+   T-003): `SymbolRefParser.parse` implements the full PROPOSAL.md §6 grammar —
+   generous input (`#`/`::`/`.` separators, simple/FQ params, JVM descriptors,
+   varargs, coordinates, package globs, `<init>`/`<clinit>`), canonical output via
+   `SymbolRefPrinter.print`, positioned structured failures (`Failure(message,
+   position)`, never throws). Disambiguation rules are **D-025** — read it before
+   touching the parser. Round-trip is a pinned property (`parse(print(ref)) == ref`).
+
+All 142 tests are round-trip / structural / property tests written **test-first**
+(D-020); generators live in `core/src/test/kotlin/.../gen/` (seed of T-055).
 
 Docs of note: `docs/LESSONS.md` (+ `docs/lessons/` shards) — mistakes already paid for,
 seeded with L-001…L-009. Skim its index before fighting a toolchain or spec.
@@ -120,7 +130,7 @@ when it holds 10 sessions, create the next (`sessions-011-020.md`) and update th
 
 | Shard | Sessions | Status |
 |---|---|---|
-| `docs/progress/sessions-001-010.md` | 1–4 | open (6 free) |
+| `docs/progress/sessions-001-010.md` | 1–5 | open (5 free) |
 
 ---
 

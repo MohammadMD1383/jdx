@@ -10,6 +10,88 @@ history preserves the pre-shard file).
 
 ---
 
+## Session 5 — 2026-09-13 — symbol reference parser + printer (T-003, D-025)
+**Agent:** GLM (via opencode) · **Commits:** claim `25cbcaf` + one feat commit (this entry included)
+
+### Goal
+T-003: implement PROPOSAL.md §6 — parse every accepted reference form, print canonical
+forms, positioned structured errors, round-trip property. TDD mandatory (`core`, D-020).
+
+### What I did
+1. Claimed T-003 (`chore: claim T-003`), then worked test-first throughout:
+   model change → stubs → 68 new tests verified RED → implementation → GREEN.
+2. **Model change** (`core/model/SymbolRef.kt`): `MemberSymbolRef.parameterTypes`
+   `List<TypeName>` → `List<TypeName>?`. `null` = no parameter list ("all overloads"),
+   `[]` = explicitly zero parameters — without this, `Gson#toString()` and
+   `Gson#toString` were indistinguishable. (Recorded in D-025.)
+3. **New files** (package `dev.jdx.core.ref`):
+   - `SymbolRefParseResult.kt` — sealed `Ok(ref)` / `Failure(message, position)`
+   - `SymbolRefParser.kt` — recursive-descent parser, ~340 lines, KDoc carries the
+     disambiguation rules (D-025). Internal `RefSyntaxException` caught exactly once
+     and converted to `Failure`; `IllegalArgumentException` (model `require()`s
+     reachable via the descriptor path) is also netted — parse never throws.
+   - `SymbolRefPrinter.kt` — canonical printing; params/returns use `$`-joined
+     nesting + `[]` per array dimension (NOT the dotted fqn — see below).
+   - Tests: `SymbolRefParserTest` (48), `SymbolRefPrinterTest` (16),
+     `SymbolRefPropertyTest` (4 properties × 1000 cases), generators in
+     `core/src/test/kotlin/dev/jdx/core/gen/SymbolRefGenerators.kt` (seeds T-055's
+     shared `gen/` package). `kotest-property` added to `core` test deps (catalog only).
+4. **Property tests caught two real bugs** hand-written tests had not:
+   - dotted-fqn params broke round-tripping (`ClassType("", ["c","λ"])` printed
+     `c.λ`, re-parsing as package `c` + class `λ`) → printer now `$`-joins nesting;
+   - `$`-split nesting segments were only checked for emptiness, not characters, so
+     `]$[` reached `TypeName`'s `require()` and threw → full segment validation +
+     the IAE safety net.
+5. Six test-side position assertions were wrong (my arithmetic, verified char-by-char
+   against the inputs — the implementation was right; cf. L-005/L-007: read every
+   failure individually before "fixing" code).
+
+### Decisions made
+**D-025** (proposed-by-implementer): the four syntactic ambiguities of the generous
+grammar — package-vs-nesting on `.` (leading-lowercase heuristic, uppercase-first
+packages unrepresentable), `.`-as-member-separator (only with parens or `<init>`/
+`<clinit>`), descriptor-vs-param-list (descriptor tried first, must consume all),
+globs (any `*` in a member-less ref → verbatim `PackageSymbolRef`; no coordinate).
+Fills shard `D-001-025.md` to capacity — next decision opens `D-026-050.md`.
+
+### Tasks moved
+- T-003: WIP → DONE (all five acceptance boxes ticked).
+
+### Lessons distilled
+**L-010**: kotest 6's `checkAll` returns `PropertyContext`, so `fun \`x\`() =
+runBlocking { checkAll(...) }` is a non-void JUnit method and is **silently
+undiscovered** ("No tests found"). Fix: `runBlocking<Unit>`. Will bite T-055.
+
+### What works now (and how to verify it yourself)
+```bash
+./gradlew build                      # green; 142 tests in core (~3 s, tier-1 budget 30 s)
+./gradlew :core:test --tests 'dev.jdx.core.ref.*'   # 68 new tests, all green
+# parse/print round-trip, 1000 generated cases per property, re-run for new seeds:
+./gradlew :core:test --tests 'dev.jdx.core.ref.SymbolRefPropertyTest' --rerun
+```
+Spot-check the acceptance criterion: `SymbolRefParser.parse("Map.Entry")`,
+`parse("Map$Entry")` and `parse("java.util.Map$Entry")` yield
+`ClassType("java.util"-or-`""`, `["Map","Entry"])` — `Map.Entry` ≡ `Map$Entry`,
+`java.util.Map.Entry` ≡ `java.util.Map$Entry` (test:
+`dollar and dot nesting normalise identically …`).
+
+### What is broken / half-done
+Nothing known. Known limitations are documented, not hidden: uppercase-first package
+segments don't round-trip (D-025); module refs are print-only (no input syntax);
+`Type#name(...)` dot-separator form requires the paren list; varargs-ness is not
+preserved in refs (erased to arrays, like the JVM descriptor).
+
+### Open questions / blockers
+None.
+
+### Next action
+**T-004 — `app` module: fat jar + `jdx` launcher script** (unblocked, depends T-001
+only). Remember: JAVA_HOME is unset on this machine and no gradle/mvn on PATH — the
+launcher must resolve the JDK itself (CLAUDE.md §8). Alternatively T-006 (fixture
+corpus) or T-053 (test tiers) are unblocked.
+
+---
+
 ## Session 4 — 2026-09-13 — docs sharded, lessons log created (D-023, D-024, T-061)
 **Agent:** GLM (via opencode) · **Commits:** single commit, this entry included
 
