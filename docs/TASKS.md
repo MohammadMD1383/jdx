@@ -51,9 +51,9 @@ be fiction.
 | **M6** | Serving: daemon, MCP, HTTP, `batch` | TODO |
 | **M7** | Polish: token budgets, AppCDS, mutation gates, docs, install | TODO |
 
-**T-001, T-002, T-003 and T-061 are `DONE`.** Next unblocked task: **T-004** (`app`
-module: fat jar + `jdx` launcher script). **T-006 and T-053 are also unblocked** — they
-depend only on T-001.
+**T-001, T-002, T-003, T-004 and T-061 are `DONE`.** Next unblocked task: **T-005**
+(`jdx version` and `jdx doctor`, depends T-004). **T-006 and T-053 are also unblocked** —
+they depend only on T-001.
 
 ---
 
@@ -136,7 +136,7 @@ list, `[]` = zero parameters).*
 
 ---
 
-### T-004 — `app` module: fat jar + `jdx` launcher script · `WIP`
+### T-004 — `app` module: fat jar + `jdx` launcher script · `DONE` (session 6)
 **Depends:** T-001 · **Files:** `app/build.gradle.kts`, `app/src/main/scripts/jdx`, `install.sh`
 
 - Shadow/fat jar of `cli` and its dependencies.
@@ -147,10 +147,16 @@ list, `[]` = zero parameters).*
   overwrite an existing unrelated `jdx` without `--force`.
 
 **Acceptance**
-- [ ] `./gradlew :app:installDist` (or equivalent) produces a working `./build/jdx`
-- [ ] Launcher works with `JAVA_HOME` unset (the owner's machine)
-- [ ] Launcher gives a human error, not a stack trace, on a missing/old JDK
-- [ ] `--version` round-trips through the launcher
+- [x] `./gradlew :app:installDist` (or equivalent) produces a working `./build/jdx`
+- [x] Launcher works with `JAVA_HOME` unset (the owner's machine)
+- [x] Launcher gives a human error, not a stack trace, on a missing/old JDK
+- [x] `--version` round-trips through the launcher
+
+*Implementation notes: fat jar is a hand-rolled `Jar` over the runtime classpath (no shadow
+plugin — see the build-file comment for the revisit trigger); launcher-level failures exit
+6 per D-026; cli was switched from clikt to clikt-core (the mordant flavor eagerly loads
+JNA — JDK 22+ native-access warnings on stderr); tests are stub-JDK fault injection +
+generated version-gate properties + install.sh suite + two real-JVM e2e tests.*
 
 ---
 

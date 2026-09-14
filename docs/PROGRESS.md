@@ -14,20 +14,20 @@ or delete a past entry — if one turned out to be wrong, say so in a *new* entr
 
 | | |
 |---|---|
-| **Last updated** | 2026-09-13 (session 5) |
+| **Last updated** | 2026-09-14 (session 6) |
 | **Repository** | <https://github.com/MohammadMD1383/jdx> (public, Apache-2.0) |
 | **Phase** | Design complete; **M0 implementation in progress** |
 | **Active milestone** | M0 — Skeleton |
-| **Next task** | **T-004 — `app` module: fat jar + `jdx` launcher script** (`docs/TASKS.md`) |
+| **Next task** | **T-005 — `jdx version` and `jdx doctor`** (`docs/TASKS.md`); T-006, T-053 also unblocked |
 | **Task count** | 59 tasks defined (T-001…T-061; M0–M2 in full detail, M3–M7 as one-liners) |
-| **Build status** | **Green.** `./gradlew build` passes. |
-| **Test status** | **142 tests in `core`, all green**, ~3 s for the full tier-1 run. |
-| **Docs** | Append-only logs sharded (D-023): sessions → `docs/progress/`, decisions → `docs/decisions/`, lessons → `docs/lessons/`. Every hard-won lesson goes to `docs/LESSONS.md` (D-024). |
+| **Build status** | **Green.** `./gradlew build` passes (~18 s clean). A runnable `jdx` exists: `./gradlew :app:installDist` → `app/build/jdx` (fat jar + POSIX launcher, JDK-21 gate, ~180 ms cold start); `install.sh` symlinks it into `~/.local/bin`. |
+| **Test status** | **167 tests, all green** (142 in `core`, 25 new in `cli`/`app`: launcher fault injection + generated version-gate properties + install.sh suite + 2 real-JVM e2e). |
+| **Docs** | Append-only logs sharded (D-023): sessions → `docs/progress/`, decisions → `docs/decisions/` (shard 2 open at D-026), lessons → `docs/lessons/`. Every hard-won lesson goes to `docs/LESSONS.md` (D-024). |
 | **Blocked on** | Nothing. |
 
 ### What exists right now
 
-Documentation, the Gradle skeleton, and **two layers of implemented behaviour**:
+Documentation, the Gradle skeleton, and **three layers of implemented behaviour**:
 
 1. **The `core` domain model** (`core/src/main/kotlin/dev/jdx/core/model/`):
    - `TypeName` (class/array/primitive, binary/FQN/simple names) + `typeNameFromBinaryName`,
@@ -50,8 +50,21 @@ Documentation, the Gradle skeleton, and **two layers of implemented behaviour**:
    position)`, never throws). Disambiguation rules are **D-025** — read it before
    touching the parser. Round-trip is a pinned property (`parse(print(ref)) == ref`).
 
-All 142 tests are round-trip / structural / property tests written **test-first**
-(D-020); generators live in `core/src/test/kotlin/.../gen/` (seed of T-055).
+3. **A runnable `jdx` distribution** (`cli` + `app`, T-004):
+   - `cli`: `JdxCli` root command (Clikt **`clikt-core`** — plain flavor; the mordant
+     flavor eagerly loads JNA, L-011) with `--version`; `BuildInfo` reads the
+     Gradle-generated `build.properties` so the version is never hard-coded.
+   - `app`: `fatJar` task (hand-rolled, byte-deterministic, `Main-Class
+     dev.jdx.cli.JdxCliKt`) + `installDist` → `app/build/jdx` — a POSIX launcher that
+     resolves a JDK (`JAVA_HOME` → PATH → `JDX_JVM_DEFAULT_DIR`, D-026), gates on
+     Java 21+, applies the one-shot JVM flags, and fails with one human line (exit 6).
+   - `install.sh` at the repo root: no-root symlink install into `~/.local/bin` with a
+     `--force` clobber guard.
+
+All 142 `core` tests are round-trip / structural / property tests written **test-first**
+(D-020); generators live in `core/src/test/kotlin/.../gen/` (seed of T-055). The 25
+`cli`/`app` tests (T-004) cover the launcher with stub-JDK fault injection, generated
+version-gate properties, an install.sh suite, and two real-JVM end-to-end tests.
 
 Docs of note: `docs/LESSONS.md` (+ `docs/lessons/` shards) — mistakes already paid for,
 seeded with L-001…L-009. Skim its index before fighting a toolchain or spec.
@@ -130,7 +143,7 @@ when it holds 10 sessions, create the next (`sessions-011-020.md`) and update th
 
 | Shard | Sessions | Status |
 |---|---|---|
-| `docs/progress/sessions-001-010.md` | 1–5 | open (5 free) |
+| `docs/progress/sessions-001-010.md` | 1–6 | open (4 free) |
 
 ---
 

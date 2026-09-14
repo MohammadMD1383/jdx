@@ -20,9 +20,10 @@ Every entry here was **decided explicitly by the project owner** or, where marke
 | `open` | Known question, not yet answered. Ask the owner before it blocks you. |
 | `superseded by D-nnn` | No longer in force. |
 
-**Entries are sharded (D-023):** full text lives in `docs/decisions/D-001-025.md`
-(25 entries per shard). Read the index below; open a shard only for the entries a task
-needs. Context efficiency is the point — don't read the whole log.
+**Entries are sharded (D-023):** full text lives in `docs/decisions/D-001-025.md` or
+`docs/decisions/D-026-050.md` (25 entries per shard). Read the index below; open a shard
+only for the entries a task needs. Context efficiency is the point — don't read the whole
+log.
 
 ## Index
 
@@ -53,3 +54,4 @@ needs. Context efficiency is the point — don't read the whole log.
 | D-023 | Ever-growing docs are sharded; entry files stay small | locked | `D-001-025.md` |
 | D-024 | Every hard-won lesson recorded in `docs/LESSONS.md` | locked | `D-001-025.md` |
 | D-025 | Reference-grammar disambiguation rules (T-003) | proposed-by-implementer | `D-001-025.md` |
+| D-026 | Launcher environment resolution and its exit code (T-004) | proposed-by-implementer | `D-026-050.md` |

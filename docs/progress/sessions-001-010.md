@@ -10,6 +10,107 @@ history preserves the pre-shard file).
 
 ---
 
+## Session 6 — 2026-09-14 — app module: fat jar, launcher, install.sh (T-004, D-026)
+**Agent:** GLM (via opencode) · **Commits:** claim `6f9423c` + one feat commit (this entry included)
+
+### Goal
+T-004: a runnable `jdx` distribution — fat jar of `cli` + deps, a POSIX `sh` launcher that
+resolves a JDK without assuming `JAVA_HOME` (CLAUDE.md §8), and a no-root `install.sh`.
+
+### What I did
+1. Claimed T-004 (`chore: claim T-004`), then implemented:
+2. **`cli`**: `JdxCli` (Clikt root command, `versionOption` → `--version` prints
+   `jdx version <v>`, exit 0) + `BuildInfo` reading a **Gradle-generated**
+   `dev/jdx/cli/build.properties` (task `generateBuildProperties` — hand-written bytes, not
+   `WriteProperties`, which stamps a date and would break jar determinism). `main` =
+   `dev.jdx.cli.JdxCliKt` = the fat jar's `Main-Class`.
+3. **`app/build.gradle.kts`**: hand-rolled `fatJar` (Jar over `runtimeClasspath`, excludes
+   manifests/signatures/module-info, `reproducibleFileOrder`, no timestamps — verified
+   byte-identical across `--rerun-tasks`) + `installDist` (single-file task → `app/build/jdx`,
+   executable). **No shadow plugin** — today's deps need no service-file merging; the
+   revisit trigger is documented in the build file and below.
+4. **`app/src/main/scripts/jdx`** (POSIX sh): JDK resolution `JAVA_HOME` → PATH →
+   `$JDX_JVM_DEFAULT_DIR` (default `/usr/lib/jvm/default`); major-version gate ≥ 21 with
+   legacy `1.8.0_x` handling; one-shot flags `-XX:TieredStopAtLevel=1 -XX:+UseSerialGC
+   -Xshare:auto`; `exec` so exit codes/streams pass through; jar found by glob relative to
+   the `readlink -f`-resolved script path (install.sh symlinks work). All failures: one
+   `jdx: …` line on stderr, exit 6 (D-026).
+5. **`install.sh`** (repo root): refuses root, refuses to overwrite an unrelated
+   `~/.local/bin/jdx` without `--force` (dirs never), idempotent for our own symlink,
+   prints a PATH hint, `~/.local/bin` only — no root anywhere.
+6. **Dependency change (the surprise):** the first smoke test showed JDK 26
+   native-access warnings — `com.github.ajalt.clikt:clikt` (mordant flavor) eagerly loads
+   **JNA** even with piped stdout. Switched `cli` to **`clikt-core`** (plain flavor, same
+   `versionOption`/`main`; `CoreCliktCommand` instead of `CliktCommand`): warnings gone,
+   fat jar 22.7 → 19.5 MB. Recorded as L-011; catalog comment forbids switching back.
+7. **Tests (25 new, all green):**
+   - `cli/JdxCliTest` (2): in-process `--version` via `shouldThrow<PrintMessage>` (clikt's
+     `test()` helper is mordant-only — see L-011), BuildInfo ≠ "dev" (proves the Gradle
+     wiring).
+   - `app/LauncherScriptTest` (16): stub-JDK fault injection (JAVA_HOME/PATH/default-dir
+     resolution, flags/jar/args/stream/exit-code passthrough, symlink resolution, missing
+     jar, broken JAVA_HOME, old/legacy/EA versions, crashing/unparseable `-version`),
+     **generated version-gate property** (200 cases: majors 6–45 × legacy/pre-release
+     forms → accepted iff effective major ≥ 21) and **garbage-output property** (100
+     cases → always exit 6, never a stack trace), plus 2 real-JVM e2e (`--version`,
+     `--help` through the built launcher; skipped cleanly if no JDK).
+   - `app/InstallScriptTest` (7): fresh install, idempotent re-run, unrelated-file refusal,
+     `--force`, directory refusal, bad args, unbuilt-repo error.
+   - Fault tests found a real bug: with a PATH lacking coreutils, `dirname` died noisily
+     and masked the real error → launcher now uses parameter expansion and a `sed` guard
+     (L-013).
+
+### Decisions made
+**D-026** (proposed-by-implementer, new shard `D-026-050.md`): launcher failures exit 6
+with a human message; broken `JAVA_HOME` is loud, not a fall-through; `JDX_JVM_DEFAULT_DIR`
+override; hard 21 gate before exec; `sed` is the only required external tool.
+
+### Tasks moved
+- T-004: WIP → DONE (all four acceptance boxes ticked and verified by hand).
+
+### Lessons distilled
+**L-011** (clikt mordant flavor eagerly loads JNA → use clikt-core for non-interactive
+CLIs), **L-012** (Gradle 9: `tasks.registering` is an error-level deprecation;
+`FileCopyDetails.mode` removed → `permissions { unix(…) }`; `Copy` into the build-dir root
+breaks implicit-dependency validation), **L-013** (fault-inject a script's *environment*,
+not only its inputs).
+
+### What works now (and how to verify it yourself)
+```bash
+./gradlew build                    # green; 167 tests (~18 s clean, tier-1 budget 30 s)
+./gradlew :app:installDist         # -> app/build/jdx + app/build/libs/jdx-*-all.jar
+env -u JAVA_HOME app/build/jdx --version    # "jdx version 0.1.0-SNAPSHOT", exit 0 (~180 ms cold)
+JAVA_HOME=/tmp/oldjdk17 app/build/jdx --version  # one-line human error, exit 6
+HOME=$(mktemp -d) ./install.sh     # symlink into ~/.local/bin, PATH hint, no root
+```
+Fat jar is byte-deterministic (sha256-stable across `--rerun-tasks`); cold start through
+the launcher is ~180 ms — already under the 250 ms M0 target, before AppCDS (T-048).
+
+### What is broken / half-done
+Nothing known in T-004 scope. Known gaps, documented where they bite:
+- The fat jar merges `META-INF/services` first-wins (EXCLUDE). Safe today (no two deps
+  claim the same service file); revisit when that changes — trigger noted in
+  `app/build.gradle.kts`.
+- `./gradlew build` prints a pre-existing Gradle 10 deprecation warning: the JDK 21
+  toolchain is auto-provisioned without toolchain repositories (T-001 setup). Harmless
+  today; will fail on Gradle 10. Not fixed here (not T-004's scope) — needs a small task
+  when the build moves.
+- `docs/PROPOSAL.md` Appendix B has no launcher/env flags to document (JDX_JVM_DEFAULT_DIR
+  is documented in D-026 and the script itself); if the appendix later covers environment
+  variables, add it there.
+
+### Open questions / blockers
+None.
+
+### Next action
+**T-005 — `jdx version` and `jdx doctor`** (unblocked now that T-004 is done). The
+`JdxCli` root command and `BuildInfo` already exist — `VersionCommand` should reuse
+`BuildInfo.version` (do not re-read the resource), and `doctor`'s checks belong in a
+service class, not the Clikt command (D-004). Alternatively T-006 (fixture corpus) or
+T-053 (test tiers) remain unblocked.
+
+---
+
 ## Session 5 — 2026-09-13 — symbol reference parser + printer (T-003, D-025)
 **Agent:** GLM (via opencode) · **Commits:** claim `25cbcaf` + one feat commit (this entry included)
 

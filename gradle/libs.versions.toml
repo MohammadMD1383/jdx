@@ -26,6 +26,9 @@ vineflower           = "1.12.0"
 sqlite               = "3.53.4.0"
 
 # --- cli / serialization ---
+# clikt-core is the plain, non-interactive flavor: no mordant, no JNA, no terminal probing —
+# jdx output is for agents. Do NOT switch to plain `clikt`: the mordant flavor eagerly loads
+# JNA and JDK 22+ prints native-access warnings to stderr on every run (discovered in T-004).
 clikt                = "5.1.0"
 kotlinxSerialization = "1.11.0"
 
@@ -51,7 +54,7 @@ vineflower                  = { module = "org.vineflower:vineflower",           
 
 sqlite-jdbc                 = { module = "org.xerial:sqlite-jdbc",                   version.ref = "sqlite" }
 
-clikt                       = { module = "com.github.ajalt.clikt:clikt",             version.ref = "clikt" }
+clikt-core                  = { module = "com.github.ajalt.clikt:clikt-core",       version.ref = "clikt" }
 kotlinx-serialization-json  = { module = "org.jetbrains.kotlinx:kotlinx-serialization-json", version.ref = "kotlinxSerialization" }
 
 mcp-kotlin-sdk              = { module = "io.modelcontextprotocol:kotlin-sdk",       version.ref = "mcpKotlinSdk" }

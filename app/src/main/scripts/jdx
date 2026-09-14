@@ -1,0 +1,83 @@
+#!/bin/sh
+# jdx launcher — POSIX sh (T-004).
+#
+# This script is the only supported entry point for end users. It is intentionally dumb:
+# no config, no colour, no argument parsing — the JVM owns all of that. Its three jobs:
+#
+#   1. find a Java 21+ runtime:  $JAVA_HOME  ->  `java` on PATH  ->  $JDX_JVM_DEFAULT_DIR
+#      (default /usr/lib/jvm/default, the Arch layout; JDX_JVM_DEFAULT_DIR exists mainly so
+#      the no-JDK error path is testable on a machine that always has a JDK, and secondarily
+#      for non-Arch users — see D-026)
+#   2. fail with one human-readable line on stderr — never a stack trace — if it cannot
+#      (missing JDK, JDK too old, missing build). Exit code 6 (D-015/D-026).
+#   3. exec the fat jar with the one-shot CLI JVM flags (PROPOSAL.md §15):
+#      -XX:TieredStopAtLevel=1 -XX:+UseSerialGC -Xshare:auto
+#
+# install.sh symlinks this file into ~/.local/bin, so the fat jar is located relative to
+# the *resolved* script path, not $0 (GNU `readlink -f`; without it, $0 must be the real
+# path — direct execution always is).
+
+minimum_java_major=21
+
+die() {
+    printf 'jdx: %s\n' "$*" >&2
+    exit 6
+}
+
+# External tools this script needs: `sed` only. `readlink` is optional (guarded below) and
+# `dirname` is deliberately avoided in favour of POSIX parameter expansion, so a stripped
+# PATH still yields one clean error instead of shell noise (found by T-004's fault tests).
+command -v sed >/dev/null 2>&1 || die "the 'sed' tool is required but not on PATH"
+
+self=$0
+if resolved=$(readlink -f -- "$self" 2>/dev/null) && [ -n "$resolved" ]; then
+    self=$resolved
+fi
+# $0 always contains a slash for an exec'd script (absolute path or resolved from PATH).
+case $self in
+    */*) jdx_home=${self%/*} ;;
+    *)   jdx_home=. ;;
+esac
+
+jar=
+for candidate in "$jdx_home"/libs/jdx-*-all.jar; do
+    [ -f "$candidate" ] || continue
+    jar=$candidate
+    break
+done
+[ -n "$jar" ] || die "no jdx fat jar in '$jdx_home/libs' — build it first: ./gradlew :app:installDist"
+
+# An explicitly set JAVA_HOME that is broken is a loud error, not a silent fall-through to
+# PATH: a user who sets JAVA_HOME wants *that* JDK, and quietly picking another one hides
+# the real problem (D-026).
+java_exe=
+if [ -n "${JAVA_HOME:-}" ]; then
+    [ -x "$JAVA_HOME/bin/java" ] || die "JAVA_HOME is set to '$JAVA_HOME' but \$JAVA_HOME/bin/java is not an executable"
+    java_exe=$JAVA_HOME/bin/java
+elif command -v java >/dev/null 2>&1; then
+    java_exe=$(command -v java)
+else
+    default_jvm_dir=${JDX_JVM_DEFAULT_DIR:-/usr/lib/jvm/default}
+    [ -x "$default_jvm_dir/bin/java" ] || die "no Java runtime found — set JAVA_HOME, add java to PATH, or point JDX_JVM_DEFAULT_DIR at a JDK (jdx needs Java $minimum_java_major+)"
+    java_exe=$default_jvm_dir/bin/java
+fi
+
+version_output=$("$java_exe" -version 2>&1) || die "could not run '$java_exe -version' — is it a working JDK?"
+version=$(printf '%s\n' "$version_output" | sed -n '1s/^.*version "\([^"]*\)".*/\1/p')
+if [ -z "$version" ]; then
+    first_line=$(printf '%s\n' "$version_output" | sed -n '1p')
+    die "no version string in output of '$java_exe -version': $first_line"
+fi
+
+case $version in
+    1.*) major=${version#*.} ;;
+    *)   major=$version ;;
+esac
+major=${major%%[!0-9]*}
+case $major in
+    ''|*[!0-9]*) die "unrecognised Java version '$version' reported by '$java_exe'" ;;
+esac
+
+[ "$major" -ge "$minimum_java_major" ] || die "jdx requires Java $minimum_java_major+, but '$java_exe' is version '$version' — set JAVA_HOME to a newer JDK"
+
+exec "$java_exe" -XX:TieredStopAtLevel=1 -XX:+UseSerialGC -Xshare:auto -jar "$jar" "$@"
