@@ -422,6 +422,45 @@ class LauncherScriptTest {
         result.stdout.shouldContain("Usage: jdx")
     }
 
+    @Test
+    fun `doctor round-trips through the real launcher and fat jar`() {
+        assumeTrue(javaIsAvailable(), "no java on PATH or /usr/lib/jvm/default")
+        assumeTrue(builtLauncher.isFile, "app/build/jdx missing — run :app:installDist")
+
+        val result = runLauncher(builtLauncher, projectDir, args = listOf("doctor"))
+
+        // Machine-dependent by design (doctor reports this machine): only the shape is pinned.
+        (result.exitCode == 0 || result.exitCode == 6) shouldBe true
+        result.stdout.shouldStartWith("jdx doctor")
+        result.stdout.trim().lines().size shouldBe 11
+        result.stdout shouldNotContain "\u001B"
+    }
+
+    @Test
+    fun `doctor --json round-trips through the real launcher and fat jar`() {
+        assumeTrue(javaIsAvailable(), "no java on PATH or /usr/lib/jvm/default")
+        assumeTrue(builtLauncher.isFile, "app/build/jdx missing — run :app:installDist")
+
+        val result = runLauncher(builtLauncher, projectDir, args = listOf("doctor", "--json"))
+
+        (result.exitCode == 0 || result.exitCode == 6) shouldBe true
+        // Compact envelope; string-pinned so the app module needs no JSON library.
+        result.stdout shouldContain "\"jdx\":1"
+        result.stdout shouldContain "\"command\":\"doctor\""
+        result.stdout shouldContain "\"checks\":["
+    }
+
+    @Test
+    fun `version round-trips through the real launcher and fat jar`() {
+        assumeTrue(javaIsAvailable(), "no java on PATH or /usr/lib/jvm/default")
+        assumeTrue(builtLauncher.isFile, "app/build/jdx missing — run :app:installDist")
+
+        val result = runLauncher(builtLauncher, projectDir, args = listOf("version"))
+
+        result.exitCode shouldBe 0
+        result.stdout.trim() shouldBe "jdx version ${dev.jdx.cli.BuildInfo.version}"
+    }
+
     private fun javaIsAvailable(): Boolean =
         runCommand(
             listOf("sh", "-c", "command -v java >/dev/null 2>&1 || [ -x /usr/lib/jvm/default/bin/java ]"),

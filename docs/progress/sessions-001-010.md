@@ -10,6 +10,117 @@ history preserves the pre-shard file).
 
 ---
 
+## Session 7 — 2026-09-14 — `jdx version` and `jdx doctor` (T-005, D-027)
+**Agent:** GLM (via opencode) · **Commits:** claim `1e36632` + one feat commit (this entry included)
+
+### Goal
+T-005: `jdx version [--json]` and `jdx doctor [--json]` — the environment self-diagnosis
+with OK/WARN/FAIL rows, same information in text and JSON (D-007), exit 0/6 per D-015.
+
+### What I did
+1. Claimed T-005 (`chore: claim T-005`), then implemented:
+2. **`cli/.../service/DoctorService.kt`** — the behaviour layer (cli is an adapter, D-004):
+   `DoctorStatus`/`DoctorCheck`/`DoctorReport` model; `DoctorEnvironment` bundling every
+   outside-world read (userHome, javaHome, pathDirs, XDG_RUNTIME_DIR, working dir, a
+   `RuntimeInfo` jrt probe, a `ProcessRunner` fun-interface over `ProcessBuilder`), all
+   constructor-injectable so tests fake whole environments; `DoctorService.probe()` runs
+   ten isolated checks — jdk, jrt, javap, jdk-sources, cache, config, index, kotlin,
+   daemon, workspace — each wrapped so **no check can ever throw** (any exception becomes
+   a FAIL row). Detail strings are single-line by construction. Literal `~/.cache/jdx` and
+   `~/.config/jdx` (D-013/T-015); doctor is strictly read-only.
+3. **`cli/.../render/JsonEnvelope.kt`** — the T-010 seed: `{"jdx":1, ok, command, result}`
+   envelope (ok mirrors the exit code), one shared `Json` instance, `VersionResult` and
+   `DoctorReport` text+JSON renderers.
+4. **Commands** (`cli/.../commands/`): `VersionCommand` (text line identical to
+   `--version`, or envelope) and `DoctorCommand` (renders, exits 6 only when a check
+   failed — the exit mapping is the pure `exitCodeFor`, tested directly). `--json` lives
+   on the root and on each subcommand; effective when either is set, so `jdx --json doctor`
+   and `jdx doctor --json` both work (D-027).
+5. **JdxCli**: `subcommands(VersionCommand(), DoctorCommand())`; `--json` root option.
+6. **Tests (30 new, all green):**
+   - `DoctorServiceTest` (16): every fault named in the task — missing/old/crashing/
+     throwing/unparseable `javap` (FAIL), old `javap` (WARN, oracle note), unreachable jrt
+     (FAIL with reason), unwritable cache (FAIL), missing cache (WARN), cache size row,
+     nearest-build-file workspace detection, socket-count daemon row, `formatBytes` units,
+     exit-code law, single-line details, javaHome-vs-PATH `javap` resolution.
+   - `DoctorEnvironmentTest` (1): the **exhaustive environment fault-injection family** —
+     576 combinations (cache shape × javap behaviour × src.zip × jrt × daemon × workspace),
+     each asserting: never throws, same ten rows, exit-code law (6 iff some FAIL),
+     text↔JSON row parity (D-007), run-twice byte-identical determinism (TESTING.md §6),
+     plus the targeted severity per injected fault. A loop-size guard prevents the
+     enumeration silently shrinking.
+   - `ToolVersionParserTest` (3): generated `*-version` outputs (300 cases: plain/legacy/
+     quoted/suffixed → major), digit-free garbage → null, real-world samples.
+   - `VersionCommandTest` (7): text line, envelope shape, `--json` in both positions,
+     no-flag default.
+   - `LauncherScriptTest` (+3 e2e): `doctor`, `doctor --json`, `version` through the real
+     launcher + fat jar (shape pinned; machine-dependent severities are not).
+7. **Property tests caught a real bug and three test bugs** (L-005/L-007 pattern again):
+   the envelope was missing `"jdx": 1` — kotlinx.serialization drops default-valued
+   properties unless `encodeDefaults = true` (L-014). Test bugs: Int overflow in
+   `formatBytes(3GB)`, a wrong `shouldStartWith` expectation (the javap detail leads with
+   the executable path), and generator majors including `1` with legacy=false (composes
+   inputs no JDK prints — removed from the generator).
+
+### Decisions made
+**D-027** (proposed-by-implementer): doctor severity rule (FAIL = core job impossible,
+WARN = degraded/not-yet-available, OK includes correctly-absent); missing `javap` is FAIL
+(oracle T-056 + engine T-027 need it); M0 envelope is minimal `{jdx, ok, command, result}`;
+`--json` accepted before or after the subcommand; literal `~/.cache/jdx`/`~/.config/jdx`,
+no XDG fallback; doctor never creates what it reports.
+
+### Tasks moved
+- T-005: WIP → DONE (all four acceptance boxes ticked; verified by hand, see below).
+
+### Lessons distilled
+**L-014** (kotlinx.serialization drops defaults unless `encodeDefaults = true` — the
+envelope marker vanished), **L-015** (an unconditional `exitProcess` in a command kills
+the Gradle test worker mid-suite — 4 of 29 tests ran, silently; exit mapping must be a
+pure function, only the non-zero arm exits), **L-016** (Clikt 5 `parse()` already invokes
+`run()` — calling both double-executes).
+
+### What works now (and how to verify it yourself)
+```bash
+./gradlew build                     # green; 197 tests (142 core + 30 cli + 25 app)
+./gradlew :app:installDist
+env -u JAVA_HOME app/build/jdx doctor          # 10 rows, exit 0
+env -u JAVA_HOME app/build/jdx doctor --json   # {"jdx":1,"ok":true,"command":"doctor",…}
+env -u JAVA_HOME app/build/jdx --json doctor   # same, flag before the subcommand
+env -u JAVA_HOME app/build/jdx version         # "jdx version 0.1.0-SNAPSHOT"
+env -u JAVA_HOME app/build/jdx version --json  # envelope
+mkdir -p ~/.cache/jdx && chmod a-w ~/.cache/jdx && env -u JAVA_HOME app/build/jdx doctor
+#   -> "cache: fail (… is not writable)", exit 6   (restore: chmod u+w ~/.cache/jdx)
+```
+Text and JSON carry the same ten rows in the same order (asserted per-combination in
+`DoctorEnvironmentTest`); every check is exception-proof; same environment → identical
+bytes on repeat runs.
+
+### What is broken / half-done
+Nothing known in T-005 scope. Known gaps, documented where they bite:
+- `doctor` reports the index DB/Kotlin module/daemon rows as WARN/OK placeholders — their
+  real verification logic lands with the owning milestones (T-013, T-038, T-041); the rows
+  never invent paths or facts.
+- **Tier-1 duration is over budget:** a clean `./gradlew test` takes ~38 s (budget 30 s;
+  `app` tests ~13.6 s of test-time plus first-build compile). The incremental loop
+  (~5–7 s, up-to-date builds) is unaffected, but T-053's tier machinery is now *needed*,
+  not nice-to-have — likely fixes: split app e2e JVM tests to tier 2 and cache the fat jar
+  between clean runs.
+- `--json` is per-command + root flag, not a true global flag (every flag in either
+  position) — D-027 defers that to the T-011 flag pass.
+- `docs/PROPOSAL.md` Appendix B has no `--json`/doctor rows yet; add when the appendix is
+  first filled in.
+
+### Open questions / blockers
+None.
+
+### Next action
+**T-006 (fixture corpus)** or **T-053 (test tier infrastructure)** — both unblocked,
+depend only on T-001. T-053 first is reasonable: it will move the app e2e JVM tests out of
+tier 1 and fix the 38 s clean-`test` overrun this session documented. T-006 is the bigger
+unblocker (nine of ten test families lean on it). Owner's call; either is safe to start.
+
+---
+
 ## Session 6 — 2026-09-14 — app module: fat jar, launcher, install.sh (T-004, D-026)
 **Agent:** GLM (via opencode) · **Commits:** claim `6f9423c` + one feat commit (this entry included)
 

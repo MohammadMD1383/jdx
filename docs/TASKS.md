@@ -51,9 +51,9 @@ be fiction.
 | **M6** | Serving: daemon, MCP, HTTP, `batch` | TODO |
 | **M7** | Polish: token budgets, AppCDS, mutation gates, docs, install | TODO |
 
-**T-001, T-002, T-003, T-004 and T-061 are `DONE`.** Next unblocked task: **T-005**
-(`jdx version` and `jdx doctor`, depends T-004). **T-006 and T-053 are also unblocked** —
-they depend only on T-001.
+**T-001, T-002, T-003, T-004, T-005 and T-061 are `DONE`.** M0's remaining tasks are
+the **test spine: T-006** (fixture corpus) and **T-053** (test tier infrastructure),
+both unblocked (depend only on T-001).
 
 ---
 
@@ -160,7 +160,7 @@ generated version-gate properties + install.sh suite + two real-JVM e2e tests.*
 
 ---
 
-### T-005 — `jdx version` and `jdx doctor` · `WIP`
+### T-005 — `jdx version` and `jdx doctor` · `DONE` (session 7)
 **Depends:** T-004 · **Files:** `cli/.../commands/VersionCommand.kt`, `DoctorCommand.kt`
 
 `doctor` is the project's self-diagnosis and the first thing a confused contributor or agent
@@ -171,10 +171,18 @@ count; whether the Kotlin source module is installed (D-008); whether a daemon i
 detected project/workspace for the CWD.
 
 **Acceptance**
-- [ ] `jdx doctor` and `jdx doctor --json` both work and carry the same information
-- [ ] Exit code `0` when all OK, `6` when any FAIL
-- [ ] No check ever throws; every failure becomes a FAIL row with a readable reason
-- [ ] Output fits in ~25 lines — it is read by agents too
+- [x] `jdx doctor` and `jdx doctor --json` both work and carry the same information
+- [x] Exit code `0` when all OK, `6` when any FAIL
+- [x] No check ever throws; every failure becomes a FAIL row with a readable reason
+- [x] Output fits in ~25 lines — it is read by agents too
+
+*Implementation notes: `DoctorService` (injectable `DoctorEnvironment`: paths, process
+runner, runtime probe) + `DoctorReport` model shared by a text and a JSON renderer
+(`cli/.../render/JsonEnvelope.kt`, the T-010 seed; minimal `{"jdx":1,ok,command,result}`
+envelope). Severity policy and `--json`-in-both-positions are D-027. `--version` eager flag
+kept; `jdx version` subcommand added. Test bar: example tests + an exhaustive 576-combination
+environment fault-injection family (never-throws, exit-code law, text↔JSON parity,
+run-twice determinism) + a generated `parseToolVersion` property + 3 real-JVM e2e tests.*
 
 ---
 

@@ -14,15 +14,15 @@ or delete a past entry — if one turned out to be wrong, say so in a *new* entr
 
 | | |
 |---|---|
-| **Last updated** | 2026-09-14 (session 6) |
+| **Last updated** | 2026-09-14 (session 7) |
 | **Repository** | <https://github.com/MohammadMD1383/jdx> (public, Apache-2.0) |
 | **Phase** | Design complete; **M0 implementation in progress** |
 | **Active milestone** | M0 — Skeleton |
-| **Next task** | **T-005 — `jdx version` and `jdx doctor`** (`docs/TASKS.md`); T-006, T-053 also unblocked |
+| **Next task** | **T-006 (fixture corpus) or T-053 (test tier infrastructure)** — both unblocked; T-053 fixes a documented tier-1 overrun |
 | **Task count** | 59 tasks defined (T-001…T-061; M0–M2 in full detail, M3–M7 as one-liners) |
-| **Build status** | **Green.** `./gradlew build` passes (~18 s clean). A runnable `jdx` exists: `./gradlew :app:installDist` → `app/build/jdx` (fat jar + POSIX launcher, JDK-21 gate, ~180 ms cold start); `install.sh` symlinks it into `~/.local/bin`. |
-| **Test status** | **167 tests, all green** (142 in `core`, 25 new in `cli`/`app`: launcher fault injection + generated version-gate properties + install.sh suite + 2 real-JVM e2e). |
-| **Docs** | Append-only logs sharded (D-023): sessions → `docs/progress/`, decisions → `docs/decisions/` (shard 2 open at D-026), lessons → `docs/lessons/`. Every hard-won lesson goes to `docs/LESSONS.md` (D-024). |
+| **Build status** | **Green.** `./gradlew build` passes. Runnable `jdx`: `./gradlew :app:installDist` → `app/build/jdx` (fat jar + POSIX launcher, JDK-21 gate, ~180 ms cold start); `install.sh` symlinks it into `~/.local/bin`. Commands so far: `--version`, `version [--json]`, `doctor [--json]`. |
+| **Test status** | **197 tests, all green** (142 `core`, 30 `cli`, 25 `app`). **Tier-1 duration is over budget: a clean `./gradlew test` is ~38 s (budget 30 s)** — `app` e2e JVM tests are the bulk; T-053 must move them to tier 2. Incremental loop ~5–7 s. |
+| **Docs** | Append-only logs sharded (D-023): sessions → `docs/progress/`, decisions → `docs/decisions/` (shard 2 open at D-027), lessons → `docs/lessons/` (L-001…L-016). Every hard-won lesson goes to `docs/LESSONS.md` (D-024). |
 | **Blocked on** | Nothing. |
 
 ### What exists right now
@@ -50,10 +50,16 @@ Documentation, the Gradle skeleton, and **three layers of implemented behaviour*
    position)`, never throws). Disambiguation rules are **D-025** — read it before
    touching the parser. Round-trip is a pinned property (`parse(print(ref)) == ref`).
 
-3. **A runnable `jdx` distribution** (`cli` + `app`, T-004):
+3. **A runnable `jdx` distribution** (`cli` + `app`, T-004/T-005):
    - `cli`: `JdxCli` root command (Clikt **`clikt-core`** — plain flavor; the mordant
      flavor eagerly loads JNA, L-011) with `--version`; `BuildInfo` reads the
      Gradle-generated `build.properties` so the version is never hard-coded.
+   - **Commands (T-005):** `version [--json]` and `doctor [--json]`. `DoctorService`
+     (`cli/.../service/`) runs ten injectable, exception-proof checks (jdk, jrt, javap,
+     jdk-sources, cache, config, index, kotlin, daemon, workspace) with OK/WARN/FAIL
+     severity per D-027; `DoctorReport` feeds a text and a JSON renderer
+     (`cli/.../render/JsonEnvelope.kt`, the T-010 seed: `{"jdx":1,ok,command,result}`).
+     Exit 0/6 per D-015; `--json` works before or after the subcommand.
    - `app`: `fatJar` task (hand-rolled, byte-deterministic, `Main-Class
      dev.jdx.cli.JdxCliKt`) + `installDist` → `app/build/jdx` — a POSIX launcher that
      resolves a JDK (`JAVA_HOME` → PATH → `JDX_JVM_DEFAULT_DIR`, D-026), gates on
@@ -62,9 +68,11 @@ Documentation, the Gradle skeleton, and **three layers of implemented behaviour*
      `--force` clobber guard.
 
 All 142 `core` tests are round-trip / structural / property tests written **test-first**
-(D-020); generators live in `core/src/test/kotlin/.../gen/` (seed of T-055). The 25
-`cli`/`app` tests (T-004) cover the launcher with stub-JDK fault injection, generated
-version-gate properties, an install.sh suite, and two real-JVM end-to-end tests.
+(D-020); generators live in `core/src/test/kotlin/.../gen/` (seed of T-055). The `cli`
+tests (T-004/T-005) cover the launcher with stub-JDK fault injection, an exhaustive
+576-combination doctor environment matrix (never-throws, exit-code law, text↔JSON parity,
+determinism), generated version-gate and tool-version-parser properties, an install.sh
+suite, and real-JVM end-to-end tests.
 
 Docs of note: `docs/LESSONS.md` (+ `docs/lessons/` shards) — mistakes already paid for,
 seeded with L-001…L-009. Skim its index before fighting a toolchain or spec.
@@ -143,7 +151,7 @@ when it holds 10 sessions, create the next (`sessions-011-020.md`) and update th
 
 | Shard | Sessions | Status |
 |---|---|---|
-| `docs/progress/sessions-001-010.md` | 1–6 | open (4 free) |
+| `docs/progress/sessions-001-010.md` | 1–7 | open (3 free) |
 
 ---
 

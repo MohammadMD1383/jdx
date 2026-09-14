@@ -1,3 +1,7 @@
+plugins {
+    alias(libs.plugins.kotlin.serialization)
+}
+
 dependencies {
     implementation(project(":core"))
     implementation(project(":index"))
@@ -7,6 +11,7 @@ dependencies {
     // on JDK 22+, slower startup, ~2 MB of fat jar) and jdx never renders a terminal.
     implementation(libs.clikt.core)
     implementation(libs.kotlinx.serialization.json)
+    testImplementation(libs.kotest.property)
 }
 
 // The CLI must report the version it was built as (`jdx --version`, later `jdx version --json`).
