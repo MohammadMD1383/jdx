@@ -136,7 +136,7 @@ list, `[]` = zero parameters).*
 
 ---
 
-### T-004 — `app` module: fat jar + `jdx` launcher script · `TODO`
+### T-004 — `app` module: fat jar + `jdx` launcher script · `WIP`
 **Depends:** T-001 · **Files:** `app/build.gradle.kts`, `app/src/main/scripts/jdx`, `install.sh`
 
 - Shadow/fat jar of `cli` and its dependencies.
