@@ -160,7 +160,7 @@ generated version-gate properties + install.sh suite + two real-JVM e2e tests.*
 
 ---
 
-### T-005 — `jdx version` and `jdx doctor` · `TODO`
+### T-005 — `jdx version` and `jdx doctor` · `WIP`
 **Depends:** T-004 · **Files:** `cli/.../commands/VersionCommand.kt`, `DoctorCommand.kt`
 
 `doctor` is the project's self-diagnosis and the first thing a confused contributor or agent
