@@ -3,6 +3,7 @@ package dev.jdx.core.fixtures
 import io.kotest.matchers.collections.shouldContainExactly
 import io.kotest.matchers.shouldBe
 import org.junit.jupiter.api.Assumptions.assumeTrue
+import org.junit.jupiter.api.Tag
 import org.junit.jupiter.api.Test
 import java.io.File
 import java.util.Calendar
@@ -14,6 +15,10 @@ import java.util.zip.ZipFile
  * self-describing via `@ExpectedMembers`, and prove D-017 (the static-initialiser marker is
  * absent even though every fixture was inspected two ways).
  *
+ * Tier 2 (`@Tag("tier2")`, T-053): this suite shells out to `javap` per fixture class and
+ * reads both jars end to end (~14 s) — far too slow for the tier-1 TDD loop. It runs in
+ * `./gradlew check`, never in `./gradlew test`.
+ *
  * ## Never loads a fixture class
  *
  * Every assertion here reads jar bytes or runs `javap` in a subprocess — `javap` parses class
@@ -21,6 +26,7 @@ import java.util.zip.ZipFile
  * `dev.jdx.fixtures.StaticInitMarker`, the marker test below would fail, and that failure would
  * be a real D-017 violation, not test noise.
  */
+@Tag("tier2")
 class FixtureCorpusTest {
 
     private val binaryJar: File by lazy { Fixtures.binaryJar() }

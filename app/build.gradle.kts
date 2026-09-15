@@ -1,4 +1,5 @@
 // # Assembly (T-004)
+import org.gradle.api.tasks.testing.Test
 //
 // `:app` produces the runnable distribution: one self-contained fat jar plus the `jdx`
 // launcher script (src/main/scripts/jdx) that resolves a JDK and starts it. The launcher,
@@ -66,8 +67,12 @@ val installDist = tasks.register("installDist") {
     }
 }
 
-// The launcher and install.sh tests run the real built artifacts.
-tasks.test { dependsOn(installDist) }
+// The launcher and install.sh tests run the real built artifacts. Both tiers that run
+// them (`test` for the stub-JDK suites, `tier2Test` for the real-JVM end-to-end tests)
+// need the distribution built first.
+listOf("test", "tier2Test").forEach { taskName ->
+    tasks.named<Test>(taskName) { dependsOn(installDist) }
+}
 
 dependencies {
     implementation(project(":cli"))

@@ -14,15 +14,15 @@ or delete a past entry — if one turned out to be wrong, say so in a *new* entr
 
 | | |
 |---|---|
-| **Last updated** | 2026-09-15 (session 8) |
+| **Last updated** | 2026-09-15 (session 9) |
 | **Repository** | <https://github.com/MohammadMD1383/jdx> (public, Apache-2.0) |
 | **Phase** | Design complete; **M0 implementation in progress** |
 | **Active milestone** | M0 — Skeleton |
-| **Next task** | **T-053 (test tier infrastructure)** — the last unblocked M0 task; then M1 starts at T-007 |
+| **Next task** | **T-007 (artifact loading)** — M1 starts; or T-054/T-055 (golden/property infra, newly unblocked by T-053) |
 | **Task count** | 59 tasks defined (T-001…T-061; M0–M2 in full detail, M3–M7 as one-liners) |
 | **Build status** | **Green.** `./gradlew build` passes. Runnable `jdx`: `./gradlew :app:installDist` → `app/build/jdx` (fat jar + POSIX launcher, JDK-21 gate, ~180 ms cold start); `install.sh` symlinks it into `~/.local/bin`. Commands so far: `--version`, `version [--json]`, `doctor [--json]`. |
-| **Test status** | **211 tests, all green** (156 `core` incl. 14 new fixture tests, 30 `cli`, 25 `app`). Tier-1 `./gradlew test --rerun` measured **~26 s** (inside the 30 s budget on this run, margin thin — T-053 still needed). Determinism proven: both fixture jars byte-identical across `--rerun-tasks` rebuilds. |
-| **Docs** | Append-only logs sharded (D-023): sessions → `docs/progress/`, decisions → `docs/decisions/` (shard 2 open at D-027), lessons → `docs/lessons/` (L-001…L-018). Every hard-won lesson goes to `docs/LESSONS.md` (D-024). |
+| **Test status** | **212 tests, all green** (184 tier 1 in **~2.6 s** via `./gradlew test`, 27 tier 2 via `check`, 1 soak proof via `soak`). Tier machinery (T-053): tags select tiers, `verifyTier1Budget` fails over 30 s, `testReport` aggregates. |
+| **Docs** | Append-only logs sharded (D-023): sessions → `docs/progress/`, decisions → `docs/decisions/` (shard 2 open at D-027), lessons → `docs/lessons/` (L-001…L-020). Every hard-won lesson goes to `docs/LESSONS.md` (D-024). |
 | **Blocked on** | Nothing. |
 
 ### What exists right now
@@ -160,7 +160,7 @@ when it holds 10 sessions, create the next (`sessions-011-020.md`) and update th
 
 | Shard | Sessions | Status |
 |---|---|---|
-| `docs/progress/sessions-001-010.md` | 1–7 | open (3 free) |
+| `docs/progress/sessions-001-010.md` | 1–9 | open (1 free) |
 
 ---
 

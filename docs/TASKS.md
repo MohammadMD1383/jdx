@@ -51,9 +51,9 @@ be fiction.
 | **M6** | Serving: daemon, MCP, HTTP, `batch` | TODO |
 | **M7** | Polish: token budgets, AppCDS, mutation gates, docs, install | TODO |
 
-**T-001, T-002, T-003, T-004, T-005 and T-061 are `DONE`.** M0's remaining tasks are
-the **test spine: T-006** (fixture corpus) and **T-053** (test tier infrastructure),
-both unblocked (depend only on T-001).
+**T-001 through T-006, T-053 and T-061 are `DONE`.** M0's remaining test-spine tasks are
+**T-054** (golden files) and **T-055** (property infrastructure), both unblocked now that
+T-053 is done; T-056…T-060 unblock as their milestones land. M1 starts at T-007.
 
 ---
 
@@ -215,7 +215,7 @@ properties with custom accessors, typealiases, `inline`/`reified`.
 
 ---
 
-### T-053 — Test tier infrastructure · `WIP`
+### T-053 — Test tier infrastructure · `DONE` (session 9)
 **Depends:** T-001 · **Files:** convention plugin / `build.gradle.kts`
 *(Added in session 1 after D-020. Numbered T-053 per the board rule: new tasks take the next
 free number even when they belong to an earlier milestone.)*
@@ -230,10 +230,20 @@ test in the fast loop.
 - `testReport` — aggregated HTML across modules
 
 **Acceptance**
-- [ ] `./gradlew check` passes on a machine with **no** local jar corpus
-- [ ] A test tagged `soak` cannot run in tier 1 or 2 (prove with a deliberate test)
-- [ ] Tier-1 duration is printed at the end of the run, with the slowest tests named
-- [ ] All four commands in TESTING.md §13 exist and do what that section says
+- [x] `./gradlew check` passes on a machine with **no** local jar corpus
+- [x] A test tagged `soak` cannot run in tier 1 or 2 (prove with a deliberate test)
+- [x] Tier-1 duration is printed at the end of the run, with the slowest tests named
+- [x] All four commands in TESTING.md §13 exist and do what that section says
+
+*Implementation notes: tags are the mechanism (`tier2`/`soak`/`bench`; TESTING.md §2 table).
+Per-module `tier2Test`/`soakTest`/`benchTest` `Test` tasks with `includeTags`; `test`
+excludes all three plus `tier2`; `check` depends on `tier2Test`; root `soak`/`bench`/
+`mutationTest`/`testReport` commands (bench/mutationTest are wired entry points whose
+suites land in T-050/T-060). `verifyTier1Budget` finalises every `test` task: prints the
+total and 10 slowest tests, fails over 30 s (`-Ptier1.budget` overrides). `FixtureCorpusTest`
+and `LauncherScriptTest` moved to tier 2 (tier 1: 26 s → 2.6 s). `SoakExclusionProofTest`
+asserts `-Djdx.tier=soak`, set only by `soakTest` — broken exclusion fails instead of
+slowing the loop.*
 
 ---
 

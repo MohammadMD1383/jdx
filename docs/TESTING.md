@@ -61,6 +61,32 @@ without anyone writing them.**
 A tier-1 suite that creeps past 30 s kills TDD, and then it kills testing. Guard it: anything
 touching disk, network, or a real jar belongs in tier 2 or above.
 
+**Tags are the mechanism (T-053).** JUnit `@Tag`s decide which tier runs a test class:
+
+| Tag | Runs in | Meaning |
+|---|---|---|
+| *(none)* | `test` (tier 1) | fast unit tests only — no disk, no subprocesses, no real jars |
+| `tier2` | `tier2Test`, via `check` (tier 2) | slow suites: jar reads, JVM spawns, golden files, fault injection, parity |
+| `soak` | `soakTest`, via `soak` (tier 3) | corpus soak over real jars; never runs in `check` |
+| `bench` | `benchTest`, via `bench` (tier 4) | benchmarks |
+
+The wiring lives in the root `build.gradle.kts`: per-module `tier2Test`/`soakTest`/
+`benchTest` `Test` tasks with `includeTags`, `test` excluding all three tags plus `tier2`,
+`check` depending on `tier2Test`, and root `soak`/`bench`/`mutationTest`/`testReport`
+commands. `SoakExclusionProofTest` (`core/.../tiers/`) is the deliberate proof that a
+`soak`-tagged test cannot run in tier 1 or 2: it asserts `-Djdx.tier=soak`, a property only
+the `soakTest` task sets, so broken exclusion fails the build instead of silently slowing
+the loop. Soak tests read the corpus directory from `-Djdx.corpusDir` (default
+`~/.gradle/caches`, override with `-Pcorpus=<dir>`) and must skip — never fail — when it
+is absent, so `check` stays green on machines with no corpus.
+
+**The tier-1 budget is enforced, not aspirational.** Every `test` task is finalised by
+`verifyTier1Budget`, which sums the JUnit XML times, prints the total and the 10 slowest
+tests at the end of the run, and fails the build when the total exceeds 30 s (override
+with `-Ptier1.budget=<seconds>`). When it fires, the fix is to move the slowest suite to
+tier 2 with `@Tag("tier2")` — never to raise the budget without a note in the session log
+saying why.
+
 ---
 
 ## 3. TDD — where it is mandatory

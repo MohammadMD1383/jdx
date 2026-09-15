@@ -14,6 +14,7 @@ import io.kotest.property.arbitrary.string
 import io.kotest.property.checkAll
 import kotlinx.coroutines.runBlocking
 import org.junit.jupiter.api.Assumptions.assumeTrue
+import org.junit.jupiter.api.Tag
 import org.junit.jupiter.api.Test
 import java.io.File
 import java.nio.file.Files
@@ -21,10 +22,13 @@ import java.nio.file.Files
 /**
  * Tests of the POSIX launcher script (src/main/scripts/jdx) against a *stub JDK*: a fake
  * `bin/java` shell script that reports a configurable version and records the exec-line
- * arguments. No real JVM is involved except in the two end-to-end tests at the bottom, so
- * the whole suite stays tier-1 fast. The version-gate properties are this task's generative
+ * arguments. The stub-JDK suites are fast; the two end-to-end tests at the bottom boot a
+ * real JVM each, which puts the whole class (~6 s) over what the tier-1 loop should carry —
+ * so this is tier 2 (`@Tag("tier2")`, T-053): it runs in `./gradlew check`, never in
+ * `./gradlew test`. The version-gate properties are this task's generative
  * family (TESTING.md §2/§4): versions are generated, never hand-picked.
  */
+@Tag("tier2")
 class LauncherScriptTest {
 
     private val projectDir = File(System.getProperty("user.dir"))

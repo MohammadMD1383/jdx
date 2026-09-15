@@ -10,6 +10,90 @@ history preserves the pre-shard file).
 
 ---
 
+## Session 9 — 2026-09-15 — test tier infrastructure (T-053)
+**Agent:** Muse Spark (via opencode) · **Branch:** `t053-test-tiers` (from T-006 HEAD; T-006's
+branch is still unmerged) · **Commits:** claim `17c2beb` + one feat commit (this entry included)
+
+### Goal
+T-053: wire the four test tiers from `docs/TESTING.md` §2 so a slow test can never
+accidentally land in the fast loop. Last unblocked M0 task; lowest-numbered unblocked TODO
+per the board rules.
+
+### What I did
+1. Claimed T-053 (`chore: claim T-053`).
+2. **Tier machinery in the root `build.gradle.kts`** (the `subprojects`-block comment's
+   promotion trigger is now closer — the file is ~200 lines; left in place, noted below):
+   - `test` (tier 1) excludes tags `tier2`/`soak`/`bench` and is finalised by the new
+     `verifyTier1Budget` task, which sums JUnit XML times, prints the total and the 10
+     slowest testcase-level entries, and throws (red build) over 30 s
+     (`-Ptier1.budget=<seconds>` overrides; silent when tests themselves failed).
+   - Per-module `tier2Test` (`includeTags("tier2")`), `soakTest` (`soak` + `-Djdx.tier=soak`
+     + `-Djdx.corpusDir=< -Pcorpus or ~/.gradle/caches>`), `benchTest` (`bench`);
+     `check` depends on `tier2Test`; nothing in the default lifecycle touches `soakTest`.
+   - Root commands: `soak`, `bench`, `mutationTest` (wired entry points; suites land in
+     T-050/T-060 — said on the tin and in `--group=verification` help text, not hidden),
+     `testReport` (real `TestReport` aggregation over `test`+`tier2Test` results).
+3. **Moved the two slow suites to tier 2** (`@Tag("tier2")`): `FixtureCorpusTest` (~14 s,
+   jars + `javap` subprocesses) and `LauncherScriptTest` (~6 s, real-JVM e2e); KDoc updated
+   to say tier 2. `core`/`app` build files wire fixture jars and `installDist` into
+   `tier2Test` too.
+4. **Deliberate soak-exclusion proof** (`core/.../tiers/SoakExclusionProofTest`, `@Tag("soak")`):
+   asserts `-Djdx.tier=soak`, which only `soakTest` sets — broken exclusion fails the build
+   instead of silently slowing the loop; green `soak` proves the task picks the tag up.
+5. **Docs:** `TESTING.md` §2 gained the tag table, sysprop contracts, and the budget-gate
+   rule; `TASKS.md` T-053 acceptance checked + implementation note.
+6. Two bugs caught while verifying (both are now lessons): custom `Test` tasks start with
+   empty `testClassesDirs` (every `tier2Test` ran NO-SOURCE green-nothing until pointed at
+   the `test` source set — inside `register` the receiver is the task, so
+   `project.extensions`, L-019), and `logger.lifecycle` takes only `{}` placeholders, so
+   `{:.1f}` printed literally (pre-format with Kotlin `.format`, L-020).
+
+### Decisions made
+None at D-level (all within T-053's brief). Convention recorded in `TESTING.md` §2 instead:
+tags are the tier mechanism; `-Djdx.tier`/`-Djdx.corpusDir` sysprop contracts; the budget
+gate fires on total XML time and stays silent when tests failed.
+
+### Tasks moved
+- T-053: WIP → DONE (all four acceptance boxes ticked, verified below).
+
+### Lessons distilled
+**L-019** (custom `Test` tasks need explicit `testClassesDirs`/`classpath` or they run
+NO-SOURCE and look green), **L-020** (`logger.lifecycle` placeholders are `{}`-only).
+
+### What works now (and how to verify it yourself)
+```bash
+./gradlew test        # tier 1: 184 tests, ~2.6 s (was ~26 s), slowest-10 report at the end
+./gradlew check       # tiers 1+2: green, +27 tier-2 tests (FixtureCorpusTest 8, LauncherScriptTest 19)
+./gradlew soak        # tier 3: SoakExclusionProofTest runs and passes (check test-results/soakTest/)
+./gradlew bench mutationTest   # tier-4 entry points, green, say which task wires them
+./gradlew testReport  # build/reports/allTests/index.html across tiers 1–2
+./gradlew test -Ptier1.budget=0.5  # verifyTier1Budget FAILS, names slowest tests (gate works)
+./gradlew tasks --group=verification  # all tier commands listed
+```
+211 → 212 tests total (184 tier 1 + 27 tier 2 + 1 soak proof). No tier-1/2 test reads
+`jdx.corpusDir`, and `soakTest` is reachable only via `soak`, so `check` is green with no
+corpus by construction (this machine has one, so this is argued, not executed).
+
+### What is broken / half-done
+Nothing known in T-053 scope. Known implications, documented where they bite:
+- Root `build.gradle.kts` is now ~200 lines — past the "~100 lines → promote to buildSrc"
+  trigger noted in its own header comment. Left as one file deliberately (still readable
+  top-to-bottom); the T-054/T-055/T-060 tasks that next touch it should promote it.
+- `verifyTier1Budget` aggregates `*/build/test-results/test/*.xml` as found: on a
+  single-module run (`:core:test`) it reports stale results from other modules. Said in the
+  task description; the gate is authoritative on a full `./gradlew test`.
+- `bench`/`mutationTest` are honest placeholders (print which task wires them) until T-050/T-060.
+
+### Open questions / blockers
+None.
+
+### Next action
+**T-007 (artifact loading and sources pairing)** — M1 starts; it now has a corpus and a
+tier system. Alternatively T-054 (golden files) or T-055 (property infrastructure), both
+newly unblocked by T-053.
+
+---
+
 ## Session 8 — 2026-09-15 — fixture corpus (T-006)
 **Agent:** Muse Spark (via opencode) · **Commits:** claim `d5cfb7d` + one feat commit (this entry included)
 
