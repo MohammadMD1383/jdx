@@ -381,7 +381,7 @@ opportunistic real-cache test (aborts, never fails, without the cache).*
 
 ---
 
-### T-008 — ASM class reader → `ClassInfo`/`MemberInfo` · `TODO`
+### T-008 — ASM class reader → `ClassInfo`/`MemberInfo` · `WIP`
 **Depends:** T-007, T-002 · **Files:** `index/.../asm/*`
 
 `ClassReader` with `SKIP_FRAMES` (**not** `SKIP_DEBUG` — parameter names live there).
