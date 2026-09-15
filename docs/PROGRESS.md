@@ -14,15 +14,15 @@ or delete a past entry — if one turned out to be wrong, say so in a *new* entr
 
 | | |
 |---|---|
-| **Last updated** | 2026-09-15 (session 10) |
+| **Last updated** | 2026-09-15 (session 11) |
 | **Repository** | <https://github.com/MohammadMD1383/jdx> (public, Apache-2.0) |
 | **Phase** | Design complete; **M0 done, M1 in progress** |
 | **Active milestone** | M1 — Read path |
-| **Next task** | **T-008 (ASM class reader)** — reads `openClass` bytes from T-007; or T-054/T-055 (golden/property infra) |
+| **Next task** | **T-009 (member resolution with inheritance + generic substitution)** — consumes T-008's `ClassInfo`; or T-054/T-055 (golden/property infra) |
 | **Task count** | 59 tasks defined (T-001…T-061; M0–M2 in full detail, M3–M7 as one-liners) |
 | **Build status** | **Green.** `./gradlew build` passes. Runnable `jdx`: `./gradlew :app:installDist` → `app/build/jdx` (fat jar + POSIX launcher, JDK-21 gate, ~180 ms cold start); `install.sh` symlinks it into `~/.local/bin`. Commands so far: `--version`, `version [--json]`, `doctor [--json]`. |
-| **Test status** | **261 tests, all green** (212 tier 1 in **~3 s** via `./gradlew test`, 48 tier 2 via `check`, 1 soak proof via `soak`). T-007 added 28 tier-1 + 21 tier-2 artifact tests. |
-| **Docs** | Append-only logs sharded (D-023): sessions → `docs/progress/`, decisions → `docs/decisions/` (shard 2 open at D-027), lessons → `docs/lessons/` (L-001…L-020). Every hard-won lesson goes to `docs/LESSONS.md` (D-024). |
+| **Test status** | **285 tests, all green** (229 tier 1 in **~8 s** via `./gradlew test`, 55 tier 2 via `check`, 1 soak proof via `soak`). T-008 added 17 tier-1 + 7 tier-2 ASM reader tests. |
+| **Docs** | Append-only logs sharded (D-023): sessions → `docs/progress/`, decisions → `docs/decisions/` (shard 2 open at D-027), lessons → `docs/lessons/` (L-001…L-023). Every hard-won lesson goes to `docs/LESSONS.md` (D-024). |
 | **Blocked on** | Nothing. |
 
 ### What exists right now
@@ -85,6 +85,21 @@ Documentation, the Gradle skeleton, and **four layers of implemented behaviour**
    (incl. a 1,000-case normalisation property) and 21 tier-2 tests over real and
    crafted jars.
 
+6. **The ASM class reader** (`index/src/main/kotlin/dev/jdx/index/asm/`, T-008):
+   `AsmClassReader.read` maps class-file bytes to `ClassInfo`/`MemberInfo` with
+   `SKIP_FRAMES` (never `SKIP_DEBUG`): kind, access, superclass (normalised `null`
+   for interfaces/`Object`), interfaces, generic signatures (malformed → `null`),
+   annotations, `InnerClasses` outer class, `Deprecated`, source file, members with
+   descriptors/throws/deprecation/`AnnotationDefault`/`ConstantValue`, and param
+   names from `MethodParameters` then `LocalVariableTable` then `null`. Errors are a
+   sealed `ClassReadResult` (`Ok`/`UnsupportedVersion`/`Corrupt`) — never throws, so
+   one bad entry never aborts a jar. Core gained three defaulted slots for it
+   (`ClassInfo.deprecated`, `MethodInfo.annotationDefault`,
+   `FieldInfo.constantValue`). Proven by 14 tier-1 tests over in-memory ASM-built
+   classes plus a `javap -p -s` differential over every fixture class, a JRT smoke
+   (major-70 JDK-26 bytes parse), corrupt-neighbour isolation and the D-017 marker
+   proof (7 tier-2 tests).
+
 All 156 `core` tests are round-trip / structural / property tests written **test-first**
 (D-020); generators live in `core/src/test/kotlin/.../gen/` (seed of T-055). The `cli`
 tests (T-004/T-005) cover the launcher with stub-JDK fault injection, an exhaustive
@@ -93,7 +108,7 @@ determinism), generated version-gate and tool-version-parser properties, an inst
 suite, and real-JVM end-to-end tests.
 
 Docs of note: `docs/LESSONS.md` (+ `docs/lessons/` shards) — mistakes already paid for,
-now L-001…L-018. Skim its index before fighting a toolchain or spec.
+now L-001…L-023. Skim its index before fighting a toolchain or spec.
 
 ```
 CLAUDE.md            project instructions — the entry point, read first
@@ -169,7 +184,8 @@ when it holds 10 sessions, create the next (`sessions-011-020.md`) and update th
 
 | Shard | Sessions | Status |
 |---|---|---|
-| `docs/progress/sessions-001-010.md` | 1–9 | open (1 free) |
+| `docs/progress/sessions-001-010.md` | 1–10 | full |
+| `docs/progress/sessions-011-020.md` | 11– | open (9 free) |
 
 ---
 

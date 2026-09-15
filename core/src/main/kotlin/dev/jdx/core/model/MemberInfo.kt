@@ -21,6 +21,8 @@ public sealed interface MemberInfo {
 /**
  * A field declaration. [type] is the erased type from the descriptor;
  * [genericSignature] carries the generic type when the field is generic.
+ * [constantValue] is the rendered `ConstantValue` attribute when the field is a
+ * compile-time constant (e.g. `serialVersionUID = 1L` renders as `"1"`), else `null`.
  */
 public data class FieldInfo(
     override val name: String,
@@ -29,6 +31,7 @@ public data class FieldInfo(
     public val genericSignature: FieldSignature? = null,
     override val annotations: List<AnnotationInfo> = emptyList(),
     override val deprecated: Boolean = false,
+    public val constantValue: String? = null,
 ) : MemberInfo
 
 /**
@@ -36,6 +39,8 @@ public data class FieldInfo(
  * JVM truth; [genericSignature] is present when the method is generic or refers to type
  * variables. [parameterNames] come from `MethodParameters`/`LocalVariableTable` when
  * present — `null` entries mean "unknown, a renderer must synthesise and label".
+ * [annotationDefault] is the rendered `AnnotationDefault` value for annotation elements
+ * (e.g. `String[] names() default {}` renders as `"{}"`), else `null`.
  */
 public data class MethodInfo(
     override val name: String,
@@ -46,4 +51,5 @@ public data class MethodInfo(
     public val throwsTypes: List<TypeName> = emptyList(),
     override val annotations: List<AnnotationInfo> = emptyList(),
     override val deprecated: Boolean = false,
+    public val annotationDefault: String? = null,
 ) : MemberInfo

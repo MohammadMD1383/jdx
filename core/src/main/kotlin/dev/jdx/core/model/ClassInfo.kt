@@ -31,6 +31,9 @@ public data class AnnotationInfo(
  * [superclass] is `null` only for `java.lang.Object` and interfaces (JVMS: interfaces
  * have `Object` as their direct superclass in the class file — producers normalise that
  * to `null` here; the distinction is not interesting to any query).
+ *
+ * [deprecated] is true when the class carries the `Deprecated` attribute or a
+ * `@Deprecated` annotation (T-008 reads both — either source proves deprecation).
  */
 public data class ClassInfo(
     public val name: TypeName.ClassType,
@@ -44,6 +47,7 @@ public data class ClassInfo(
     public val annotations: List<AnnotationInfo> = emptyList(),
     public val outerClass: TypeName.ClassType? = null,
     public val sourceFileName: String? = null,
+    public val deprecated: Boolean = false,
 ) {
     /** Fields then methods, in declaration order — the order renderers print. */
     public val members: List<MemberInfo>

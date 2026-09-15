@@ -381,7 +381,7 @@ opportunistic real-cache test (aborts, never fails, without the cache).*
 
 ---
 
-### T-008 — ASM class reader → `ClassInfo`/`MemberInfo` · `WIP`
+### T-008 — ASM class reader → `ClassInfo`/`MemberInfo` · `DONE` (session 11)
 **Depends:** T-007, T-002 · **Files:** `index/.../asm/*`
 
 `ClassReader` with `SKIP_FRAMES` (**not** `SKIP_DEBUG` — parameter names live there).
@@ -390,15 +390,27 @@ deprecation, source-file name, members with descriptors/signatures/throws/annota
 default values, and parameter names from `MethodParameters` then `LocalVariableTable`.
 
 **Acceptance**
-- [ ] **Differential test vs `javap -p -s`**: for every fixture class, the member set and
+- [x] **Differential test vs `javap -p -s`**: for every fixture class, the member set and
       descriptors match exactly. This is the correctness oracle — make it a real test, not a
       manual check.
-- [ ] Class-file major versions up to the running JDK parse; newer ones emit
+- [x] Class-file major versions up to the running JDK parse; newer ones emit
       `UNSUPPORTED_CLASS_VERSION` instead of throwing
-- [ ] A corrupt/truncated class file yields `CORRUPT_CLASS` and does not abort a whole jar
-- [ ] No class from an inspected jar is ever loaded into the JVM (D-017) — assert by running
+- [x] A corrupt/truncated class file yields `CORRUPT_CLASS` and does not abort a whole jar
+- [x] No class from an inspected jar is ever loaded into the JVM (D-017) — assert by running
       with a `SecurityManager`-free check that the fixture's static initialiser side-effect
       file was never created
+
+*Implementation notes (session 11): `AsmClassReader` (`index/.../asm/`) returns a sealed
+`ClassReadResult` (`Ok`/`UnsupportedVersion`/`Corrupt` — errors are values, never throws);
+major-version pre-check against `Runtime.version().feature() + 44` plus an ASM-lag catch
+for majors ASM itself rejects. Param names: `MethodParameters` when sizes match, else LVT
+slot walk (long/double take two), else `null`s. Annotation/constant values rendered
+deterministically (`"s"`, `Fqn.class`, `E.A`, `{1, 2}`, `@Fqn(k=v)`). Core model gained
+three defaulted slots: `ClassInfo.deprecated`, `MethodInfo.annotationDefault`,
+`FieldInfo.constantValue` (test-first, `MemberDefaultsTest`). Tests: 14 tier-1
+(in-memory ASM-built classes via `AsmTestClasses`) + 7 tier-2 (javap differential over
+every fixture class, whole-jar read, corrupt-neighbour isolation, D-017 marker proof,
+JRT `Object`/`HashMap` smoke on major-70 JDK-26 bytes, flag spot-checks).*
 
 ---
 
