@@ -51,7 +51,7 @@ be fiction.
 | **M6** | Serving: daemon, MCP, HTTP, `batch` | TODO |
 | **M7** | Polish: token budgets, AppCDS, mutation gates, docs, install | TODO |
 
-**T-001 through T-006, T-053 and T-061 are `DONE`.** M0's remaining test-spine tasks are
+**T-001 through T-007, T-053 and T-061 are `DONE`.** M0's remaining test-spine tasks are
 **T-054** (golden files) and **T-055** (property infrastructure), both unblocked now that
 T-053 is done; T-056…T-060 unblock as their milestones land. M1 starts at T-007.
 
@@ -350,7 +350,7 @@ shards hold 10 sessions; lessons and decisions shards hold 25 entries each.
 Goal: `jdx show` / `outline` / `members --inherited` answer correctly from real jars, with no
 index and no sources. This milestone alone already beats `javap` for the agent's main loop.
 
-### T-007 — Artifact loading and sources pairing · `WIP`
+### T-007 — Artifact loading and sources pairing · `DONE` (session 10)
 **Depends:** T-002 · **Files:** `index/.../artifact/*`
 
 Open jars, class dirs, and `jrt:/`. Implement the five sources-pairing rules from
@@ -358,13 +358,26 @@ PROPOSAL.md §5.2. Content-hash artifacts. Harden against zip-slip and zip bombs
 normalise entry names, reject traversal, cap decompressed size and entry count.
 
 **Acceptance**
-- [ ] Reads a jar, a class directory, and the running JDK's `jrt:/` uniformly through one
+- [x] Reads a jar, a class directory, and the running JDK's `jrt:/` uniformly through one
       interface
-- [ ] Finds `gson-2.14.0-sources.jar` from `gson-2.14.0.jar` via the Gradle cache layout
-- [ ] Multi-release jars: picks the right variant for the running JDK and emits
+- [x] Finds `gson-2.14.0-sources.jar` from `gson-2.14.0.jar` via the Gradle cache layout
+- [x] Multi-release jars: picks the right variant for the running JDK and emits
       `MULTI_RELEASE_VARIANT`
-- [ ] A crafted zip-slip entry is rejected with a test proving it
-- [ ] Hash of an unchanged jar is stable across runs and processes
+- [x] A crafted zip-slip entry is rejected with a test proving it
+- [x] Hash of an unchanged jar is stable across runs and processes
+
+*Implementation notes (session 10): uniform `ArtifactRoot` interface (`classEntryPaths`,
+`openClass`, `stableId`, `warnings`) with `JarArtifact`/`DirArtifact`/`JrtArtifact` behind
+the `ArtifactLoader` dispatch; `ZipSafety` (normalisation + entry/total/per-read caps),
+`ArtifactHash` (SHA-256/128 streaming file + deterministic dir hash), `MultiRelease`
+(pure selector, manifest-gated), `SourcesPairing` (sealed `External`/`Embedded`/`Absent`;
+explicit override wins as the word "override" demands; rules 2+3 share one stem-locked
+version-dir scan so flat lib dirs never cross-pair). JRT strips module prefixes and maps
+them via `moduleForClass` (first module wins + one `DUPLICATE_FQN` for split packages).
+Tests: 28 tier-1 (incl. a 1,000-case normalisation property) + 21 tier-2 (crafted MR,
+zip-slip, cache-layout, real-cache opportunistic, full-jar D-017 marker proof). The
+`gson` acceptance is covered two ways: a fabricated Gradle-layout test (always) and an
+opportunistic real-cache test (aborts, never fails, without the cache).*
 
 ---
 

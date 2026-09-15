@@ -14,14 +14,14 @@ or delete a past entry — if one turned out to be wrong, say so in a *new* entr
 
 | | |
 |---|---|
-| **Last updated** | 2026-09-15 (session 9) |
+| **Last updated** | 2026-09-15 (session 10) |
 | **Repository** | <https://github.com/MohammadMD1383/jdx> (public, Apache-2.0) |
-| **Phase** | Design complete; **M0 implementation in progress** |
-| **Active milestone** | M0 — Skeleton |
-| **Next task** | **T-007 (artifact loading)** — M1 starts; or T-054/T-055 (golden/property infra, newly unblocked by T-053) |
+| **Phase** | Design complete; **M0 done, M1 in progress** |
+| **Active milestone** | M1 — Read path |
+| **Next task** | **T-008 (ASM class reader)** — reads `openClass` bytes from T-007; or T-054/T-055 (golden/property infra) |
 | **Task count** | 59 tasks defined (T-001…T-061; M0–M2 in full detail, M3–M7 as one-liners) |
 | **Build status** | **Green.** `./gradlew build` passes. Runnable `jdx`: `./gradlew :app:installDist` → `app/build/jdx` (fat jar + POSIX launcher, JDK-21 gate, ~180 ms cold start); `install.sh` symlinks it into `~/.local/bin`. Commands so far: `--version`, `version [--json]`, `doctor [--json]`. |
-| **Test status** | **212 tests, all green** (184 tier 1 in **~2.6 s** via `./gradlew test`, 27 tier 2 via `check`, 1 soak proof via `soak`). Tier machinery (T-053): tags select tiers, `verifyTier1Budget` fails over 30 s, `testReport` aggregates. |
+| **Test status** | **261 tests, all green** (212 tier 1 in **~3 s** via `./gradlew test`, 48 tier 2 via `check`, 1 soak proof via `soak`). T-007 added 28 tier-1 + 21 tier-2 artifact tests. |
 | **Docs** | Append-only logs sharded (D-023): sessions → `docs/progress/`, decisions → `docs/decisions/` (shard 2 open at D-027), lessons → `docs/lessons/` (L-001…L-020). Every hard-won lesson goes to `docs/LESSONS.md` (D-024). |
 | **Blocked on** | Nothing. |
 
@@ -29,8 +29,7 @@ or delete a past entry — if one turned out to be wrong, say so in a *new* entr
 
 Documentation, the Gradle skeleton, and **four layers of implemented behaviour**:
 
-1. **The `core` domain model** (`core/src/main/kotlin/dev/jdx/core/model/`):
-   - `TypeName` (class/array/primitive, binary/FQN/simple names) + `typeNameFromBinaryName`,
+1. **The `core` domain model** (`core/src/main/kotlin/dev/jdx/core/model/`):   - `TypeName` (class/array/primitive, binary/FQN/simple names) + `typeNameFromBinaryName`,
      `arrayTypeName`
    - `JvmDescriptor` (field/method descriptors, parse & print, null-on-malformed)
    - `GenericSignature` (full JVMS §4.7.9.1 grammar: class/method/field signatures, type
@@ -75,6 +74,16 @@ Documentation, the Gradle skeleton, and **four layers of implemented behaviour**
    (`core/src/test/.../fixtures/`) resolves the jars without hard-coded paths and never
    loads a fixture class; `StaticInitMarker` + absent-marker test prove D-017; one class
    compiles `-g:none`. How to extend: `docs/TESTING.md` §11.1.
+
+5. **The artifact layer** (`index/src/main/kotlin/dev/jdx/index/artifact/`, T-007):
+   a uniform `ArtifactRoot` (`classEntryPaths`/`openClass`/`stableId`/`warnings`) over
+   jars, class dirs and `jrt:/` (`JarArtifact`/`DirArtifact`/`JrtArtifact`, all opened
+   via the `ArtifactLoader` dispatch), plus `ZipSafety` (traversal rejection +
+   entry/total/per-read caps), `ArtifactHash` (SHA-256/128 content ids), `MultiRelease`
+   (manifest-gated variant selection + `MULTI_RELEASE_VARIANT`) and `SourcesPairing`
+   (sealed `External`/`Embedded`/`Absent`, five §5.2 rules). Proven by 28 tier-1 tests
+   (incl. a 1,000-case normalisation property) and 21 tier-2 tests over real and
+   crafted jars.
 
 All 156 `core` tests are round-trip / structural / property tests written **test-first**
 (D-020); generators live in `core/src/test/kotlin/.../gen/` (seed of T-055). The `cli`

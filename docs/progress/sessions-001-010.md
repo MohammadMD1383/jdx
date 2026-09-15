@@ -10,6 +10,76 @@ history preserves the pre-shard file).
 
 ---
 
+## Session 10 — 2026-09-15 — artifact loading and sources pairing (T-007)
+**Agent:** Muse Spark (via opencode) · **Branch:** `t007-artifact-loading` (from T-053 HEAD) ·
+**Commits:** claim `5ba13fa` + one feat commit (this entry included)
+
+### Goal
+T-007: open jars, class dirs and `jrt:/` through one interface, with the five
+sources-pairing rules, content hashes, MR-jar selection and zip hardening. Lowest-numbered
+unblocked TODO per the board rules; M1 starts here.
+
+### What I did
+1. Claimed T-007 (`chore: claim T-007` on new branch `t007-artifact-loading`).
+2. **New `index/.../artifact/` package** (6 main files, all KDoc'd):
+    - `ArtifactRoot` (uniform `classEntryPaths`/`openClass`/`stableId`/`warnings`) +
+      `ArtifactKind`, `ArtifactReadException` (typed exit-5 carrier, message-only contract);
+    - `JarArtifact` (eager normalise + caps + MR resolve; holds one `ZipFile`),
+      `DirArtifact` (relative-path entries identical to its jar's), `JrtArtifact`
+      (module-stripped paths, `moduleForClass`, `lib/src.zip` pairing, one `DUPLICATE_FQN`
+      for split packages) — all constructed via the `ArtifactLoader` dispatch only;
+    - `ZipSafety` (normalise, entry/total/per-read caps), `ArtifactHash` (SHA-256/128
+      streaming file + deterministic dir hash), `MultiRelease` (pure manifest-gated
+      selector), `SourcesPairing` (sealed `External`/`Embedded`/`Absent`; explicit
+      override wins — the proposal lists it fourth but calls it an override, and an
+      override that loses is not one; rules 2+3 share one stem-locked version-dir scan).
+3. **Tests:** 28 tier-1 (`ZipSafetyTest`, 1,000-case `ZipSafetyPropertyTest`,
+   `ArtifactHashTest`, `MultiReleaseTest`) + 21 tier-2 (`ArtifactLoaderTest` incl. full-jar
+   D-017 marker proof, crafted MR/zip-slip/empty jars, jrt smoke; `SourcesPairingTest`
+   incl. fabricated Gradle layout + opportunistic real-cache test that aborts, never
+   fails, without the cache). `index/build.gradle.kts` gains kotest-property and the
+   `:testfixtures` wiring (same pattern as `core`).
+4. Two compile errors, both now lessons: `private companion` capping an `internal`
+   factory (L-021) and kotest 6's two `Arb.map` imports (L-022).
+
+### Decisions made
+None at D-level. One judgement call inside T-007's brief, recorded in
+`SourcesPairing`'s KDoc: explicit `--sources` is evaluated before rules 1–3 despite the
+proposal numbering it fourth (see above).
+
+### Tasks moved
+- T-007: WIP → DONE (all five acceptance boxes ticked, verified below).
+
+### Lessons distilled
+**L-021** (`private companion` invisibility), **L-022** (kotest `arbitrary.map` import).
+
+### What works now (and how to verify it yourself)
+```bash
+./gradlew test            # tier 1: 212 tests, ~3 s, still under the 30 s budget
+./gradlew check           # tiers 1+2: green — +21 artifact tests (12 loader, 9 pairing)
+./gradlew :index:test :index:tier2Test   # just this task's suites
+```
+261 tests total (212 tier 1 + 48 tier 2 + 1 soak proof), 0 failures. `check` is still
+green on machines with no jar corpus: the only cache-dependent test aborts via
+`assumeTrue` instead of failing.
+
+### What is broken / half-done
+Nothing known in T-007 scope. Known limits, documented in code for the task that owns
+them: total-size cap enforced over *declared* sizes at open plus per-read streaming caps
+(T-057 owns hostile-size adversarial coverage); `stableId` for `jrt:/` is the release
+string, not a content hash (fine — the JDK is not indexed by content); exit-code mapping
+of `ArtifactReadException`→5 happens in the service layer (T-011), not here.
+
+### Open questions / blockers
+None.
+
+### Next action
+**T-008 (ASM class reader → `ClassInfo`/`MemberInfo`)** — lowest-numbered unblocked TODO;
+it builds directly on this task's `openClass` bytes. T-054/T-055 remain available as
+bedrock alternatives.
+
+---
+
 ## Session 9 — 2026-09-15 — test tier infrastructure (T-053)
 **Agent:** Muse Spark (via opencode) · **Branch:** `t053-test-tiers` (from T-006 HEAD; T-006's
 branch is still unmerged) · **Commits:** claim `17c2beb` + one feat commit (this entry included)
