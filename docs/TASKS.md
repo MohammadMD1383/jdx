@@ -350,7 +350,7 @@ shards hold 10 sessions; lessons and decisions shards hold 25 entries each.
 Goal: `jdx show` / `outline` / `members --inherited` answer correctly from real jars, with no
 index and no sources. This milestone alone already beats `javap` for the agent's main loop.
 
-### T-007 — Artifact loading and sources pairing · `TODO`
+### T-007 — Artifact loading and sources pairing · `WIP`
 **Depends:** T-002 · **Files:** `index/.../artifact/*`
 
 Open jars, class dirs, and `jrt:/`. Implement the five sources-pairing rules from
