@@ -14,6 +14,7 @@ include(
     "mcp",        // MCP stdio server
     "server",     // HTTP/JSON API + daemon
     "app",        // fat-jar assembly + `jdx` launcher script
+    "testfixtures", // nasty Java/Kotlin classes compiled to a binary jar + sources jar (T-006)
 )
 
 dependencyResolutionManagement {

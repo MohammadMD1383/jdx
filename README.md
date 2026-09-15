@@ -108,6 +108,22 @@ Full specification with every flag: [`docs/PROPOSAL.md`](docs/PROPOSAL.md).
 - **JDK 21+** (developed against JDK 26)
 - No Maven or Gradle installation needed — the Gradle wrapper is the only build entry point
 
+## Fixture corpus
+
+Tests read real bytecode, not mocks: `testfixtures/` compiles deliberately nasty Java and
+Kotlin classes (generics, bridges, nesting, records, sealed types, enums, annotations,
+`synchronized`/`native`, a `-g:none` class, a static-initialiser probe, and every Kotlin
+shape whose JVM projection misleads) into a binary jar plus a `-sources.jar`.
+
+```bash
+./gradlew :testfixtures:jar :testfixtures:sourcesJar
+```
+
+Every fixture type carries an `@ExpectedMembers` annotation with its `javap -p` truth, so
+adding a fixture adds coverage automatically. **To add one:** write the source, copy the
+member lines from `javap -p` into the annotation (never from memory), rebuild twice and
+check the jars are byte-identical. Full rules: [`docs/TESTING.md`](docs/TESTING.md) §11.1.
+
 ## Documentation
 
 | | |

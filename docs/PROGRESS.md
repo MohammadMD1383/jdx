@@ -14,20 +14,20 @@ or delete a past entry — if one turned out to be wrong, say so in a *new* entr
 
 | | |
 |---|---|
-| **Last updated** | 2026-09-14 (session 7) |
+| **Last updated** | 2026-09-15 (session 8) |
 | **Repository** | <https://github.com/MohammadMD1383/jdx> (public, Apache-2.0) |
 | **Phase** | Design complete; **M0 implementation in progress** |
 | **Active milestone** | M0 — Skeleton |
-| **Next task** | **T-006 (fixture corpus) or T-053 (test tier infrastructure)** — both unblocked; T-053 fixes a documented tier-1 overrun |
+| **Next task** | **T-053 (test tier infrastructure)** — the last unblocked M0 task; then M1 starts at T-007 |
 | **Task count** | 59 tasks defined (T-001…T-061; M0–M2 in full detail, M3–M7 as one-liners) |
 | **Build status** | **Green.** `./gradlew build` passes. Runnable `jdx`: `./gradlew :app:installDist` → `app/build/jdx` (fat jar + POSIX launcher, JDK-21 gate, ~180 ms cold start); `install.sh` symlinks it into `~/.local/bin`. Commands so far: `--version`, `version [--json]`, `doctor [--json]`. |
-| **Test status** | **197 tests, all green** (142 `core`, 30 `cli`, 25 `app`). **Tier-1 duration is over budget: a clean `./gradlew test` is ~38 s (budget 30 s)** — `app` e2e JVM tests are the bulk; T-053 must move them to tier 2. Incremental loop ~5–7 s. |
-| **Docs** | Append-only logs sharded (D-023): sessions → `docs/progress/`, decisions → `docs/decisions/` (shard 2 open at D-027), lessons → `docs/lessons/` (L-001…L-016). Every hard-won lesson goes to `docs/LESSONS.md` (D-024). |
+| **Test status** | **211 tests, all green** (156 `core` incl. 14 new fixture tests, 30 `cli`, 25 `app`). Tier-1 `./gradlew test --rerun` measured **~26 s** (inside the 30 s budget on this run, margin thin — T-053 still needed). Determinism proven: both fixture jars byte-identical across `--rerun-tasks` rebuilds. |
+| **Docs** | Append-only logs sharded (D-023): sessions → `docs/progress/`, decisions → `docs/decisions/` (shard 2 open at D-027), lessons → `docs/lessons/` (L-001…L-018). Every hard-won lesson goes to `docs/LESSONS.md` (D-024). |
 | **Blocked on** | Nothing. |
 
 ### What exists right now
 
-Documentation, the Gradle skeleton, and **three layers of implemented behaviour**:
+Documentation, the Gradle skeleton, and **four layers of implemented behaviour**:
 
 1. **The `core` domain model** (`core/src/main/kotlin/dev/jdx/core/model/`):
    - `TypeName` (class/array/primitive, binary/FQN/simple names) + `typeNameFromBinaryName`,
@@ -64,10 +64,19 @@ Documentation, the Gradle skeleton, and **three layers of implemented behaviour*
      dev.jdx.cli.JdxCliKt`) + `installDist` → `app/build/jdx` — a POSIX launcher that
      resolves a JDK (`JAVA_HOME` → PATH → `JDX_JVM_DEFAULT_DIR`, D-026), gates on
      Java 21+, applies the one-shot JVM flags, and fails with one human line (exit 6).
-   - `install.sh` at the repo root: no-root symlink install into `~/.local/bin` with a
-     `--force` clobber guard.
+    - `install.sh` at the repo root: no-root symlink install into `~/.local/bin` with a
+      `--force` clobber guard.
 
-All 142 `core` tests are round-trip / structural / property tests written **test-first**
+4. **The fixture corpus** (`testfixtures/`, T-006): 12 deliberately nasty Java/Kotlin
+   sources compiled to a byte-deterministic binary jar + `-sources.jar`
+   (`:testfixtures:jar :testfixtures:sourcesJar`); every source-declared type carries
+   `@ExpectedMembers` with its `javap -p` truth (bridges, `this$0`, `$default` stubs
+   included) so adding a fixture adds coverage; `Fixtures` helper
+   (`core/src/test/.../fixtures/`) resolves the jars without hard-coded paths and never
+   loads a fixture class; `StaticInitMarker` + absent-marker test prove D-017; one class
+   compiles `-g:none`. How to extend: `docs/TESTING.md` §11.1.
+
+All 156 `core` tests are round-trip / structural / property tests written **test-first**
 (D-020); generators live in `core/src/test/kotlin/.../gen/` (seed of T-055). The `cli`
 tests (T-004/T-005) cover the launcher with stub-JDK fault injection, an exhaustive
 576-combination doctor environment matrix (never-throws, exit-code law, text↔JSON parity,
@@ -75,7 +84,7 @@ determinism), generated version-gate and tool-version-parser properties, an inst
 suite, and real-JVM end-to-end tests.
 
 Docs of note: `docs/LESSONS.md` (+ `docs/lessons/` shards) — mistakes already paid for,
-seeded with L-001…L-009. Skim its index before fighting a toolchain or spec.
+now L-001…L-018. Skim its index before fighting a toolchain or spec.
 
 ```
 CLAUDE.md            project instructions — the entry point, read first

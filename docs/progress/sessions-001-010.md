@@ -10,6 +10,95 @@ history preserves the pre-shard file).
 
 ---
 
+## Session 8 — 2026-09-15 — fixture corpus (T-006)
+**Agent:** Muse Spark (via opencode) · **Commits:** claim `d5cfb7d` + one feat commit (this entry included)
+
+### Goal
+T-006: the `testfixtures` corpus — nasty Java/Kotlin classes compiled to a deterministic
+binary jar + `-sources.jar`, self-describing via `@ExpectedMembers`, with a `Fixtures`
+helper and a D-017 marker proof. Lowest-numbered unblocked TODO per the board rules.
+
+### What I did
+1. Claimed T-006 (branch `t006-fixture-corpus`, `chore: claim T-006`).
+2. **New `testfixtures` module** (`testfixtures/build.gradle.kts`, in `settings.gradle.kts`):
+   `noDebug` source set compiled with `options.isDebug = false` (`-g:none`); every archive
+   `isPreserveFileTimestamps = false` + `isReproducibleFileOrder = true`; custom `sourcesJar`
+   (`src/main/java` + `src/main/kotlin` + `src/nodebug/java`); `build` depends on it; java
+   toolchain pinned to the catalog version; Kotlin `moduleName = "testfixtures"` so renames
+   cannot silently rewrite `internal` mangling. No `ModuleInfo.kt` — any source file here
+   would become a fixture (said in the build-file comment).
+3. **12 fixture sources** (`dev.jdx.fixtures`): `ExpectedMembers` (RUNTIME, TYPE) +
+   `Generics` (bounded/wildcard/recursive), `CovariantOverrides` (bridges),
+   `Nesting` (static-nested/inner/local/anonymous), `PersonRecord`, `SealedHierarchy`,
+   `TrafficLight` (constant bodies), `Annos` (`Tag`/`Tags`/`Matrix`: repeatable +
+   array/Class-valued), `VarargsAndModifiers` (varargs, synchronized, native, strictfp,
+   `forRemoval`, package-private/private), `NoDebug` (`-g:none`), `StaticInitMarker`
+   (clinit writes `$TMPDIR/jdx-fixture-static-init-marker`), `KotlinShapes.kt` (typealias,
+   data/sealed/value/object/companion, `@JvmName`/`@JvmStatic`/`@JvmOverloads`, suspend,
+   default args, nullability, custom accessors, `internal`, extension fun, inline/reified).
+4. **Pinned `@ExpectedMembers` mechanically**: built, dumped `javap -p` for every class,
+   pasted exact member lines (FQ signatures, ctors, synthetics; never `static {}`).
+   `javap` corrected five of my hand-written guesses (FQ names, `Companion` has no
+   `getVERSION` for a `const`, `withDefault` overloads/`$default` I had not predicted,
+   `internalHelper$testfixtures` mangling, `strictfp` invisible since JEP 306 — noted on
+   the fixture). Even `@ExpectedMembers` annotates itself and `Tag`/`Tags`/`Matrix`, so
+   the "every source-declared type is annotated" rule has zero exceptions.
+5. **`Fixtures` helper** (`core/src/test/.../fixtures/Fixtures.kt`): `fixturesDir()`
+   (`jdx.fixturesDir` sysprop, else upward search — no absolute paths), `binaryJar()`/
+   `sourcesJar()` (exactly-one-match, never guess), `classNames()`/`classBytes()` (zip
+   reads, never loads), `staticInitMarkerFile()` (formula duplicated, never touches the
+   class). `core/build.gradle.kts` wires `:core:test → :testfixtures:jar+sourcesJar` +
+   the sysprop (up-to-date-checked; T-053 re-tiers it).
+6. **14 tests, green** (`FixturesTest`: resolution/ambiguity/sysprop/marker-formula/zip
+   round-trip on fake dirs; `FixtureCorpusTest`: jars exist, sources-manifest exact,
+   uniform 1980 entry timestamps, annotation coverage with a pinned exempt set
+   (`KotlinShapesKt` + 5 anonymous/local/enum-body classes, exact both ways),
+   **annotation-vs-`javap -p` member-for-member agreement** (skips cleanly without
+   `javap`), facade pinning, marker absent, `NoDebug` free of `LineNumberTable`/
+   `LocalVariableTable`).
+7. **Docs**: `TESTING.md` §11.1 + README "Fixture corpus" (how to add a fixture).
+
+### Decisions made
+None at D-level (all within T-006's brief). Convention recorded in `ExpectedMembers` KDoc
+instead: entries are `javap -p` member lines exactly (FQ, with ctors and synthetics,
+without `static {}`); empty list means "declares nothing".
+
+### Tasks moved
+- T-006: WIP → DONE (all six acceptance boxes ticked, verified below).
+
+### Lessons distilled
+**L-017** (Kotlin keeps the `is` prefix: `options.isDebug`, not `options.debug`),
+**L-018** (`javap` flags must precede the class name — trailing `-v` becomes a class).
+
+### What works now (and how to verify it yourself)
+```bash
+./gradlew :testfixtures:jar :testfixtures:sourcesJar   # both jars in testfixtures/build/libs/
+./gradlew :core:test --tests 'dev.jdx.core.fixtures.*' # 14 tests, green
+./gradlew test --rerun                                 # tier 1: 211 tests green, ~26 s
+sha256sum testfixtures/build/libs/*.jar > /tmp/a; ./gradlew :testfixtures:jar :testfixtures:sourcesJar --rerun-tasks -q; sha256sum testfixtures/build/libs/*.jar > /tmp/b; diff /tmp/a /tmp/b  # identical
+javap -p -classpath testfixtures/build/libs/testfixtures-0.1.0-SNAPSHOT.jar dev.jdx.fixtures.NoDebug  # no "Compiled from", unnamed params
+ls /tmp/jdx-fixture-static-init-marker                 # absent: D-017 holds
+```
+
+### What is broken / half-done
+Nothing known in T-006 scope. Known implications, documented where they bite:
+- `:core:test` now builds the fixture jars first (up-to-date-checked; incremental loop
+  unaffected, clean `test` measured 26 s — inside the 30 s budget on this run, but the
+  margin is thin and T-053 should still move jar-touching tests to tier 2).
+- Only remaining Gradle-10 warning is the pre-existing toolchain auto-provisioning one
+  (session 6); this task adds none.
+- `javap`-agreement tests skip (not fail) where `javap` is absent — CI without a JDK
+  would silently lose that pinning. T-056 should assert-or-explain that case.
+
+### Open questions / blockers
+None.
+
+### Next action
+**T-053 (test tier infrastructure)** — the other unblocked M0 task; it fixes the tier-1
+margin structurally. Then M1 starts at T-007 (artifact loading), which now has a corpus.
+
+---
+
 ## Session 7 — 2026-09-14 — `jdx version` and `jdx doctor` (T-005, D-027)
 **Agent:** GLM (via opencode) · **Commits:** claim `1e36632` + one feat commit (this entry included)
 

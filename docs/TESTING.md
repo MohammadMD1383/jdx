@@ -330,6 +330,27 @@ Requirements:
   fixture adds test coverage automatically.
 - **A `Fixtures` helper** resolves jar paths with no hard-coded absolute paths.
 
+### 11.1 Adding a fixture
+
+1. Add the source under `testfixtures/src/main/java` (or `src/main/kotlin`). The odd one out
+   is `src/nodebug/java`: classes there compile with `-g:none` (see
+   `testfixtures/build.gradle.kts`), so only a fixture that must lack debug info goes there.
+2. Annotate **every** source-declared type with `@ExpectedMembers` — one entry per declared
+   field, method and constructor, exactly as `javap -p` prints the member line (modifiers plus
+   fully-qualified signature, no trailing `;`). List synthetic members (`this$0`, bridges,
+   `$default` stubs) like any other; never list `static {}`. A type declaring nothing carries
+   an explicit empty list. Anonymous/local classes, enum constant bodies and the Kotlin file
+   facade cannot carry the annotation — they live in `FixtureCorpusTest`'s pinned exempt set
+   instead, which you must extend consciously.
+3. Run `./gradlew :testfixtures:jar` and copy the member lines from
+   `javap -p -classpath testfixtures/build/libs/testfixtures-<version>.jar <YourClass>` into
+   the annotation — never hand-write them from memory. The corpus test diffs annotation
+   against `javap` member-for-member and fails on any deviation, including order.
+4. If the fixture must never execute (a static-initialiser probe like `StaticInitMarker`),
+   say so in its KDoc, and never reference it from test code — read bytes via
+   `Fixtures.classBytes(...)`, never reflection (D-017).
+5. Rebuild twice and compare sha256 of both jars; identical bytes are the acceptance bar.
+
 ---
 
 ## 12. What we deliberately do **not** test

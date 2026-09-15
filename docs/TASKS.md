@@ -186,7 +186,7 @@ run-twice determinism) + a generated `parseToolVersion` property + 3 real-JVM e2
 
 ---
 
-### T-006 — Fixture corpus · `WIP`
+### T-006 — Fixture corpus · `DONE` (session 8)
 **Depends:** T-001 · **Files:** `testfixtures/`, `core/src/test/kotlin/.../Fixtures.kt`
 
 A `testfixtures` source set of deliberately nasty Java and Kotlin classes, compiled by Gradle
@@ -204,14 +204,14 @@ the marker must never appear) · Kotlin: `suspend`, extension functions, default
 properties with custom accessors, typealiases, `inline`/`reified`.
 
 **Acceptance**
-- [ ] `./gradlew :testfixtures:jar :testfixtures:sourcesJar` produces both jars
-- [ ] Builds are **byte-deterministic** across repeat runs (otherwise golden tests go flaky)
-- [ ] A `Fixtures` helper resolves both jar paths with no hard-coded absolute paths
-- [ ] Fixtures are **self-describing**: an `@ExpectedMembers({"public int add(int,int)", …})`
+- [x] `./gradlew :testfixtures:jar :testfixtures:sourcesJar` produces both jars
+- [x] Builds are **byte-deterministic** across repeat runs (otherwise golden tests go flaky)
+- [x] A `Fixtures` helper resolves both jar paths with no hard-coded absolute paths
+- [x] Fixtures are **self-describing**: an `@ExpectedMembers({"public int add(int,int)", …})`
       annotation carries the expected truth, so adding a fixture adds coverage automatically
       (TESTING.md §5.2)
-- [ ] The static-initialiser marker fixture exists and a test asserts the marker is absent
-- [ ] `docs/TESTING.md` §11 and the README document how to add a fixture
+- [x] The static-initialiser marker fixture exists and a test asserts the marker is absent
+- [x] `docs/TESTING.md` §11 and the README document how to add a fixture
 
 ---
 
