@@ -186,7 +186,7 @@ run-twice determinism) + a generated `parseToolVersion` property + 3 real-JVM e2
 
 ---
 
-### T-006 — Fixture corpus · `TODO`
+### T-006 — Fixture corpus · `WIP`
 **Depends:** T-001 · **Files:** `testfixtures/`, `core/src/test/kotlin/.../Fixtures.kt`
 
 A `testfixtures` source set of deliberately nasty Java and Kotlin classes, compiled by Gradle
