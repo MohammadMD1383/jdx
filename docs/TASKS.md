@@ -215,7 +215,7 @@ properties with custom accessors, typealiases, `inline`/`reified`.
 
 ---
 
-### T-053 — Test tier infrastructure · `TODO`
+### T-053 — Test tier infrastructure · `WIP`
 **Depends:** T-001 · **Files:** convention plugin / `build.gradle.kts`
 *(Added in session 1 after D-020. Numbered T-053 per the board rule: new tasks take the next
 free number even when they belong to an earlier milestone.)*
