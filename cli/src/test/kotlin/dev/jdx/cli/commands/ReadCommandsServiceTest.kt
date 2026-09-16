@@ -10,6 +10,7 @@ import java.io.File
 import java.io.PrintStream
 import java.util.zip.ZipFile
 import kotlinx.serialization.json.Json
+import kotlinx.serialization.json.jsonArray
 import kotlinx.serialization.json.jsonObject
 import kotlinx.serialization.json.jsonPrimitive
 import org.junit.jupiter.api.Tag
@@ -93,6 +94,16 @@ class ReadCommandsServiceTest {
         run.exit shouldBe 0
         run.output shouldContain "class java.util.HashMap"
         run.output shouldContain "next: jdx members java.util.HashMap --inherited"
+    }
+
+    @Test
+    fun `show HashMap json provenance names the JDK module (T-012)`() {
+        val run = run(listOf("show", "java.util.HashMap", "--json"))
+        run.exit shouldBe 0
+        val parsed = Json.parseToJsonElement(run.output.trim()).jsonObject
+        val provenance = parsed["provenance"]?.jsonArray
+            ?: fail("show JSON has no top-level provenance: ${run.output.trim()}")
+        provenance.single().jsonObject["artifact"]?.jsonPrimitive?.content shouldBe "java.base"
     }
 
     @Test

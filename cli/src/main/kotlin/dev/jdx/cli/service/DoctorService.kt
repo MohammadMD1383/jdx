@@ -1,5 +1,6 @@
 package dev.jdx.cli.service
 
+import dev.jdx.index.artifact.JdkLayout
 import kotlinx.serialization.SerialName
 import kotlinx.serialization.Serializable
 import java.io.File
@@ -82,6 +83,8 @@ data class RuntimeInfo(val version: String, val jrtReachable: Boolean, val jrtRe
 data class DoctorEnvironment(
     val userHome: Path,
     val javaHome: Path,
+    /** `$JAVA_HOME` when set — the second `src.zip` candidate (T-012). Null means unset. */
+    val javaHomeEnv: Path? = null,
     val pathDirs: List<Path>,
     val runtimeDir: Path?,
     val workingDir: Path,
@@ -108,6 +111,7 @@ data class DoctorEnvironment(
             return DoctorEnvironment(
                 userHome = userHome,
                 javaHome = javaHome,
+                javaHomeEnv = JdkLayout.envJavaHome(),
                 pathDirs = pathDirs,
                 runtimeDir = runtimeDir,
                 workingDir = workingDir,
@@ -195,12 +199,17 @@ class DoctorService(private val environment: DoctorEnvironment) {
     }
 
     private fun jdkSourcesCheck(): DoctorCheck {
-        val srcZip = environment.javaHome.resolve("lib/src.zip")
-        return if (Files.isRegularFile(srcZip)) {
-            check("jdk-sources", DoctorStatus.OK, "present ($srcZip)")
+        // One shared lookup with the `jrt:/` root (T-012): found sources read OK, a
+        // missing src.zip is a WARN — some distributions omit it — never an error.
+        val found = JdkLayout.findSrcZip(environment.javaHome, environment.javaHomeEnv)
+        return if (found != null) {
+            check("jdk-sources", DoctorStatus.OK, "present ($found)")
         } else {
-            // Graceful absence is pinned by T-012: a WARN row, not an error.
-            check("jdk-sources", DoctorStatus.WARN, "absent ($srcZip) — JDK sources unavailable")
+            val searched = listOfNotNull(
+                environment.javaHome.resolve("lib/src.zip"),
+                environment.javaHomeEnv?.resolve("lib/src.zip"),
+            ).distinct().joinToString(" and ")
+            check("jdk-sources", DoctorStatus.WARN, "absent ($searched) — JDK sources unavailable")
         }
     }
 

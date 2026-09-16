@@ -49,8 +49,11 @@ public object ArtifactLoader {
     /**
      * Opens the running JDK via `jrt:/` (defaulting to this process's `java.home`).
      * Never throws for a missing `src.zip` — that is routine, reported as
-     * [JrtArtifact.jdkSources] `null`.
+     * [JrtArtifact.jdkSources] `null`. [envJavaHome] defaults to `$JAVA_HOME` so a
+     * full JDK beside a bare runtime still pairs its sources (T-012).
      */
-    public fun openJdk(javaHome: Path = Path.of(System.getProperty("java.home"))): JrtArtifact =
-        JrtArtifact.open(javaHome)
+    public fun openJdk(
+        javaHome: Path = Path.of(System.getProperty("java.home")),
+        envJavaHome: Path? = JdkLayout.envJavaHome(),
+    ): JrtArtifact = JrtArtifact.open(javaHome, envJavaHome)
 }

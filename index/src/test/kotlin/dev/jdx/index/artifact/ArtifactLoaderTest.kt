@@ -179,6 +179,39 @@ class ArtifactLoaderTest {
     }
 
     @Test
+    fun `jdk root pairs src zip from a fabricated java home`(@TempDir temp: Path) {
+        val home = temp.resolve("jdk").also { Files.createDirectories(it) }
+        Files.createDirectories(home.resolve("lib"))
+        Files.write(home.resolve("lib/src.zip"), byteArrayOf(0x50, 0x4b))
+
+        // Explicit null env home isolates the test from the ambient $JAVA_HOME.
+        ArtifactLoader.openJdk(home, envJavaHome = null).use { root ->
+            root.jdkSources shouldBe home.resolve("lib/src.zip")
+        }
+    }
+
+    @Test
+    fun `jdk root falls back to the env home for src zip`(@TempDir temp: Path) {
+        val home = temp.resolve("jdk").also { Files.createDirectories(it) }
+        val env = temp.resolve("envjdk").also { Files.createDirectories(it) }
+        Files.createDirectories(env.resolve("lib"))
+        Files.write(env.resolve("lib/src.zip"), byteArrayOf(0x50, 0x4b))
+
+        ArtifactLoader.openJdk(home, envJavaHome = env).use { root ->
+            root.jdkSources shouldBe env.resolve("lib/src.zip")
+        }
+    }
+
+    @Test
+    fun `jdk root reports no sources when neither home ships one`(@TempDir temp: Path) {
+        val home = temp.resolve("jdk").also { Files.createDirectories(it) }
+
+        ArtifactLoader.openJdk(home, envJavaHome = null).use { root ->
+            (root.jdkSources == null) shouldBe true
+        }
+    }
+
+    @Test
     fun `jdk root serves object from java-base`(@TempDir temp: Path) {
         ArtifactLoader.openJdk().use { root ->
             root.kind shouldBe ArtifactKind.JRT

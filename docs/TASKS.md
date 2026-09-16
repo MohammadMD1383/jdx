@@ -532,17 +532,32 @@ extend `MemberListingOptions`, and pin both with goldens.
 
 ---
 
-### T-012 — JDK stdlib root via `jrt-fs` + `src.zip` · `WIP`
-**Depends:** T-007 · **Files:** `index/.../artifact/JrtRoot.kt`
+### T-012 — JDK stdlib root via `jrt-fs` + `src.zip` · `DONE` (session 15)
+**Depends:** T-007 · **Files:** `index/.../artifact/JdkLayout.kt`, `JrtArtifact.kt`, `ArtifactLoader.kt`, `cli/.../service/DoctorService.kt`
 
 Expose the running JDK's modules as a root, paired with `$JAVA_HOME/lib/src.zip` as its
 sources. Appended to every workspace unless `--no-jdk` (D-006).
 
 **Acceptance**
-- [ ] `jdx show java.util.HashMap` works with zero configuration
-- [ ] JDK source is found when `src.zip` is present, absent gracefully when it is not
+- [x] `jdx show java.util.HashMap` works with zero configuration
+- [x] JDK source is found when `src.zip` is present, absent gracefully when it is not
       (some distributions omit it) — emit a WARN row in `doctor`, not an error
-- [ ] Module name is reported as the artifact (e.g. `java.base`)
+- [x] Module name is reported as the artifact (e.g. `java.base`)
+
+*Implementation notes (session 15): the `jrt:/` root, zero-config reads and the module
+label already existed from T-007/T-011 — this task closed the remaining gap, `src.zip`
+discovery. New `JdkLayout` (`index/.../artifact/`): `findSrcZip(javaHome, envJavaHome)`
+tries `java.home/lib/src.zip` then `$JAVA_HOME/lib/src.zip` (first file wins, `java.home`
+wins ties; never throws), shared by `JrtArtifact.jdkSources` and the `doctor`
+`jdk-sources` row so the two can never disagree. `ArtifactLoader.openJdk` and
+`DoctorEnvironment.system()` both default the env home from the live `$JAVA_HOME`;
+`DoctorEnvironment` gained `javaHomeEnv` (default `null`, so existing callers compile).
+Tests: 8 tier-1 `JdkLayoutTest` (7 examples over fabricated homes + one 500-case
+property: result is null or a real file under a searched home, java-home-first,
+never throws) + 3 tier-2 `ArtifactLoaderTest` pairing tests (fabricated-home,
+env-fallback, neither) + 3 `DoctorServiceTest` tests (env-fallback OK, java-home
+precedence, absent WARN naming locations) + 1 tier-2 JSON test pinning
+`provenance[0].artifact == "java.base"` for `show java.util.HashMap`.*
 
 ---
 

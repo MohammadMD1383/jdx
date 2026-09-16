@@ -17,12 +17,14 @@ import java.nio.file.Path
  * the alphabetically first module wins and one `DUPLICATE_FQN` warning names them all —
  * the same shadowing rule workspaces apply to jars.
  *
- * [jdkSources] is `$JAVA_HOME/lib/src.zip` when the distribution ships it, `null` when it
- * does not (some distributions omit it — T-012 turns that into a `doctor` WARN row, never
- * an error here).
+ * [javaHome] is `java.home`; [envJavaHome] is `$JAVA_HOME` when it names a different
+ * directory. [jdkSources] is the first `$home/lib/src.zip` found across the two
+ * ([JdkLayout.findSrcZip]), `null` when neither ships it (some distributions omit it —
+ * routine, surfaced as a `doctor` WARN row, never an error here).
  */
 public class JrtArtifact private constructor(
     private val javaHome: Path,
+    envJavaHome: Path?,
 ) : ArtifactRoot {
 
     private val moduleByPath: Map<String, String>
@@ -33,9 +35,9 @@ public class JrtArtifact private constructor(
 
     override val warnings: List<Warning>
 
-    /** `$JAVA_HOME/lib/src.zip` when present, `null` when the distribution omits it. */
+    /** `$home/lib/src.zip` when present, `null` when the distribution omits it. */
     public val jdkSources: Path? =
-        javaHome.resolve("lib/src.zip").takeIf { Files.isRegularFile(it) }
+        JdkLayout.findSrcZip(javaHome, envJavaHome)
 
     init {
         val fileSystem = FileSystems.getFileSystem(URI.create("jrt:/"))
@@ -110,9 +112,9 @@ public class JrtArtifact private constructor(
 
     internal companion object {
         /** Called from [ArtifactLoader]; kept here so roots share one dispatch point. */
-        internal fun open(javaHome: Path): JrtArtifact {
+        internal fun open(javaHome: Path, envJavaHome: Path? = JdkLayout.envJavaHome()): JrtArtifact {
             try {
-                return JrtArtifact(javaHome.toAbsolutePath().normalize())
+                return JrtArtifact(javaHome.toAbsolutePath().normalize(), envJavaHome)
             } catch (ex: ArtifactReadException) {
                 throw ex
             } catch (ex: Exception) {

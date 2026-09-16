@@ -183,6 +183,58 @@ class DoctorServiceTest {
     }
 
     @Test
+    fun `jdk sources found via JAVA_HOME fallback is OK`() {
+        val root = tempDir("jdx-doctor-test-")
+        val envJdk = root.resolve("envjava").also { Files.createDirectories(it) }
+        Files.createDirectories(envJdk.resolve("lib"))
+        Files.write(envJdk.resolve("lib/src.zip"), byteArrayOf(0x50, 0x4b))
+        val service = DoctorService(
+            fakeEnvironment(root, srcZipPresent = false, envJavaHome = envJdk),
+        )
+
+        val report = service.probe()
+
+        val sources = report.checks.first { it.name == "jdk-sources" }
+        sources.status shouldBe DoctorStatus.OK
+        sources.detail shouldContain envJdk.resolve("lib/src.zip").toString()
+        exitCodeFor(report) shouldBe 0
+    }
+
+    @Test
+    fun `javaHome src zip wins over JAVA_HOME`() {
+        val root = tempDir("jdx-doctor-test-")
+        val envJdk = root.resolve("envjava").also { Files.createDirectories(it) }
+        Files.createDirectories(envJdk.resolve("lib"))
+        Files.write(envJdk.resolve("lib/src.zip"), byteArrayOf(0x50, 0x4b))
+        // srcZipPresent = true puts a src.zip under root/jdk, which must win.
+        val service = DoctorService(
+            fakeEnvironment(root, srcZipPresent = true, envJavaHome = envJdk),
+        )
+
+        val report = service.probe()
+
+        val sources = report.checks.first { it.name == "jdk-sources" }
+        sources.status shouldBe DoctorStatus.OK
+        sources.detail shouldContain root.resolve("jdk/lib/src.zip").toString()
+        sources.detail shouldNotContain "envjava"
+    }
+
+    @Test
+    fun `missing jdk sources is a WARN naming the searched locations`() {
+        val service = DoctorService(
+            fakeEnvironment(tempDir("jdx-doctor-test-"), srcZipPresent = false),
+        )
+
+        val report = service.probe()
+
+        val sources = report.checks.first { it.name == "jdk-sources" }
+        sources.status shouldBe DoctorStatus.WARN
+        sources.detail shouldContain "lib/src.zip"
+        sources.detail shouldContain "JDK sources unavailable"
+        exitCodeFor(report) shouldBe 0
+    }
+
+    @Test
     fun `workspace detection finds the nearest build file upward`() {
         val root = tempDir("jdx-doctor-test-")
         val outer = root.resolve("outer").also { Files.createDirectories(it) }

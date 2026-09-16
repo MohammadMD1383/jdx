@@ -7,6 +7,77 @@ wrong, say so in a *new* entry.
 
 ---
 
+## Session 15 — 2026-09-16 — JDK stdlib root + `src.zip` pairing (T-012)
+**Agent:** Muse Spark (via opencode) · **Branch:** none (on top of T-011 HEAD) ·
+**Commits:** claim `cdc7490` + one feat commit (this entry included)
+
+### Goal
+T-012 — the lowest-numbered unblocked TODO (12 < 54). Close the JDK-root milestone
+item: `jrt-fs` + `src.zip` pairing, zero-config reads, module-as-artifact.
+
+### What I did
+1. Audited T-012's three acceptance boxes against the tree: zero-config
+   `show`/`members` on `java.util.HashMap` and the `java.base` module label already
+   worked and were pinned by T-011 tests; `doctor` already WARNed on a missing
+   `src.zip`. The real gap was `src.zip` *discovery*: `JrtArtifact` and
+   `DoctorService` each hardcoded `javaHome/lib/src.zip`, ignored `$JAVA_HOME`,
+   and could disagree with each other.
+2. **New `index/.../artifact/JdkLayout.kt`:** `findSrcZip(javaHome, envJavaHome)`
+   (tries `java.home` then `$JAVA_HOME`, first file wins, never throws) plus
+   `envJavaHome(getenv)` (`$JAVA_HOME` reader, injectable, never throws).
+3. **Wired it in:** `JrtArtifact(javaHome, envJavaHome)` computes `jdkSources`
+   through the finder; `ArtifactLoader.openJdk` defaults the env home from the
+   live `$JAVA_HOME`; `DoctorEnvironment` gained `javaHomeEnv` (defaulted, so
+   existing callers compile) and `system()` fills it; `jdkSourcesCheck` uses the
+   same finder and its absent-WARN names every location searched.
+4. **Tests:** 8 tier-1 `JdkLayoutTest` (fabricated homes: found/preferred/
+   fallback/dir-named-src.zip/missing-homes/env parsing + one 500-case property:
+   null-or-real-file, java-home-first, never throws, ~0.2 s) + 3 tier-2
+   `ArtifactLoaderTest` pairing tests + 3 `DoctorServiceTest` tests (env-fallback
+   OK, java-home precedence, absent WARN) + 1 tier-2 test pinning
+   `show --json` `provenance[0].artifact == "java.base"`. One red along the way,
+   working as designed: my new test read `provenance` under `result` — the
+   envelope carries it top-level (fixed the test, not the code).
+5. Twice deleted a neighbouring test's `@Test` header with a bad `edit` anchor
+   (repaired immediately, caught by reading the file — now L-028).
+
+### Decisions made
+None at D-level. Judgement calls in code KDoc: only `java.home` and `$JAVA_HOME`
+are candidates (no parent-dir guessing — a sibling JDK's `src.zip` would be a
+false positive); ties go to `java.home`, matching the launcher's spirit (D-026).
+
+### Tasks moved
+- T-012: WIP → DONE (all three acceptance boxes ticked, verified below).
+
+### Lessons distilled
+**L-028** (an `edit` insertion anchor must appear in *both* `oldString` and
+`newString`; `git diff` the hunk before running anything).
+
+### What works now (and how to verify it yourself)
+```bash
+./gradlew test                        # tier 1 green (incl. JdkLayoutTest property)
+./gradlew check                       # tiers 1+2 green
+./gradlew soak                        # tier 3 green
+./gradlew :app:installDist && env -u JAVA_HOME app/build/jdx show java.util.HashMap
+env -u JAVA_HOME app/build/jdx doctor | sed -n '5p'   # jdk-sources WARN (this machine ships no src.zip)
+env -u JAVA_HOME app/build/jdx members java.util.HashMap --limit 3  # source: java.base (jrt)
+```
+
+### What is broken / half-done
+Nothing known in T-012 scope. `show`/`members` provenance still says
+`source: java.base (jrt)` without a sources-available flag — bodies and source
+slices that would use `jdkSources` land in M3 (T-020…T-025).
+
+### Open questions / blockers
+None. **Push needs owner go-ahead (D-012):** T-011 + T-012 work unpushed.
+
+### Next action
+**T-013** (`IndexStore` interface + SQLite implementation) — lowest-numbered
+unblocked TODO by the board rule (13 < 54). T-054/T-055 (golden/property spine)
+and T-062 (`--sort` orders) remain available as alternatives.
+
+---
+
 ## Session 14 — 2026-09-16 — `jdx show`, `jdx outline`, `jdx members` (T-011)
 **Agent:** Muse Spark (via opencode) · **Branch:** none (continued on top of the T-011
 `WIP` working tree: claim `c82dde1` plus uncommitted `ClassCard`/`JdxService`/test work

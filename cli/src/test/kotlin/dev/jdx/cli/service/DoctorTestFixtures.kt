@@ -33,6 +33,8 @@ internal fun fakeEnvironment(
     pathBinJavap: Boolean = false,
     runner: ProcessRunner = cannedOutcome("26.0.2.1"),
     srcZipPresent: Boolean = true,
+    /** A second JDK home standing in for `$JAVA_HOME` (T-012 fallback); null means unset. */
+    envJavaHome: Path? = null,
     jrtReachable: Boolean = true,
     cacheSetup: (cacheRoot: Path) -> Unit = {},
     configPresent: Boolean = false,
@@ -71,6 +73,7 @@ internal fun fakeEnvironment(
     return DoctorEnvironment(
         userHome = home,
         javaHome = javaHome,
+        javaHomeEnv = envJavaHome,
         pathDirs = listOf(pathBin),
         runtimeDir = runtimeDir,
         workingDir = cwd,
