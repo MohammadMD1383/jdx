@@ -612,7 +612,7 @@ the only tests allowed raw SQL, said in their KDoc). Next: T-014 builds the
 parallel indexer on `upsert → replaceClasses`; `DoctorService.indexCheck` still
 reports presence-only until then.*
 
-### T-014 — Parallel indexer · `TODO`
+### T-014 — Parallel indexer · `WIP`
 **Depends:** T-013 · Virtual-thread fan-out across artifacts, batched transactions,
 content-hash short-circuit, progress reporting for long runs. Target ≥3,000 classes/s.
 
