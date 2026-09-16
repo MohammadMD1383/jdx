@@ -282,7 +282,7 @@ T-063.*
 
 ---
 
-### T-055 — Property-based test infrastructure and shared generators · `TODO`
+### T-055 — Property-based test infrastructure and shared generators · `WIP`
 **Depends:** T-053, T-002 · **Files:** `core/src/test/kotlin/.../gen/*`
 
 kotest-property wired in, with shared `Arb` generators for `TypeName`, `JvmDescriptor`,
