@@ -1,0 +1,9 @@
+members of dev.jdx.fixtures.KotlinRegistry
+constructors declared on dev.jdx.fixtures.KotlinRegistry:
+  constructor private KotlinRegistry()
+methods declared on dev.jdx.fixtures.KotlinRegistry:
+  method public final void register(java.lang.Object entry)
+fields declared on dev.jdx.fixtures.KotlinRegistry:
+  field private static final java.util.List<java.lang.Object> entries
+  field public static final dev.jdx.fixtures.KotlinRegistry INSTANCE
+source: fixture-corpus.jar (bytecode)

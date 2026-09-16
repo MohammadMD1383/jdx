@@ -1,0 +1,6 @@
+members of dev.jdx.fixtures.Nesting$StaticNested
+constructors declared on dev.jdx.fixtures.Nesting$StaticNested:
+  constructor public StaticNested()
+methods declared on dev.jdx.fixtures.Nesting$StaticNested:
+  method public int nestedValue()
+source: fixture-corpus.jar (bytecode)

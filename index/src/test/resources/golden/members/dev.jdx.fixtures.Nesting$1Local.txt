@@ -1,0 +1,6 @@
+members of dev.jdx.fixtures.Nesting$1Local
+constructors declared on dev.jdx.fixtures.Nesting$1Local:
+  constructor 1Local(dev.jdx.fixtures.Nesting arg0)
+methods declared on dev.jdx.fixtures.Nesting$1Local:
+  method int localValue()
+source: fixture-corpus.jar (bytecode)

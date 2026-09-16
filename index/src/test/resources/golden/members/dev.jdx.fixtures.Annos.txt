@@ -1,0 +1,6 @@
+members of dev.jdx.fixtures.Annos
+constructors declared on dev.jdx.fixtures.Annos:
+  constructor public Annos()
+methods declared on dev.jdx.fixtures.Annos:
+  method public void tagged()
+source: fixture-corpus.jar (bytecode)

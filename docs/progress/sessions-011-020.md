@@ -7,6 +7,95 @@ wrong, say so in a *new* entry.
 
 ---
 
+## Session 13 — 2026-09-16 — Text and JSON renderers over one result model (T-010)
+**Agent:** Muse Spark (via opencode) · **Branch:** `t010-renderers` ·
+**Commits:** claim `81359c9` + one feat commit (this entry included)
+
+### Goal
+T-010: the shared text+JSON renderers T-011's `show`/`outline`/`members` will
+consume. Lowest-numbered unblocked TODO (10 < 54). Plus prerequisite hygiene the
+previous session left undone: session 12 never merged `t009-member-resolver`
+into `main` (local `main` was 2 commits behind its own branch).
+
+### What I did
+1. Merged `t009-member-resolver` into `main` (fast-forward, clean tree;
+   verified `main` was the ancestor first), deleted the branch, cut
+   `t010-renderers`, claimed T-010 (`TODO`→`WIP` commit before coding).
+2. **Test-first, RED:** 5 core test files against non-existent `core/.../render/`
+   (`Unresolved reference`, the right reason): `TruncationTest`,
+   `SignatureLineTest`, `MemberListingTest` (exact-text layout pins),
+   `JsonEscapeTest`, `ErrorResultTest`, `MemberListingPropertyTest`
+   (5 properties × 500–1000 generated graphs reusing T-009's `arbClassGraph`).
+3. **GREEN:** `core/.../render/` — `JsonEscape` (hand-rolled quoting, D-028),
+   `Truncation` (whole-entity cut, `shown`/`total`/`hint`), `SignatureLines`
+   (FQN `$`-joined one-liners: generics, varargs, `argN` fallback, throws,
+   defaults, const values), `Listing` (`MemberListing` grouped by declaring
+   type in linearisation order, kind-then-name sort, pinned Object summary,
+   `declaredOnly` outline mode, `:return` refs only for bridge siblings,
+   `UNRESOLVED_SUPERTYPE` warnings), `Envelope` (version-1 success envelope),
+   `Errors` (exit-1 not-found/did-you-mean, exit-2 ambiguous+candidates, both
+   renderers), `Ansi` (color flag, bold headers; TTY detection is adapters').
+   Plus `WarningCode.UNRESOLVED_SUPERTYPE` (closed-set test + PROPOSAL §16
+   updated per the `Warning` KDoc rule).
+4. **Goldens (tier 2):** `index/.../render/RendererGoldenTest` over all 35
+   fixture classes × text+JSON = 70 files under
+   `index/src/test/resources/golden/members/` (orphan check included; rewrite
+   via `-Pgolden.update=true`, wired in `index/build.gradle.kts` as T-054's
+   seed). Hermetic by construction (D-028 §7): fixed artifact label, empty
+   `Object` stub, no JRT. Read every golden before accepting — real signal
+   found on sight: `Generics$Recursive#compareTo(E)` stays unsubstituted with
+   a labelled warning where `Comparable` is absent (honest degradation).
+5. **Outside JSON check:** `cli/.../render/RendererJsonValidityTest` (tier 1)
+   parses renderer output with kotlinx.serialization — hostile strings
+   (quotes, backslash, newline, λ) round-trip.
+6. One red along the way, working as designed: `ModelTest`'s closed-set pin
+   failed on the new warning code; updated the set + PROPOSAL §16 (public-API
+   procedure, not a test to weaken).
+
+### Decisions made
+**D-028** (renderer placement, FQN-over-simple-names reading of principle 3,
+per-group canonicality, Object-collapse/truncation rules, uniform error
+envelope, `UNRESOLVED_SUPERTYPE`, golden hermeticity rule). Judgement calls in
+code KDoc: `argN` is the labelled fallback (proposal's ladder); empty lists
+and `deprecated:false` omitted from JSON; `members` default cap 50.
+
+### Tasks moved
+- T-010: WIP → DONE (all five acceptance boxes ticked, verified below).
+
+### Lessons distilled
+**L-025** (`git diff` every build-file edit before running the build — an
+`edit` meant to append replaced the fixtures block; diff review caught it).
+Note: `docs/lessons/L-001-025.md` is now full (25/25) — next lesson-adding
+session creates `L-026-050.md` per D-023.
+
+### What works now (and how to verify it yourself)
+```bash
+./gradlew test            # tier 1: 314 tests, ~4 s, inside the 30 s budget
+./gradlew check           # tiers 1+2: green (60 tier-2, incl. the golden test)
+./gradlew soak            # tier 3: green (rendering touched, TESTING.md §13)
+./gradlew :core:test --tests "dev.jdx.core.render.*"       # 52 renderer tests
+./gradlew :index:tier2Test --tests "dev.jdx.index.render.*" # goldens vs fixtures
+./gradlew :cli:test --tests "dev.jdx.cli.render.*"         # real-parser JSON check
+```
+375 tests total (314 tier 1 + 60 tier 2 + 1 soak proof), 0 failures.
+
+### What is broken / half-done
+Nothing known in T-010 scope. Known limits, documented for the owning task:
+`ClassCard` (show model) and `JdxService` + flags land in T-011; `version`/
+`doctor` still use the M0 `cli` envelope until migrated (compatible, D-028);
+golden helper is local to the index test until T-054 promotes it.
+
+### Open questions / blockers
+None. **Push needs owner go-ahead (D-012):** local `main` is now 5 commits
+ahead of `origin/main` (T-009 feat + T-010 work) — nothing pushed this session.
+
+### Next action
+**T-011 (`jdx show`, `jdx outline`, `jdx members`)** — consumes `MemberListing`
+directly; lowest unblocked TODO. T-054/T-055 remain available as infra
+alternatives.
+
+---
+
 ## Session 12 — 2026-09-16 — Member resolution with inheritance + generic substitution (T-009)
 **Agent:** Muse Spark (via opencode) · **Branch:** `t009-member-resolver` ·
 **Commits:** claim `edb3042` + docs-tooling `0ee304a` (main) + one feat commit (this entry included)

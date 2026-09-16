@@ -1,0 +1,6 @@
+members of dev.jdx.fixtures.KotlinMembers$Companion
+constructors declared on dev.jdx.fixtures.KotlinMembers$Companion:
+  constructor private Companion()
+methods declared on dev.jdx.fixtures.KotlinMembers$Companion:
+  method public final dev.jdx.fixtures.KotlinMembers create()
+source: fixture-corpus.jar (bytecode)

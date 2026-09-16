@@ -18,6 +18,7 @@ class ModelTest {
             "UNSUPPORTED_CLASS_VERSION",
             "CORRUPT_CLASS",
             "MULTI_RELEASE_VARIANT",
+            "UNRESOLVED_SUPERTYPE",
         )
     }
 

@@ -446,7 +446,7 @@ determinism, no-leak, concrete `StringMap` substitution).*
 
 ---
 
-### T-010 — Text and JSON renderers · `WIP`
+### T-010 — Text and JSON renderers · `DONE` (session 13)
 **Depends:** T-009 · **Files:** `core/.../render/*`
 
 Two renderers over one result model, per PROPOSAL.md §8. Text follows the layout in D-007.
@@ -454,12 +454,32 @@ JSON follows the `{"jdx":1, ok, command, query, result, truncated, warnings, pro
 envelope.
 
 **Acceptance**
-- [ ] Anything present in text output is also present in JSON (no text-only information)
-- [ ] Deterministic: identical bytes for identical input, sorted, no absolute paths, no
+- [x] Anything present in text output is also present in JSON (no text-only information)
+- [x] Deterministic: identical bytes for identical input, sorted, no absolute paths, no
       timestamps, no hashes in default output
-- [ ] ANSI only when `stdout` is a TTY; piping yields plain text
-- [ ] Truncation never cuts mid-entity and always reports `shown`/`total`/`hint`
-- [ ] Golden tests for both renderers on every fixture
+- [x] ANSI only when `stdout` is a TTY; piping yields plain text
+- [x] Truncation never cuts mid-entity and always reports `shown`/`total`/`hint`
+- [x] Golden tests for both renderers on every fixture
+
+*Implementation notes (session 13): `core/.../render/` — `Truncation`
+(entity-preserving cut + `shown`/`total`/`hint`), `SignatureLines` (one-line
+FQN signatures: generics, varargs `...`, `argN` fallback, throws, defaults,
+const values), `Listing` (`MemberListing` grouped by declaring type in
+linearisation order, kind-then-name sort, Object collapsed to one pinned
+summary line, `declaredOnly` outline mode, `:return` ref disambiguation only
+for bridge siblings), `Envelope` (hand-rolled JSON — core stays
+dependency-free; outside-checked by a cli test parsing with
+kotlinx.serialization), `Errors` (exit-1 not-found + did-you-mean, exit-2
+ambiguous with candidates, both renderers), `Ansi` (color flag, bold headers;
+adapters pass TTY-ness in). New `UNRESOLVED_SUPERTYPE` warning for missing
+hierarchy edges (PROPOSAL §16 list updated). Layout choices recorded as D-028
+(FQN over Appendix-A simple names, per-group canonical reading, golden
+hermeticity rule). Tests: 52 tier-1 (examples + 5 thousand-case properties
+reusing the T-009 graph generators: determinism, truncation law, text⊆JSON,
+prefix preservation, no-escapes-or-paths) + 3 cli tier-1 JSON-validity tests +
+1 tier-2 golden test over all 35 fixture classes (70 files, orphan check,
+`-Pgolden.update=true` rewrite wired in `index/build.gradle.kts` — seed of
+T-054). `WarningCode` closed-set test + PROPOSAL §16 updated for the new code.*
 
 ---
 

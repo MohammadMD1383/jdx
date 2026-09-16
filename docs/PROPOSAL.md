@@ -867,7 +867,9 @@ did you mean:
 
 ### Warnings, never silent
 Duplicate FQNs across artifacts (shading!), sources/binary mismatch, corrupt class files,
-unsupported class-file major versions, multi-release jar variants, sealed/hidden classes —
+unsupported class-file major versions, multi-release jar variants, unresolvable supertypes
+(a hierarchy edge the workspace cannot provide — inherited members may be incomplete),
+sealed/hidden classes —
 all surface as named warning codes in both text and JSON.
 
 ---

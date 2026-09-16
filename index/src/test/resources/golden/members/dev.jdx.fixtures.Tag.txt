@@ -1,0 +1,5 @@
+members of dev.jdx.fixtures.Tag
+methods declared on dev.jdx.fixtures.Tag:
+  method public abstract java.lang.String value()
+warning UNRESOLVED_SUPERTYPE: supertype java.lang.annotation.Annotation is not in the workspace — members inherited from it are missing
+source: fixture-corpus.jar (bytecode)

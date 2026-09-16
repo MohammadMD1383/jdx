@@ -1,0 +1,7 @@
+members of dev.jdx.fixtures.Nesting$1
+constructors declared on dev.jdx.fixtures.Nesting$1:
+  constructor 1(dev.jdx.fixtures.Nesting arg0)
+methods declared on dev.jdx.fixtures.Nesting$1:
+  method public void run()
+warning UNRESOLVED_SUPERTYPE: supertype java.lang.Runnable is not in the workspace — members inherited from it are missing
+source: fixture-corpus.jar (bytecode)

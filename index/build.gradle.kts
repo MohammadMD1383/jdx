@@ -22,3 +22,11 @@ listOf("test", "tier2Test").forEach { taskName ->
         )
     }
 }
+
+// Golden-file update mode (T-010, TESTING.md §14): `./gradlew :index:tier2Test
+// -Pgolden.update=true` rewrites every golden under src/test/resources/golden.
+// The flag travels as a system property so tests stay environment-agnostic.
+// T-054 promotes this to shared per-module wiring.
+tasks.named<Test>("tier2Test") {
+    systemProperty("jdx.golden.update", (findProperty("golden.update") as String?) ?: "false")
+}

@@ -1,0 +1,14 @@
+members of dev.jdx.fixtures.VarargsAndModifiers
+constructors declared on dev.jdx.fixtures.VarargsAndModifiers:
+  constructor public VarargsAndModifiers()
+methods declared on dev.jdx.fixtures.VarargsAndModifiers:
+  method private void hidden()
+  method public double fp(double x)
+  method public native int nativeMethod()
+  method public static java.lang.String join(java.lang.String separator, java.lang.String... parts)
+  method public synchronized void syncMethod()
+  method public void oldApi()
+  method void packagePrivate()
+fields declared on dev.jdx.fixtures.VarargsAndModifiers:
+  field private static final long serialVersionUID = 1
+source: fixture-corpus.jar (bytecode)

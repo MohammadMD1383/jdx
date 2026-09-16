@@ -1,0 +1,10 @@
+members of dev.jdx.fixtures.KotlinSealed$Empty
+constructors declared on dev.jdx.fixtures.KotlinSealed$Empty:
+  constructor private Empty()
+methods declared on dev.jdx.fixtures.KotlinSealed$Empty:
+  method public boolean equals(java.lang.Object other)
+  method public int hashCode()
+  method public java.lang.String toString()
+fields declared on dev.jdx.fixtures.KotlinSealed$Empty:
+  field public static final dev.jdx.fixtures.KotlinSealed$Empty INSTANCE
+source: fixture-corpus.jar (bytecode)

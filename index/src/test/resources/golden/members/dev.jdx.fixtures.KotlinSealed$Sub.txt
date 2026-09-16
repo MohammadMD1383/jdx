@@ -1,0 +1,13 @@
+members of dev.jdx.fixtures.KotlinSealed$Sub
+constructors declared on dev.jdx.fixtures.KotlinSealed$Sub:
+  constructor public Sub(int x)
+methods declared on dev.jdx.fixtures.KotlinSealed$Sub:
+  method public boolean equals(java.lang.Object other)
+  method public final dev.jdx.fixtures.KotlinSealed$Sub copy(int x)
+  method public final int component1()
+  method public final int getX()
+  method public int hashCode()
+  method public java.lang.String toString()
+fields declared on dev.jdx.fixtures.KotlinSealed$Sub:
+  field private final int x
+source: fixture-corpus.jar (bytecode)

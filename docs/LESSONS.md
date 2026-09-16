@@ -31,11 +31,11 @@ and never reused. Tags in use: `build` · `tooling` · `jvm-spec` · `kotlin` ·
 | `tooling` | L-002, L-003, L-015, L-018 |
 | `jvm-spec` | L-005, L-006, L-024 |
 | `kotlin` | L-009, L-010, L-011, L-014, L-016, L-021, L-022, L-023 |
-| `process` | L-007, L-008, L-013 |
+| `process` | L-007, L-008, L-013, L-025 |
 
 | Shard | Entries | Status |
 |---|---|---|
-| `docs/lessons/L-001-025.md` | L-001…L-024 | open (1 free) |
+| `docs/lessons/L-001-025.md` | L-001…L-025 | open (0 free) |
 
 ## Adding an entry
 

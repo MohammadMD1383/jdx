@@ -1,0 +1,7 @@
+members of dev.jdx.fixtures.CovariantOverrides$Base
+constructors declared on dev.jdx.fixtures.CovariantOverrides$Base:
+  constructor public Base()
+methods declared on dev.jdx.fixtures.CovariantOverrides$Base:
+  method public dev.jdx.fixtures.CovariantOverrides$Base copy()
+  method public java.lang.Number size()
+source: fixture-corpus.jar (bytecode)

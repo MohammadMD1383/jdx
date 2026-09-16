@@ -1,0 +1,6 @@
+members of dev.jdx.fixtures.Nesting$Inner
+constructors declared on dev.jdx.fixtures.Nesting$Inner:
+  constructor public Inner(dev.jdx.fixtures.Nesting arg0)
+methods declared on dev.jdx.fixtures.Nesting$Inner:
+  method public dev.jdx.fixtures.Nesting outer()
+source: fixture-corpus.jar (bytecode)

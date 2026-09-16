@@ -14,16 +14,16 @@ or delete a past entry — if one turned out to be wrong, say so in a *new* entr
 
 | | |
 |---|---|
-| **Last updated** | 2026-09-16 (session 12) |
+| **Last updated** | 2026-09-16 (session 13) |
 | **Repository** | <https://github.com/MohammadMD1383/jdx> (public, Apache-2.0) |
 | **Phase** | Design complete; **M0 done, M1 in progress** |
 | **Active milestone** | M1 — Read path |
-| **Next task** | **T-010 (text and JSON renderers)** — consumes T-009's `ResolvedMembers`; or T-054/T-055 (golden/property infra) |
+| **Next task** | **T-011 (`jdx show`, `jdx outline`, `jdx members`)** — consumes T-010's `MemberListing`; or T-054/T-055 (golden/property infra) |
 | **Task count** | 59 tasks defined (T-001…T-061; M0–M2 in full detail, M3–M7 as one-liners) |
 | **Build status** | **Green.** `./gradlew build` passes. Runnable `jdx`: `./gradlew :app:installDist` → `app/build/jdx` (fat jar + POSIX launcher, JDK-21 gate, ~180 ms cold start); `install.sh` symlinks it into `~/.local/bin`. Commands so far: `--version`, `version [--json]`, `doctor [--json]`. |
-| **Test status** | **319 tests, all green** (259 tier 1 in **~7 s** via `./gradlew test`, 59 tier 2 via `check`, 1 soak proof via `soak`). T-009 added 30 tier-1 + 4 tier-2 tests. |
-| **Docs** | Append-only logs sharded (D-023): sessions → `docs/progress/`, decisions → `docs/decisions/` (shard 2 open at D-027), lessons → `docs/lessons/` (L-001…L-023). Every hard-won lesson goes to `docs/LESSONS.md` (D-024). |
-| **Blocked on** | Nothing. |
+| **Test status** | **375 tests, all green** (314 tier 1 in **~4 s** via `./gradlew test`, 60 tier 2 via `check`, 1 soak proof via `soak`). T-010 added 52 tier-1 core + 3 tier-1 cli + 1 tier-2 golden test (70 golden files over 35 fixture classes). |
+| **Docs** | Append-only logs sharded (D-023): sessions → `docs/progress/`, decisions → `docs/decisions/` (shard 2 open at D-028), lessons → `docs/lessons/` (shard `L-001-025.md` **full** — next lesson creates `L-026-050.md`). Every hard-won lesson goes to `docs/LESSONS.md` (D-024). |
+| **Blocked on** | Nothing. Push needs owner go-ahead (D-012): local `main` is 5 commits ahead of `origin/main`. |
 
 ### What exists right now
 
@@ -75,7 +75,7 @@ Documentation, the Gradle skeleton, and **four layers of implemented behaviour**
    loads a fixture class; `StaticInitMarker` + absent-marker test prove D-017; one class
    compiles `-g:none`. How to extend: `docs/TESTING.md` §11.1.
 
-5. **The artifact layer** (`index/src/main/kotlin/dev/jdx/index/artifact/`, T-007):
+ 5. **The artifact layer** (`index/src/main/kotlin/dev/jdx/index/artifact/`, T-007):
    a uniform `ArtifactRoot` (`classEntryPaths`/`openClass`/`stableId`/`warnings`) over
    jars, class dirs and `jrt:/` (`JarArtifact`/`DirArtifact`/`JrtArtifact`, all opened
    via the `ArtifactLoader` dispatch), plus `ZipSafety` (traversal rejection +
@@ -100,7 +100,34 @@ Documentation, the Gradle skeleton, and **four layers of implemented behaviour**
    (major-70 JDK-26 bytes parse), corrupt-neighbour isolation and the D-017 marker
    proof (7 tier-2 tests).
 
-All 156 `core` tests are round-trip / structural / property tests written **test-first**
+7. **The member resolver** (`core/src/main/kotlin/dev/jdx/core/resolve/`, T-009,
+   session 12): `MemberResolver.resolve` implements PROPOSAL.md §9.3 — BFS
+   linearisation (superclass then interfaces, first-visit-wins, `Object` last),
+   transitive generic substitution (raw edges erase to `Object`, method type
+   params shadow class ones), override collapse by name+erased-descriptor
+   (fields by name), JLS visibility from the target's package,
+   synthetic/bridge filtering, ctors never inherited, `<clinit>` never listed,
+   missing supertypes skipped and reported sorted. Enabling fix:
+   `GenericSignature.parseClass` (lone-superclass signatures are class
+   signatures by construction — L-024). Proven by 16 tier-1 examples, 6
+   thousand-case properties, and 4 tier-2 JRT tests over real
+   `java.util.HashMap`.
+
+8. **The text and JSON renderers** (`core/src/main/kotlin/dev/jdx/core/render/`,
+   T-010, session 13): `MemberListing` (the one result model both renderers
+   read) built from `ResolvedMembers` — grouped by declaring type in
+   linearisation order, kind-then-name sort, `Object` collapsed to one pinned
+   summary line, `declaredOnly` outline mode, `:return` ref disambiguation only
+   for bridge siblings, `UNRESOLVED_SUPERTYPE` warnings; `SignatureLines`
+   (FQN `$`-joined one-liners); `Truncation` (whole rows, `shown`/`total`/
+   `--limit` hint, default cap 50); hand-rolled JSON envelope v1 (core stays
+   dependency-free); `ErrorResult` (exit 1/2, both renderers); `Ansi` color
+   gate. Layout choices in D-028. Proven by 52 tier-1 tests (examples + 5
+   thousand-case properties) + 3 cli JSON-validity tests (real-parser check) +
+   70 golden files over all 35 fixture classes (hermetic: fixed artifact label,
+   `Object` stub, no JRT; rewrite with `-Pgolden.update=true`, seed of T-054).
+
+All 232 `core` tier-1 tests are round-trip / structural / property tests written **test-first**
 (D-020); generators live in `core/src/test/kotlin/.../gen/` (seed of T-055). The `cli`
 tests (T-004/T-005) cover the launcher with stub-JDK fault injection, an exhaustive
 576-combination doctor environment matrix (never-throws, exit-code law, text↔JSON parity,
@@ -108,7 +135,7 @@ determinism), generated version-gate and tool-version-parser properties, an inst
 suite, and real-JVM end-to-end tests.
 
 Docs of note: `docs/LESSONS.md` (+ `docs/lessons/` shards) — mistakes already paid for,
-now L-001…L-023. Skim its index before fighting a toolchain or spec.
+now L-001…L-025 (`L-001-025.md` full — next lesson creates `L-026-050.md`). Skim its index before fighting a toolchain or spec.
 
 ```
 CLAUDE.md            project instructions — the entry point, read first

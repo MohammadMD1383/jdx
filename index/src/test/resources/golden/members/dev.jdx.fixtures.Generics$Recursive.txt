@@ -1,0 +1,7 @@
+members of dev.jdx.fixtures.Generics$Recursive
+constructors declared on dev.jdx.fixtures.Generics$Recursive:
+  constructor public Recursive()
+methods declared on dev.jdx.fixtures.Generics$Recursive:
+  method public int compareTo(E other)
+warning UNRESOLVED_SUPERTYPE: supertype java.lang.Comparable is not in the workspace — members inherited from it are missing
+source: fixture-corpus.jar (bytecode)

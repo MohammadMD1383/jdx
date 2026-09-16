@@ -1,0 +1,4 @@
+members of dev.jdx.fixtures.KotlinSealed
+constructors declared on dev.jdx.fixtures.KotlinSealed:
+  constructor private KotlinSealed()
+source: fixture-corpus.jar (bytecode)

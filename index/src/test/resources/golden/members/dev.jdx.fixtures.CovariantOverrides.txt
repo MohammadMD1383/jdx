@@ -1,0 +1,4 @@
+members of dev.jdx.fixtures.CovariantOverrides
+constructors declared on dev.jdx.fixtures.CovariantOverrides:
+  constructor public CovariantOverrides()
+source: fixture-corpus.jar (bytecode)

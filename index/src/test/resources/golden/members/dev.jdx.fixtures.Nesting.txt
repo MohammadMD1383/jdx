@@ -1,0 +1,6 @@
+members of dev.jdx.fixtures.Nesting
+constructors declared on dev.jdx.fixtures.Nesting:
+  constructor public Nesting()
+methods declared on dev.jdx.fixtures.Nesting:
+  method public java.lang.Object make()
+source: fixture-corpus.jar (bytecode)

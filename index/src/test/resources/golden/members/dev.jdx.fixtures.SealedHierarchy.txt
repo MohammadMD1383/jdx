@@ -1,0 +1,2 @@
+members of dev.jdx.fixtures.SealedHierarchy
+source: fixture-corpus.jar (bytecode)

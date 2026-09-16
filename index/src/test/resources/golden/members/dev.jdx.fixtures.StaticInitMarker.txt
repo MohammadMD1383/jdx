@@ -1,0 +1,9 @@
+members of dev.jdx.fixtures.StaticInitMarker
+constructors declared on dev.jdx.fixtures.StaticInitMarker:
+  constructor public StaticInitMarker()
+methods declared on dev.jdx.fixtures.StaticInitMarker:
+  method public int answer()
+  method public static java.lang.String markerPath()
+fields declared on dev.jdx.fixtures.StaticInitMarker:
+  field static final java.lang.String MARKER_PATH
+source: fixture-corpus.jar (bytecode)

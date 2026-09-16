@@ -20,6 +20,9 @@ public enum class WarningCode {
 
     /** A multi-release jar served a version-specific variant of a class. */
     MULTI_RELEASE_VARIANT,
+
+    /** A supertype named by a class file is not in the workspace (T-010). */
+    UNRESOLVED_SUPERTYPE,
 }
 
 /**
