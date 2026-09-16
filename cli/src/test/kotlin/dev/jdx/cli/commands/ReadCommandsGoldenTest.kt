@@ -28,6 +28,10 @@ class ReadCommandsGoldenTest {
 
     private val noExit: (Int) -> Nothing = { throw TestExit(it) }
 
+    // Goldens pin exact bytes (D-028 hermeticity): project auto-discovery stays off
+    // here — it is covered structurally in ReadCommandDiscoveryTest.
+    private val noDiscovery: ProjectDiscoveryFn = { _, _, _, _ -> null }
+
     @Test
     fun `text and json goldens cover every fixture class for show members and outline`() {
         val jar = fixtureBinaryJar()
@@ -57,17 +61,17 @@ class ReadCommandsGoldenTest {
 
     private fun runShow(binary: String, roots: List<String>, json: Boolean): String {
         val args = listOf(binary) + roots + (if (json) listOf("--json") else emptyList())
-        return execute { ShowCommand(terminate = noExit).parse(args) }
+        return execute { ShowCommand(terminate = noExit, discover = noDiscovery).parse(args) }
     }
 
     private fun runMembers(binary: String, roots: List<String>, json: Boolean): String {
         val args = listOf(binary) + roots + (if (json) listOf("--json") else emptyList())
-        return execute { MembersCommand(terminate = noExit).parse(args) }
+        return execute { MembersCommand(terminate = noExit, discover = noDiscovery).parse(args) }
     }
 
     private fun runOutline(binary: String, roots: List<String>, json: Boolean): String {
         val args = listOf(binary) + roots + (if (json) listOf("--json") else emptyList())
-        return execute { OutlineCommand(terminate = noExit).parse(args) }
+        return execute { OutlineCommand(terminate = noExit, discover = noDiscovery).parse(args) }
     }
 
     private fun execute(block: () -> Unit): String {

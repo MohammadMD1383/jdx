@@ -25,6 +25,7 @@ class ShowCommand(
     private val terminate: (Int) -> Nothing = ::exitProcess,
     private val store: WorkspaceStore = FileWorkspaceStore.system(),
     private val getenv: (String) -> String? = { name -> System.getenv(name) },
+    private val discover: ProjectDiscoveryFn? = null,
 ) : CoreCliktCommand(name = "show") {
     override fun help(context: Context): String =
         "Show the class card for a type: kind, modifiers, supertypes, member counts, " +
@@ -33,6 +34,8 @@ class ShowCommand(
             "member references are a usage error. " +
             "Reads --jars roots plus the selected workspace (-w, JDX_WORKSPACE, jdx ws use) " +
             "plus the JDK stdlib unless --no-jdk. " +
+            "With no workspace selected, Gradle/Maven project roots auto-discover from the " +
+            "working directory. " +
             "Exits 1 when the type is unknown, 2 when a short name is ambiguous, " +
             "4 when the workspace cannot be resolved."
 
@@ -67,7 +70,14 @@ class ShowCommand(
 
     override fun run() {
         val json = effectiveJson(json)
-        when (val resolved = ReadCommandSupport.resolveRoots(jars, noJdk, effectiveWorkspace(workspace), store, getenv)) {
+        when (val resolved = ReadCommandSupport.resolveRoots(
+            jars,
+            noJdk,
+            effectiveWorkspace(workspace),
+            store,
+            getenv,
+            discover = discover ?: ReadCommandSupport::discoverProject,
+        )) {
             is ReadCommandSupport.RootsOrFailure.Ready -> {
                 val outcome = query(ref, resolved.roots)
                 ReadCommandSupport.finish(outcome, "show", json, noColor, terminate)

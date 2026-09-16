@@ -7,6 +7,88 @@ wrong, say so in a *new* entry.
 
 ---
 
+## Session 22 — 2026-09-16 — Project auto-discovery (T-016)
+**Agent:** Muse Spark (via opencode) · **Branch:** none (on `main` at `c1e87fa`) ·
+**Commits:** `c1e87fa` (claim), this session's work (to commit with this entry)
+
+### Goal
+Implement T-016 — the lowest-numbered unblocked TODO: walk up for Gradle/Maven
+markers, derive binary roots (own classes + referenced dependency jars, never running
+a build), cache the derived workspace with build-file invalidation.
+
+### What I did
+1. Claimed T-016 (`TODO`→`WIP`, commit `c1e87fa`) before coding.
+2. **Test-first where it counts:** `core`'s closed-set `WarningCode` test extended
+   first (RED), then `PROJECT_DISCOVERY_FALLBACK` added (GREEN); PROPOSAL.md §16
+   updated in the same step per the `Warning` KDoc rule.
+3. **New `index/.../workspace/ProjectDiscovery.kt`:** `findProjectRoot` (nearest
+   marker, `settings.gradle.kts` first), `parseLockCoordinates` (regex over
+   lockfiles + scripts), `parsePomCoordinates` (hardened DOM, `${…}` versions
+   skipped), `resolveDependencyJars` (Gradle `files-2.1` + `~/.m2` layouts,
+   sources/javadoc excluded, capped, sorted), `deriveBinaryRoots` (deepest
+   package roots first, then jars), `projectHash`/`computeFingerprint`;
+   **`ProjectCache`** (`<hash>.toml` + `<hash>.fingerprint`, mismatch → re-derive).
+4. **Plumbing:** `WorkspaceResolver` takes discovery only with no named workspace
+   (explicit `--jars` merge in front); `JdxService.RootsSpec.extraWarnings` carries
+   resolution warnings into every listing; `ReadCommandSupport` owns lookup +
+   caching behind an injectable `ProjectDiscoveryFn`; `doctor` shares the walk;
+   `show --help` + `WorkspaceDefinition` KDoc updated; `ws create --src` now
+   names T-031.
+5. **Two real bugs caught by tests:** (a) deepest-vs-outermost class dirs —
+   opening `build/classes` lists `java/main/…`-prefixed entries nothing matches
+   (exit 1), so derivation keeps the deepest package roots (L-040); (b) the repo
+   checkout itself is ambient state — tier-1 command tests and goldens grew
+   `cli/build/classes` + the fallback warning, fixed with the `ProjectDiscoveryFn`
+   seam (null in tier-1/pinned suites, real path covered once in tier-2; L-041).
+   A stray `/*.jar` glob inside KDoc killed compilation with a far-away
+   `Missing '}'` — Kotlin comments nest (L-039).
+6. `./gradlew check --offline` green (11 new tier-1 incl. two 1,000-case
+   properties — 480 tier-1 in 8.0 s of 30 s — plus 31 new tier-2),
+   `./gradlew soak --offline` green, all 280 existing goldens byte-identical.
+   Live smoke: fabricated `/tmp/fakeproj` answers `members` with zero flags
+   (exit 0, labelled fallback warning, text+JSON agree); `doctor` names the root.
+   Test-run pollution of the real `~/.cache/jdx/auto` (pre-seam run) removed.
+
+### Decisions made
+**D-030** (project auto-discovery semantics: no broad cache scan, N3 coordinate
+sources, deepest roots, discovery-only-without-workspace, fingerprint sidecar,
+binary roots only) in `docs/decisions/D-026-050.md`, indexed in `docs/DECISIONS.md`.
+
+### Tasks moved
+- T-016: TODO → WIP → DONE.
+
+### Lessons distilled
+**L-039** (nested Kotlin comments vs globs in KDoc), **L-040** (class-dir roots
+must be package roots), **L-041** (the checkout is ambient discovery state;
+seam it like the store) in `docs/lessons/L-026-050.md`; tag index updated.
+
+### What works now (and how to verify it yourself)
+```bash
+mv ~/.config/jdx /tmp/jdx-shelved   # only if an active workspace exists (L-038); restore after
+./gradlew check --offline           # tiers 1+2 green (480 tier-1 + tier-2)
+./gradlew soak --offline            # tier 3 green
+mv /tmp/jdx-shelved ~/.config/jdx
+# live zero-config read inside any Gradle/Maven project:
+mkdir -p /tmp/fakeproj/build/classes/java/main && printf 'rootProject.name = "d"\n' > /tmp/fakeproj/settings.gradle
+./gradlew :app:installDist --offline && ./app/build/jdx members '<YourClass>'   # run with CWD=/tmp/fakeproj
+```
+
+### What is broken / half-done
+Nothing in T-016 scope. Known, owned elsewhere: T-066 (pre-existing
+`ReadCommandsTest` store hermeticity — this task fixed the *discovery* half by
+threading `ProjectDiscoveryFn`; the store half is still T-066's), T-064/T-065
+(indexer perf gap, JFR `$$` names) untouched.
+
+### Open questions / blockers
+None. **Push needs owner go-ahead (D-012)** — session 22 commits unpushed
+(claim `c1e87fa` + this work). `~/.config/jdx` shelved during verification;
+restored afterwards (verify `ls ~/.config/jdx` shows `active-workspace`).
+
+### Next action
+**T-062** (`--sort name|declaring` — small, builds on the read path), or
+**T-066** (finish `ReadCommandsTest` hermeticity now the discovery seam exists),
+or **T-017** (`search`/`resolve`/`ls`/`tree` — next M2 behaviour).
+
 ## Session 21 — 2026-09-16 — Shared property-test generators + missing §4 properties (T-055)
 **Agent:** Muse Spark (via opencode) · **Branch:** none (on `main` at `104b2d5`) ·
 **Commits:** `104b2d5` (claim), this session's work (to commit with this entry)

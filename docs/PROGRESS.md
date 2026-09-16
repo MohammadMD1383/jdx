@@ -14,15 +14,15 @@ or delete a past entry — if one turned out to be wrong, say so in a *new* entr
 
 | | |
 |---|---|
-| **Last updated** | 2026-09-16 (session 21) |
+| **Last updated** | 2026-09-16 (session 22) |
 | **Repository** | <https://github.com/MohammadMD1383/jdx> (public, Apache-2.0) |
 | **Phase** | Design complete; **M0 done, M1 in progress** |
 | **Active milestone** | M2 — Index |
-| **Next task** | **T-016 (project auto-discovery)** — lowest unblocked TODO; or T-066 (`ReadCommandsTest` hermeticity — small, unblocks green `check` on this machine), T-062 (`--sort` orders), T-063 (share fixture-jar helpers) |
+| **Next task** | **T-017 (`search`/`resolve`/`ls`/`tree`)** — lowest unblocked TODO; or T-062 (`--sort` orders), T-066 (`ReadCommandsTest` store hermeticity — the discovery half is fixed), T-063 (share fixture-jar helpers) |
 | **Task count** | 64 tasks defined (T-001…T-066; M0–M2 in full detail, M3–M7 as one-liners) |
-| **Build status** | **Green.** `./gradlew build` passes. Runnable `jdx`: `./gradlew :app:installDist` → `app/build/jdx` (fat jar + POSIX launcher, JDK-21 gate, ~180 ms cold start); `install.sh` symlinks it into `~/.local/bin`. Commands so far: `--version`, `version [--json]`, `doctor [--json]`, **`show`, `members`, `outline` (all flags, text+JSON, exits 0–4, `-w` workspaces)**, **`ws create|list|info|remove|use|add` (text+JSON, exits 0/1/3/4/6)**. JDK root: zero-config `show`/`members` on `java.*` via `jrt:/`, module-as-artifact (`java.base`), `src.zip` paired from `java.home`/`$JAVA_HOME` (T-012). Workspaces (T-015): TOML in `~/.config/jdx/workspaces/`, §13 resolution (`-w` > `JDX_WORKSPACE` > `ws use`, explicit `--jars` merge first), first-provider-wins shadowing with `DUPLICATE_FQN`. |
-| **Test status** | **586 tests, all green** (`./gradlew check` tiers 1+2: 469 tier-1 + 117 tier-2; soak tier 3 green). T-055 added 17: shared `gen/` generators (`TypeName`/`JvmDescriptor`/`GenericSignature` + `PropertySupport` seed workflow) with fixed-seed nastiness pins + 1,000-case fixed-point/never-throws/stability properties; fixed a real `JvmDescriptor.parse`-throws-on-malformed bug. Tier-1 aggregate now 18.0 s of the 30 s budget. **Caveat (L-038):** a bare `check` on *this* machine shows 2 `ReadCommandsTest` failures from the ambient `~/.config/jdx` active workspace (`fx`) — filed as T-066; shelve that dir to see green. Shared `GoldenFiles`/`UnifiedDiff` helper (`testfixtures` testFixtures) backs all 280 `index`/`cli` goldens; update mode prints every rewritten path. |
-| **Docs** | Append-only logs sharded (D-023): sessions → `docs/progress/`, decisions → `docs/decisions/` (shard 2 open — D-029 workspace shape/semantics), lessons → `docs/lessons/` (`L-026-050.md` open — latest L-036 (kotest eager generators), L-037 (null-on-malformed must not throw), L-038 (command tests must inject the workspace store). Every hard-won lesson goes to `docs/LESSONS.md` (D-024). |
+| **Build status** | **Green.** `./gradlew build` passes. Runnable `jdx`: `./gradlew :app:installDist` → `app/build/jdx` (fat jar + POSIX launcher, JDK-21 gate, ~180 ms cold start); `install.sh` symlinks it into `~/.local/bin`. Commands so far: `--version`, `version [--json]`, `doctor [--json]`, **`show`, `members`, `outline` (all flags, text+JSON, exits 0–4, `-w` workspaces)**, **`ws create|list|info|remove|use|add` (text+JSON, exits 0/1/3/4/6)**. JDK root: zero-config `show`/`members` on `java.*` via `jrt:/`, module-as-artifact (`java.base`), `src.zip` paired from `java.home`/`$JAVA_HOME` (T-012). Workspaces (T-015): TOML in `~/.config/jdx/workspaces/`, §13 resolution (`-w` > `JDX_WORKSPACE` > `ws use`, explicit `--jars` merge first), first-provider-wins shadowing with `DUPLICATE_FQN`. Auto-discovery (T-016): Gradle/Maven projects contribute `build/classes`/`target/classes` + referenced cache jars when no workspace is selected (cached in `~/.cache/jdx/auto/`, `PROJECT_DISCOVERY_FALLBACK` when coordinates are unknown). |
+| **Test status** | **All green** (`./gradlew check` tiers 1+2: 480 tier-1 in 8.0 s of the 30 s budget + tier-2; soak tier 3 green). T-016 added 42: `PROJECT_DISCOVERY_FALLBACK` closed-set pin (core, test-first) + 6 tier-1 (lock-parse examples, 1,000-case parse property, 4 resolver discovery tests, 1 merge-order property) + 31 tier-2 (19 discovery, 6 cache, 2 service end-to-end, 4 CLI incl. a real-command end-to-end) + doctor/`ws create` wording pins; all 280 existing goldens byte-identical. **Caveat (L-038):** a bare `check` on *this* machine still needs `~/.config/jdx` shelved — the ambient `fx` active workspace reds 2 `ReadCommandsTest` store tests (T-066, pre-existing); the *discovery* half of that hermeticity is fixed via the `ProjectDiscoveryFn` seam (L-041). Shared `GoldenFiles`/`UnifiedDiff` helper (`testfixtures` testFixtures) backs all goldens; update mode prints every rewritten path. |
+| **Docs** | Append-only logs sharded (D-023): sessions → `docs/progress/`, decisions → `docs/decisions/` (shard 2 open — D-030 discovery semantics/deviations), lessons → `docs/lessons/` (`L-026-050.md` open — latest L-039 (nested Kotlin comments), L-040 (deepest package roots), L-041 (the checkout is ambient discovery state). Every hard-won lesson goes to `docs/LESSONS.md` (D-024). |
 | **Blocked on** | Nothing. **Push needs owner go-ahead (D-012)** — session 20–21 commits unpushed. |
 
 ### What exists right now
@@ -167,7 +167,20 @@ suite, and real-JVM end-to-end tests.
     first-provider-wins order (decision record: D-029). Proven by 4 tier-1
     suites (incl. 4 thousand-case properties) + 16 in-process `ws` tests +
     read-flag/doctor tests + 4 tier-2 service tests (order-flip reverses the
-    `DUPLICATE_FQN` winner).
+     `DUPLICATE_FQN` winner).
+
+12. **Project auto-discovery** (`index/.../workspace/ProjectDiscovery.kt` +
+    `ProjectCache`, `cli/.../commands/ReadCommandSupport.kt`, T-016, session
+    22): nearest-marker walk (`settings.gradle.kts` first), coordinates from
+    `gradle.lockfile`/scripts/`pom.xml` (never running a build), jars resolved
+    from the Gradle files cache + `~/.m2` (sources/javadoc excluded), deepest
+    package roots kept, cached as `~/.cache/jdx/auto/<hash>.toml` plus a
+    fingerprint sidecar (any build-file change re-derives). Consulted only with
+    no named workspace; unknown dependency sets warn
+    `PROJECT_DISCOVERY_FALLBACK` (new closed-set code) instead of scanning the
+    whole cache (D-030). Proven by 11 new tier-1 tests (incl. two 1,000-case
+    properties) + 31 tier-2 tests (incl. a real-command end-to-end); commands
+    take an injectable `ProjectDiscoveryFn` so tier-1 stays hermetic (L-041).
 
 Docs of note: `docs/LESSONS.md` (+ `docs/lessons/` shards) — mistakes already paid for,
 now L-001…L-025 (`L-001-025.md` full — next lesson creates `L-026-050.md`). Skim its index before fighting a toolchain or spec.

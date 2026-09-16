@@ -56,12 +56,18 @@ public object JdxService {
     public data class RootsSpec(
         public val jarSpecs: List<String> = emptyList(),
         public val includeJdk: Boolean = true,
+        /** Warnings contributed by root resolution itself (e.g. discovery fallback). */
+        public val extraWarnings: List<Warning> = emptyList(),
     ) {
         public companion object {
             /** Converts a resolved workspace selection into the roots a query opens. */
             public fun fromResolved(
                 resolved: dev.jdx.index.workspace.WorkspaceResolver.ResolvedRoots,
-            ): RootsSpec = RootsSpec(jarSpecs = resolved.jarSpecs, includeJdk = resolved.includeJdk)
+            ): RootsSpec = RootsSpec(
+                jarSpecs = resolved.jarSpecs,
+                includeJdk = resolved.includeJdk,
+                extraWarnings = resolved.warnings,
+            )
         }
     }
 
@@ -269,6 +275,9 @@ public object JdxService {
             val winner = providers.getValue(binary).first()
 
             val warnings = mutableListOf<Warning>()
+            // Resolution-time warnings (e.g. project-discovery fallback) lead, so the
+            // agent sees why the root set looks the way it does before artifact notes.
+            warnings.addAll(roots.extraWarnings)
             for (open in opened) warnings.addAll(open.root.warnings)
             val extraProviders = providers.getValue(binary).drop(1)
             if (extraProviders.isNotEmpty()) {

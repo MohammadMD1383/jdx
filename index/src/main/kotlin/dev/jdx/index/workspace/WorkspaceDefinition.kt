@@ -13,9 +13,11 @@ package dev.jdx.index.workspace
  * read and written only through [WorkspaceStore]. Produced by `jdx ws create`, consumed
  * by `jdx -w <name>` / `JDX_WORKSPACE` / `jdx ws use` via [WorkspaceResolver].
  *
- * v1 holds binary roots and the JDK switch only. Source dirs (`--src`, T-016/T-031) and
+ * v1 holds binary roots and the JDK switch only. Source dirs (`--src`, T-031) and
  * Maven coordinates (`--coord`, T-019) are accepted by no v1 field — `jdx ws create`
  * rejects them naming the owning task rather than storing something the reader ignores.
+ * Project auto-discovery (T-016) derives these same binary roots from Gradle/Maven
+ * projects; it never stores source dirs either.
  */
 public data class WorkspaceDefinition(
     /** Workspace name; always equals the file stem. Validated by [validateWorkspaceName]. */

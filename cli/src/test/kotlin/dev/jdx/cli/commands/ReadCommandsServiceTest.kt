@@ -58,18 +58,34 @@ class ReadCommandsServiceTest {
         return Run(buffer.toString(Charsets.UTF_8), exit)
     }
 
-    /** The three read commands with the real service but a throwing exit (tier-1 style). */
+    /**
+     * The three read commands with the real service but a throwing exit (tier-1 style).
+     * Auto-discovery is off: these tests pin exact roots and exits (notably exit 4 for
+     * "no roots"), so the ambient checkout must not leak in — discovery itself is
+     * covered in `ReadCommandDiscoveryTest`.
+     */
     private object JdxTestCli {
+        private val noDiscovery: ProjectDiscoveryFn = { _, _, _, _ -> null }
+
         fun parse(args: List<String>) {
             val head = args.firstOrNull()
             val rest = args.drop(1)
             when (head) {
-                "show" -> ShowCommand(query = ::defaultShowQuery, terminate = { throw TestExit(it) })
-                    .parse(rest)
-                "outline" -> OutlineCommand(query = ::defaultMemberQuery, terminate = { throw TestExit(it) })
-                    .parse(rest)
-                else -> MembersCommand(query = ::defaultMemberQuery, terminate = { throw TestExit(it) })
-                    .parse(if (head == "members") rest else args)
+                "show" -> ShowCommand(
+                    query = ::defaultShowQuery,
+                    terminate = { throw TestExit(it) },
+                    discover = noDiscovery,
+                ).parse(rest)
+                "outline" -> OutlineCommand(
+                    query = ::defaultMemberQuery,
+                    terminate = { throw TestExit(it) },
+                    discover = noDiscovery,
+                ).parse(rest)
+                else -> MembersCommand(
+                    query = ::defaultMemberQuery,
+                    terminate = { throw TestExit(it) },
+                    discover = noDiscovery,
+                ).parse(if (head == "members") rest else args)
             }
         }
     }

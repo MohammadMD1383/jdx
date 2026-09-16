@@ -66,6 +66,34 @@ class WorkspacePropertyTest {
     }
 
     @Test
+    fun `discovered roots merge explicit-first and never shadow a workspace`() = runBlocking<Unit> {
+        checkAll(1_000, Arb.list(nastyString, 0..4), Arb.list(nastyString, 0..4)) { explicit, discovered ->
+            val lookup = mapOf("ws" to WorkspaceDefinition("ws", listOf("ws.jar"), true))
+            // No workspace selected: explicit, then discovered.
+            val auto = WorkspaceResolver.resolve(
+                explicitJars = explicit,
+                discoveredJars = discovered,
+                discoveredSelection = "auto",
+                loadWorkspace = { lookup[it] },
+                listNames = { listOf("ws") },
+            )
+            (auto is WorkspaceResolver.Result.success) shouldBe true
+            (auto as WorkspaceResolver.Result.success).value.jarSpecs shouldBe explicit + discovered
+            // Workspace selected: discovery ignored entirely.
+            val named = WorkspaceResolver.resolve(
+                explicitJars = explicit,
+                flagWorkspace = "ws",
+                discoveredJars = discovered,
+                discoveredSelection = "auto",
+                loadWorkspace = { lookup[it] },
+                listNames = { listOf("ws") },
+            )
+            (named is WorkspaceResolver.Result.success) shouldBe true
+            (named as WorkspaceResolver.Result.success).value.jarSpecs shouldBe explicit + listOf("ws.jar")
+        }
+    }
+
+    @Test
     fun `name validation never throws on generated strings`() = runBlocking<Unit> {
         checkAll(1_000, nastyString) { raw ->
             // Null (valid) or an error (invalid) — never an exception.

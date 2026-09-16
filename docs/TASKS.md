@@ -710,10 +710,30 @@ resolver order, 4 thousand-case properties incl. TOML fixed-point + merge law) +
 4 tier-2 (`WorkspaceServiceTest`: stored workspace answers, order flip reverses the
 `DUPLICATE_FQN` winner, explicit-first merge) — `./gradlew check` + `soak` green.*
 
-### T-016 — Project auto-discovery · `WIP`
+### T-016 — Project auto-discovery · `DONE` (session 22)
 **Depends:** T-015 · Walk up for `settings.gradle(.kts)`/`build.gradle(.kts)`/`pom.xml`/
 `.idea`; derive roots per PROPOSAL.md §13 step 4. **Must not run Gradle or Maven** (N3).
 Cache derived workspace, invalidate on build-file change.
+
+*Implementation notes (session 22): `index/.../workspace/ProjectDiscovery`
+(`findProjectRoot` nearest-marker walk, `parseLockCoordinates`/`parsePomCoordinates`
+— the latter hardened against doctypes/entities, `${…}` versions skipped —
+`resolveDependencyJars` over the Gradle files cache + `~/.m2` excluding
+sources/javadoc, `deriveBinaryRoots` keeping the deepest package roots,
+`projectHash`/`computeFingerprint`) + `ProjectCache` (`<hash>.toml` with
+`name == hash` + `<hash>.fingerprint` sidecar; any mismatch re-derives).
+`WorkspaceResolver` consults discovery only with no named workspace selected
+(explicit `--jars` merge in front); `JdxService.RootsSpec.extraWarnings` carries
+the new `PROJECT_DISCOVERY_FALLBACK` code (core, test-first; PROPOSAL §16
+updated) into every listing; `ReadCommandSupport` owns the cache lookup with an
+injectable `ProjectDiscoveryFn` seam; `doctor` shares `findProjectRoot`.
+Deliberate deviations recorded as D-030 (no broad cache scan, binary roots only
+— `ws create --src` now names T-031). Tests: 11 new tier-1 (6 lock-parse incl. a
+1,000-case never-throws/sorted-unique property, 4 resolver discovery tests, 1
+1,000-case merge-order property) + 31 tier-2 (19 discovery, 6 cache, 2 service
+end-to-end, 4 CLI incl. a real-command end-to-end); goldens byte-identical
+(discovery pinned off there). `./gradlew check` + `soak` green; tier-1 8.0 s
+of 30 s across 480 tests.*
 
 ### T-017 — `jdx search`, `jdx resolve`, `jdx ls`, `jdx tree` · `TODO`
 **Depends:** T-014 · Glob, regex, and IntelliJ-style camel-hump matching; `--fuzzy`

@@ -278,9 +278,10 @@ class DoctorService(private val environment: DoctorEnvironment) {
     }
 
     private fun workspaceCheck(): DoctorCheck {
-        // Named workspaces (T-015) plus nearest-build-file detection (T-016 owns derivation).
-        // One line, three facts: the §13 selection, the project root, the stored count.
-        // Read-only: a garbage active file reads as none, a missing dir as zero.
+        // Named workspaces (T-015) plus project auto-discovery (T-016): one line, three
+        // facts — the §13 selection, the project root, the stored count. Read-only: a
+        // garbage active file reads as none, a missing dir as zero, and discovery never
+        // writes the auto-cache from here (queries own that).
         val store = dev.jdx.index.workspace.FileWorkspaceStore(environment.userHome.resolve(".config/jdx"))
         val envName = environment.workspaceEnv?.trim().orEmpty().ifEmpty { null }
         val activeName = try {
@@ -298,19 +299,15 @@ class DoctorService(private val environment: DoctorEnvironment) {
             activeName != null -> "workspace '$activeName' (default, jdx ws use)"
             else -> "no named workspace"
         }
-        val markers = listOf(
-            "settings.gradle.kts", "settings.gradle",
-            "build.gradle.kts", "build.gradle",
-            "pom.xml", ".idea",
-        )
-        val start = environment.workingDir.toAbsolutePath().normalize()
-        val hit = generateSequence(start) { it.parent }.firstNotNullOfOrNull { dir ->
-            markers.firstOrNull { Files.exists(dir.resolve(it)) }?.let { dir to it }
+        val hit = try {
+            dev.jdx.index.workspace.ProjectDiscovery.findProjectRoot(environment.workingDir)
+        } catch (e: Exception) {
+            null
         }
         val project = if (hit != null) {
-            "project root: ${hit.first} (nearest build file: ${hit.second})"
+            "project root: ${hit.root} (nearest build file: ${hit.marker})"
         } else {
-            "no project files (auto-discovery lands in T-016)"
+            "no project files"
         }
         val stored = if (count == null) "workspaces: unreadable" else "$count workspace(s)"
         return check("workspace", DoctorStatus.OK, "$selection; $project; $stored")

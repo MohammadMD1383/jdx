@@ -291,6 +291,7 @@ class DoctorServiceTest {
         val workspace = report.checks.first { it.name == "workspace" }
         workspace.status shouldBe DoctorStatus.OK
         workspace.detail shouldContain "no named workspace"
+        workspace.detail shouldContain "no project files"
         workspace.detail shouldContain "0 workspace(s)"
     }
 

@@ -94,7 +94,7 @@ class WsCommandsTest {
         val (group, _) = testWsGroup()
         val (srcOut, srcCode) = run(group, listOf("create", "mc", "--src", "src/main/java"))
         srcCode shouldBe 3
-        srcOut shouldContain "T-016"
+        srcOut shouldContain "T-031"
         val (coordOut, coordCode) = run(group, listOf("create", "mc", "--coord", "g:a:1"))
         coordCode shouldBe 3
         coordOut shouldContain "T-019"

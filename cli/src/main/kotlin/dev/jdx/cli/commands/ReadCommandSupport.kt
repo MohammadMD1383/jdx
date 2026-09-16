@@ -1,10 +1,16 @@
 package dev.jdx.cli.commands
 
+import dev.jdx.core.model.Warning
 import dev.jdx.core.render.ErrorResult
 import dev.jdx.index.service.JdxService
 import dev.jdx.index.workspace.FileWorkspaceStore
+import dev.jdx.index.workspace.ProjectCache
+import dev.jdx.index.workspace.ProjectDiscovery
+import dev.jdx.index.workspace.WorkspaceDefinition
 import dev.jdx.index.workspace.WorkspaceResolver
 import dev.jdx.index.workspace.WorkspaceStore
+import java.nio.file.Path
+import java.nio.file.Paths
 import kotlin.system.exitProcess
 
 /**
@@ -30,12 +36,15 @@ internal object ReadCommandSupport {
         JdxService.RootsSpec(jarSpecs = jars, includeJdk = !noJdk)
 
     /**
-     * Resolves the roots one read query opens (PROPOSAL.md §13, T-015): explicit `--jars`
-     * merge in front of the selected workspace (`-w` beats `JDX_WORKSPACE` beats
-     * `jdx ws use`), the JDK stays unless `--no-jdk` or the workspace switches it off.
+     * Resolves the roots one read query opens (PROPOSAL.md §13, T-015/T-016): explicit
+     * `--jars` merge in front of the selected workspace (`-w` beats `JDX_WORKSPACE` beats
+     * `jdx ws use`), project auto-discovery fills the workspace half when no workspace
+     * is selected, the JDK stays unless `--no-jdk` or the workspace switches it off.
      *
      * [store] and [getenv] are injectable so command tests resolve without touching the
-     * real home directory or the process environment.
+     * real home directory or the process environment. [workingDir], [cacheBase],
+     * [gradleFilesRoot] and [m2Repo] default to the process environment; tests point
+     * them at `@TempDir` trees instead.
      */
     internal fun resolveRoots(
         jars: List<String>,
@@ -43,21 +52,36 @@ internal object ReadCommandSupport {
         workspace: String?,
         store: WorkspaceStore = FileWorkspaceStore.system(),
         getenv: (String) -> String? = System::getenv,
+        workingDir: Path = Paths.get("").toAbsolutePath(),
+        cacheBase: Path = defaultAutoCacheBase(),
+        gradleFilesRoot: Path? = defaultGradleFilesRoot(),
+        m2Repo: Path? = defaultM2Repo(),
+        discover: ProjectDiscoveryFn = ::discoverProject,
     ): RootsOrFailure {
+        val envWorkspace = try {
+            getenv("JDX_WORKSPACE")
+        } catch (e: SecurityException) {
+            null
+        }
+        val activeWorkspace = try {
+            store.activeName()
+        } catch (e: Exception) {
+            null
+        }
+        // Auto-discovery runs only when no named workspace is in play; a named
+        // workspace always wins (PROPOSAL.md §13). Never throws — discovery failure
+        // reads as "no project", never as a failed query.
+        val discovered = if (hasNamedSelection(workspace, envWorkspace, activeWorkspace)) {
+            null
+        } else {
+            runCatching { discover(workingDir, cacheBase, gradleFilesRoot, m2Repo) }.getOrNull()
+        }
         val outcome = WorkspaceResolver.resolve(
             explicitJars = jars,
             explicitNoJdk = noJdk,
             flagWorkspace = workspace,
-            envWorkspace = try {
-                getenv("JDX_WORKSPACE")
-            } catch (e: SecurityException) {
-                null
-            },
-            activeWorkspace = try {
-                store.activeName()
-            } catch (e: Exception) {
-                null
-            },
+            envWorkspace = envWorkspace,
+            activeWorkspace = activeWorkspace,
             loadWorkspace = store::load,
             listNames = {
                 try {
@@ -66,6 +90,9 @@ internal object ReadCommandSupport {
                     emptyList()
                 }
             },
+            discoveredJars = discovered?.jars ?: emptyList(),
+            discoveredSelection = discovered?.selection,
+            discoveredWarnings = discovered?.warnings ?: emptyList(),
         )
         return when (outcome) {
             is WorkspaceResolver.Result.success ->
@@ -78,6 +105,57 @@ internal object ReadCommandSupport {
                 )
         }
     }
+
+    private fun hasNamedSelection(flag: String?, env: String?, active: String?): Boolean =
+        !flag?.trim().orEmpty().isEmpty() || !env?.trim().orEmpty().isEmpty() || !active?.trim().orEmpty().isEmpty()
+
+    /**
+     * Finds the enclosing project and derives (or loads from cache) its binary roots.
+     * Returns `null` when the working directory sits in no project. Cache entries are
+     * keyed by project path hash and invalidated by build-file fingerprint (T-016).
+     */
+    internal fun discoverProject(
+        workingDir: Path,
+        cacheBase: Path,
+        gradleFilesRoot: Path?,
+        m2Repo: Path?,
+    ): DiscoveredRoots? {
+        val project = ProjectDiscovery.findProjectRoot(workingDir) ?: return null
+        val hash = ProjectDiscovery.projectHash(project.root)
+        val cached = ProjectCache.load(cacheBase, hash, project.root)
+        // The cache stores jars only; the fallback warning is re-derived from the
+        // (cheap, no directory walks) coordinate parse so cache hits warn identically.
+        val warnings = if (ProjectDiscovery.coordinatesOf(project.root).isEmpty()) {
+            listOf(ProjectDiscovery.fallbackWarning(project.root))
+        } else {
+            emptyList()
+        }
+        val definition = cached ?: run {
+            val derived = ProjectDiscovery.deriveBinaryRoots(project.root, gradleFilesRoot, m2Repo)
+            WorkspaceDefinition(name = hash, jars = derived.jars, includeJdk = true).also {
+                ProjectCache.save(cacheBase, it, ProjectDiscovery.computeFingerprint(project.root))
+            }
+        }
+        return DiscoveredRoots(
+            jars = definition.jars,
+            selection = "auto-discovered project at '${project.root}' (nearest build file: ${project.marker})",
+            warnings = warnings,
+        )
+    }
+
+    /** Default `~/.cache/jdx/auto` off the process home. */
+    internal fun defaultAutoCacheBase(): Path =
+        Paths.get(System.getProperty("user.home")).resolve(".cache/jdx/auto")
+
+    /** Default `~/.gradle/caches/modules-2/files-2.1`, or null when the property is absent. */
+    internal fun defaultGradleFilesRoot(): Path? = runCatching {
+        Paths.get(System.getProperty("user.home")).resolve(".gradle/caches/modules-2/files-2.1")
+    }.getOrNull()
+
+    /** Default `~/.m2/repository`, or null when the property is absent. */
+    internal fun defaultM2Repo(): Path? = runCatching {
+        Paths.get(System.getProperty("user.home")).resolve(".m2/repository")
+    }.getOrNull()
 
     /** The two ways root resolution ends: roots to query with, or an exit-4 outcome to render. */
     internal sealed interface RootsOrFailure {
@@ -163,6 +241,30 @@ internal object ReadCommandSupport {
         if (outcome.exitCode != 0) terminate(outcome.exitCode)
     }
 }
+
+/**
+ * One auto-discovered project's contribution to root resolution: the derived jars,
+ * the human-readable selection trail, and resolution-time warnings. Produced by
+ * [ReadCommandSupport.discoverProject], consumed by [WorkspaceResolver].
+ */
+public data class DiscoveredRoots(
+    public val jars: List<String>,
+    public val selection: String,
+    public val warnings: List<Warning>,
+)
+
+/**
+ * Project auto-discovery behind root resolution, injectable so command tests run
+ * without IO (T-016): `(workingDir, cacheBase, gradleFilesRoot, m2Repo) -> roots?`.
+ * Commands take it nullable (null means the real [ReadCommandSupport.discoverProject]);
+ * tier-1 tests pass a null-returning lambda.
+ */
+internal typealias ProjectDiscoveryFn = (
+    workingDir: Path,
+    cacheBase: Path,
+    gradleFilesRoot: Path?,
+    m2Repo: Path?,
+) -> DiscoveredRoots?
 
 /** Query behind `members`/`outline`, injectable so command tests run without IO (T-011). */
 internal typealias MemberQuery = (

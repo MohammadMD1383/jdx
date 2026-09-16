@@ -31,6 +31,7 @@ class MembersCommand(
     private val terminate: (Int) -> Nothing = ::exitProcess,
     private val store: WorkspaceStore = FileWorkspaceStore.system(),
     private val getenv: (String) -> String? = { name -> System.getenv(name) },
+    private val discover: ProjectDiscoveryFn? = null,
 ) : CoreCliktCommand(name = "members") {
     override fun help(context: Context): String =
         "List the members of a type — the '.' completion equivalent. Inherited members " +
@@ -156,7 +157,14 @@ class MembersCommand(
             fromRef = from,
             grep = grep?.let { Regex(it) },
         )
-        when (val resolved = ReadCommandSupport.resolveRoots(jars, noJdk, effectiveWorkspace(workspace), store, getenv)) {
+        when (val resolved = ReadCommandSupport.resolveRoots(
+            jars,
+            noJdk,
+            effectiveWorkspace(workspace),
+            store,
+            getenv,
+            discover = discover ?: ReadCommandSupport::discoverProject,
+        )) {
             is ReadCommandSupport.RootsOrFailure.Ready -> {
                 val outcome = query(
                     ref,
@@ -183,6 +191,7 @@ class OutlineCommand(
     private val terminate: (Int) -> Nothing = ::exitProcess,
     private val store: WorkspaceStore = FileWorkspaceStore.system(),
     private val getenv: (String) -> String? = { name -> System.getenv(name) },
+    private val discover: ProjectDiscoveryFn? = null,
 ) : CoreCliktCommand(name = "outline") {
     override fun help(context: Context): String =
         "Outline a type: one dense line per member declared on it (never inherited " +
@@ -296,7 +305,14 @@ class OutlineCommand(
             fromRef = from,
             grep = grep?.let { Regex(it) },
         )
-        when (val resolved = ReadCommandSupport.resolveRoots(jars, noJdk, effectiveWorkspace(workspace), store, getenv)) {
+        when (val resolved = ReadCommandSupport.resolveRoots(
+            jars,
+            noJdk,
+            effectiveWorkspace(workspace),
+            store,
+            getenv,
+            discover = discover ?: ReadCommandSupport::discoverProject,
+        )) {
             is ReadCommandSupport.RootsOrFailure.Ready -> {
                 val outcome = query(
                     ref,

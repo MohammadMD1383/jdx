@@ -1,5 +1,7 @@
 package dev.jdx.index.workspace
 
+import dev.jdx.core.model.Warning
+import dev.jdx.core.model.WarningCode
 import io.kotest.matchers.shouldBe
 import io.kotest.matchers.string.shouldContain
 import org.junit.jupiter.api.Test
@@ -25,6 +27,9 @@ class WorkspaceResolverTest {
         envWorkspace: String? = null,
         activeWorkspace: String? = null,
         lookup: Map<String, WorkspaceDefinition> = stored,
+        discoveredJars: List<String> = emptyList(),
+        discoveredSelection: String? = null,
+        discoveredWarnings: List<Warning> = emptyList(),
     ): WorkspaceResolver.Result<WorkspaceResolver.ResolvedRoots, WorkspaceResolver.ResolutionFailure> =
         WorkspaceResolver.resolve(
             explicitJars = explicitJars,
@@ -34,6 +39,9 @@ class WorkspaceResolverTest {
             activeWorkspace = activeWorkspace,
             loadWorkspace = { lookup[it] },
             listNames = { lookup.keys.sorted() },
+            discoveredJars = discoveredJars,
+            discoveredSelection = discoveredSelection,
+            discoveredWarnings = discoveredWarnings,
         )
 
     private fun success(
@@ -117,6 +125,64 @@ class WorkspaceResolverTest {
     fun `an invalid flag name is a failure, not a lookup`() {
         val message = failure(resolve(flagWorkspace = "../evil"))
         message shouldContain "invalid workspace name"
+    }
+
+    @Test
+    fun `auto-discovery fills the workspace half when no workspace is selected`() {
+        val warning = Warning(WarningCode.PROJECT_DISCOVERY_FALLBACK, "no coordinates")
+        val resolved = success(
+            resolve(
+                discoveredJars = listOf("build/classes"),
+                discoveredSelection = "auto-discovered project at '/repo' (nearest build file: pom.xml)",
+                discoveredWarnings = listOf(warning),
+            ),
+        )
+        resolved.jarSpecs shouldBe listOf("build/classes")
+        resolved.includeJdk shouldBe true
+        resolved.workspaceName shouldBe null
+        resolved.selection shouldBe "auto-discovered project at '/repo' (nearest build file: pom.xml)"
+        resolved.warnings shouldBe listOf(warning)
+    }
+
+    @Test
+    fun `explicit jars merge in front of discovered jars`() {
+        val resolved = success(
+            resolve(
+                explicitJars = listOf("cli.jar"),
+                discoveredJars = listOf("build/classes", "dep.jar"),
+                discoveredSelection = "auto-discovered project at '/repo' (nearest build file: build.gradle)",
+            ),
+        )
+        resolved.jarSpecs shouldBe listOf("cli.jar", "build/classes", "dep.jar")
+        resolved.workspaceName shouldBe null
+    }
+
+    @Test
+    fun `a named workspace beats auto-discovery`() {
+        val resolved = success(
+            resolve(
+                flagWorkspace = "mc",
+                discoveredJars = listOf("build/classes"),
+                discoveredSelection = "auto-discovered project at '/repo' (nearest build file: pom.xml)",
+                discoveredWarnings = listOf(Warning(WarningCode.PROJECT_DISCOVERY_FALLBACK, "stale")),
+            ),
+        )
+        resolved.jarSpecs shouldBe listOf("ws.jar")
+        resolved.workspaceName shouldBe "mc"
+        resolved.warnings shouldBe emptyList()
+    }
+
+    @Test
+    fun `explicit no-jdk wins over auto-discovery`() {
+        val resolved = success(
+            resolve(
+                explicitNoJdk = true,
+                discoveredJars = listOf("build/classes"),
+                discoveredSelection = "auto-discovered project at '/repo' (nearest build file: pom.xml)",
+            ),
+        )
+        resolved.includeJdk shouldBe false
+        resolved.jarSpecs shouldBe listOf("build/classes")
     }
 
     @Test

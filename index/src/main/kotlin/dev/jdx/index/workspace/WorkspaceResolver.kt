@@ -1,5 +1,7 @@
 package dev.jdx.index.workspace
 
+import dev.jdx.core.model.Warning
+
 /**
  * Resolves the ordered roots one query reads (PROPOSAL.md §13, T-015).
  *
@@ -12,7 +14,7 @@ package dev.jdx.index.workspace
  * 2. `-w/--workspace <name>`;
  * 3. `JDX_WORKSPACE`;
  * 4. the `jdx ws use` selection;
- * 5. project auto-discovery (T-016 — not consulted here);
+ * 5. project auto-discovery (T-016 — [discoveredJars] when no workspace is selected);
  * 6. the JDK stdlib unless switched off.
  *
  * Pure: workspace lookup is an injected lambda, so tier-1 tests resolve against a map
@@ -31,6 +33,8 @@ public object WorkspaceResolver {
         public val workspaceName: String? = null,
         /** Human-readable selection trail for `ws info`/`doctor` (e.g. `flag -w 'mc'`). */
         public val selection: String = "none",
+        /** Warnings contributed by root resolution itself (e.g. discovery fallback). */
+        public val warnings: List<Warning> = emptyList(),
     )
 
     /** A resolution failure: the message already names the problem and the fix. */
@@ -49,6 +53,9 @@ public object WorkspaceResolver {
         activeWorkspace: String? = null,
         loadWorkspace: (String) -> WorkspaceDefinition? = { null },
         listNames: () -> List<String> = { emptyList() },
+        discoveredJars: List<String> = emptyList(),
+        discoveredSelection: String? = null,
+        discoveredWarnings: List<Warning> = emptyList(),
     ): Result<ResolvedRoots, ResolutionFailure> {
         val flag = flagWorkspace?.trim().orEmpty().ifEmpty { null }
         val env = envWorkspace?.trim().orEmpty().ifEmpty { null }
@@ -66,6 +73,20 @@ public object WorkspaceResolver {
             }
         }
         if (selected == null) {
+            // No named workspace anywhere: project auto-discovery (T-016) fills the
+            // workspace half, if the caller found a project. A named workspace always
+            // wins over discovery — discovery is consulted only here, never alongside.
+            if (discoveredSelection != null) {
+                return Result.success(
+                    ResolvedRoots(
+                        jarSpecs = explicitJars + discoveredJars,
+                        includeJdk = !explicitNoJdk,
+                        workspaceName = null,
+                        selection = discoveredSelection,
+                        warnings = discoveredWarnings,
+                    ),
+                )
+            }
             return Result.success(
                 ResolvedRoots(
                     jarSpecs = explicitJars,

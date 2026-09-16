@@ -137,7 +137,7 @@ class WsCreateCommand(
 
     private val src by option(
         "--src",
-        help = "Source dirs (not yet implemented, T-016).",
+        help = "Source dirs (not yet implemented, T-031).",
     ).multiple()
 
     private val coord by option(
@@ -170,8 +170,8 @@ class WsCreateCommand(
         }
         if (src.isNotEmpty()) {
             finishWs(
-                "usage error: --src is not yet implemented (T-016: project auto-discovery and source-dir roots)",
-                WsPayload(workspace = name, message = "--src is not yet implemented (T-016)"),
+                "usage error: --src is not yet implemented (T-031: project source-dir roots)",
+                WsPayload(workspace = name, message = "--src is not yet implemented (T-031)"),
                 "ws create", json, 3, terminate,
             )
             return

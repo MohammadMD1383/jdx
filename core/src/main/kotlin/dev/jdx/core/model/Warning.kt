@@ -23,6 +23,13 @@ public enum class WarningCode {
 
     /** A supertype named by a class file is not in the workspace (T-010). */
     UNRESOLVED_SUPERTYPE,
+
+    /**
+     * Project auto-discovery (T-016) found the project but could not determine its
+     * dependency set from lock/metadata files, so dependency jars were omitted.
+     * The project's own `build/classes`/`target/classes` roots still apply.
+     */
+    PROJECT_DISCOVERY_FALLBACK,
 }
 
 /**

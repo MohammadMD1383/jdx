@@ -44,6 +44,10 @@ class ReadCommandsTest {
 
     private val noExit: (Int) -> Nothing = { throw TestExit(it) }
 
+    // Tier 1 runs with no disk and no ambient project: discovery is off here.
+    // Real discovery is covered in tier 2 (ReadCommandDiscoveryTest).
+    private val noDiscovery: ProjectDiscoveryFn = { _, _, _, _ -> null }
+
     private fun classType(binary: String): TypeName.ClassType =
         typeNameFromBinaryName(binary) as TypeName.ClassType
 
@@ -112,6 +116,7 @@ class ReadCommandsTest {
             ShowCommand(
                 query = { ref, roots -> seenRoots = roots; ref shouldBe "com.example.Point"; pointCard() },
                 terminate = noExit,
+                discover = noDiscovery,
             ).parse(listOf("com.example.Point"))
         }
         output shouldContain "class com.example.Point"
@@ -126,6 +131,7 @@ class ReadCommandsTest {
             ShowCommand(
                 query = { _, roots -> seenRoots = roots; pointCard() },
                 terminate = noExit,
+                discover = noDiscovery,
             ).parse(listOf("Point", "--jars", "a.jar", "--jars", "b/*.jar", "--no-jdk"))
         }
         seenRoots shouldBe JdxService.RootsSpec(listOf("a.jar", "b/*.jar"), includeJdk = false)
@@ -134,7 +140,7 @@ class ReadCommandsTest {
     @Test
     fun `show --json after the subcommand prints the envelope`() {
         val output = captureStdout {
-            ShowCommand(query = { _, _ -> pointCard() }, terminate = noExit)
+            ShowCommand(query = { _, _ -> pointCard() }, terminate = noExit, discover = noDiscovery)
                 .parse(listOf("Point", "--json"))
         }
         val parsed = Json.parseToJsonElement(output.trim()).jsonObject
@@ -145,7 +151,9 @@ class ReadCommandsTest {
     @Test
     fun `--json before the subcommand flows to show`() {
         val output = captureStdout {
-            JdxCli().subcommands(ShowCommand(query = { _, _ -> pointCard() }, terminate = noExit))
+            JdxCli().subcommands(
+                ShowCommand(query = { _, _ -> pointCard() }, terminate = noExit, discover = noDiscovery),
+            )
                 .parse(listOf("--json", "show", "Point"))
         }
         Json.parseToJsonElement(output.trim()).jsonObject["command"]
@@ -161,6 +169,7 @@ class ReadCommandsTest {
                         JdxService.ServiceOutcome.Failure(ErrorResult.notFound(ref, emptyList()))
                     },
                     terminate = noExit,
+                    discover = noDiscovery,
                 ).parse(listOf("Missing"))
             }
             null
@@ -180,6 +189,7 @@ class ReadCommandsTest {
             MembersCommand(
                 query = { _, _, f, d, _, _ -> filters = f; declared = d; pointListing() },
                 terminate = noExit,
+                discover = noDiscovery,
             ).parse(listOf("com.example.Point"))
         }
         declared shouldBe false
@@ -196,6 +206,7 @@ class ReadCommandsTest {
             MembersCommand(
                 query = { _, _, _, d, _, _ -> declared = d; pointListing() },
                 terminate = noExit,
+                discover = noDiscovery,
             ).parse(listOf("Point", "--declared"))
         }
         declared shouldBe true
@@ -210,6 +221,7 @@ class ReadCommandsTest {
             MembersCommand(
                 query = { _, _, f, _, s, m -> filters = f; synthetic = s; limit = m; pointListing() },
                 terminate = noExit,
+                discover = noDiscovery,
             ).parse(
                 listOf(
                     "Point", "--kind", "ctor", "--access", "all", "--static",
@@ -235,6 +247,7 @@ class ReadCommandsTest {
             MembersCommand(
                 query = { _, _, f, _, _, _ -> filters = f; pointListing() },
                 terminate = noExit,
+                discover = noDiscovery,
             ).parse(listOf("Point", "--instance"))
         }
         filters?.staticOnly shouldBe false
@@ -248,6 +261,7 @@ class ReadCommandsTest {
                 MembersCommand(
                     query = { _, _, _, _, _, _ -> queried = true; pointListing() },
                     terminate = noExit,
+                    discover = noDiscovery,
                 ).parse(listOf("Point", "--static", "--instance"))
                 null
             } catch (e: TestExit) {
@@ -267,6 +281,7 @@ class ReadCommandsTest {
                 MembersCommand(
                     query = { _, _, _, _, _, _ -> queried = true; pointListing() },
                     terminate = noExit,
+                    discover = noDiscovery,
                 ).parse(listOf("Point", "--grep", "[unclosed"))
                 null
             } catch (e: TestExit) {
@@ -285,6 +300,7 @@ class ReadCommandsTest {
                 MembersCommand(
                     query = { _, _, _, _, _, _ -> pointListing() },
                     terminate = noExit,
+                    discover = noDiscovery,
                 ).parse(listOf("Point", "--with-doc"))
                 null
             } catch (e: TestExit) {
@@ -302,6 +318,7 @@ class ReadCommandsTest {
                 MembersCommand(
                     query = { _, _, _, _, _, _ -> pointListing() },
                     terminate = noExit,
+                    discover = noDiscovery,
                 ).parse(listOf("Point", "--sort", "name"))
             }
             null
@@ -314,11 +331,11 @@ class ReadCommandsTest {
     @Test
     fun `members json carries the same signatures as text`() {
         val text = captureStdout {
-            MembersCommand(query = { _, _, _, _, _, _ -> pointListing() }, terminate = noExit)
+            MembersCommand(query = { _, _, _, _, _, _ -> pointListing() }, terminate = noExit, discover = noDiscovery)
                 .parse(listOf("Point"))
         }
         val json = captureStdout {
-            MembersCommand(query = { _, _, _, _, _, _ -> pointListing() }, terminate = noExit)
+            MembersCommand(query = { _, _, _, _, _, _ -> pointListing() }, terminate = noExit, discover = noDiscovery)
                 .parse(listOf("Point", "--json"))
         }
         val parsed = Json.parseToJsonElement(json.trim()).jsonObject
@@ -340,6 +357,7 @@ class ReadCommandsTest {
                         )
                     },
                     terminate = noExit,
+                    discover = noDiscovery,
                 ).parse(listOf("Point"))
                 null
             } catch (e: TestExit) {
@@ -359,6 +377,7 @@ class ReadCommandsTest {
             OutlineCommand(
                 query = { _, _, _, d, _, _ -> declared = d; pointListing() },
                 terminate = noExit,
+                discover = noDiscovery,
             ).parse(listOf("Point", "--kind", "method"))
         }
         declared shouldBe true
@@ -368,7 +387,7 @@ class ReadCommandsTest {
     @Test
     fun `outline --json prints the outline envelope`() {
         val output = captureStdout {
-            OutlineCommand(query = { _, _, _, _, _, _ -> pointListing() }, terminate = noExit)
+            OutlineCommand(query = { _, _, _, _, _, _ -> pointListing() }, terminate = noExit, discover = noDiscovery)
                 .parse(listOf("Point", "--json"))
         }
         Json.parseToJsonElement(output.trim()).jsonObject["command"]
@@ -389,6 +408,7 @@ class ReadCommandsTest {
             ShowCommand(
                 query = { _, roots -> seenRoots = roots; pointCard() },
                 terminate = noExit,
+                discover = noDiscovery,
                 store = workspaceStore(),
                 getenv = { null },
             ).parse(listOf("Point", "-w", "mc"))
@@ -403,6 +423,7 @@ class ReadCommandsTest {
             ShowCommand(
                 query = { _, roots -> seenRoots = roots; pointCard() },
                 terminate = noExit,
+                discover = noDiscovery,
                 store = workspaceStore(),
                 getenv = { null },
             ).parse(listOf("Point", "--jars", "cli.jar", "-w", "mc"))
@@ -417,6 +438,7 @@ class ReadCommandsTest {
             ShowCommand(
                 query = { _, roots -> seenRoots = roots; pointCard() },
                 terminate = noExit,
+                discover = noDiscovery,
                 store = workspaceStore(),
                 getenv = { null },
             ).parse(listOf("Point", "-w", "mc", "--no-jdk"))
@@ -432,6 +454,7 @@ class ReadCommandsTest {
                 ShowCommand(
                     query = { _, roots -> seenRoots = roots; pointCard() },
                     terminate = noExit,
+                    discover = noDiscovery,
                     store = workspaceStore(),
                     getenv = { null },
                 ),
@@ -449,6 +472,7 @@ class ReadCommandsTest {
                 ShowCommand(
                     query = { _, roots -> seenRoots = roots; pointCard() },
                     terminate = noExit,
+                    discover = noDiscovery,
                     store = store,
                     getenv = { if (it == "JDX_WORKSPACE") env else null },
                 ).parse(argv)
@@ -470,6 +494,7 @@ class ReadCommandsTest {
                 ShowCommand(
                     query = { _, _ -> queried = true; pointCard() },
                     terminate = noExit,
+                    discover = noDiscovery,
                     store = workspaceStore(),
                     getenv = { null },
                 ).parse(listOf("Point", "-w", "ghost"))
@@ -490,6 +515,7 @@ class ReadCommandsTest {
             MembersCommand(
                 query = { _, roots, _, _, _, _ -> seenRoots = roots; pointListing() },
                 terminate = noExit,
+                discover = noDiscovery,
                 store = workspaceStore(),
                 getenv = { null },
             ).parse(listOf("Point", "--workspace", "mc"))
