@@ -247,7 +247,7 @@ slowing the loop.*
 
 ---
 
-### T-054 — Golden-file test infrastructure · `TODO`
+### T-054 — Golden-file test infrastructure · `WIP`
 **Depends:** T-053 · **Files:** `core/src/test/kotlin/.../golden/*`
 
 Helper comparing output to files under `src/test/resources/golden/`, rewritten by
