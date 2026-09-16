@@ -1,0 +1,6 @@
+class dev.jdx.fixtures.StaticInitMarker
+  public class StaticInitMarker
+  extends java.lang.Object
+  members: 1 constructor, 2 methods, 1 field
+source: fixture-corpus.jar (bytecode)
+next: jdx members dev.jdx.fixtures.StaticInitMarker --inherited

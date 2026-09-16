@@ -1,0 +1,1 @@
+{"jdx":1,"ok":true,"command":"show","query":"dev.jdx.fixtures.UserIdBox","result":{"kind":"class","declaration":"public final class UserIdBox","modifiers":["public","final"],"superclass":"java.lang.Object","interfaces":[],"counts":{"constructors":1,"methods":11,"fields":1}},"warnings":[],"provenance":[{"artifact":"fixture-corpus.jar","origin":"bytecode"}]}

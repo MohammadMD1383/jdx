@@ -1,0 +1,6 @@
+class dev.jdx.fixtures.Generics
+  public class Generics
+  extends java.lang.Object
+  members: 1 constructor, 3 methods, 0 fields
+source: fixture-corpus.jar (bytecode)
+next: jdx members dev.jdx.fixtures.Generics --inherited

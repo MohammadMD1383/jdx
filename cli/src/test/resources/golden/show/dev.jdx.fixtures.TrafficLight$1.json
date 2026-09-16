@@ -1,0 +1,1 @@
+{"jdx":1,"ok":true,"command":"show","query":"dev.jdx.fixtures.TrafficLight$1","result":{"kind":"enum","declaration":"final enum 1","modifiers":["final"],"superclass":"dev.jdx.fixtures.TrafficLight","interfaces":[],"counts":{"constructors":1,"methods":1,"fields":0}},"warnings":[],"provenance":[{"artifact":"fixture-corpus.jar","origin":"bytecode"}]}

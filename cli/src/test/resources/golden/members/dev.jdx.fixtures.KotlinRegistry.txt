@@ -1,0 +1,7 @@
+members of dev.jdx.fixtures.KotlinRegistry
+methods declared on dev.jdx.fixtures.KotlinRegistry:
+  method public final void register(java.lang.Object entry)
+fields declared on dev.jdx.fixtures.KotlinRegistry:
+  field public static final dev.jdx.fixtures.KotlinRegistry INSTANCE
+warning UNRESOLVED_SUPERTYPE: supertype java.lang.Object is not in the workspace — members inherited from it are missing
+source: fixture-corpus.jar (bytecode)

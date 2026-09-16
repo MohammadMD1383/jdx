@@ -1,0 +1,7 @@
+record dev.jdx.fixtures.SealedHierarchy$Rect
+  public final record Rect
+  extends java.lang.Record
+  implements dev.jdx.fixtures.SealedHierarchy
+  members: 1 constructor, 5 methods, 2 fields
+source: fixture-corpus.jar (bytecode)
+next: jdx members dev.jdx.fixtures.SealedHierarchy$Rect --inherited

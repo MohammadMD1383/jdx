@@ -1,0 +1,5 @@
+members of dev.jdx.fixtures.KotlinShapesKt
+methods declared on dev.jdx.fixtures.KotlinShapesKt:
+  method public static final java.lang.String extensionGreeting(dev.jdx.fixtures.KotlinMembers $this$extensionGreeting)
+warning UNRESOLVED_SUPERTYPE: supertype java.lang.Object is not in the workspace — members inherited from it are missing
+source: fixture-corpus.jar (bytecode)

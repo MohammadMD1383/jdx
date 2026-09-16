@@ -7,6 +7,9 @@ import com.github.ajalt.clikt.parameters.options.flag
 import com.github.ajalt.clikt.parameters.options.option
 import com.github.ajalt.clikt.parameters.options.versionOption
 import dev.jdx.cli.commands.DoctorCommand
+import dev.jdx.cli.commands.MembersCommand
+import dev.jdx.cli.commands.OutlineCommand
+import dev.jdx.cli.commands.ShowCommand
 import dev.jdx.cli.commands.VersionCommand
 
 /**
@@ -40,4 +43,10 @@ internal fun CoreCliktCommand.effectiveJson(ownJson: Boolean): Boolean =
 
 /** One-shot CLI entry point; the fat jar's `Main-Class` (see `app/build.gradle.kts`). */
 fun main(args: Array<String>): Unit =
-    JdxCli().subcommands(VersionCommand(), DoctorCommand()).main(args)
+    JdxCli().subcommands(
+        VersionCommand(),
+        DoctorCommand(),
+        ShowCommand(),
+        MembersCommand(),
+        OutlineCommand(),
+    ).main(args)

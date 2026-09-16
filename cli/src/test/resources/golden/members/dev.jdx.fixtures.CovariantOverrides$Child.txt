@@ -1,0 +1,11 @@
+members of dev.jdx.fixtures.CovariantOverrides$Child
+constructors declared on dev.jdx.fixtures.CovariantOverrides$Child:
+  constructor public Child()
+methods declared on dev.jdx.fixtures.CovariantOverrides$Child:
+  method public dev.jdx.fixtures.CovariantOverrides$Child copy()
+  method public java.lang.Integer size()
+methods inherited from dev.jdx.fixtures.CovariantOverrides$Base:
+  method public dev.jdx.fixtures.CovariantOverrides$Base copy()
+  method public java.lang.Number size()
+warning UNRESOLVED_SUPERTYPE: supertype java.lang.Object is not in the workspace — members inherited from it are missing
+source: fixture-corpus.jar (bytecode)

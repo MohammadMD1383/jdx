@@ -1,0 +1,1 @@
+{"jdx":1,"ok":true,"command":"show","query":"dev.jdx.fixtures.SealedHierarchy","result":{"kind":"interface","declaration":"public abstract interface SealedHierarchy","modifiers":["public","abstract"],"interfaces":[],"counts":{"constructors":0,"methods":0,"fields":0}},"warnings":[],"provenance":[{"artifact":"fixture-corpus.jar","origin":"bytecode"}]}

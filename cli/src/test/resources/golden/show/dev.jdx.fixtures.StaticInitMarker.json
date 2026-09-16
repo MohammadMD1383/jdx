@@ -1,0 +1,1 @@
+{"jdx":1,"ok":true,"command":"show","query":"dev.jdx.fixtures.StaticInitMarker","result":{"kind":"class","declaration":"public class StaticInitMarker","modifiers":["public"],"superclass":"java.lang.Object","interfaces":[],"counts":{"constructors":1,"methods":2,"fields":1}},"warnings":[],"provenance":[{"artifact":"fixture-corpus.jar","origin":"bytecode"}]}

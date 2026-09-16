@@ -72,4 +72,38 @@ class ErrorResultTest {
         result.renderText() shouldNotContain "\u001B"
         result.toJson(command = "show") shouldNotContain "truncated"
     }
+
+    @Test
+    fun `generic errors carry their exit code in text and json`() {
+        val usage = ErrorResult.generic(
+            query = "members",
+            exitCode = 3,
+            message = "usage error: --sort name is not yet implemented (T-062)",
+        )
+        usage.exitCode shouldBe 3
+        usage.renderText() shouldBe "usage error: --sort name is not yet implemented (T-062)"
+        val json = usage.toJson(command = "members")
+        json shouldContain "\"ok\":false"
+        json shouldContain "\"code\":3"
+        json shouldContain "not yet implemented"
+
+        val artifact = ErrorResult.generic(
+            query = "app.jar",
+            exitCode = 5,
+            message = "artifact read error: no such artifact: app.jar",
+        )
+        artifact.exitCode shouldBe 5
+        artifact.renderText() shouldBe "artifact read error: no such artifact: app.jar"
+        artifact.toJson(command = "show") shouldContain "\"code\":5"
+    }
+
+    @Test
+    fun `generic errors reject result codes`() {
+        io.kotest.assertions.throwables.shouldThrow<IllegalArgumentException> {
+            ErrorResult.generic(query = "x", exitCode = 1, message = "not found: x")
+        }
+        io.kotest.assertions.throwables.shouldThrow<IllegalArgumentException> {
+            ErrorResult.generic(query = "x", exitCode = 0, message = "ok")
+        }
+    }
 }

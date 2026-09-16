@@ -1,0 +1,6 @@
+class dev.jdx.fixtures.CovariantOverrides$Child
+  public class Child
+  extends dev.jdx.fixtures.CovariantOverrides$Base
+  members: 1 constructor, 4 methods, 0 fields
+source: fixture-corpus.jar (bytecode)
+next: jdx members dev.jdx.fixtures.CovariantOverrides$Child --inherited

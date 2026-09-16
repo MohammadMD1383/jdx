@@ -1099,6 +1099,9 @@ the authoritative machine-readable version.)*
 
 ### Per-command highlights
 ```
+show      <type> [--jars …] [--no-jdk] [--json] [--no-color]
+outline   <type> [--kind --static/--instance --access --from --grep
+          --include-synthetic --limit] [--jars …] [--no-jdk] [--json] [--no-color]
 members   --inherited/--declared --kind --static --instance --access --from
           --grep --with-doc --sort --include-synthetic
 body      --engine vineflower|javap --with-doc --with-signature --context N

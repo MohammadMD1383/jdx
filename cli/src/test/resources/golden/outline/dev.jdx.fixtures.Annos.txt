@@ -1,0 +1,7 @@
+members of dev.jdx.fixtures.Annos
+constructors declared on dev.jdx.fixtures.Annos:
+  constructor public Annos()
+methods declared on dev.jdx.fixtures.Annos:
+  method public void tagged()
+warning UNRESOLVED_SUPERTYPE: supertype java.lang.Object is not in the workspace — members inherited from it are missing
+source: fixture-corpus.jar (bytecode)

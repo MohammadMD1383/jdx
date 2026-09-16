@@ -1,0 +1,8 @@
+members of dev.jdx.fixtures.NoDebug
+constructors declared on dev.jdx.fixtures.NoDebug:
+  constructor public NoDebug()
+methods declared on dev.jdx.fixtures.NoDebug:
+  method public int add(int arg0, int arg1)
+  method public static java.lang.String describe(java.lang.String arg0)
+warning UNRESOLVED_SUPERTYPE: supertype java.lang.Object is not in the workspace — members inherited from it are missing
+source: fixture-corpus.jar (bytecode)

@@ -1,0 +1,6 @@
+class dev.jdx.fixtures.KotlinData
+  public final class KotlinData
+  extends java.lang.Object
+  members: 2 constructors, 13 methods, 3 fields
+source: fixture-corpus.jar (bytecode)
+next: jdx members dev.jdx.fixtures.KotlinData --inherited

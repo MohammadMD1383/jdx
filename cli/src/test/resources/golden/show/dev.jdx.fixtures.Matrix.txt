@@ -1,0 +1,7 @@
+annotation dev.jdx.fixtures.Matrix
+  abstract @interface Matrix
+  extends java.lang.Object
+  implements java.lang.annotation.Annotation
+  members: 0 constructors, 3 methods, 0 fields
+source: fixture-corpus.jar (bytecode)
+next: jdx members dev.jdx.fixtures.Matrix --inherited

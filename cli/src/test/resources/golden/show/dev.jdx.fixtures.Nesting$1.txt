@@ -1,0 +1,7 @@
+class dev.jdx.fixtures.Nesting$1
+  class 1
+  extends java.lang.Object
+  implements java.lang.Runnable
+  members: 1 constructor, 1 method, 0 fields
+source: fixture-corpus.jar (bytecode)
+next: jdx members dev.jdx.fixtures.Nesting$1 --inherited

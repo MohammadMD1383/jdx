@@ -1,3 +1,5 @@
+import org.gradle.api.tasks.testing.Test
+
 plugins {
     alias(libs.plugins.kotlin.serialization)
 }
@@ -37,3 +39,22 @@ sourceSets {
 }
 
 tasks.named("processResources") { dependsOn(generateBuildProperties) }
+
+// Read-command tests (T-011) run the real `JdxService` over the `testfixtures` jars:
+// hand the directory in as a system property so tests never hard-code paths
+// (same pattern as `index/build.gradle.kts`, T-006).
+listOf("test", "tier2Test").forEach { taskName ->
+    tasks.named<Test>(taskName) {
+        dependsOn(":testfixtures:jar", ":testfixtures:sourcesJar")
+        systemProperty(
+            "jdx.fixturesDir",
+            project(":testfixtures").layout.buildDirectory.dir("libs").get().asFile.absolutePath,
+        )
+    }
+}
+
+// Golden-file update mode (TESTING.md §14): `./gradlew :cli:tier2Test
+// -Pgolden.update=true` rewrites every golden under src/test/resources/golden.
+tasks.named<Test>("tier2Test") {
+    systemProperty("jdx.golden.update", (findProperty("golden.update") as String?) ?: "false")
+}

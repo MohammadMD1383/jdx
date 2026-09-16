@@ -7,6 +7,98 @@ wrong, say so in a *new* entry.
 
 ---
 
+## Session 14 — 2026-09-16 — `jdx show`, `jdx outline`, `jdx members` (T-011)
+**Agent:** Muse Spark (via opencode) · **Branch:** none (continued on top of the T-011
+`WIP` working tree: claim `c82dde1` plus uncommitted `ClassCard`/`JdxService`/test work
+from the previous session) · **Commits:** one feat commit (this entry included)
+
+### Goal
+Finish T-011, found `WIP` with the service layer (`JdxService`, `ClassCard`,
+`ErrorResult.Generic`, pure filter/name-matching tests) written but the Clikt commands,
+goldens and wiring missing. Lowest-numbered unblocked TODO.
+
+### What I did
+1. Verified the inherited tree compiles and `./gradlew test` is green before touching
+   anything; confirmed the T-011 acceptance list against the tree (commands missing).
+2. **Commands (thin, D-004):** `cli/.../commands/ShowCommand.kt` (`show <type>`),
+   `ReadCommands.kt` (`MembersCommand` with every §7.1 flag, `OutlineCommand` as
+   declared-only), `ReadCommandSupport.kt` (roots mapping, `--access`/`--kind`
+   mapping, flag-combination validation, outcome printing + termination).
+   `--with-doc` exits 3 naming T-025; `--sort name|declaring` exits 3 naming the new
+   T-062; `--inherited` accepted explicitly (default on); `--declared` wins when both
+   are passed (said in `--help`). Registered all three in `JdxCli`.
+3. **Exit-code fix:** first cut threw Clikt `ProgramResult` — the real binary still
+   exited 0 on every error. Root cause: clikt-core's default `exitProcess` hook is a
+   no-op (`{ }`; the real one lives in the excluded mordant flavor). Commands now
+   call `kotlin.system.exitProcess` like `DoctorCommand`, with the terminator
+   `(Int) -> Nothing` injected so tests throw instead of dying (L-026).
+4. **Real bug the tests caught (L-027):** `members --from java.lang.Object` returned
+   *only* the `+ N from java.lang.Object` collapse line — the renderer collapsed
+   exactly what was asked to expand. `JdxService` now passes
+   `collapseObjectMembers = (from != Object)`; tier-2 test pins it.
+5. **Tests:** 20 tier-1 command tests (injected query + exit: flags, both `--json`
+   positions, text⊆JSON, exits 1/2/3); +1 tier-1 property (`narrowing filters never
+   adds rows`, 500 cases); 15 tier-2 behavioural tests (HashMap zero-config,
+   outline == `members --declared` byte-for-byte, `--from` expansion, `--limit 0`,
+   exits 1/4/5, determinism, D-017 marker absence, corpus size pin); 3 tier-2 golden
+   tests — 210 files (35 fixture classes × show/members/outline × text/JSON,
+   hermetic: `--no-jdk`, fixed artifact label). Read every sampled golden before
+   accepting (covariant collapse, `compareTo(E)` + Comparable warning, enum/Kotlin
+   outlines, `argN` fallback, annotation defaults in JSON).
+6. **Docs:** T-011 → DONE with implementation notes; new T-062 (`--sort` orders);
+   Appendix B `show`/`outline` rows; `L-026-050.md` shard created (L-026, L-027);
+   CURRENT STATE updated. `cli/build.gradle.kts` wires `jdx.fixturesDir` +
+   `jdx.golden.update` (T-054 seed pattern).
+
+### Decisions made
+None at D-level. Judgement calls recorded in code/docs: `--declared` wins over
+`--inherited` when both are passed; `--access public` means exactly public (the
+public+protected default applies only when the flag is absent); annotation cards
+print `extends java.lang.Object`, faithful to the T-008 model (cosmetic, noted).
+
+### Tasks moved
+- T-011: WIP → DONE (all five acceptance boxes ticked, verified below).
+- T-062: added (TODO) — `--sort name|declaring` for members/outline.
+
+### Lessons distilled
+**L-026** (clikt-core's default `exitProcess` is a no-op — `ProgramResult` alone
+exits 0; call `kotlin.system.exitProcess` explicitly, inject the terminator) and
+**L-027** (`--from X` must defeat display rules hiding X; tests caught it, not
+reading). New shard `docs/lessons/L-026-050.md` (23 free).
+
+### What works now (and how to verify it yourself)
+```bash
+./gradlew test                       # tier 1 green
+./gradlew check                      # tiers 1+2 green (439 tests, 0 failures)
+./gradlew soak                       # tier 3 green
+./gradlew :app:installDist && env -u JAVA_HOME app/build/jdx members java.util.HashMap --limit 8
+env -u JAVA_HOME app/build/jdx show java.util.HashMap
+env -u JAVA_HOME app/build/jdx members Map; echo $?            # 2, candidates
+env -u JAVA_HOME app/build/jdx members java.util.NoSuchThing; echo $?  # 1
+env -u JAVA_HOME app/build/jdx members java.util.HashMap --static --instance; echo $?  # 3
+env -u JAVA_HOME app/build/jdx members java.util.HashMap --no-jdk; echo $?  # 4
+env -u JAVA_HOME app/build/jdx members java.util.HashMap --from java.lang.Object --limit 5
+```
+
+### What is broken / half-done
+Nothing known in T-011 scope. Known deferred paths, each labelled at runtime:
+`--with-doc` → T-025, `--sort name|declaring` → T-062, Maven coords → T-019,
+named workspaces → T-015. `version`/`doctor` still use the M0 envelope until
+migrated (compatible, D-028).
+
+### Open questions / blockers
+None. **Push needs owner go-ahead (D-012):** T-011 work (this session + the
+inherited `ClassCard`/`JdxService` files) is unpushed.
+
+### Next action
+**T-012 (JDK stdlib root + `src.zip`)** — lowest unblocked TODO; the `JrtArtifact`
+already exists, so this is mostly pairing + `--jdk` surfacing. T-054/T-055 remain
+available as infra alternatives.
+
+---
+
+## Session 13 — 2026-09-16 — Text and JSON renderers over one result model (T-010)
+
 ## Session 13 — 2026-09-16 — Text and JSON renderers over one result model (T-010)
 **Agent:** Muse Spark (via opencode) · **Branch:** `t010-renderers` ·
 **Commits:** claim `81359c9` + one feat commit (this entry included)

@@ -1,0 +1,1 @@
+{"jdx":1,"ok":true,"command":"show","query":"dev.jdx.fixtures.Tags","result":{"kind":"annotation","declaration":"abstract @interface Tags","modifiers":["abstract"],"superclass":"java.lang.Object","interfaces":["java.lang.annotation.Annotation"],"counts":{"constructors":0,"methods":1,"fields":0}},"warnings":[],"provenance":[{"artifact":"fixture-corpus.jar","origin":"bytecode"}]}

@@ -60,6 +60,28 @@ public sealed interface ErrorResult {
         override fun toJson(command: String): String = toErrorJson(command, this)
     }
 
+    /**
+     * Usage (3), workspace (4), artifact (5) and internal (6) failures (D-015).
+     * [message] is the full text line — callers prefix the kind
+     * (`usage error: …`, `artifact read error: …`) so text and JSON agree.
+     * Codes 1/2 are [NotFound]/[Ambiguous]; anything outside 3..6 is rejected.
+     */
+    public data class Generic(
+        override val query: String,
+        override val exitCode: Int,
+        public val message: String,
+    ) : ErrorResult {
+        init {
+            require(exitCode in 3..6) { "generic errors carry exit code 3, 4, 5 or 6, not $exitCode" }
+        }
+
+        override val candidates: List<String> = emptyList()
+
+        override fun renderText(): String = message
+
+        override fun toJson(command: String): String = toErrorJson(command, this)
+    }
+
     public companion object {
         /** Valid query, no results (exit 1). */
         public fun notFound(query: String, suggestions: List<String> = emptyList()): ErrorResult =
@@ -68,14 +90,19 @@ public sealed interface ErrorResult {
         /** Under-specified reference (exit 2). */
         public fun ambiguous(query: String, candidates: List<String>): ErrorResult =
             Ambiguous(query, candidates)
+
+        /** Usage/workspace/artifact/internal failure (exit 3, 4, 5 or 6). */
+        public fun generic(query: String, exitCode: Int, message: String): ErrorResult =
+            Generic(query, exitCode, message)
     }
 }
 
 private fun toErrorJson(command: String, result: ErrorResult): String {
-    val message = if (result is ErrorResult.Ambiguous) {
-        "ambiguous: ${result.candidates.size} candidates for ${result.query}"
-    } else {
-        "not found: ${result.query}"
+    val message = when (result) {
+        is ErrorResult.Ambiguous ->
+            "ambiguous: ${result.candidates.size} candidates for ${result.query}"
+        is ErrorResult.Generic -> result.message
+        else -> "not found: ${result.query}"
     }
     val errorJson = "{\"code\":" + result.exitCode + ",\"message\":" + JsonEscape.quote(message) + "}"
     return envelopeJson(

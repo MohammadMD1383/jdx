@@ -1,0 +1,6 @@
+class dev.jdx.fixtures.KotlinMembers
+  public final class KotlinMembers
+  extends java.lang.Object
+  members: 1 constructor, 8 methods, 2 fields
+source: fixture-corpus.jar (bytecode)
+next: jdx members dev.jdx.fixtures.KotlinMembers --inherited

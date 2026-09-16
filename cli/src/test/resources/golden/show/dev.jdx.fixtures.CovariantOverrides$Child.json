@@ -1,0 +1,1 @@
+{"jdx":1,"ok":true,"command":"show","query":"dev.jdx.fixtures.CovariantOverrides$Child","result":{"kind":"class","declaration":"public class Child","modifiers":["public"],"superclass":"dev.jdx.fixtures.CovariantOverrides$Base","interfaces":[],"counts":{"constructors":1,"methods":4,"fields":0}},"warnings":[],"provenance":[{"artifact":"fixture-corpus.jar","origin":"bytecode"}]}

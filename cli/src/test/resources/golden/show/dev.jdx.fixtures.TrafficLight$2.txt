@@ -1,0 +1,6 @@
+enum dev.jdx.fixtures.TrafficLight$2
+  final enum 2
+  extends dev.jdx.fixtures.TrafficLight
+  members: 1 constructor, 1 method, 0 fields
+source: fixture-corpus.jar (bytecode)
+next: jdx members dev.jdx.fixtures.TrafficLight$2 --inherited

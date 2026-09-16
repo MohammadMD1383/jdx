@@ -14,16 +14,16 @@ or delete a past entry — if one turned out to be wrong, say so in a *new* entr
 
 | | |
 |---|---|
-| **Last updated** | 2026-09-16 (session 13) |
+| **Last updated** | 2026-09-16 (session 14) |
 | **Repository** | <https://github.com/MohammadMD1383/jdx> (public, Apache-2.0) |
 | **Phase** | Design complete; **M0 done, M1 in progress** |
 | **Active milestone** | M1 — Read path |
-| **Next task** | **T-011 (`jdx show`, `jdx outline`, `jdx members`)** — consumes T-010's `MemberListing`; or T-054/T-055 (golden/property infra) |
-| **Task count** | 59 tasks defined (T-001…T-061; M0–M2 in full detail, M3–M7 as one-liners) |
-| **Build status** | **Green.** `./gradlew build` passes. Runnable `jdx`: `./gradlew :app:installDist` → `app/build/jdx` (fat jar + POSIX launcher, JDK-21 gate, ~180 ms cold start); `install.sh` symlinks it into `~/.local/bin`. Commands so far: `--version`, `version [--json]`, `doctor [--json]`. |
-| **Test status** | **375 tests, all green** (314 tier 1 in **~4 s** via `./gradlew test`, 60 tier 2 via `check`, 1 soak proof via `soak`). T-010 added 52 tier-1 core + 3 tier-1 cli + 1 tier-2 golden test (70 golden files over 35 fixture classes). |
-| **Docs** | Append-only logs sharded (D-023): sessions → `docs/progress/`, decisions → `docs/decisions/` (shard 2 open at D-028), lessons → `docs/lessons/` (shard `L-001-025.md` **full** — next lesson creates `L-026-050.md`). Every hard-won lesson goes to `docs/LESSONS.md` (D-024). |
-| **Blocked on** | Nothing. `main` pushed to `origin/main` (`ebcdf5b`) with owner go-ahead — local and remote in sync. |
+| **Next task** | **T-012 (`jdx` JDK root + `src.zip`)** — lowest unblocked TODO; or T-054/T-055 (golden/property infra), T-062 (`--sort` orders) |
+| **Task count** | 60 tasks defined (T-001…T-062; M0–M2 in full detail, M3–M7 as one-liners) |
+| **Build status** | **Green.** `./gradlew build` passes. Runnable `jdx`: `./gradlew :app:installDist` → `app/build/jdx` (fat jar + POSIX launcher, JDK-21 gate, ~180 ms cold start); `install.sh` symlinks it into `~/.local/bin`. Commands so far: `--version`, `version [--json]`, `doctor [--json]`, **`show`, `members`, `outline` (all flags, text+JSON, exits 0–4)**. |
+| **Test status** | **439 tests, all green** (`./gradlew test` tier 1 + `check` tier 2 + `soak` tier 3). T-011 added 20 tier-1 cli + 1 tier-1 index property + 15 tier-2 behavioural tests + 3 tier-2 golden tests (210 golden files over 35 fixture classes × 3 commands × text+JSON). |
+| **Docs** | Append-only logs sharded (D-023): sessions → `docs/progress/`, decisions → `docs/decisions/` (shard 2 open at D-028), lessons → `docs/lessons/` (new shard `L-026-050.md` open — L-026/L-027 from this session). Every hard-won lesson goes to `docs/LESSONS.md` (D-024). |
+| **Blocked on** | Nothing. Push needs owner go-ahead (D-012): T-011 work unpushed. |
 
 ### What exists right now
 

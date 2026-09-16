@@ -483,20 +483,52 @@ T-054). `WarningCode` closed-set test + PROPOSAL §16 updated for the new code.*
 
 ---
 
-### T-011 — `jdx show`, `jdx outline`, `jdx members` · `WIP`
+### T-011 — `jdx show`, `jdx outline`, `jdx members` · `DONE` (session 14)
 **Depends:** T-010, T-003 · **Files:** `cli/.../commands/*`
 
 Wire the three read commands through Clikt. **No logic in the command classes** (D-004) —
 they parse flags, call `JdxService`, hand the result to a renderer, map to an exit code.
 
 **Acceptance**
-- [ ] All flags from PROPOSAL.md §7.1 for these commands are implemented or explicitly
+- [x] All flags from PROPOSAL.md §7.1 for these commands are implemented or explicitly
       rejected with a "not yet implemented" message naming the task that will add them
-- [ ] `--inherited` is the default for `members`; `java.lang.Object` members collapse to one
-      line by default
-- [ ] Exit codes follow D-015; ambiguity follows D-016 with candidate listing
-- [ ] `jdx members java.util.HashMap` works with **no** flags, via the JDK jrt root
-- [ ] Golden tests for each command, text and JSON
+      (`--with-doc` → T-025, `--sort name|declaring` → T-062)
+- [x] `--inherited` is the default for `members`; `java.lang.Object` members collapse to one
+      line by default (and `--from java.lang.Object` expands them — L-027)
+- [x] Exit codes follow D-015; ambiguity follows D-016 with candidate listing
+- [x] `jdx members java.util.HashMap` works with **no** flags, via the JDK jrt root
+- [x] Golden tests for each command, text and JSON (210 files over all 35 fixture classes)
+
+*Implementation notes (session 14): `index/.../service/JdxService` (D-004 facade:
+classpath-ordered roots, exact/short-name lookup, did-you-mean, DUPLICATE_FQN,
+lazy per-class ASM reads, all §7.1 filters, exit 1–6 outcomes) + `core/.../render/
+ClassCard` (show card) + `ErrorResult.Generic` (exit 3/4/5/6 text+JSON) + three thin
+Clikt commands (`--jars` repeatable, `--no-jdk`, `--json` both positions,
+`--no-color`, explicit `exitProcess` — clikt-core's hook is a no-op, L-026).
+Tests: 20 tier-1 command tests (injected query+exit), 6 index filter tests + 1 new
+monotonicity property, 15 tier-2 behavioural tests (JDK zero-config, outline ==
+members --declared, determinism, D-017 marker, failure exits) + 3×70 goldens
+(hermetic: --no-jdk, fixed artifact label). Real bug caught: --from Object vs
+collapse (L-027). Known cosmetic: annotation cards print `extends Object`, faithful
+to the model (T-008 normalises only interfaces).*
+
+---
+
+### T-062 — Member sort orders (`--sort name|declaring`) · `TODO`
+**Depends:** T-011 · **Files:** `core/.../render/*`, `cli/.../commands/*`
+*(Added in session 14: T-011 accepts `--sort kind` (the current kind-then-name
+layout) and rejects anything else naming this task.)*
+
+`members`/`outline` row ordering beyond the default: `--sort name` (flat
+name-first order across kinds/groups) and `--sort declaring` (declaring-type
+order semantics where they differ from linearisation). Decide the exact layouts,
+extend `MemberListingOptions`, and pin both with goldens.
+
+**Acceptance**
+- [ ] `--sort name|kind|declaring` all accepted by `members` and `outline`
+- [ ] Text and JSON agree on the order; determinism property holds per order
+- [ ] Golden files cover all three orders on at least one generic, one nested
+      and one Kotlin fixture class
 
 ---
 

@@ -1,0 +1,1 @@
+{"jdx":1,"ok":true,"command":"show","query":"dev.jdx.fixtures.KotlinRegistry","result":{"kind":"class","declaration":"public final class KotlinRegistry","modifiers":["public","final"],"superclass":"java.lang.Object","interfaces":[],"counts":{"constructors":1,"methods":1,"fields":2}},"warnings":[],"provenance":[{"artifact":"fixture-corpus.jar","origin":"bytecode"}]}

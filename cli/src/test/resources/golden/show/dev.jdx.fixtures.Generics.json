@@ -1,0 +1,1 @@
+{"jdx":1,"ok":true,"command":"show","query":"dev.jdx.fixtures.Generics","result":{"kind":"class","declaration":"public class Generics","modifiers":["public"],"superclass":"java.lang.Object","interfaces":[],"counts":{"constructors":1,"methods":3,"fields":0}},"warnings":[],"provenance":[{"artifact":"fixture-corpus.jar","origin":"bytecode"}]}

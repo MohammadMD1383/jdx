@@ -1,0 +1,1 @@
+{"jdx":1,"ok":true,"command":"show","query":"dev.jdx.fixtures.Nesting$StaticNested","result":{"kind":"class","declaration":"public class StaticNested","modifiers":["public"],"superclass":"java.lang.Object","interfaces":[],"counts":{"constructors":1,"methods":1,"fields":0}},"warnings":[],"provenance":[{"artifact":"fixture-corpus.jar","origin":"bytecode"}]}

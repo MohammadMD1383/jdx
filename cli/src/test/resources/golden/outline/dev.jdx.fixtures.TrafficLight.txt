@@ -1,0 +1,12 @@
+members of dev.jdx.fixtures.TrafficLight
+methods declared on dev.jdx.fixtures.TrafficLight:
+  method public abstract boolean isStop()
+  method public int seconds()
+  method public static dev.jdx.fixtures.TrafficLight valueOf(java.lang.String arg0)
+  method public static dev.jdx.fixtures.TrafficLight[] values()
+fields declared on dev.jdx.fixtures.TrafficLight:
+  field public static final dev.jdx.fixtures.TrafficLight GREEN
+  field public static final dev.jdx.fixtures.TrafficLight RED
+  field public static final dev.jdx.fixtures.TrafficLight YELLOW
+warning UNRESOLVED_SUPERTYPE: supertype java.lang.Enum is not in the workspace — members inherited from it are missing
+source: fixture-corpus.jar (bytecode)

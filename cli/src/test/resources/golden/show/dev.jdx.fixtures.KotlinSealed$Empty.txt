@@ -1,0 +1,6 @@
+class dev.jdx.fixtures.KotlinSealed$Empty
+  public final class Empty
+  extends dev.jdx.fixtures.KotlinSealed
+  members: 1 constructor, 3 methods, 1 field
+source: fixture-corpus.jar (bytecode)
+next: jdx members dev.jdx.fixtures.KotlinSealed$Empty --inherited

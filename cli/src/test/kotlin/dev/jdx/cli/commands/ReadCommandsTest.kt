@@ -1,0 +1,403 @@
+package dev.jdx.cli.commands
+
+import com.github.ajalt.clikt.core.parse
+import com.github.ajalt.clikt.core.subcommands
+import dev.jdx.cli.JdxCli
+import dev.jdx.core.model.Access
+import dev.jdx.core.model.AccessFlag
+import dev.jdx.core.model.ClassInfo
+import dev.jdx.core.model.FieldInfo
+import dev.jdx.core.model.JvmDescriptor
+import dev.jdx.core.model.MethodInfo
+import dev.jdx.core.model.Origin
+import dev.jdx.core.model.Provenance
+import dev.jdx.core.model.TypeKind
+import dev.jdx.core.model.TypeName
+import dev.jdx.core.model.Visibility
+import dev.jdx.core.model.typeNameFromBinaryName
+import dev.jdx.core.render.ErrorResult
+import dev.jdx.core.render.buildClassCard
+import dev.jdx.core.render.buildMemberListing
+import dev.jdx.core.resolve.MemberResolver
+import dev.jdx.index.service.JdxService
+import io.kotest.matchers.shouldBe
+import io.kotest.matchers.string.shouldContain
+import java.io.ByteArrayOutputStream
+import java.io.PrintStream
+import kotlinx.serialization.json.Json
+import kotlinx.serialization.json.jsonObject
+import kotlinx.serialization.json.jsonPrimitive
+import org.junit.jupiter.api.Test
+
+/**
+ * In-process tests for `show`, `members` and `outline` (T-011).
+ *
+ * No disk, no jars: the service query and the process exit are both injected, so every
+ * path — including the non-zero exits — runs in tier 1. Real-artifact behaviour (the
+ * JDK, the fixture jar, goldens) is tier 2 in `ReadCommandsGoldenTest`.
+ */
+class ReadCommandsTest {
+
+    private class TestExit(val code: Int) : RuntimeException()
+
+    private val noExit: (Int) -> Nothing = { throw TestExit(it) }
+
+    private fun classType(binary: String): TypeName.ClassType =
+        typeNameFromBinaryName(binary) as TypeName.ClassType
+
+    private fun pointCard(): JdxService.ServiceOutcome.Card {
+        val point = ClassInfo(name = classType("com.example.Point"), kind = TypeKind.CLASS)
+        return JdxService.ServiceOutcome.Card(
+            buildClassCard(point, listOf(Provenance(artifact = "app.jar", origin = Origin.BYTECODE))),
+        )
+    }
+
+    private fun pointListing(): JdxService.ServiceOutcome.MemberList {
+        val target = ClassInfo(
+            name = classType("com.example.Point"),
+            kind = TypeKind.CLASS,
+            superclass = classType("java.lang.Object"),
+            methods = listOf(
+                MethodInfo(
+                    name = "<init>",
+                    descriptor = JvmDescriptor.parse("(II)V") as JvmDescriptor.Method,
+                    access = Access.of(AccessFlag.PUBLIC),
+                ),
+                MethodInfo(
+                    name = "getX",
+                    descriptor = JvmDescriptor.parse("()I") as JvmDescriptor.Method,
+                    access = Access.of(AccessFlag.PUBLIC),
+                ),
+            ),
+            fields = listOf(
+                FieldInfo(
+                    name = "x",
+                    type = (JvmDescriptor.parse("I") as JvmDescriptor.Field).type,
+                    access = Access.of(AccessFlag.PUBLIC),
+                ),
+            ),
+        )
+        val objectStub = ClassInfo(name = classType("java.lang.Object"), kind = TypeKind.CLASS)
+        val byBinary = listOf(target, objectStub).associateBy { it.name.binaryName }
+        val resolved = MemberResolver.resolve(target, lookup = { name -> byBinary[name.binaryName] })
+        return JdxService.ServiceOutcome.MemberList(
+            buildMemberListing(
+                target = target,
+                resolved = resolved,
+                provenance = listOf(Provenance(artifact = "app.jar", origin = Origin.BYTECODE)),
+            ),
+        )
+    }
+
+    private fun captureStdout(block: () -> Unit): String {
+        val original = System.out
+        val buffer = ByteArrayOutputStream()
+        System.setOut(PrintStream(buffer))
+        try {
+            block()
+        } finally {
+            System.setOut(original)
+        }
+        return buffer.toString(Charsets.UTF_8)
+    }
+
+    // -- show -------------------------------------------------------------------
+
+    @Test
+    fun `show prints the card text and exits zero`() {
+        var seenRoots: JdxService.RootsSpec? = null
+        val output = captureStdout {
+            ShowCommand(
+                query = { ref, roots -> seenRoots = roots; ref shouldBe "com.example.Point"; pointCard() },
+                terminate = noExit,
+            ).parse(listOf("com.example.Point"))
+        }
+        output shouldContain "class com.example.Point"
+        output shouldContain "next: jdx members com.example.Point --inherited"
+        seenRoots shouldBe JdxService.RootsSpec(emptyList(), includeJdk = true)
+    }
+
+    @Test
+    fun `show forwards jars and no-jdk to the roots`() {
+        var seenRoots: JdxService.RootsSpec? = null
+        captureStdout {
+            ShowCommand(
+                query = { _, roots -> seenRoots = roots; pointCard() },
+                terminate = noExit,
+            ).parse(listOf("Point", "--jars", "a.jar", "--jars", "b/*.jar", "--no-jdk"))
+        }
+        seenRoots shouldBe JdxService.RootsSpec(listOf("a.jar", "b/*.jar"), includeJdk = false)
+    }
+
+    @Test
+    fun `show --json after the subcommand prints the envelope`() {
+        val output = captureStdout {
+            ShowCommand(query = { _, _ -> pointCard() }, terminate = noExit)
+                .parse(listOf("Point", "--json"))
+        }
+        val parsed = Json.parseToJsonElement(output.trim()).jsonObject
+        parsed["command"]?.jsonPrimitive?.content shouldBe "show"
+        parsed["ok"]?.jsonPrimitive?.content shouldBe "true"
+    }
+
+    @Test
+    fun `--json before the subcommand flows to show`() {
+        val output = captureStdout {
+            JdxCli().subcommands(ShowCommand(query = { _, _ -> pointCard() }, terminate = noExit))
+                .parse(listOf("--json", "show", "Point"))
+        }
+        Json.parseToJsonElement(output.trim()).jsonObject["command"]
+            ?.jsonPrimitive?.content shouldBe "show"
+    }
+
+    @Test
+    fun `show maps a service failure to its exit code`() {
+        val thrown = try {
+            captureStdout {
+                ShowCommand(
+                    query = { ref, _ ->
+                        JdxService.ServiceOutcome.Failure(ErrorResult.notFound(ref, emptyList()))
+                    },
+                    terminate = noExit,
+                ).parse(listOf("Missing"))
+            }
+            null
+        } catch (e: TestExit) {
+            e
+        }
+        (thrown?.code) shouldBe 1
+    }
+
+    // -- members ----------------------------------------------------------------
+
+    @Test
+    fun `members defaults to inherited public members`() {
+        var declared = true
+        var filters: JdxService.MemberFilters? = null
+        val output = captureStdout {
+            MembersCommand(
+                query = { _, _, f, d, _, _ -> filters = f; declared = d; pointListing() },
+                terminate = noExit,
+            ).parse(listOf("com.example.Point"))
+        }
+        declared shouldBe false
+        filters?.kind shouldBe JdxService.KindFilter.ALL
+        filters?.access shouldBe null
+        filters?.staticOnly shouldBe null
+        output shouldContain "members of com.example.Point"
+    }
+
+    @Test
+    fun `members --declared scopes to the type itself`() {
+        var declared = false
+        captureStdout {
+            MembersCommand(
+                query = { _, _, _, d, _, _ -> declared = d; pointListing() },
+                terminate = noExit,
+            ).parse(listOf("Point", "--declared"))
+        }
+        declared shouldBe true
+    }
+
+    @Test
+    fun `members forwards every filter flag to the service`() {
+        var filters: JdxService.MemberFilters? = null
+        var synthetic = false
+        var limit = 0
+        captureStdout {
+            MembersCommand(
+                query = { _, _, f, _, s, m -> filters = f; synthetic = s; limit = m; pointListing() },
+                terminate = noExit,
+            ).parse(
+                listOf(
+                    "Point", "--kind", "ctor", "--access", "all", "--static",
+                    "--from", "com.example.Base", "--grep", "get.*", "--limit", "7",
+                    "--include-synthetic",
+                ),
+            )
+        }
+        filters?.kind shouldBe JdxService.KindFilter.CTOR
+        filters?.access shouldBe
+            setOf(Visibility.PUBLIC, Visibility.PROTECTED, Visibility.PACKAGE_PRIVATE, Visibility.PRIVATE)
+        filters?.staticOnly shouldBe true
+        filters?.fromRef shouldBe "com.example.Base"
+        (filters?.grep?.pattern) shouldBe "get.*"
+        synthetic shouldBe true
+        limit shouldBe 7
+    }
+
+    @Test
+    fun `members --instance maps to instance-only`() {
+        var filters: JdxService.MemberFilters? = null
+        captureStdout {
+            MembersCommand(
+                query = { _, _, f, _, _, _ -> filters = f; pointListing() },
+                terminate = noExit,
+            ).parse(listOf("Point", "--instance"))
+        }
+        filters?.staticOnly shouldBe false
+    }
+
+    @Test
+    fun `members --static and --instance together exit 3 without querying`() {
+        var queried = false
+        val output = captureStdout {
+            val thrown = try {
+                MembersCommand(
+                    query = { _, _, _, _, _, _ -> queried = true; pointListing() },
+                    terminate = noExit,
+                ).parse(listOf("Point", "--static", "--instance"))
+                null
+            } catch (e: TestExit) {
+                e
+            }
+            (thrown?.code) shouldBe 3
+        }
+        queried shouldBe false
+        output shouldContain "usage error: --static and --instance are mutually exclusive"
+    }
+
+    @Test
+    fun `members with an invalid grep exits 3 without querying`() {
+        var queried = false
+        val output = captureStdout {
+            val thrown = try {
+                MembersCommand(
+                    query = { _, _, _, _, _, _ -> queried = true; pointListing() },
+                    terminate = noExit,
+                ).parse(listOf("Point", "--grep", "[unclosed"))
+                null
+            } catch (e: TestExit) {
+                e
+            }
+            (thrown?.code) shouldBe 3
+        }
+        queried shouldBe false
+        output shouldContain "usage error: invalid --grep regex"
+    }
+
+    @Test
+    fun `members --with-doc names T-025 and exits 3`() {
+        val output = captureStdout {
+            val thrown = try {
+                MembersCommand(
+                    query = { _, _, _, _, _, _ -> pointListing() },
+                    terminate = noExit,
+                ).parse(listOf("Point", "--with-doc"))
+                null
+            } catch (e: TestExit) {
+                e
+            }
+            (thrown?.code) shouldBe 3
+        }
+        output shouldContain "T-025"
+    }
+
+    @Test
+    fun `members --sort name names T-062 and exits 3`() {
+        val thrown = try {
+            captureStdout {
+                MembersCommand(
+                    query = { _, _, _, _, _, _ -> pointListing() },
+                    terminate = noExit,
+                ).parse(listOf("Point", "--sort", "name"))
+            }
+            null
+        } catch (e: TestExit) {
+            e
+        }
+        (thrown?.code) shouldBe 3
+    }
+
+    @Test
+    fun `members json carries the same signatures as text`() {
+        val text = captureStdout {
+            MembersCommand(query = { _, _, _, _, _, _ -> pointListing() }, terminate = noExit)
+                .parse(listOf("Point"))
+        }
+        val json = captureStdout {
+            MembersCommand(query = { _, _, _, _, _, _ -> pointListing() }, terminate = noExit)
+                .parse(listOf("Point", "--json"))
+        }
+        val parsed = Json.parseToJsonElement(json.trim()).jsonObject
+        parsed["command"]?.jsonPrimitive?.content shouldBe "members"
+        for (line in text.lines().filter { it.startsWith("  ") }) {
+            val signature = line.substringAfter("  ").substringAfter(" ")
+            json shouldContain signature
+        }
+    }
+
+    @Test
+    fun `members maps an ambiguous service failure to exit 2 with candidates`() {
+        val output = captureStdout {
+            val thrown = try {
+                MembersCommand(
+                    query = { ref, _, _, _, _, _ ->
+                        JdxService.ServiceOutcome.Failure(
+                            ErrorResult.ambiguous(ref, listOf("com.a.Point", "com.b.Point")),
+                        )
+                    },
+                    terminate = noExit,
+                ).parse(listOf("Point"))
+                null
+            } catch (e: TestExit) {
+                e
+            }
+            (thrown?.code) shouldBe 2
+        }
+        output shouldContain "com.a.Point"
+        output shouldContain "com.b.Point"
+    }
+
+    // -- outline ------------------------------------------------------------------
+
+    @Test
+    fun `outline always queries in declared-only mode`() {
+        var declared = false
+        val output = captureStdout {
+            OutlineCommand(
+                query = { _, _, _, d, _, _ -> declared = d; pointListing() },
+                terminate = noExit,
+            ).parse(listOf("Point", "--kind", "method"))
+        }
+        declared shouldBe true
+        output shouldContain "members of com.example.Point"
+    }
+
+    @Test
+    fun `outline --json prints the outline envelope`() {
+        val output = captureStdout {
+            OutlineCommand(query = { _, _, _, _, _, _ -> pointListing() }, terminate = noExit)
+                .parse(listOf("Point", "--json"))
+        }
+        Json.parseToJsonElement(output.trim()).jsonObject["command"]
+            ?.jsonPrimitive?.content shouldBe "outline"
+    }
+
+    // -- pure flag mapping ----------------------------------------------------------
+
+    @Test
+    fun `access mapping covers every choice value`() {
+        ReadCommandSupport.accessOf(null) shouldBe null
+        ReadCommandSupport.accessOf("public") shouldBe setOf(Visibility.PUBLIC)
+        ReadCommandSupport.accessOf("protected") shouldBe setOf(Visibility.PROTECTED)
+        ReadCommandSupport.accessOf("package") shouldBe setOf(Visibility.PACKAGE_PRIVATE)
+        ReadCommandSupport.accessOf("private") shouldBe setOf(Visibility.PRIVATE)
+        ReadCommandSupport.accessOf("all") shouldBe
+            setOf(Visibility.PUBLIC, Visibility.PROTECTED, Visibility.PACKAGE_PRIVATE, Visibility.PRIVATE)
+    }
+
+    @Test
+    fun `kind mapping covers every choice value`() {
+        ReadCommandSupport.kindOf("all") shouldBe JdxService.KindFilter.ALL
+        ReadCommandSupport.kindOf("method") shouldBe JdxService.KindFilter.METHOD
+        ReadCommandSupport.kindOf("field") shouldBe JdxService.KindFilter.FIELD
+        ReadCommandSupport.kindOf("ctor") shouldBe JdxService.KindFilter.CTOR
+    }
+
+    @Test
+    fun `flag validation accepts the coherent combinations`() {
+        ReadCommandSupport.validateMemberFlags(false, false, null, false, "kind") shouldBe null
+        ReadCommandSupport.validateMemberFlags(true, false, "get.*", false, "kind") shouldBe null
+    }
+}

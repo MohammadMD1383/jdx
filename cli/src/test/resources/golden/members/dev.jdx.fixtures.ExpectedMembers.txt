@@ -1,0 +1,6 @@
+members of dev.jdx.fixtures.ExpectedMembers
+methods declared on dev.jdx.fixtures.ExpectedMembers:
+  method public abstract java.lang.String[] value()
+warning UNRESOLVED_SUPERTYPE: supertype java.lang.Object is not in the workspace — members inherited from it are missing
+warning UNRESOLVED_SUPERTYPE: supertype java.lang.annotation.Annotation is not in the workspace — members inherited from it are missing
+source: fixture-corpus.jar (bytecode)

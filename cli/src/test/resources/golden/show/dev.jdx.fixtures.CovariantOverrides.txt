@@ -1,0 +1,6 @@
+class dev.jdx.fixtures.CovariantOverrides
+  public class CovariantOverrides
+  extends java.lang.Object
+  members: 1 constructor, 0 methods, 0 fields
+source: fixture-corpus.jar (bytecode)
+next: jdx members dev.jdx.fixtures.CovariantOverrides --inherited

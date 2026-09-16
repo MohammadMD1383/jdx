@@ -1,0 +1,6 @@
+members of dev.jdx.fixtures.Tags
+methods declared on dev.jdx.fixtures.Tags:
+  method public abstract dev.jdx.fixtures.Tag[] value()
+warning UNRESOLVED_SUPERTYPE: supertype java.lang.Object is not in the workspace — members inherited from it are missing
+warning UNRESOLVED_SUPERTYPE: supertype java.lang.annotation.Annotation is not in the workspace — members inherited from it are missing
+source: fixture-corpus.jar (bytecode)

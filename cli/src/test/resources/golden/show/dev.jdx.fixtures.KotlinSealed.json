@@ -1,0 +1,1 @@
+{"jdx":1,"ok":true,"command":"show","query":"dev.jdx.fixtures.KotlinSealed","result":{"kind":"class","declaration":"public abstract class KotlinSealed","modifiers":["public","abstract"],"superclass":"java.lang.Object","interfaces":[],"counts":{"constructors":2,"methods":0,"fields":0}},"warnings":[],"provenance":[{"artifact":"fixture-corpus.jar","origin":"bytecode"}]}

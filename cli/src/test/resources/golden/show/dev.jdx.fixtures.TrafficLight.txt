@@ -1,0 +1,6 @@
+enum dev.jdx.fixtures.TrafficLight
+  public abstract enum TrafficLight
+  extends java.lang.Enum
+  members: 1 constructor, 5 methods, 5 fields
+source: fixture-corpus.jar (bytecode)
+next: jdx members dev.jdx.fixtures.TrafficLight --inherited

@@ -1,0 +1,8 @@
+members of dev.jdx.fixtures.StaticInitMarker
+constructors declared on dev.jdx.fixtures.StaticInitMarker:
+  constructor public StaticInitMarker()
+methods declared on dev.jdx.fixtures.StaticInitMarker:
+  method public int answer()
+  method public static java.lang.String markerPath()
+warning UNRESOLVED_SUPERTYPE: supertype java.lang.Object is not in the workspace — members inherited from it are missing
+source: fixture-corpus.jar (bytecode)

@@ -1,0 +1,1 @@
+{"jdx":1,"ok":true,"command":"show","query":"dev.jdx.fixtures.KotlinMembers$Companion","result":{"kind":"class","declaration":"public final class Companion","modifiers":["public","final"],"superclass":"java.lang.Object","interfaces":[],"counts":{"constructors":2,"methods":1,"fields":0}},"warnings":[],"provenance":[{"artifact":"fixture-corpus.jar","origin":"bytecode"}]}

@@ -1,0 +1,1 @@
+{"jdx":1,"ok":true,"command":"show","query":"dev.jdx.fixtures.TrafficLight","result":{"kind":"enum","declaration":"public abstract enum TrafficLight","modifiers":["public","abstract"],"superclass":"java.lang.Enum","interfaces":[],"counts":{"constructors":1,"methods":5,"fields":5}},"warnings":[],"provenance":[{"artifact":"fixture-corpus.jar","origin":"bytecode"}]}

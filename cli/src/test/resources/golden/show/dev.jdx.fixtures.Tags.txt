@@ -1,0 +1,7 @@
+annotation dev.jdx.fixtures.Tags
+  abstract @interface Tags
+  extends java.lang.Object
+  implements java.lang.annotation.Annotation
+  members: 0 constructors, 1 method, 0 fields
+source: fixture-corpus.jar (bytecode)
+next: jdx members dev.jdx.fixtures.Tags --inherited

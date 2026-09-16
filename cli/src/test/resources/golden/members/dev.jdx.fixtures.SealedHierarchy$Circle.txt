@@ -1,0 +1,10 @@
+members of dev.jdx.fixtures.SealedHierarchy$Circle
+constructors declared on dev.jdx.fixtures.SealedHierarchy$Circle:
+  constructor public Circle(double radius)
+methods declared on dev.jdx.fixtures.SealedHierarchy$Circle:
+  method public double radius()
+  method public final boolean equals(java.lang.Object o)
+  method public final int hashCode()
+  method public final java.lang.String toString()
+warning UNRESOLVED_SUPERTYPE: supertype java.lang.Record is not in the workspace — members inherited from it are missing
+source: fixture-corpus.jar (bytecode)

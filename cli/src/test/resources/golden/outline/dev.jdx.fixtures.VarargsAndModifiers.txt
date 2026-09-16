@@ -1,0 +1,11 @@
+members of dev.jdx.fixtures.VarargsAndModifiers
+constructors declared on dev.jdx.fixtures.VarargsAndModifiers:
+  constructor public VarargsAndModifiers()
+methods declared on dev.jdx.fixtures.VarargsAndModifiers:
+  method public double fp(double x)
+  method public native int nativeMethod()
+  method public static java.lang.String join(java.lang.String separator, java.lang.String... parts)
+  method public synchronized void syncMethod()
+  method public void oldApi()
+warning UNRESOLVED_SUPERTYPE: supertype java.lang.Object is not in the workspace — members inherited from it are missing
+source: fixture-corpus.jar (bytecode)

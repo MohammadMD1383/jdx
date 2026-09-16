@@ -1,0 +1,6 @@
+record dev.jdx.fixtures.PersonRecord
+  public final record PersonRecord
+  extends java.lang.Record
+  members: 1 constructor, 5 methods, 2 fields
+source: fixture-corpus.jar (bytecode)
+next: jdx members dev.jdx.fixtures.PersonRecord --inherited

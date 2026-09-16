@@ -1,0 +1,1 @@
+{"jdx":1,"ok":true,"command":"outline","query":"dev.jdx.fixtures.SealedHierarchy","result":{"groups":[],"counts":{"constructors":0,"methods":0,"fields":0}},"warnings":[],"provenance":[{"artifact":"fixture-corpus.jar","origin":"bytecode"}]}

@@ -1,0 +1,1 @@
+{"jdx":1,"ok":true,"command":"show","query":"dev.jdx.fixtures.VarargsAndModifiers","result":{"kind":"class","declaration":"public class VarargsAndModifiers","modifiers":["public"],"superclass":"java.lang.Object","interfaces":[],"counts":{"constructors":1,"methods":7,"fields":1}},"warnings":[],"provenance":[{"artifact":"fixture-corpus.jar","origin":"bytecode"}]}

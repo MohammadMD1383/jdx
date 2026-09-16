@@ -1,0 +1,9 @@
+members of dev.jdx.fixtures.KotlinSealed$Empty
+methods declared on dev.jdx.fixtures.KotlinSealed$Empty:
+  method public boolean equals(java.lang.Object other)
+  method public int hashCode()
+  method public java.lang.String toString()
+fields declared on dev.jdx.fixtures.KotlinSealed$Empty:
+  field public static final dev.jdx.fixtures.KotlinSealed$Empty INSTANCE
+warning UNRESOLVED_SUPERTYPE: supertype java.lang.Object is not in the workspace — members inherited from it are missing
+source: fixture-corpus.jar (bytecode)

@@ -1,0 +1,6 @@
+class dev.jdx.fixtures.Nesting$1Local
+  class 1Local
+  extends java.lang.Object
+  members: 1 constructor, 1 method, 0 fields
+source: fixture-corpus.jar (bytecode)
+next: jdx members dev.jdx.fixtures.Nesting$1Local --inherited

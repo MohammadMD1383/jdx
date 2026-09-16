@@ -1,0 +1,8 @@
+members of dev.jdx.fixtures.Matrix
+methods declared on dev.jdx.fixtures.Matrix:
+  method public abstract int[] codes() default {}
+  method public abstract java.lang.Class<?>[] types() default {}
+  method public abstract java.lang.String[] names() default {}
+warning UNRESOLVED_SUPERTYPE: supertype java.lang.Object is not in the workspace — members inherited from it are missing
+warning UNRESOLVED_SUPERTYPE: supertype java.lang.annotation.Annotation is not in the workspace — members inherited from it are missing
+source: fixture-corpus.jar (bytecode)
