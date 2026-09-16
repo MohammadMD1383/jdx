@@ -7,6 +7,50 @@ wrong, say so in a *new* entry.
 
 ---
 
+## Session 16 — 2026-09-16 — Merge + push T-011/T-012 to `origin/main`
+**Agent:** Muse Spark (via opencode) · **Branch:** `t011-show-outline-members` → `main` ·
+**Commits:** none (merge only)
+
+### Goal
+Owner-directed: merge the T-011/T-012 branch and push (D-012 go-ahead given in
+conversation).
+
+### What I did
+1. Verified the branch held exactly the 4 T-011/T-012 commits over `main`
+   (`c82dde1`, `18c79db`, `cdc7490`, `0079ea3`) and that `origin/main` was still
+   at `e887df0` (`git fetch`; no drift).
+2. Fast-forward-merged into `main` (no merge commit — linear history, same as
+   session 13's T-009 merge) and pushed: `e887df0..0079ea3 main -> main`.
+3. Deleted the merged branch `t011-show-outline-members`.
+4. Cleared the "unpushed work" line in CURRENT STATE.
+
+### Decisions made
+None.
+
+### Tasks moved
+None (T-011/T-012 already DONE; this session only moved the commits).
+
+### Lessons distilled
+None.
+
+### What works now (and how to verify it yourself)
+```bash
+git log origin/main --oneline -3   # 0079ea3 on top, in sync with local main
+git status -sb                     # ## main...origin/main, clean
+```
+
+### What is broken / half-done
+Nothing.
+
+### Open questions / blockers
+None.
+
+### Next action
+**T-013** (`IndexStore` interface + SQLite implementation) — lowest-numbered
+unblocked TODO.
+
+---
+
 ## Session 15 — 2026-09-16 — JDK stdlib root + `src.zip` pairing (T-012)
 **Agent:** Muse Spark (via opencode) · **Branch:** none (on top of T-011 HEAD) ·
 **Commits:** claim `cdc7490` + one feat commit (this entry included)

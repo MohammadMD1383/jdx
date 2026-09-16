@@ -14,7 +14,7 @@ or delete a past entry — if one turned out to be wrong, say so in a *new* entr
 
 | | |
 |---|---|
-| **Last updated** | 2026-09-16 (session 15) |
+| **Last updated** | 2026-09-16 (session 16) |
 | **Repository** | <https://github.com/MohammadMD1383/jdx> (public, Apache-2.0) |
 | **Phase** | Design complete; **M0 done, M1 in progress** |
 | **Active milestone** | M1 — Read path |
@@ -23,7 +23,7 @@ or delete a past entry — if one turned out to be wrong, say so in a *new* entr
 | **Build status** | **Green.** `./gradlew build` passes. Runnable `jdx`: `./gradlew :app:installDist` → `app/build/jdx` (fat jar + POSIX launcher, JDK-21 gate, ~180 ms cold start); `install.sh` symlinks it into `~/.local/bin`. Commands so far: `--version`, `version [--json]`, `doctor [--json]`, **`show`, `members`, `outline` (all flags, text+JSON, exits 0–4)**. JDK root: zero-config `show`/`members` on `java.*` via `jrt:/`, module-as-artifact (`java.base`), `src.zip` paired from `java.home`/`$JAVA_HOME` (T-012). |
 | **Test status** | **455 tests, all green** (`./gradlew test` tier 1 + `check` tier 2 + `soak` tier 3). T-012 added 8 tier-1 (`JdkLayoutTest`: 7 examples + 1 500-case property) + 7 tier-2 (3 JRT pairing, 3 doctor fallback, 1 `show --json` module provenance). |
 | **Docs** | Append-only logs sharded (D-023): sessions → `docs/progress/`, decisions → `docs/decisions/` (shard 2 open at D-028), lessons → `docs/lessons/` (new shard `L-026-050.md` open — L-026/L-027 (session 14), L-028 (session 15). Every hard-won lesson goes to `docs/LESSONS.md` (D-024). |
-| **Blocked on** | Nothing. Push needs owner go-ahead (D-012): T-011 + T-012 work unpushed. |
+| **Blocked on** | Nothing. |
 
 ### What exists right now
 
