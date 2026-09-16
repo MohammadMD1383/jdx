@@ -583,7 +583,7 @@ precedence, absent WARN naming locations) + 1 tier-2 JSON test pinning
 
 # M2 — Index
 
-### T-013 — `IndexStore` interface + SQLite implementation · `TODO`
+### T-013 — `IndexStore` interface + SQLite implementation · `WIP`
 **Depends:** T-008 · Schema in PROPOSAL.md §10.3. WAL mode, schema versioning with a
 migration path, artifact-scoped rows (D-013). **Keep SQLite behind the interface** — no SQL
 outside the implementation package.
