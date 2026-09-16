@@ -73,6 +73,24 @@ class AsmClassReaderTest {
     }
 
     @Test
+    fun `a superclass-only signature keeps its type arguments`() {
+        // `class StringList extends ArrayList<String>` with no interfaces: the lone
+        // superclass must parse as a ClassSignature (T-009 generic substitution), not
+        // degrade to null the way the generic entry point's field-first reading would.
+        val bytes = buildClass(
+            "com/example/StringList",
+            signature = "Lcom/example/ArrayList<Ljava/lang/String;>;",
+            superName = "com/example/ArrayList",
+        )
+        val stringList = ok(bytes)
+        val classSignature = stringList.genericSignature
+            ?: error("expected a class signature, got null")
+        classSignature.superclass.simpleName shouldBe "ArrayList"
+        classSignature.superclass.typeArguments.size shouldBe 1
+        classSignature.signature shouldBe "Lcom/example/ArrayList<Ljava/lang/String;>;"
+    }
+
+    @Test
     fun `the inner-classes table names the outer class`() {
         val bytes = buildClass("com/example/Outer\$Inner") {
             inner("com/example/Outer\$Inner", "com/example/Outer", "Inner", Opcodes.ACC_PUBLIC)

@@ -14,14 +14,14 @@ or delete a past entry — if one turned out to be wrong, say so in a *new* entr
 
 | | |
 |---|---|
-| **Last updated** | 2026-09-15 (session 11) |
+| **Last updated** | 2026-09-16 (session 12) |
 | **Repository** | <https://github.com/MohammadMD1383/jdx> (public, Apache-2.0) |
 | **Phase** | Design complete; **M0 done, M1 in progress** |
 | **Active milestone** | M1 — Read path |
-| **Next task** | **T-009 (member resolution with inheritance + generic substitution)** — consumes T-008's `ClassInfo`; or T-054/T-055 (golden/property infra) |
+| **Next task** | **T-010 (text and JSON renderers)** — consumes T-009's `ResolvedMembers`; or T-054/T-055 (golden/property infra) |
 | **Task count** | 59 tasks defined (T-001…T-061; M0–M2 in full detail, M3–M7 as one-liners) |
 | **Build status** | **Green.** `./gradlew build` passes. Runnable `jdx`: `./gradlew :app:installDist` → `app/build/jdx` (fat jar + POSIX launcher, JDK-21 gate, ~180 ms cold start); `install.sh` symlinks it into `~/.local/bin`. Commands so far: `--version`, `version [--json]`, `doctor [--json]`. |
-| **Test status** | **285 tests, all green** (229 tier 1 in **~8 s** via `./gradlew test`, 55 tier 2 via `check`, 1 soak proof via `soak`). T-008 added 17 tier-1 + 7 tier-2 ASM reader tests. |
+| **Test status** | **319 tests, all green** (259 tier 1 in **~7 s** via `./gradlew test`, 59 tier 2 via `check`, 1 soak proof via `soak`). T-009 added 30 tier-1 + 4 tier-2 tests. |
 | **Docs** | Append-only logs sharded (D-023): sessions → `docs/progress/`, decisions → `docs/decisions/` (shard 2 open at D-027), lessons → `docs/lessons/` (L-001…L-023). Every hard-won lesson goes to `docs/LESSONS.md` (D-024). |
 | **Blocked on** | Nothing. |
 

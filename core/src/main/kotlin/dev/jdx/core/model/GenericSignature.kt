@@ -41,6 +41,20 @@ public sealed interface GenericSignature {
             }
             return parser.parseClassSignature(typeParameters)?.takeIf { parser.isAtEnd }
         }
+
+        /**
+         * Parses a class-file `Signature` attribute known to belong to a class, interface,
+         * enum or record declaration. Unlike [parse], this never prefers the field
+         * reading: a lone superclass (`Lt/ArrayList<Ljava/lang/String;>;` — `class
+         * StringList extends ArrayList<String>` with no interfaces) is a [ClassSignature]
+         * here, because the attribute grammar says so (JVMS §4.7.9.1: ClassSignature).
+         * Returns `null` on malformed input — never throws.
+         */
+        public fun parseClass(text: String): ClassSignature? {
+            val parser = SignatureParser(text)
+            val typeParameters = parser.parseFormalTypeParameters() ?: return null
+            return parser.parseClassSignature(typeParameters)?.takeIf { parser.isAtEnd }
+        }
     }
 }
 

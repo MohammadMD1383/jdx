@@ -3,7 +3,6 @@ package dev.jdx.index.asm
 import dev.jdx.core.model.Access
 import dev.jdx.core.model.AnnotationInfo
 import dev.jdx.core.model.ClassInfo
-import dev.jdx.core.model.ClassSignature
 import dev.jdx.core.model.FieldInfo
 import dev.jdx.core.model.FieldSignature
 import dev.jdx.core.model.GenericSignature
@@ -136,7 +135,11 @@ public object AsmClassReader {
             access = Access(access),
             superclass = superclass,
             interfaces = (node.interfaces ?: emptyList()).map { mapTypeName(it) },
-            genericSignature = node.signature?.let { GenericSignature.parse(it) as? ClassSignature },
+            // The class-file Signature attribute is a ClassSignature by construction
+            // (JVMS §4.7.9.1) — parsed with parseClass, never the generic entry point,
+            // which would read a lone superclass as a field (T-009: StringList's
+            // `ArrayList<String>` edge). Malformed degrades to null, never throws.
+            genericSignature = node.signature?.let { GenericSignature.parseClass(it) },
             fields = (node.fields ?: emptyList()).map { mapField(it) },
             methods = (node.methods ?: emptyList()).map { mapMethod(it) },
             annotations = annotations,

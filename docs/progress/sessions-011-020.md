@@ -7,6 +7,80 @@ wrong, say so in a *new* entry.
 
 ---
 
+## Session 12 — 2026-09-16 — Member resolution with inheritance + generic substitution (T-009)
+**Agent:** Muse Spark (via opencode) · **Branch:** `t009-member-resolver` ·
+**Commits:** claim `edb3042` + docs-tooling `0ee304a` (main) + one feat commit (this entry included)
+
+### Goal
+T-009: the `--inherited` core (PROPOSAL.md §9.3) — linearise, substitute generics,
+filter visibility, collapse overrides, drop synthetics. Lowest-numbered unblocked TODO
+(T-009 = 9 < T-054). Plus an owner-directed one-liner: state the tool-call batching rule
+in `CLAUDE.md` (done as `0ee304a` on `main` before branching).
+
+### What I did
+1. Owner doc tweak: `CLAUDE.md` §7 gained "Batch independent tool calls in a single
+   turn" (plan reads/writes, issue together; sequence only on real dependencies).
+2. Claimed T-009 (`chore: claim T-009` on new branch `t009-member-resolver`).
+3. **Test-first, RED:** `MemberResolverTest` (16 examples) + `MemberResolverPropertyTest`
+   (6 properties × 1,000 generated graphs) + `ResolveGenerators`/`ResolutionTestFixtures`
+   helpers — failed with `Unresolved reference 'MemberResolver'`, the right reason.
+4. **GREEN:** `core/.../resolve/MemberResolver.kt` — BFS linearisation (superclass then
+   interfaces, first-visit-wins, `Object` moved last), transitive type-variable
+   environments (raw edges erase to `Object`, method type params shadow class ones,
+   wildcards approximate to bound/`Object`, documented), override collapse by
+   name+erased-descriptor (fields by name, hidden types recorded), JLS visibility from
+   the target's package, synthetic/bridge filtering, ctors never inherited, `<clinit>`
+   never listed, missing supertypes skipped and reported sorted.
+5. **Enabling fix the tests caught:** `StringList`-shaped signatures
+   (`Lfoo/Bar<String>;`, no interfaces/params) parsed as `FieldSignature`, so
+   `AsmClassReader`'s `as? ClassSignature` silently dropped every such edge (real
+   bytecode would have resolved `add(Object)`). Added `GenericSignature.parseClass`
+   (test-first, 7 new invocations incl. pinning `parse`'s field-first behaviour) and
+   pointed the reader at it + 1 tier-1 reader test. Logged as **L-024**.
+6. **Tier-2 real-JDK spot-check** (`index/.../resolve/MemberResolverJrtTest`, `@Tag("tier2")`,
+   needs only the running JDK, no corpus): `HashMap` Map-API name set (the IntelliJ
+   completion check), determinism + empty `missingSupertypes` + `Object`-last, no
+   private-supertype leak, and a synthetic `StringMap extends HashMap<String,Integer>`
+   proving `put(String,Integer)` substitution against real supertypes.
+
+### Decisions made
+None at D-level (all within T-009's brief). Judgement calls in code KDoc: wildcard
+edges approximate (no `TypeSignature` form for use-site wildcards); `Array` throws
+mappings keep the declared name; resolvers return declaration order and leave
+grouping/sorting to T-010 renderers; `missingSupertypes` sorted for determinism.
+
+### Tasks moved
+- T-009: WIP → DONE (all six acceptance boxes ticked, verified below).
+
+### Lessons distilled
+**L-024** (lone-superclass `Signature` parses as a field — `as?` silent-drop; use
+`parseClass` for class-file contexts).
+
+### What works now (and how to verify it yourself)
+```bash
+./gradlew test            # tier 1: 259 tests, ~7 s, inside the 30 s budget
+./gradlew check           # tiers 1+2: green (59 tier-2, incl. 4 JRT resolver tests)
+./gradlew soak            # tier 3: green (proof test; corpus harness is T-059)
+./gradlew :core:test --tests "dev.jdx.core.resolve.*"      # just this task's properties
+./gradlew :index:tier2Test --tests "dev.jdx.index.resolve.*" # just the JRT spot-check
+```
+319 tests total (259 tier 1 + 59 tier 2 + 1 soak proof), 0 failures.
+
+### What is broken / half-done
+Nothing known in T-009 scope. Known limits, documented in code for the task that owns
+them: Kotlin JVM→Kotlin-declaration mapping is T-036's (resolver returns JVM members);
+grouping/sorting/rendering is T-010's; `overriddenTypes`/`hiddenTypes` are recorded but
+no renderer prints them yet (same task).
+
+### Open questions / blockers
+None.
+
+### Next action
+**T-010 (text and JSON renderers)** — consumes `ResolvedMembers` directly; lowest
+unblocked TODO (10 < 54). T-054/T-055 remain available as infra alternatives.
+
+---
+
 ## Session 11 — 2026-09-15 — ASM class reader into ClassInfo/MemberInfo (T-008)
 **Agent:** Muse Spark (via opencode) · **Branch:** `t008-asm-reader` (from T-007 HEAD) ·
 **Commits:** claim `9dc94e4` + one feat commit (this entry included)

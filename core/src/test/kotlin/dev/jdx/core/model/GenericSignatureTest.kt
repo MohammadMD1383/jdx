@@ -186,4 +186,49 @@ class GenericSignatureTest {
     fun `malformed signatures parse to null rather than throwing`(text: String) {
         GenericSignature.parse(text).shouldBeNull()
     }
+
+    //
+    // parseClass — the class-file `Signature` attribute of a class is a ClassSignature by
+    // construction (JVMS §4.7.9.1), even when it is a lone superclass with no interfaces
+    // and no type parameters — exactly the shape `parse` reads as a field (T-009).
+    //
+
+    @Test
+    fun `parseClass reads a superclass-only signature as a class signature`() {
+        val parsed = GenericSignature.parseClass("Lt/ArrayList<Ljava/lang/String;>;")
+        parsed.shouldNotBeNull { "expected a class signature" }
+        parsed.signature shouldBe "Lt/ArrayList<Ljava/lang/String;>;"
+        parsed.superclass.simpleName shouldBe "ArrayList"
+        parsed.superinterfaces shouldBe emptyList()
+        val argument = parsed.superclass.typeArguments.single() as TypeArgument.Exact
+        (argument.type as ClassTypeSignature).simpleName shouldBe "String"
+    }
+
+    @Test
+    fun `parseClass reads a plain superclass with no interfaces`() {
+        val parsed = GenericSignature.parseClass("Ljava/lang/Object;")
+        parsed.shouldNotBeNull { "expected a class signature" }
+        parsed.superclass.simpleName shouldBe "Object"
+        parsed.superinterfaces shouldBe emptyList()
+    }
+
+    @Test
+    fun `parse prefers the field reading for a lone class type`() {
+        // Pinned: this ambiguity is why parseClass exists — callers that know the context
+        // is a class file must not use the generic entry point.
+        (GenericSignature.parse("Lt/ArrayList<Ljava/lang/String;>;") is FieldSignature) shouldBe true
+    }
+
+    @ParameterizedTest
+    @ValueSource(
+        strings = [
+            "",
+            "(I)V",
+            "Ljava/lang/Object",
+            "Ljava/lang/Object;x",
+        ],
+    )
+    fun `parseClass returns null for non-class signatures`(text: String) {
+        GenericSignature.parseClass(text).shouldBeNull()
+    }
 }

@@ -51,7 +51,7 @@ be fiction.
 | **M6** | Serving: daemon, MCP, HTTP, `batch` | TODO |
 | **M7** | Polish: token budgets, AppCDS, mutation gates, docs, install | TODO |
 
-**T-001 through T-007, T-053 and T-061 are `DONE`.** M0's remaining test-spine tasks are
+**T-001 through T-009, T-053 and T-061 are `DONE`.** M0's remaining test-spine tasks are
 **T-054** (golden files) and **T-055** (property infrastructure), both unblocked now that
 T-053 is done; T-056…T-060 unblock as their milestones land. M1 starts at T-007.
 
@@ -414,7 +414,7 @@ JRT `Object`/`HashMap` smoke on major-70 JDK-26 bytes, flag spot-checks).*
 
 ---
 
-### T-009 — Member resolution with inheritance and generic substitution · `WIP`
+### T-009 — Member resolution with inheritance and generic substitution · `DONE` (session 12)
 **Depends:** T-008 · **Files:** `core/.../resolve/MemberResolver.kt`
 
 Implement PROPOSAL.md §9.3 step by step. This is **the highest-value algorithm in the
@@ -422,14 +422,27 @@ project** — it is what saves an agent from walking hierarchies by hand. Treat 
 heavily tested, heavily commented, no cleverness.
 
 **Acceptance**
-- [ ] Linearisation is cycle-safe and deterministic
-- [ ] `class StringList extends ArrayList<String>` reports `boolean add(String)`, not `add(E)`
-- [ ] Overridden members collapse to the nearest declaration, with the overridden type
+- [x] Linearisation is cycle-safe and deterministic
+- [x] `class StringList extends ArrayList<String>` reports `boolean add(String)`, not `add(E)`
+- [x] Overridden members collapse to the nearest declaration, with the overridden type
       recorded as metadata
-- [ ] JLS visibility respected from the querying perspective (private supertype members
+- [x] JLS visibility respected from the querying perspective (private supertype members
       excluded; package-private only when same package)
-- [ ] Bridge/synthetic hidden by default, shown with `--include-synthetic`
-- [ ] Spot-check against IntelliJ: `java.util.HashMap` inherited completion list matches
+- [x] Bridge/synthetic hidden by default, shown with `--include-synthetic`
+- [x] Spot-check against IntelliJ: `java.util.HashMap` inherited completion list matches
+
+*Implementation notes (session 12): `MemberResolver` (`core/.../resolve/`) — BFS
+linearisation (superclass then interfaces, first-visit-wins, Object moved last),
+transitive generic environments with raw-erasure and method-type-param shadowing,
+override collapse by name+erased-descriptor (fields by name), JLS visibility from the
+target's package, synthetic/bridge filtering, ctors never inherited, `<clinit>` never
+listed, missing supertypes skipped+reported. Enabling fix: `GenericSignature.parseClass`
+(a lone-superclass class Signature is a ClassSignature by construction — `parse` reads
+it as a field, L-024) + `AsmClassReader` uses it. Tests: 16 tier-1 examples, 6
+thousand-case properties (determinism, declared-superset, no-private-leak,
+single-collapse, synthetic-monotonicity, cycle-termination), 4 parser + 1 reader
+tier-1 tests, 4 tier-2 JRT tests over real `java.util.HashMap` (Map-API spot-check,
+determinism, no-leak, concrete `StringMap` substitution).*
 
 ---
 
