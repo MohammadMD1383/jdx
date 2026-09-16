@@ -14,16 +14,16 @@ or delete a past entry — if one turned out to be wrong, say so in a *new* entr
 
 | | |
 |---|---|
-| **Last updated** | 2026-09-16 (session 20) |
+| **Last updated** | 2026-09-16 (session 21) |
 | **Repository** | <https://github.com/MohammadMD1383/jdx> (public, Apache-2.0) |
 | **Phase** | Design complete; **M0 done, M1 in progress** |
 | **Active milestone** | M2 — Index |
-| **Next task** | **T-016 (project auto-discovery)** — lowest unblocked TODO; or T-055 (property infra), T-062 (`--sort` orders), T-063 (share fixture-jar helpers) |
-| **Task count** | 63 tasks defined (T-001…T-065; M0–M2 in full detail, M3–M7 as one-liners) |
+| **Next task** | **T-016 (project auto-discovery)** — lowest unblocked TODO; or T-066 (`ReadCommandsTest` hermeticity — small, unblocks green `check` on this machine), T-062 (`--sort` orders), T-063 (share fixture-jar helpers) |
+| **Task count** | 64 tasks defined (T-001…T-066; M0–M2 in full detail, M3–M7 as one-liners) |
 | **Build status** | **Green.** `./gradlew build` passes. Runnable `jdx`: `./gradlew :app:installDist` → `app/build/jdx` (fat jar + POSIX launcher, JDK-21 gate, ~180 ms cold start); `install.sh` symlinks it into `~/.local/bin`. Commands so far: `--version`, `version [--json]`, `doctor [--json]`, **`show`, `members`, `outline` (all flags, text+JSON, exits 0–4, `-w` workspaces)**, **`ws create|list|info|remove|use|add` (text+JSON, exits 0/1/3/4/6)**. JDK root: zero-config `show`/`members` on `java.*` via `jrt:/`, module-as-artifact (`java.base`), `src.zip` paired from `java.home`/`$JAVA_HOME` (T-012). Workspaces (T-015): TOML in `~/.config/jdx/workspaces/`, §13 resolution (`-w` > `JDX_WORKSPACE` > `ws use`, explicit `--jars` merge first), first-provider-wins shadowing with `DUPLICATE_FQN`. |
-| **Test status** | **569 tests, all green** (`./gradlew check` tiers 1+2; soak tier 3 green). T-015 added 73: validation/codec/resolver-order examples + 4 thousand-case properties (TOML fixed-point, merge law) + `WsCommandsTest` (16 in-process, text⊆JSON) + read-flag + doctor tests + 4 tier-2 (`WorkspaceServiceTest`: order-flip reverses the `DUPLICATE_FQN` winner). Shared `GoldenFiles`/`UnifiedDiff` helper (`testfixtures` testFixtures) backs all 280 `index`/`cli` goldens; update mode prints every rewritten path. |
-| **Docs** | Append-only logs sharded (D-023): sessions → `docs/progress/`, decisions → `docs/decisions/` (shard 2 open — D-029 workspace shape/semantics), lessons → `docs/lessons/` (`L-026-050.md` open — L-034 (`:` illegal in backtick test names), L-035 (capture stdout around the exit-throw). Every hard-won lesson goes to `docs/LESSONS.md` (D-024). |
-| **Blocked on** | Nothing. **Push needs owner go-ahead (D-012)** — session 20 commits unpushed. |
+| **Test status** | **586 tests, all green** (`./gradlew check` tiers 1+2: 469 tier-1 + 117 tier-2; soak tier 3 green). T-055 added 17: shared `gen/` generators (`TypeName`/`JvmDescriptor`/`GenericSignature` + `PropertySupport` seed workflow) with fixed-seed nastiness pins + 1,000-case fixed-point/never-throws/stability properties; fixed a real `JvmDescriptor.parse`-throws-on-malformed bug. Tier-1 aggregate now 18.0 s of the 30 s budget. **Caveat (L-038):** a bare `check` on *this* machine shows 2 `ReadCommandsTest` failures from the ambient `~/.config/jdx` active workspace (`fx`) — filed as T-066; shelve that dir to see green. Shared `GoldenFiles`/`UnifiedDiff` helper (`testfixtures` testFixtures) backs all 280 `index`/`cli` goldens; update mode prints every rewritten path. |
+| **Docs** | Append-only logs sharded (D-023): sessions → `docs/progress/`, decisions → `docs/decisions/` (shard 2 open — D-029 workspace shape/semantics), lessons → `docs/lessons/` (`L-026-050.md` open — latest L-036 (kotest eager generators), L-037 (null-on-malformed must not throw), L-038 (command tests must inject the workspace store). Every hard-won lesson goes to `docs/LESSONS.md` (D-024). |
+| **Blocked on** | Nothing. **Push needs owner go-ahead (D-012)** — session 20–21 commits unpushed. |
 
 ### What exists right now
 
@@ -247,7 +247,8 @@ when it holds 10 sessions, create the next (`sessions-011-020.md`) and update th
 | Shard | Sessions | Status |
 |---|---|---|
 | `docs/progress/sessions-001-010.md` | 1–10 | full |
-| `docs/progress/sessions-011-020.md` | 11– | open (2 free) |
+| `docs/progress/sessions-011-020.md` | 11–20 | full |
+| `docs/progress/sessions-021-030.md` | 21– | open (9 free) |
 
 ---
 

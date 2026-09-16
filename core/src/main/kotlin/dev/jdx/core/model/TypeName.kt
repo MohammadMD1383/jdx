@@ -191,7 +191,14 @@ internal fun parseDescriptorType(text: String, startIndex: Int): Pair<TypeName, 
             if (end == -1) return null
             val internal = text.substring(startIndex + 1, end)
             if (internal.isEmpty()) return null
-            typeNameFromBinaryName(internal.replace('/', '.')) to end + 1
+            // The `L...;` payload is untrusted class-file text: empty segments (`L$Entry;`),
+            // separators in segments (`L/;`), or garbage (`L1C)Q.;`) make typeNameFromBinaryName
+            // throw, but this function's contract is null-on-malformed (T-055 property).
+            try {
+                typeNameFromBinaryName(internal.replace('/', '.')) to end + 1
+            } catch (_: IllegalArgumentException) {
+                null
+            }
         }
         else -> {
             val primitive = JvmPrimitive.entries.firstOrNull { it.descriptor == c } ?: return null

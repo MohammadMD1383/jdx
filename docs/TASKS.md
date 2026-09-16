@@ -51,8 +51,8 @@ be fiction.
 | **M6** | Serving: daemon, MCP, HTTP, `batch` | TODO |
 | **M7** | Polish: token budgets, AppCDS, mutation gates, docs, install | TODO |
 
-**T-001 through T-015, T-053, T-054 and T-061 are `DONE`.** M0's remaining test-spine task is
-**T-055** (property infrastructure), unblocked now that T-053 is done; T-056…T-060 unblock as their milestones land. M1 starts at T-007.
+**T-001 through T-015, T-053, T-054, T-055 and T-061 are `DONE`.** M0's test spine is
+complete; T-056…T-060 unblock as their milestones land. M1 starts at T-007.
 
 ---
 
@@ -282,7 +282,7 @@ T-063.*
 
 ---
 
-### T-055 — Property-based test infrastructure and shared generators · `WIP`
+### T-055 — Property-based test infrastructure and shared generators · `DONE` (session 21)
 **Depends:** T-053, T-002 · **Files:** `core/src/test/kotlin/.../gen/*`
 
 kotest-property wired in, with shared `Arb` generators for `TypeName`, `JvmDescriptor`,
@@ -290,12 +290,35 @@ kotest-property wired in, with shared `Arb` generators for `TypeName`, `JvmDescr
 these once pays for itself across every later property.
 
 **Acceptance**
-- [ ] ≥ 1,000 cases per property in tier 1 without breaking the 30 s budget
-- [ ] The failing **seed is printed** and there is a documented one-line way to pin it as a
+- [x] ≥ 1,000 cases per property in tier 1 without breaking the 30 s budget
+- [x] The failing **seed is printed** and there is a documented one-line way to pin it as a
       regression test
-- [ ] Generators produce genuinely nasty values: nested generics, wildcards, type variables,
+- [x] Generators produce genuinely nasty values: nested generics, wildcards, type variables,
       arrays of arrays, `$` in identifiers, unicode identifiers, empty packages
-- [ ] The properties listed in TESTING.md §4 exist (or have tasks) — none silently dropped
+- [x] The properties listed in TESTING.md §4 exist (or have tasks) — none silently dropped
+
+*Implementation notes (session 21): new `gen/` files — `TypeNameGenerators`
+(`arbTypeName`/`arbFieldTypeName`/`arbJvmDescriptor`, empty packages, unicode segments,
+3-deep nesting whose binary names carry `$`, 1–3-dim arrays, void excluded from array
+elements after the properties caught `[[[V]`), `SignatureGenerators` (all three wildcard
+kinds, type variables incl. empty-class-bound params, nested generics, inner classes with
+own args, arrays, void returns, throws; depth-0 base is non-recursive — eager Arb
+construction overflows otherwise, L-036), `PropertySupport` (`JDX_PROPERTY_ITERATIONS`,
+`pinnedConfig(seed)` + the seed workflow KDoc). New properties, all 1,000 cases:
+`TypeNamePropertyTest` (binaryName + field-descriptor fixed points),
+`JvmDescriptorPropertyTest` (descriptor fixed point + never-throws),
+`GenericSignaturePropertyTest` (parse + parseClass fixed points + never-throws),
+`print(parse(s))` stability in `SymbolRefPropertyTest`; `GeneratorsTest` pins the
+nastiness coverage over fixed seeds + the `pinnedConfig` API. The three
+`MemberListingPropertyTest` 500-case properties raised to 1,000. Real production bug
+found and fixed: `JvmDescriptor.parse` threw `IllegalArgumentException` on malformed
+`L...;` payloads instead of returning null (`parseDescriptorType` now catches it, L-037;
+regression strings pinned in `JvmDescriptorTest`). TESTING.md §4 documents the pin
+one-liner. Tier-1 aggregate 7.7 s → 18.0 s across 469 tests (still inside 30 s, but
+headroom is now 12 s — the next property-adding task watches the slowest list).
+Check green (586 tests) only with ambient `~/.config/jdx` shelved: 2 pre-existing
+`ReadCommandsTest` failures come from the real-home `FileWorkspaceStore` default + the
+`fx` active workspace on this machine — filed as T-066 (L-038), not fixed here.*
 
 ---
 
@@ -769,6 +792,26 @@ copies — the same jar-count trap from L-029 is waiting in each copy.
 - [ ] Index and cli golden tests resolve jars/classes through the shared helper
 - [ ] `core`'s `Fixtures` either delegates to it or documents why it cannot
 - [ ] No test hard-codes an absolute jar path (existing rule, still enforced)
+
+---
+
+### T-066 — Make `ReadCommandsTest` hermetic to the machine's workspaces · `TODO`
+**Depends:** T-015 · **Files:** `cli/src/test/kotlin/.../commands/ReadCommandsTest.kt`
+*(Added in session 21: found while verifying T-055 — pre-existing T-015 gap, not caused
+by T-055.)*
+
+`ReadCommandsTest` constructs `ShowCommand`/`MembersCommand`/`OutlineCommand` with the
+default `FileWorkspaceStore.system()`, so an `active-workspace` file on the contributor's
+machine (e.g. `fx`, left by an earlier e2e) silently re-roots every "no workspace"
+assertion — 2 red tests whose diff is nowhere near the failure (L-038). Proven by
+shelving `~/.config/jdx`: green without it, red with it.
+
+**Acceptance**
+- [ ] Every command construction in `ReadCommandsTest` injects `InMemoryWorkspaceStore()`
+      (or an isolated temp-dir store) instead of the real-home default
+- [ ] `./gradlew :cli:test` passes with an active workspace present in `~/.config/jdx`
+      (prove by creating one in the test run setup, not by relying on the machine's)
+- [ ] No production behaviour change (test-only task)
 
 ---
 

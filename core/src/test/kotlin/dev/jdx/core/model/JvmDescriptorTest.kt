@@ -98,6 +98,9 @@ class JvmDescriptorTest {
             "(Q)V",                    // bad parameter type
             "()Q",                     // bad return type
             "(Ljava/lang/Object;",     // parameter not terminated
+            "L1C)1JQLB)Q.;",           // T-055 property find: threw instead of null
+            "L\$Entry;",               // empty nesting segment
+            "L/;",                     // separator as the whole name
         ],
     )
     fun `malformed descriptors parse to null rather than throwing`(text: String) {

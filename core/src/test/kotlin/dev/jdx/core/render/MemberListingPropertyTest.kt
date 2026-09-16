@@ -75,7 +75,7 @@ class MemberListingPropertyTest {
 
     @Test
     fun `every text row is covered by the json`() = runBlocking<Unit> {
-        checkAll(500, arbClassGraph(), arbSyntheticToggle(), Arb.int(0..10)) { graph, synthetic, max ->
+        checkAll(1000, arbClassGraph(), arbSyntheticToggle(), Arb.int(0..10)) { graph, synthetic, max ->
             val listing = listingFor(graph, synthetic, max)
             val json = listing.toJson(command = "members")
             for (row in listing.groups.flatMap { it.rows }) {
@@ -87,7 +87,7 @@ class MemberListingPropertyTest {
 
     @Test
     fun `truncation keeps a prefix of the full row order`() = runBlocking<Unit> {
-        checkAll(500, arbClassGraph(), arbSyntheticToggle(), Arb.int(0..10)) { graph, synthetic, max ->
+        checkAll(1000, arbClassGraph(), arbSyntheticToggle(), Arb.int(0..10)) { graph, synthetic, max ->
             val full = listingFor(graph, synthetic, Int.MAX_VALUE)
             val cut = listingFor(graph, synthetic, max)
             val fullRefs = full.groups.flatMap { it.rows }.map { it.canonicalRef }
@@ -98,7 +98,7 @@ class MemberListingPropertyTest {
 
     @Test
     fun `plain text never contains escapes or absolute paths`() = runBlocking<Unit> {
-        checkAll(500, arbClassGraph(), arbSyntheticToggle()) { graph, synthetic ->
+        checkAll(1000, arbClassGraph(), arbSyntheticToggle()) { graph, synthetic ->
             val text = listingFor(graph, synthetic, 50).renderText()
             (text.contains("\u001B")) shouldBe false
             // Generated packages are `p`/`q`: no tmpdir, no home dir may leak through.

@@ -46,6 +46,33 @@ class SymbolRefPropertyTest {
     }
 
     @Test
+    fun `print of parse is stable for arbitrary input`() = runBlocking<Unit> {
+        // Idempotent normalisation (TESTING.md §4): when arbitrary text parses, printing
+        // the result and parsing again must yield the identical ref — never a Failure,
+        // never a different ref.
+        val structuralAlphabet = listOf(
+            '#', ':', '/', '.', '$', '(', ')', ',', ';', '[', ']', '<', '>', '*', ' ', 'a', 'B', '1', '-',
+        )
+        val arbNastyString = Arb.list(Arb.of(structuralAlphabet), 0..40)
+            .map { chars -> chars.joinToString("") }
+        checkAll(1000, arbNastyString) { text ->
+            val first = SymbolRefParser.parse(text)
+            if (first is SymbolRefParseResult.Ok) {
+                val once = SymbolRefPrinter.print(first.ref)
+                val second = SymbolRefParser.parse(once)
+                second shouldBeOk first.ref
+                SymbolRefPrinter.print((second as SymbolRefParseResult.Ok).ref) shouldBeEqual once
+            }
+        }
+    }
+
+    private infix fun String.shouldBeEqual(expected: String) {
+        if (this != expected) {
+            fail<Unit>("expected stable print '$expected' but was '$this'")
+        }
+    }
+
+    @Test
     fun `a malformed reference never throws`() = runBlocking<Unit> {
         // Any string built from the grammar's structural alphabet must parse to
         // Ok or Failure — never an exception (D-015: exit code 3, not a stack trace).

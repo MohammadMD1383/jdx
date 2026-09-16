@@ -133,8 +133,12 @@ later.
 Hand-written examples stop finding bugs once they cover what you already thought of.
 Properties keep generating inputs forever.
 
-Library: **kotest-property** (or jqwik). Minimum 1,000 cases per property in tier 1; seeds
-printed on failure and **pinned as a regression test** when one fails.
+Library: **kotest-property**. Minimum 1,000 cases per property in tier 1
+(`JDX_PROPERTY_ITERATIONS` in `core/src/test/kotlin/dev/jdx/core/gen/PropertySupport.kt`).
+When a property fails, kotest prints the failing seed (`Repeat this test by using seed …`);
+**pin it as a regression test** with one line —
+`checkAll(1_000, pinnedConfig(<seed>L), arbFoo()) { foo -> … }` — and remove the pin once
+the bug is fixed and the property passes unpinned again.
 
 Properties we owe the project:
 
@@ -144,9 +148,11 @@ Properties we owe the project:
 "print(parse(s)) is stable"                             // idempotent normalisation
 "a malformed ref never throws"                          // returns a positioned error
 
-// Descriptors and signatures (T-002)
+// Descriptors and signatures (T-002, generators + properties T-055)
 "descriptor -> parsed -> printed == descriptor"         // for generated nested generics,
                                                         // wildcards, arrays, type vars
+"binaryName -> fromBinaryName -> binaryName == identity" // TypeNamePropertyTest
+"parseClass(classSignature).signature == signature"     // the T-009 class-file entry point
 // Member resolution (T-009)
 "resolve(type) is deterministic across runs"
 "resolve(type) contains every member of declared(type)"
