@@ -483,7 +483,7 @@ T-054). `WarningCode` closed-set test + PROPOSAL §16 updated for the new code.*
 
 ---
 
-### T-011 — `jdx show`, `jdx outline`, `jdx members` · `TODO`
+### T-011 — `jdx show`, `jdx outline`, `jdx members` · `WIP`
 **Depends:** T-010, T-003 · **Files:** `cli/.../commands/*`
 
 Wire the three read commands through Clikt. **No logic in the command classes** (D-004) —
