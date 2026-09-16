@@ -446,7 +446,7 @@ determinism, no-leak, concrete `StringMap` substitution).*
 
 ---
 
-### T-010 — Text and JSON renderers · `TODO`
+### T-010 — Text and JSON renderers · `WIP`
 **Depends:** T-009 · **Files:** `core/.../render/*`
 
 Two renderers over one result model, per PROPOSAL.md §8. Text follows the layout in D-007.
