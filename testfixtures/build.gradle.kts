@@ -3,6 +3,22 @@ import org.gradle.api.tasks.compile.JavaCompile
 import org.gradle.jvm.tasks.Jar
 import org.gradle.jvm.toolchain.JavaLanguageVersion
 
+plugins {
+    // Shared golden-file helpers (T-054) live in `src/testFixtures`: a separate
+    // jar that test modules consume via `testFixtures(project(":testfixtures"))`.
+    // They must NOT live in `src/main` — every class there becomes a fixture the
+    // corpus scans would treat as expected API.
+    `java-test-fixtures`
+}
+
+// The plugin's jar defaults to `build/libs`, where it would sit next to the
+// fixture jars and break every "exactly one binary fixture jar" assertion
+// (`Fixtures.binaryJar` and friends). It lives in its own directory instead;
+// variant-aware resolution follows the task output wherever it points.
+tasks.named<Jar>("testFixturesJar") {
+    destinationDirectory.set(layout.buildDirectory.dir("test-fixtures-libs"))
+}
+
 // # `:testfixtures`
 //
 // Deliberately nasty Java and Kotlin classes, compiled by Gradle into **both** a binary jar
@@ -82,4 +98,10 @@ val sourcesJar = tasks.register<Jar>("sourcesJar") {
 // or missing `-sources.jar` halfway through a differential test run.
 tasks.named("build") {
     dependsOn(sourcesJar)
+}
+
+dependencies {
+    // Property tests for the shared test helpers (T-054/T-055). Versions live
+    // only in the catalog — never inline (T-001 rule).
+    testImplementation(libs.kotest.property)
 }

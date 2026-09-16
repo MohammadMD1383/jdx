@@ -10,6 +10,7 @@ import dev.jdx.core.render.buildMemberListing
 import dev.jdx.core.resolve.MemberResolver
 import dev.jdx.index.asm.AsmClassReader
 import dev.jdx.index.asm.ClassReadResult
+import dev.jdx.testsupport.golden.GoldenFiles
 import java.io.File
 import java.util.zip.ZipFile
 import org.junit.jupiter.api.Tag
@@ -27,7 +28,8 @@ import org.junit.jupiter.api.fail
  *
  * Rewrite with `./gradlew :index:tier2Test -Pgolden.update=true` — then read the
  * diff before committing it. A golden updated without reading is a test deleted
- * (TESTING.md §14). T-054 promotes this helper to shared infrastructure.
+ * (TESTING.md §14). Comparison, update mode and the orphan check come from the
+ * shared [GoldenFiles] helper (T-054).
  */
 @Tag("tier2")
 class RendererGoldenTest {
@@ -41,60 +43,23 @@ class RendererGoldenTest {
             infos[name.binaryName] ?: if (name.binaryName == "java.lang.Object") objectStub() else null
         }
         val goldenDir = File("src/test/resources/golden/members")
-        var updated = 0
-        for (binaryName in names) {
-            val info = infos.getValue(binaryName)
-            val listing = buildMemberListing(
-                target = info,
-                resolved = MemberResolver.resolve(info, lookup),
-                // Fixed artifact label, not the real file name: the version string in
-                // `testfixtures-<version>.jar` must never leak into hermetic goldens.
-                provenance = listOf(Provenance(artifact = "fixture-corpus.jar", origin = Origin.BYTECODE)),
-                options = MemberListingOptions(),
-            )
-            updated += checkGolden(goldenDir, "$binaryName.txt", listing.renderText())
-            updated += checkGolden(goldenDir, "$binaryName.json", listing.toJson(command = "members"))
+        val contents = buildMap {
+            for (binaryName in names) {
+                val info = infos.getValue(binaryName)
+                val listing = buildMemberListing(
+                    target = info,
+                    resolved = MemberResolver.resolve(info, lookup),
+                    // Fixed artifact label, not the real file name: the version string in
+                    // `testfixtures-<version>.jar` must never leak into hermetic goldens.
+                    provenance = listOf(Provenance(artifact = "fixture-corpus.jar", origin = Origin.BYTECODE)),
+                    options = MemberListingOptions(),
+                )
+                put("$binaryName.txt", listing.renderText())
+                put("$binaryName.json", listing.toJson(command = "members"))
+            }
         }
-        failOnOrphans(goldenDir, names.flatMap { listOf("$it.txt", "$it.json") }.toSet())
-        if (updateMode()) println("golden.update: rewrote $updated file(s) under $goldenDir")
+        GoldenFiles.verifyAll(goldenDir, contents)
     }
-
-    private fun checkGolden(dir: File, fileName: String, actual: String): Int {
-        val file = File(dir, fileName)
-        if (updateMode()) {
-            file.parentFile.mkdirs()
-            file.writeText(actual + "\n")
-            return 1
-        }
-        if (!file.isFile) fail("missing golden file: ${file.path} (run with -Pgolden.update=true to create it)")
-        val expected = file.readText().removeSuffix("\n")
-        if (expected != actual) {
-            fail("golden mismatch: ${file.path}\n${unifiedDiff(expected, actual)}")
-        }
-        return 0
-    }
-
-    private fun failOnOrphans(dir: File, expected: Set<String>) {
-        if (!dir.isDirectory) return
-        val orphans = dir.listFiles { file -> file.isFile }!!.map { it.name }.toSet() - expected
-        if (orphans.isNotEmpty()) {
-            fail("orphaned golden files (no fixture references them): ${orphans.sorted()}")
-        }
-    }
-
-    /** First divergence with two lines of context either side — T-054 brings unified diff. */
-    private fun unifiedDiff(expected: String, actual: String): String {
-        val expectedLines = expected.lines()
-        val actualLines = actual.lines()
-        val diverge = expectedLines.zip(actualLines).indexOfFirst { (a, b) -> a != b }
-            .takeIf { it != -1 } ?: minOf(expectedLines.size, actualLines.size)
-        fun window(lines: List<String>): String = ((diverge - 2)..(diverge + 2))
-            .filter { it in lines.indices }
-            .joinToString("\n") { i -> "${i + 1}: ${lines[i]}" }
-        return "first divergence at line ${diverge + 1}:\nexpected:\n${window(expectedLines)}\nactual:\n${window(actualLines)}"
-    }
-
-    private fun updateMode(): Boolean = System.getProperty("jdx.golden.update") == "true"
 
     private fun fixtureBinaryJar(): File {
         val dir = System.getProperty("jdx.fixturesDir")?.let { File(it) }

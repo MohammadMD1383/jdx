@@ -51,9 +51,8 @@ be fiction.
 | **M6** | Serving: daemon, MCP, HTTP, `batch` | TODO |
 | **M7** | Polish: token budgets, AppCDS, mutation gates, docs, install | TODO |
 
-**T-001 through T-009, T-053 and T-061 are `DONE`.** M0's remaining test-spine tasks are
-**T-054** (golden files) and **T-055** (property infrastructure), both unblocked now that
-T-053 is done; T-056…T-060 unblock as their milestones land. M1 starts at T-007.
+**T-001 through T-009, T-053, T-054 and T-061 are `DONE`.** M0's remaining test-spine task is
+**T-055** (property infrastructure), unblocked now that T-053 is done; T-056…T-060 unblock as their milestones land. M1 starts at T-007.
 
 ---
 
@@ -247,18 +246,39 @@ slowing the loop.*
 
 ---
 
-### T-054 — Golden-file test infrastructure · `WIP`
-**Depends:** T-053 · **Files:** `core/src/test/kotlin/.../golden/*`
+### T-054 — Golden-file test infrastructure · `DONE` (session 17)
+**Depends:** T-053 · **Files:** `testfixtures/src/testFixtures/.../golden/*`, `testfixtures/src/test/.../golden/*`
 
 Helper comparing output to files under `src/test/resources/golden/`, rewritten by
 `-Pgolden.update=true`.
 
 **Acceptance**
-- [ ] Failure output is a readable **unified diff**, not two blobs
-- [ ] Update mode prints a summary of every file it rewrote, so a reviewer sees the blast
+- [x] Failure output is a readable **unified diff**, not two blobs
+- [x] Update mode prints a summary of every file it rewrote, so a reviewer sees the blast
       radius before committing (TESTING.md §14)
-- [ ] Golden files are plain text, committed, and readable in a PR diff
-- [ ] An orphaned golden file (no test references it) fails the build
+- [x] Golden files are plain text, committed, and readable in a PR diff
+- [x] An orphaned golden file (no test references it) fails the build
+
+*Implementation notes (session 17): shared `GoldenFiles` + `UnifiedDiff`
+(`testfixtures/src/testFixtures/.../testsupport/golden/`, via the
+`java-test-fixtures` plugin — `src/main` would pollute the corpus scans, and a
+9th module would break the T-001 eight-module contract). `UnifiedDiff` is a
+dependency-free LCS renderer (`---`/`+++`/`@@` hunks, 3 context lines, 200-line
+cap with omission trailer, GNU `-0,0` empty-side form, deletions before
+insertions). `GoldenFiles.verifyAll` does compare-or-rewrite plus the orphan
+check and prints one summary line per rewritten file. `-Pgolden.update` is now
+wired once in the root build for every module's `tier2Test` (with
+`showStandardStreams` in update mode so the summary reaches the console),
+replacing the per-module blocks. `index`/`cli` golden suites migrated to the
+helper; their 280 goldens rewrite byte-identically (zero git diff), proving no
+behaviour change. Tests: 9 tier-1 (`UnifiedDiffTest`: 7 pinned + 2
+thousand-case properties — empty-iff-equal, header/balance laws) + 7 tier-2
+(`GoldenFilesTest` over `@TempDir`: mismatch/missing/orphan failures,
+update-then-verify round-trip, property-driven mode). Gotcha recorded as
+L-029: the plugin's jar lands in `build/libs` and trips the "exactly one
+fixture jar" assertions — redirected to `build/test-fixtures-libs`. Remaining
+duplication (`fixtureBinaryJar`/`fixtureClassNames` triplicated) filed as
+T-063.*
 
 ---
 
@@ -641,6 +661,23 @@ the unreachable code.
 ---
 
 ### T-047 token budgets (`--max-lines`, `--brief`) · **T-048** AppCDS archive generation · **T-049** `jdx help --agent` · **T-050** `jdx bench` against `minecraft-client.jar` · **T-051** README + install docs · **T-052** warnings-as-errors, lint, final API review
+
+---
+
+### T-063 — Share the fixture-jar resolution helpers · `TODO`
+**Depends:** — · **Files:** `core/.../fixtures/Fixtures.kt`, `index/.../render/RendererGoldenTest.kt`, `cli/.../commands/ReadCommandsGoldenTest.kt`
+*(Added in session 17: found while migrating golden suites to the T-054 helper.)*
+
+`fixtureBinaryJar()` + `fixtureClassNames()` are now triplicated: the canonical
+`Fixtures` object (core test source set, not consumable from other modules)
+plus private copies in the index and cli golden tests. Promote one copy next
+to the T-054 helper (`testfixtures` `testFixtures` source set) and delete the
+copies — the same jar-count trap from L-029 is waiting in each copy.
+
+**Acceptance**
+- [ ] Index and cli golden tests resolve jars/classes through the shared helper
+- [ ] `core`'s `Fixtures` either delegates to it or documents why it cannot
+- [ ] No test hard-codes an absolute jar path (existing rule, still enforced)
 
 ---
 

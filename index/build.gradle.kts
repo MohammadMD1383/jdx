@@ -8,6 +8,10 @@ dependencies {
     implementation(libs.kotlin.metadata.jvm)
     implementation(libs.sqlite.jdbc)
     testImplementation(libs.kotest.property)
+    // Golden suites compare against committed files via the shared T-054
+    // helper, which lives in testfixtures' testFixtures source set — never in
+    // `src/main`, where every class would pollute the fixture corpus scans.
+    testImplementation(testFixtures(project(":testfixtures")))
 }
 
 // Artifact tests (T-007) read the `testfixtures` jars. Depend on them so a clean checkout
@@ -23,10 +27,5 @@ listOf("test", "tier2Test").forEach { taskName ->
     }
 }
 
-// Golden-file update mode (T-010, TESTING.md §14): `./gradlew :index:tier2Test
-// -Pgolden.update=true` rewrites every golden under src/test/resources/golden.
-// The flag travels as a system property so tests stay environment-agnostic.
-// T-054 promotes this to shared per-module wiring.
-tasks.named<Test>("tier2Test") {
-    systemProperty("jdx.golden.update", (findProperty("golden.update") as String?) ?: "false")
-}
+// (No golden wiring here: `-Pgolden.update` reaches every module's `tier2Test`
+// from the root build, T-054.)

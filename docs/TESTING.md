@@ -421,3 +421,8 @@ output test pass, instantly, whether or not the new output is correct.
 **Always read the resulting diff before committing it.** A golden file you updated without
 reading is a test you deleted. If the diff is large, that is a signal to check whether you
 changed behaviour you did not intend to change — not a signal to skim faster.
+
+All golden suites share one helper — `GoldenFiles.verifyAll` with the `UnifiedDiff`
+renderer (`testfixtures/src/testFixtures/.../testsupport/golden/`, T-054). Do not
+hand-roll comparison, update-mode, or orphan logic in a new suite; consume the helper
+via `testFixtures(project(":testfixtures"))`.

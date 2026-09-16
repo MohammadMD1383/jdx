@@ -1,6 +1,7 @@
 package dev.jdx.cli.commands
 
 import com.github.ajalt.clikt.core.parse
+import dev.jdx.testsupport.golden.GoldenFiles
 import java.io.ByteArrayOutputStream
 import java.io.File
 import java.io.PrintStream
@@ -31,35 +32,42 @@ class ReadCommandsGoldenTest {
     fun `text and json goldens cover every fixture class for show members and outline`() {
         val jar = fixtureBinaryJar()
         val names = fixtureClassNames(jar)
-        var updated = 0
-        for (binaryName in names) {
-            val roots = listOf("--jars", jar.absolutePath, "--no-jdk")
-            updated += checkGolden("show", "$binaryName.txt", runShow(binaryName, roots, json = false, jar))
-            updated += checkGolden("show", "$binaryName.json", runShow(binaryName, roots, json = true, jar))
-            updated += checkGolden("members", "$binaryName.txt", runMembers(binaryName, roots, json = false, jar))
-            updated += checkGolden("members", "$binaryName.json", runMembers(binaryName, roots, json = true, jar))
-            updated += checkGolden("outline", "$binaryName.txt", runOutline(binaryName, roots, json = false, jar))
-            updated += checkGolden("outline", "$binaryName.json", runOutline(binaryName, roots, json = true, jar))
+        val roots = listOf("--jars", jar.absolutePath, "--no-jdk")
+        for ((command, run) in commands()) {
+            val contents = buildMap {
+                for (binaryName in names) {
+                    put("$binaryName.txt", normalize(run(binaryName, roots, false), jar))
+                    put("$binaryName.json", normalize(run(binaryName, roots, true), jar))
+                }
+            }
+            GoldenFiles.verifyAll(File("src/test/resources/golden/$command"), contents)
         }
-        failOnOrphans("show", names.map { "$it.txt" }.toSet() + names.map { "$it.json" }.toSet())
-        failOnOrphans("members", names.map { "$it.txt" }.toSet() + names.map { "$it.json" }.toSet())
-        failOnOrphans("outline", names.map { "$it.txt" }.toSet() + names.map { "$it.json" }.toSet())
-        if (updateMode()) println("golden.update: rewrote $updated file(s)")
     }
 
-    private fun runShow(binary: String, roots: List<String>, json: Boolean, jar: File): String {
+    /**
+     * One runner per read command: binary name, common roots, and the `--json`
+     * switch in, rendered stdout out. The map above keeps the golden layout
+     * (one directory per command) while sharing all comparison logic.
+     */
+    private fun commands(): List<Pair<String, (String, List<String>, Boolean) -> String>> = listOf(
+        "show" to { binary, roots, json -> runShow(binary, roots, json) },
+        "members" to { binary, roots, json -> runMembers(binary, roots, json) },
+        "outline" to { binary, roots, json -> runOutline(binary, roots, json) },
+    )
+
+    private fun runShow(binary: String, roots: List<String>, json: Boolean): String {
         val args = listOf(binary) + roots + (if (json) listOf("--json") else emptyList())
-        return normalize(execute { ShowCommand(terminate = noExit).parse(args) }, jar)
+        return execute { ShowCommand(terminate = noExit).parse(args) }
     }
 
-    private fun runMembers(binary: String, roots: List<String>, json: Boolean, jar: File): String {
+    private fun runMembers(binary: String, roots: List<String>, json: Boolean): String {
         val args = listOf(binary) + roots + (if (json) listOf("--json") else emptyList())
-        return normalize(execute { MembersCommand(terminate = noExit).parse(args) }, jar)
+        return execute { MembersCommand(terminate = noExit).parse(args) }
     }
 
-    private fun runOutline(binary: String, roots: List<String>, json: Boolean, jar: File): String {
+    private fun runOutline(binary: String, roots: List<String>, json: Boolean): String {
         val args = listOf(binary) + roots + (if (json) listOf("--json") else emptyList())
-        return normalize(execute { OutlineCommand(terminate = noExit).parse(args) }, jar)
+        return execute { OutlineCommand(terminate = noExit).parse(args) }
     }
 
     private fun execute(block: () -> Unit): String {
@@ -79,44 +87,6 @@ class ReadCommandsGoldenTest {
     /** The real jar file name carries a version string — it must never leak into goldens. */
     private fun normalize(output: String, jar: File): String =
         output.replace(jar.name, "fixture-corpus.jar")
-
-    private fun checkGolden(command: String, fileName: String, actual: String): Int {
-        val dir = File("src/test/resources/golden/$command")
-        val file = File(dir, fileName)
-        if (updateMode()) {
-            file.parentFile.mkdirs()
-            file.writeText(actual + "\n")
-            return 1
-        }
-        if (!file.isFile) fail("missing golden file: ${file.path} (run with -Pgolden.update=true to create it)")
-        val expected = file.readText().removeSuffix("\n")
-        if (expected != actual) {
-            fail("golden mismatch: ${file.path}\n${firstDivergence(expected, actual)}")
-        }
-        return 0
-    }
-
-    private fun failOnOrphans(command: String, expected: Set<String>) {
-        val dir = File("src/test/resources/golden/$command")
-        if (!dir.isDirectory) return
-        val orphans = dir.listFiles { file -> file.isFile }!!.map { it.name }.toSet() - expected
-        if (orphans.isNotEmpty()) {
-            fail("orphaned golden files (no fixture references them): ${orphans.sorted()}")
-        }
-    }
-
-    private fun firstDivergence(expected: String, actual: String): String {
-        val expectedLines = expected.lines()
-        val actualLines = actual.lines()
-        val diverge = expectedLines.zip(actualLines).indexOfFirst { (a, b) -> a != b }
-            .takeIf { it != -1 } ?: minOf(expectedLines.size, actualLines.size)
-        fun window(lines: List<String>): String = ((diverge - 2)..(diverge + 2))
-            .filter { it in lines.indices }
-            .joinToString("\n") { i -> "${i + 1}: ${lines[i]}" }
-        return "first divergence at line ${diverge + 1}:\nexpected:\n${window(expectedLines)}\nactual:\n${window(actualLines)}"
-    }
-
-    private fun updateMode(): Boolean = System.getProperty("jdx.golden.update") == "true"
 
     private fun fixtureBinaryJar(): File {
         val dir = System.getProperty("jdx.fixturesDir")?.let { File(it) }

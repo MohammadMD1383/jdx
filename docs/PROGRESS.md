@@ -14,16 +14,16 @@ or delete a past entry — if one turned out to be wrong, say so in a *new* entr
 
 | | |
 |---|---|
-| **Last updated** | 2026-09-16 (session 16) |
+| **Last updated** | 2026-09-16 (session 17) |
 | **Repository** | <https://github.com/MohammadMD1383/jdx> (public, Apache-2.0) |
 | **Phase** | Design complete; **M0 done, M1 in progress** |
 | **Active milestone** | M1 — Read path |
-| **Next task** | **T-013 (`IndexStore` + SQLite)** — lowest unblocked TODO; or T-054/T-055 (golden/property infra), T-062 (`--sort` orders) |
-| **Task count** | 60 tasks defined (T-001…T-062; M0–M2 in full detail, M3–M7 as one-liners) |
+| **Next task** | **T-013 (`IndexStore` + SQLite)** — lowest unblocked TODO; or T-055 (property infra), T-062 (`--sort` orders), T-063 (share fixture-jar helpers) |
+| **Task count** | 61 tasks defined (T-001…T-063; M0–M2 in full detail, M3–M7 as one-liners) |
 | **Build status** | **Green.** `./gradlew build` passes. Runnable `jdx`: `./gradlew :app:installDist` → `app/build/jdx` (fat jar + POSIX launcher, JDK-21 gate, ~180 ms cold start); `install.sh` symlinks it into `~/.local/bin`. Commands so far: `--version`, `version [--json]`, `doctor [--json]`, **`show`, `members`, `outline` (all flags, text+JSON, exits 0–4)**. JDK root: zero-config `show`/`members` on `java.*` via `jrt:/`, module-as-artifact (`java.base`), `src.zip` paired from `java.home`/`$JAVA_HOME` (T-012). |
-| **Test status** | **455 tests, all green** (`./gradlew test` tier 1 + `check` tier 2 + `soak` tier 3). T-012 added 8 tier-1 (`JdkLayoutTest`: 7 examples + 1 500-case property) + 7 tier-2 (3 JRT pairing, 3 doctor fallback, 1 `show --json` module provenance). |
-| **Docs** | Append-only logs sharded (D-023): sessions → `docs/progress/`, decisions → `docs/decisions/` (shard 2 open at D-028), lessons → `docs/lessons/` (new shard `L-026-050.md` open — L-026/L-027 (session 14), L-028 (session 15). Every hard-won lesson goes to `docs/LESSONS.md` (D-024). |
-| **Blocked on** | Nothing. |
+| **Test status** | **471 tests, all green** (`./gradlew check` tiers 1+2; soak tier 3 untouched — T-054 is test-only). T-054 added 16: 9 tier-1 (`UnifiedDiffTest`: 7 pinned + 2 thousand-case properties) + 7 tier-2 (`GoldenFilesTest` over `@TempDir`). Shared `GoldenFiles`/`UnifiedDiff` helper (`testfixtures` testFixtures) backs all 280 `index`/`cli` goldens; update mode prints every rewritten path. |
+| **Docs** | Append-only logs sharded (D-023): sessions → `docs/progress/`, decisions → `docs/decisions/` (shard 2 open at D-028), lessons → `docs/lessons/` (`L-026-050.md` open — L-026/L-027 (session 14), L-028 (session 15), L-029 (session 17). Every hard-won lesson goes to `docs/LESSONS.md` (D-024). |
+| **Blocked on** | Nothing. **Push needs owner go-ahead (D-012)** — session 17 commits unpushed. |
 
 ### What exists right now
 
@@ -212,7 +212,7 @@ when it holds 10 sessions, create the next (`sessions-011-020.md`) and update th
 | Shard | Sessions | Status |
 |---|---|---|
 | `docs/progress/sessions-001-010.md` | 1–10 | full |
-| `docs/progress/sessions-011-020.md` | 11– | open (9 free) |
+| `docs/progress/sessions-011-020.md` | 11– | open (3 free) |
 
 ---
 

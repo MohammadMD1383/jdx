@@ -7,6 +7,89 @@ wrong, say so in a *new* entry.
 
 ---
 
+## Session 17 — 2026-09-16 — Shared golden-file test infrastructure (T-054)
+**Agent:** Muse Spark (via opencode) · **Branch:** none (on `main` at `009588c`) ·
+**Commits:** `448856b` (claim), this session's work (to commit with this entry)
+
+### Goal
+Implement T-054 — the lowest-numbered unblocked TODO: promote the two
+copy-pasted golden helpers (index `RendererGoldenTest`, cli
+`ReadCommandsGoldenTest`) to one shared, specified helper with a real unified
+diff, a per-file rewrite summary, and the orphan check.
+
+### What I did
+1. Claimed T-054 (`TODO`→`WIP`, commit `448856b`) before coding.
+2. **Test-first helper** in `testfixtures` via the `java-test-fixtures`
+   plugin (`src/testFixtures/.../testsupport/golden/`):
+   - `UnifiedDiff` — dependency-free LCS renderer: `---`/`+++`/`@@` hunks, 3
+     context lines, 200-line cap with omission trailer, GNU `-0,0`
+     empty-side form, deletions before insertions. RED first (unresolved
+     references), then GREEN in two fix rounds (empty-side format, insertion
+     order via the backtrack tie-break).
+   - `GoldenFiles` — `verifyAll` (sorted compare-or-rewrite + orphan check +
+     per-file `golden.update:` summary), `check`, `failOnOrphans`,
+     `isUpdateMode` (injectable property reader for tests).
+   - Tests: 9 tier-1 (`UnifiedDiffTest`: 7 byte-pinned cases + 2
+     thousand-case kotest properties — empty-iff-equal, header/line-balance
+     laws) + 7 tier-2 (`GoldenFilesTest` over `@TempDir`: mismatch carries a
+     unified diff, missing names the flag, orphans fail in both modes,
+     update-then-verify round-trips).
+3. **Migrated both golden suites** to `GoldenFiles.verifyAll` and deleted
+   ~90 lines of duplicated compare/orphan/diff code. `index`/`cli` consume
+   it via `testImplementation(testFixtures(project(":testfixtures")))`.
+4. **Centralised `-Pgolden.update`** in the root build's `tier2Test`
+   registration (all modules inherit it; `showStandardStreams` in update
+   mode so the summary reaches the console), replacing the per-module
+   blocks. Verified: `:index:tier2Test -Pgolden.update=true --rerun` prints
+   all 70 rewritten paths and leaves **zero git diff** — the helper is
+   byte-compatible with the old writers.
+5. **Build gotcha (L-029):** the new plugin jar landed in `build/libs` and
+   broke all 17 "exactly one fixture jar" assertions at once. Redirected
+   `testFixturesJar` to `build/test-fixtures-libs` and deleted the stale
+   jar. Placement rationale recorded in T-054's notes: `src/main` would
+   pollute corpus scans; a 9th module would break the T-001 contract.
+6. Full `./gradlew check --offline` green (tiers 1+2, all modules). Tier 3
+   (soak) not run: test-only change, no production behaviour touched —
+   the byte-identical golden rewrite is the proof.
+7. Filed **T-063** (share `fixtureBinaryJar`/`fixtureClassNames`, still
+   triplicated) instead of folding it in.
+
+### Decisions made
+None at D-level. Judgement calls (in T-054's TASKS.md notes): helper lives in
+`testfixtures/testFixtures` rather than `core/.../golden` as the Files field
+suggested — core test code is not consumable from other modules, and the
+alternatives (new module, `src/main`) break the module contract or the
+corpus scans.
+
+### Tasks moved
+T-054: TODO → WIP → DONE. T-063 added (TODO).
+
+### Lessons distilled
+L-029 (`java-test-fixtures` jar pollutes `build/libs` scans) in
+`docs/lessons/L-026-050.md`; tag index + shard capacity updated.
+
+### What works now (and how to verify it yourself)
+```bash
+./gradlew check --offline                          # tiers 1+2 green, all modules
+./gradlew :index:tier2Test --offline -Pgolden.update=true --rerun 2>&1 | grep golden.update  # per-file summary
+git status --short -- index/src/test/resources cli/src/test/resources  # empty: rewrite is byte-identical
+./gradlew :testfixtures:test :testfixtures:tier2Test --offline         # the new helper suites directly
+```
+
+### What is broken / half-done
+Nothing in T-054 scope. Known remaining duplication: `fixtureBinaryJar` /
+`fixtureClassNames` still copied in three places — tracked as T-063.
+
+### Open questions / blockers
+None. **Push needs owner go-ahead (D-012)** — session 17 commits unpushed.
+
+### Next action
+**T-055** (property-based test infrastructure + shared generators) — now the
+lowest unblocked TODO alongside T-013/T-062; or T-013 (`IndexStore` + SQLite)
+per the CURRENT STATE handoff.
+
+---
+
 ## Session 16 — 2026-09-16 — Merge + push T-011/T-012 to `origin/main`
 **Agent:** Muse Spark (via opencode) · **Branch:** `t011-show-outline-members` → `main` ·
 **Commits:** none (merge only)

@@ -208,6 +208,18 @@ subprojects {
         useJUnitPlatform {
             includeTags("tier2")
         }
+        // Golden-file update mode (T-054, TESTING.md §14): `./gradlew check
+        // -Pgolden.update=true` rewrites every golden under
+        // `src/test/resources/golden`. Centralised here so every module's
+        // golden suite honours the same flag; the flag travels as a system
+        // property so tests stay environment-agnostic. Standard streams are
+        // shown in update mode so the per-file rewrite summary (which files
+        // changed — the reviewer's blast radius) reaches the console instead
+        // of dying in a captured test log.
+        systemProperty("jdx.golden.update", (findProperty("golden.update") as String?) ?: "false")
+        if ((findProperty("golden.update") as String?) == "true") {
+            testLogging.showStandardStreams = true
+        }
     }
     tasks.named("check") { dependsOn(tier2Test) }
 

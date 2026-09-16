@@ -14,6 +14,9 @@ dependencies {
     implementation(libs.clikt.core)
     implementation(libs.kotlinx.serialization.json)
     testImplementation(libs.kotest.property)
+    // Shared golden-file helper (T-054); see index/build.gradle.kts for why
+    // this is a testFixtures dependency and not a main one.
+    testImplementation(testFixtures(project(":testfixtures")))
 }
 
 // The CLI must report the version it was built as (`jdx --version`, later `jdx version --json`).
@@ -53,8 +56,5 @@ listOf("test", "tier2Test").forEach { taskName ->
     }
 }
 
-// Golden-file update mode (TESTING.md §14): `./gradlew :cli:tier2Test
-// -Pgolden.update=true` rewrites every golden under src/test/resources/golden.
-tasks.named<Test>("tier2Test") {
-    systemProperty("jdx.golden.update", (findProperty("golden.update") as String?) ?: "false")
-}
+// (No golden wiring here: `-Pgolden.update` reaches every module's `tier2Test`
+// from the root build, T-054.)
