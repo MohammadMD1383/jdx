@@ -612,9 +612,56 @@ the only tests allowed raw SQL, said in their KDoc). Next: T-014 builds the
 parallel indexer on `upsert → replaceClasses`; `DoctorService.indexCheck` still
 reports presence-only until then.*
 
-### T-014 — Parallel indexer · `WIP`
+### T-014 — Parallel indexer · `DONE` (session 19)
 **Depends:** T-013 · Virtual-thread fan-out across artifacts, batched transactions,
 content-hash short-circuit, progress reporting for long runs. Target ≥3,000 classes/s.
+
+*Implementation notes (session 19): `index/.../index/ArtifactIndexer` (`indexOne`
+jar/dir, `indexJdk` for `jrt:/`, `indexMany` one-virtual-thread-per-path with a
+completion-order `IndexProgressListener`, `indexRoot` seam for crafted roots):
+hash → `findArtifactByHash` short-circuit (`SKIPPED`, no read, no write) → ASM
+every entry (bad entries become subject-named `CORRUPT_CLASS`/
+`UNSUPPORTED_CLASS_VERSION` warnings, never throws) → `upsert` + one-transaction
+`replaceClasses`. Per-artifact failures become `FAILED` report entries, never abort
+the batch. Enabling perf fix in `SqliteIndexStore`: `BulkWriter` prepares the 7
+write statements once per artifact instead of per row (JDK write pass 14.7 s →
+7.7 s). Measured on JDK 26 (33,104 entries): read pass 5–6k/s (beats the target),
+end-to-end 2,502/s cold — the remaining gap is JDBC round-trips, filed as T-064.
+Real-world find: 4 JFR `Exception$JB$$*` classes carry empty name segments the
+model rejects — degraded with warnings as designed, filed as T-065. Tests: 10
+tier-2 (short-circuit, empty jar, corrupt/future-version entries, 10 %-step
+truncation sweep, parallel determinism across two stores, missing-path isolation,
+listener coverage) + 1 soak (full JDK index, ~14 s, excluded from `check`).*
+
+### T-064 — Close the indexer 3,000/s end-to-end gap · `TODO`
+**Depends:** T-014 · **Files:** `index/.../store/sqlite/SqliteIndexStore.kt`
+
+*Session-19 measurement: full-JDK (33,100 classes) end-to-end 2,502/s cold —
+read pass 5–6k/s, write pass ~4.3k/s after `BulkWriter`. The remainder is one
+JNI round-trip per row (~760k for the JDK, half of them `last_insert_rowid`
+queries). True JDBC batching needs client-side id assignment, which races across
+processes under WAL — do not attempt without solving that. Natural home is the
+T-050 bench context with `minecraft-client.jar` as the fixture.*
+
+**Acceptance**
+- [ ] End-to-end ≥ 3,000 classes/s on the benchmark jar, or a documented reason
+      why the target moved
+- [ ] No behaviour change: T-013 round-trip tests and T-014 indexer tests green
+      unmodified
+
+### T-065 — Handle JFR-style `$$` class names · `TODO`
+**Depends:** T-008 · **Files:** `core/.../model/TypeName.kt`, `index/.../asm/*`
+
+*Session-19 find: the running JDK ships `java/lang/Exception$JB$$Assertion`
+(and `$Event`, `$FullGC`, `$ShrinkingGC`) — empty name segments the model
+rejects, so they index as `CORRUPT_CLASS` warnings. That is honest degradation,
+but they are the only 4 of 33,104 JDK classes we cannot name. Decide: accept
+empty segments in the model, or keep rejecting with a dedicated warning code.*
+
+**Acceptance**
+- [ ] The four JFR classes resolve to a named `TypeName` or a documented,
+      dedicated warning explaining why not
+- [ ] Differential vs `javap` still green; no regression on `$` nesting rules (D-025)
 
 ### T-015 — Workspaces (`jdx ws …`) · `TODO`
 **Depends:** T-013 · TOML at `~/.config/jdx/workspaces/<name>.toml`, ordered roots,

@@ -279,7 +279,14 @@ public class SqliteIndexStore private constructor(
                 connection.autoCommit = false
                 try {
                     deleteScopedRows(artifactId)
-                    for (clazz in classes) insertClass(artifactId, clazz)
+                    // Statements are prepared once per artifact, not once per row:
+                    // a 33k-class JDK writes ~700k rows, and re-preparing each one
+                    // costs more than executing it (T-014 benchmark). Order, ids
+                    // and bytes are unchanged — only the preparation moves out of
+                    // the loop.
+                    BulkWriter(connection).use { writer ->
+                        for (clazz in classes) writer.insertClass(artifactId, clazz)
+                    }
                     connection.commit()
                 } catch (e: Exception) {
                     connection.rollback()
@@ -483,113 +490,135 @@ public class SqliteIndexStore private constructor(
 
     // -- class insert ---------------------------------------------------------
 
-    private fun insertClass(artifactId: Long, clazz: ClassInfo): Long {
-        val classId = connection.prepareStatement(
+    private enum class MemberKind { FIELD, METHOD }
+
+    /**
+     * The per-artifact bulk writer behind [replaceClasses] (T-014).
+     *
+     * One instance per `replaceClasses` call, closed (statements released) when
+     * the artifact is done. Every `INSERT` the store executes is prepared once
+     * here and rebound per row — preparing per row costs more than executing
+     * for JDK-scale artifacts (~700k rows), while the SQL, the bind order and
+     * the `ORDER BY id` declaration-order invariant are byte-for-byte the
+     * single-row version's. Callers outside one `replaceClasses` must never
+     * share an instance: statements are not thread-safe, the store lock is.
+     */
+    private class BulkWriter(private val connection: java.sql.Connection) : java.io.Closeable {
+        private val classInsert = connection.prepareStatement(
             "INSERT INTO class(artifact_id, fqn, simple_name, package, access, kind, signature, " +
                 "super_fqn, super_id, source_file, is_kotlin, deprecated, outer_fqn, outer_id) " +
                 "VALUES(?, ?, ?, ?, ?, ?, ?, ?, NULL, ?, 0, ?, ?, NULL)",
-        ).use { insert ->
-            insert.setLong(1, artifactId)
-            insert.setString(2, clazz.name.binaryName)
-            insert.setString(3, clazz.name.simpleName)
-            insert.setString(4, clazz.name.packageName)
-            insert.setInt(5, clazz.access.mask)
-            insert.setString(6, clazz.kind.name)
-            insert.setNullableString(7, clazz.genericSignature?.signature)
-            insert.setNullableString(8, clazz.superclass?.binaryName)
-            insert.setNullableString(9, clazz.sourceFileName)
-            insert.setInt(10, if (clazz.deprecated) 1 else 0)
-            insert.setNullableString(11, clazz.outerClass?.binaryName)
-            insert.executeUpdate()
-            connection.createStatement().use { keys ->
-                keys.executeQuery("SELECT last_insert_rowid()").use { rows ->
-                    rows.next()
-                    rows.getLong(1)
+        )
+        private val rowIdQuery = connection.prepareStatement("SELECT last_insert_rowid()")
+        private val ifaceInsert =
+            connection.prepareStatement("INSERT INTO iface(class_id, iface_fqn) VALUES(?, ?)")
+        private val fieldInsert = connection.prepareStatement(
+            "INSERT INTO member(class_id, name, descriptor, signature, access, kind, " +
+                "param_names, throws_text, default_value, deprecated, constant_value) " +
+                "VALUES(?, ?, ?, ?, ?, ?, NULL, NULL, NULL, ?, ?)",
+        )
+        private val methodInsert = connection.prepareStatement(
+            "INSERT INTO member(class_id, name, descriptor, signature, access, kind, " +
+                "param_names, throws_text, default_value, deprecated, constant_value) " +
+                "VALUES(?, ?, ?, ?, ?, ?, ?, ?, ?, ?, NULL)",
+        )
+        private val classAnnotInsert = connection.prepareStatement(
+            "INSERT INTO annot(owner_kind, owner_id, annot_fqn, annot_values) VALUES('class', ?, ?, ?)",
+        )
+        private val memberAnnotInsert = connection.prepareStatement(
+            "INSERT INTO annot(owner_kind, owner_id, annot_fqn, annot_values) VALUES('member', ?, ?, ?)",
+        )
+
+        fun insertClass(artifactId: Long, clazz: ClassInfo): Long {
+            classInsert.setLong(1, artifactId)
+            classInsert.setString(2, clazz.name.binaryName)
+            classInsert.setString(3, clazz.name.simpleName)
+            classInsert.setString(4, clazz.name.packageName)
+            classInsert.setInt(5, clazz.access.mask)
+            classInsert.setString(6, clazz.kind.name)
+            classInsert.setNullableString(7, clazz.genericSignature?.signature)
+            classInsert.setNullableString(8, clazz.superclass?.binaryName)
+            classInsert.setNullableString(9, clazz.sourceFileName)
+            classInsert.setInt(10, if (clazz.deprecated) 1 else 0)
+            classInsert.setNullableString(11, clazz.outerClass?.binaryName)
+            classInsert.executeUpdate()
+            val classId = lastRowId()
+            for (iface in clazz.interfaces) {
+                ifaceInsert.setLong(1, classId)
+                ifaceInsert.setString(2, iface.binaryName)
+                ifaceInsert.executeUpdate()
+            }
+            // Fields then methods: the ClassInfo.members order renderers print.
+            for (field in clazz.fields) insertMember(classId, field, MemberKind.FIELD)
+            for (method in clazz.methods) insertMember(classId, method, MemberKind.METHOD)
+            for (annotation in clazz.annotations) {
+                classAnnotInsert.setLong(1, classId)
+                classAnnotInsert.setString(2, annotation.type.binaryName)
+                classAnnotInsert.setString(3, encodeStringMap(annotation.values))
+                classAnnotInsert.executeUpdate()
+            }
+            return classId
+        }
+
+        private fun insertMember(
+            classId: Long,
+            member: dev.jdx.core.model.MemberInfo,
+            kind: MemberKind,
+        ): Long {
+            val memberId = when (member) {
+                is FieldInfo -> {
+                    fieldInsert.setLong(1, classId)
+                    fieldInsert.setString(2, member.name)
+                    fieldInsert.setString(3, member.type.descriptor)
+                    fieldInsert.setNullableString(4, member.genericSignature?.signature)
+                    fieldInsert.setInt(5, member.access.mask)
+                    fieldInsert.setString(6, kind.name)
+                    fieldInsert.setInt(7, if (member.deprecated) 1 else 0)
+                    fieldInsert.setNullableString(8, member.constantValue)
+                    fieldInsert.executeUpdate()
+                    lastRowId()
+                }
+                is MethodInfo -> {
+                    methodInsert.setLong(1, classId)
+                    methodInsert.setString(2, member.name)
+                    methodInsert.setString(3, member.descriptor.descriptor)
+                    methodInsert.setNullableString(4, member.genericSignature?.signature)
+                    methodInsert.setInt(5, member.access.mask)
+                    methodInsert.setString(6, kind.name)
+                    methodInsert.setString(7, encodeNullableStringList(member.parameterNames))
+                    methodInsert.setNullableString(8, encodeTypeList(member.throwsTypes))
+                    methodInsert.setNullableString(9, member.annotationDefault)
+                    methodInsert.setInt(10, if (member.deprecated) 1 else 0)
+                    methodInsert.executeUpdate()
+                    lastRowId()
                 }
             }
-        }
-        connection.prepareStatement("INSERT INTO iface(class_id, iface_fqn) VALUES(?, ?)").use { insert ->
-            for (iface in clazz.interfaces) {
-                insert.setLong(1, classId)
-                insert.setString(2, iface.binaryName)
-                insert.executeUpdate()
-            }
-        }
-        // Fields then methods: the ClassInfo.members order renderers print.
-        for (field in clazz.fields) insertMember(classId, field, MemberKind.FIELD)
-        for (method in clazz.methods) insertMember(classId, method, MemberKind.METHOD)
-        connection.prepareStatement(
-            "INSERT INTO annot(owner_kind, owner_id, annot_fqn, annot_values) VALUES('class', ?, ?, ?)",
-        ).use { insert ->
-            for (annotation in clazz.annotations) {
-                insert.setLong(1, classId)
-                insert.setString(2, annotation.type.binaryName)
-                insert.setString(3, encodeStringMap(annotation.values))
-                insert.executeUpdate()
-            }
-        }
-        return classId
-    }
-
-    private enum class MemberKind { FIELD, METHOD }
-
-    private fun insertMember(classId: Long, member: dev.jdx.core.model.MemberInfo, kind: MemberKind): Long {
-        val memberId = when (member) {
-            is FieldInfo -> connection.prepareStatement(
-                "INSERT INTO member(class_id, name, descriptor, signature, access, kind, " +
-                    "param_names, throws_text, default_value, deprecated, constant_value) " +
-                    "VALUES(?, ?, ?, ?, ?, ?, NULL, NULL, NULL, ?, ?)",
-            ).use { insert ->
-                insert.setLong(1, classId)
-                insert.setString(2, member.name)
-                insert.setString(3, member.type.descriptor)
-                insert.setNullableString(4, member.genericSignature?.signature)
-                insert.setInt(5, member.access.mask)
-                insert.setString(6, kind.name)
-                insert.setInt(7, if (member.deprecated) 1 else 0)
-                insert.setNullableString(8, member.constantValue)
-                insert.executeUpdate()
-                lastRowId()
-            }
-            is MethodInfo -> connection.prepareStatement(
-                "INSERT INTO member(class_id, name, descriptor, signature, access, kind, " +
-                    "param_names, throws_text, default_value, deprecated, constant_value) " +
-                    "VALUES(?, ?, ?, ?, ?, ?, ?, ?, ?, ?, NULL)",
-            ).use { insert ->
-                insert.setLong(1, classId)
-                insert.setString(2, member.name)
-                insert.setString(3, member.descriptor.descriptor)
-                insert.setNullableString(4, member.genericSignature?.signature)
-                insert.setInt(5, member.access.mask)
-                insert.setString(6, kind.name)
-                insert.setString(7, encodeNullableStringList(member.parameterNames))
-                insert.setNullableString(8, encodeTypeList(member.throwsTypes))
-                insert.setNullableString(9, member.annotationDefault)
-                insert.setInt(10, if (member.deprecated) 1 else 0)
-                insert.executeUpdate()
-                lastRowId()
-            }
-        }
-        connection.prepareStatement(
-            "INSERT INTO annot(owner_kind, owner_id, annot_fqn, annot_values) VALUES('member', ?, ?, ?)",
-        ).use { insert ->
             for (annotation in member.annotations) {
-                insert.setLong(1, memberId)
-                insert.setString(2, annotation.type.binaryName)
-                insert.setString(3, encodeStringMap(annotation.values))
-                insert.executeUpdate()
+                memberAnnotInsert.setLong(1, memberId)
+                memberAnnotInsert.setString(2, annotation.type.binaryName)
+                memberAnnotInsert.setString(3, encodeStringMap(annotation.values))
+                memberAnnotInsert.executeUpdate()
             }
+            return memberId
         }
-        return memberId
-    }
 
-    private fun lastRowId(): Long =
-        connection.createStatement().use { keys ->
-            keys.executeQuery("SELECT last_insert_rowid()").use { rows ->
+        private fun lastRowId(): Long =
+            rowIdQuery.executeQuery().use { rows ->
                 rows.next()
                 rows.getLong(1)
             }
+
+        override fun close() {
+            // Reverse creation order; every close is attempted even when one fails.
+            runCatching { memberAnnotInsert.close() }
+            runCatching { classAnnotInsert.close() }
+            runCatching { methodInsert.close() }
+            runCatching { fieldInsert.close() }
+            runCatching { ifaceInsert.close() }
+            runCatching { rowIdQuery.close() }
+            runCatching { classInsert.close() }.getOrThrow()
         }
+    }
 
     // -- class read -----------------------------------------------------------
 

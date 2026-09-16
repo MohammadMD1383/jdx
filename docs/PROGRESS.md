@@ -14,16 +14,16 @@ or delete a past entry — if one turned out to be wrong, say so in a *new* entr
 
 | | |
 |---|---|
-| **Last updated** | 2026-09-16 (session 18) |
+| **Last updated** | 2026-09-16 (session 19) |
 | **Repository** | <https://github.com/MohammadMD1383/jdx> (public, Apache-2.0) |
 | **Phase** | Design complete; **M0 done, M1 in progress** |
 | **Active milestone** | M1 — Read path |
-| **Next task** | **T-014 (parallel indexer)** — lowest unblocked TODO; or T-055 (property infra), T-062 (`--sort` orders), T-063 (share fixture-jar helpers) |
-| **Task count** | 61 tasks defined (T-001…T-063; M0–M2 in full detail, M3–M7 as one-liners) |
+| **Next task** | **T-015 (workspaces)** — lowest unblocked TODO; or T-055 (property infra), T-062 (`--sort` orders), T-063 (share fixture-jar helpers) |
+| **Task count** | 63 tasks defined (T-001…T-065; M0–M2 in full detail, M3–M7 as one-liners) |
 | **Build status** | **Green.** `./gradlew build` passes. Runnable `jdx`: `./gradlew :app:installDist` → `app/build/jdx` (fat jar + POSIX launcher, JDK-21 gate, ~180 ms cold start); `install.sh` symlinks it into `~/.local/bin`. Commands so far: `--version`, `version [--json]`, `doctor [--json]`, **`show`, `members`, `outline` (all flags, text+JSON, exits 0–4)**. JDK root: zero-config `show`/`members` on `java.*` via `jrt:/`, module-as-artifact (`java.base`), `src.zip` paired from `java.home`/`$JAVA_HOME` (T-012). |
-| **Test status** | **486 tests, all green** (`./gradlew check` tiers 1+2; soak tier 3 green — T-013 is store-only). T-013 added 16 tier-2: 12 `IndexStoreTest` examples (every fixture class round-trips exactly via ASM) + 2 properties (500-case fixed point, 200-case store-twice determinism) + 2 `SqliteContractTest` (WAL, newer-schema refusal). Shared `GoldenFiles`/`UnifiedDiff` helper (`testfixtures` testFixtures) backs all 280 `index`/`cli` goldens; update mode prints every rewritten path. |
-| **Docs** | Append-only logs sharded (D-023): sessions → `docs/progress/`, decisions → `docs/decisions/` (shard 2 open at D-028), lessons → `docs/lessons/` (`L-026-050.md` open — L-026/L-027 (session 14), L-028 (session 15), L-029 (session 17), L-030 (session 18). Every hard-won lesson goes to `docs/LESSONS.md` (D-024). |
-| **Blocked on** | Nothing. **Push needs owner go-ahead (D-012)** — session 18 commits unpushed. |
+| **Test status** | **496 tests, all green** (`./gradlew check` tiers 1+2; soak tier 3 green). T-013 added 16 tier-2: 12 `IndexStoreTest` examples (every fixture class round-trips exactly via ASM) + 2 properties (500-case fixed point, 200-case store-twice determinism) + 2 `SqliteContractTest` (WAL, newer-schema refusal). T-014 added 10 tier-2 (short-circuit, empty jar, corrupt/future-version entries, 10 %-step truncation sweep, parallel determinism across two stores, missing-path isolation, listener coverage) + 1 soak (full JDK index: 33,100 classes in ~13.2 s = 2,502/s end to end, 4 warnings for JFR `$$` classes). Shared `GoldenFiles`/`UnifiedDiff` helper (`testfixtures` testFixtures) backs all 280 `index`/`cli` goldens; update mode prints every rewritten path. |
+| **Docs** | Append-only logs sharded (D-023): sessions → `docs/progress/`, decisions → `docs/decisions/` (shard 2 open at D-028), lessons → `docs/lessons/` (`L-026-050.md` open — L-026/L-027 (session 14), L-028 (session 15), L-029 (session 17), L-030 (session 18), L-031/L-032/L-033 (session 19). Every hard-won lesson goes to `docs/LESSONS.md` (D-024). |
+| **Blocked on** | Nothing. **Push needs owner go-ahead (D-012)** — session 19 commits unpushed. |
 
 ### What exists right now
 
@@ -134,13 +134,26 @@ tests (T-004/T-005) cover the launcher with stub-JDK fault injection, an exhaust
 determinism), generated version-gate and tool-version-parser properties, an install.sh
 suite, and real-JVM end-to-end tests.
 
-9. **The persistent index seam** (`index/.../store/`, T-013, session 18):
-   `IndexStore` (hash-keyed artifacts, per-artifact `replaceClasses`, `ClassHit`
-   cross-artifact lookup) with the only-SQL-here `sqlite/SqliteIndexStore`
-   (WAL, `user_version` migrations that refuse newer files, full §10.3 schema).
-   Proven by 12 tier-2 example tests (every fixture class round-trips exactly),
-   2 properties (500-case fixed point, store-twice determinism) and 2 storage-
-   contract tests. No indexer yet — T-014 calls `upsert → replaceClasses`.
+ 9. **The persistent index seam** (`index/.../store/`, T-013, session 18):
+    `IndexStore` (hash-keyed artifacts, per-artifact `replaceClasses`, `ClassHit`
+    cross-artifact lookup) with the only-SQL-here `sqlite/SqliteIndexStore`
+    (WAL, `user_version` migrations that refuse newer files, full §10.3 schema).
+    Proven by 12 tier-2 example tests (every fixture class round-trips exactly),
+    2 properties (500-case fixed point, store-twice determinism) and 2 storage-
+    contract tests. No indexer yet — T-014 calls `upsert → replaceClasses`.
+
+10. **The parallel indexer** (`index/.../index/ArtifactIndexer`, T-014,
+    session 19): `indexOne` (jar/dir) + `indexJdk` (`jrt:/`) + `indexMany`
+    (one virtual thread per artifact, completion-order progress listener) over
+    the `indexRoot` seam — hash → short-circuit (`SKIPPED`, untouched) → ASM
+    every entry (bad entries warn, never abort) → `upsert` + one-transaction
+    `replaceClasses`; per-artifact failures become `FAILED` report entries.
+    `BulkWriter` prepares the 7 write statements once per artifact (JDK write
+    pass 14.7 s → 7.7 s). Measured on JDK 26 (33,104 entries): read pass
+    5–6k/s, end-to-end 2,502/s cold (gap filed as T-064); 4 JFR `$$` classes
+    warn as designed (T-065). Proven by 10 tier-2 tests (incl. a 10 %-step
+    truncation sweep and a two-store determinism metamorphic) + 1 soak test
+    (full JDK, excluded from `check`).
 
 Docs of note: `docs/LESSONS.md` (+ `docs/lessons/` shards) — mistakes already paid for,
 now L-001…L-025 (`L-001-025.md` full — next lesson creates `L-026-050.md`). Skim its index before fighting a toolchain or spec.

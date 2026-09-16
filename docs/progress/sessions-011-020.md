@@ -7,6 +7,86 @@ wrong, say so in a *new* entry.
 
 ---
 
+## Session 19 — 2026-09-16 — Parallel indexer (T-014)
+**Agent:** Muse Spark (via opencode) · **Branch:** none (on `main` at `86c54a5`) ·
+**Commits:** `86c54a5` (claim), this session's work (to commit with this entry)
+
+### Goal
+Implement T-014 — the lowest-numbered unblocked TODO (14 < 15): the §10.4
+indexing pipeline on top of T-013's `upsert → replaceClasses` seam, with the
+3,000 classes/s target measured, not assumed.
+
+### What I did
+1. Claimed T-014 (`TODO`→`WIP`, commit `86c54a5`) before coding.
+2. **Indexer** (`index/src/main/kotlin/dev/jdx/index/index/ArtifactIndexer.kt`):
+   `indexOne` (jar/dir via `ArtifactLoader`, metadata from the path +
+   `JarArtifact.sourcesPair`/`JrtArtifact.jdkSources`), `indexJdk` (`jrt:/`,
+   version-keyed `stableId`), `indexMany` (one virtual thread per path via
+   `newVirtualThreadPerTaskExecutor`, completion-order `IndexProgressListener`,
+   per-path `FAILED` entries, report sorted by path), and the shared
+   `indexRoot` seam: hash → `findArtifactByHash` short-circuit (`SKIPPED`, no
+   read, no write) → ASM every entry (bad entries become subject-named
+   `CORRUPT_CLASS`/`UNSUPPORTED_CLASS_VERSION` warnings, never throws) →
+   `upsert` + one-transaction `replaceClasses`. Results carry `classesPerSecond`;
+   timing fields are documented as the only non-deterministic part (D-007).
+3. **Measured before optimising** (throwaway scratch probe, deleted after):
+   JDK 26 has 33,104 entries; read pass 5.2–6.4k/s (beats the target), write
+   pass 2.3k/s — the bottleneck was per-row statement preparation, not the
+   transaction. Fix in `SqliteIndexStore`: `BulkWriter` prepares the 7 write
+   statements once per artifact (same SQL/bind order/commit) — write pass
+   14.7 s → 7.7 s, T-013 tests green unmodified. A `cache_size`/`temp_store`
+   bulk-load pragma try showed no gain and was reverted.
+4. **Real-world find:** 4 JFR classes (`Exception$JB$$Assertion/$Event/
+   $FullGC/$ShrinkingGC`) carry empty name segments the model rejects — they
+   index as `CORRUPT_CLASS` warnings, exactly the designed degradation. Filed
+   as T-065; the write-path remainder as T-064.
+5. **Tests, 11:** `ArtifactIndexerTest` (10, `@Tag("tier2")` — fixture round-trip
+   vs live ASM for every class + D-017 marker proof, short-circuit identity,
+   empty jar, corrupt-entry and future-version fault injection, a 10 %-step
+   truncation sweep, parallel sorted report + listener coverage, missing-path
+   isolation, two-store determinism metamorphic) + `ArtifactIndexerSoakTest`
+   (1, `@Tag("soak")` — full JDK: 33,100 classes in ~13.2 s = 2,502/s
+   end to end; kept out of `check`, which would otherwise triple).
+6. `./gradlew check --offline` green (496 tests, 0 failures, 1m12s),
+   `./gradlew soak --offline` green (JDK soak 14.8 s).
+
+### Decisions made
+None at D-level. Judgement calls in KDoc: skip-short-circuit writes nothing
+(stored rows are the answer; a moved jar re-indexes on hash change anyway);
+`indexMany` listener fires in completion order while the report stays
+path-sorted; end-to-end 2,502/s cold reported honestly against the 3,000/s
+target rather than gating a flaky perf assertion (T-064 owns the remainder).
+
+### Tasks moved
+- T-014: TODO → WIP → DONE.
+- Added T-064 (indexer write-path batching) and T-065 (JFR `$$` names).
+
+### Lessons distilled
+**L-031** (per-row statement preparation dominates at JDK scale; measure
+read-vs-write separately), **L-032** (the JDK ships 4 classes the model cannot
+name — file the model task, don't loosen the reader), **L-033** (never batch a
+read with its dependent edit in one turn — owner correction).
+
+### What works now (and how to verify it yourself)
+```bash
+./gradlew check --offline                          # tiers 1+2 green (496 tests)
+./gradlew soak --offline                           # tier 3 green (JDK index ~15 s)
+./gradlew :index:tier2Test --offline --tests "dev.jdx.index.index.*"  # just this task
+```
+
+### What is broken / half-done
+Nothing in T-014 scope. Known next: end-to-end cold-JDK rate 2,502/s vs the
+3,000/s target (T-064); JFR `$$` classes warn instead of naming (T-065); no
+`jdx index` CLI yet — the engine waits on workspaces (T-015).
+
+### Open questions / blockers
+None. **Push needs owner go-ahead (D-012)** — session 19 commits unpushed.
+
+### Next action
+**T-015** (workspaces) — lowest unblocked TODO; the indexer's first consumer.
+
+---
+
 ## Session 18 — 2026-09-16 — `IndexStore` interface + SQLite implementation (T-013)
 **Agent:** Muse Spark (via opencode) · **Branch:** none (on `main` at `a739722`) ·
 **Commits:** `a739722` (claim), this session's work (to commit with this entry)

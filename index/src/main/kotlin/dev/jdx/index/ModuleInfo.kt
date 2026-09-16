@@ -11,7 +11,8 @@
  *  - reading class files with ASM into `core`'s `ClassInfo`/`MemberInfo`
  *  - decoding Kotlin `@Metadata`
  *  - extracting the reference edges that power find-usages and call hierarchy
- *  - the persistent index: SQLite, content-hash keyed, shared across workspaces (D-013)
+ *  - the persistent index: SQLite, content-hash keyed, shared across workspaces (D-013),
+ *    filled by the parallel artifact indexer (`dev.jdx.index.index`)
  *
  * ## Two rules that are easy to break
  *
