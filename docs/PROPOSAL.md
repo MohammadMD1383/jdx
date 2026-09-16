@@ -1099,11 +1099,12 @@ the authoritative machine-readable version.)*
 
 ### Per-command highlights
 ```
-show      <type> [--jars …] [--no-jdk] [--json] [--no-color]
+show      <type> [-w …] [--jars …] [--no-jdk] [--json] [--no-color]
 outline   <type> [--kind --static/--instance --access --from --grep
-          --include-synthetic --limit] [--jars …] [--no-jdk] [--json] [--no-color]
+          --include-synthetic --limit] [-w …] [--jars …] [--no-jdk] [--json] [--no-color]
 members   --inherited/--declared --kind --static --instance --access --from
           --grep --with-doc --sort --include-synthetic
+          [-w …] [--jars …] [--no-jdk] [--json] [--no-color]
 body      --engine vineflower|javap --with-doc --with-signature --context N
           --line-numbers --max-lines
 source    --lines A:B --around <ref> --context N

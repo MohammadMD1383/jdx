@@ -57,3 +57,4 @@ log.
 | D-026 | Launcher environment resolution and its exit code (T-004) | proposed-by-implementer | `D-026-050.md` |
 | D-027 | `doctor` severity policy, M0 envelope shape, `--json` positions (T-005) | proposed-by-implementer | `D-026-050.md` |
 | D-028 | Renderer placement, signature layout, JSON contract (T-010) | proposed-by-implementer | `D-026-050.md` |
+| D-029 | Workspace file shape and resolution semantics (T-015) | proposed-by-implementer | `D-026-050.md` |

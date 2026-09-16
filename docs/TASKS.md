@@ -51,7 +51,7 @@ be fiction.
 | **M6** | Serving: daemon, MCP, HTTP, `batch` | TODO |
 | **M7** | Polish: token budgets, AppCDS, mutation gates, docs, install | TODO |
 
-**T-001 through T-013, T-053, T-054 and T-061 are `DONE`.** M0's remaining test-spine task is
+**T-001 through T-015, T-053, T-054 and T-061 are `DONE`.** M0's remaining test-spine task is
 **T-055** (property infrastructure), unblocked now that T-053 is done; T-056…T-060 unblock as their milestones land. M1 starts at T-007.
 
 ---
@@ -663,9 +663,29 @@ empty segments in the model, or keep rejecting with a dedicated warning code.*
       dedicated warning explaining why not
 - [ ] Differential vs `javap` still green; no regression on `$` nesting rules (D-025)
 
-### T-015 — Workspaces (`jdx ws …`) · `WIP`
+### T-015 — Workspaces (`jdx ws …`) · `DONE` (session 20)
 **Depends:** T-013 · TOML at `~/.config/jdx/workspaces/<name>.toml`, ordered roots,
 classpath-order shadowing, `DUPLICATE_FQN` warnings, `jdx ws use`, `JDX_WORKSPACE`.
+
+*Implementation notes (session 20): `index/.../workspace/` — `WorkspaceDefinition`
+(name validation: traversal-proof file stems) + `WorkspaceToml` (hand-rolled 3-key
+codec, unknown keys rejected, `includeJdk` alias, name-must-match-stem) +
+`WorkspaceStore` (`FileWorkspaceStore` over `~/.config/jdx`, `active-workspace`
+selection file, `WorkspaceCorruptException` → exit 4, `InMemoryWorkspaceStore` test
+fake) + `WorkspaceResolver` (pure §13 order: `-w` > `JDX_WORKSPACE` > `ws use`;
+explicit `--jars` merge in front; `--no-jdk` always wins; miss → did-you-mean +
+`jdx ws list` hint). `cli`: `jdx ws create|list|info|remove|use|add` group
+(create refuses existing names naming add/remove; `--src`/`--coord` rejected naming
+T-016/T-019), `-w/--workspace` on `show`/`members`/`outline` in both flag positions
+(D-027 pattern) plus root-level `-w`, `doctor` workspace row now reports the §13
+selection + project root + stored count (single-line, matrix-safe). Shadowing and
+`DUPLICATE_FQN` needed no new code — `JdxService` already resolves
+first-provider-wins; the workspace only supplies the order (exit-4 message updated
+accordingly). Decisions in D-029. Tests: 4 tier-1 suites (validation, codec,
+resolver order, 4 thousand-case properties incl. TOML fixed-point + merge law) +
+`WsCommandsTest` (16 in-process, text⊆JSON) + read-flag tests + 3 new doctor tests +
+4 tier-2 (`WorkspaceServiceTest`: stored workspace answers, order flip reverses the
+`DUPLICATE_FQN` winner, explicit-first merge) — `./gradlew check` + `soak` green.*
 
 ### T-016 — Project auto-discovery · `TODO`
 **Depends:** T-015 · Walk up for `settings.gradle(.kts)`/`build.gradle(.kts)`/`pom.xml`/

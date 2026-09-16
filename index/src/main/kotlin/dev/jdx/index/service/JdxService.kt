@@ -56,7 +56,14 @@ public object JdxService {
     public data class RootsSpec(
         public val jarSpecs: List<String> = emptyList(),
         public val includeJdk: Boolean = true,
-    )
+    ) {
+        public companion object {
+            /** Converts a resolved workspace selection into the roots a query opens. */
+            public fun fromResolved(
+                resolved: dev.jdx.index.workspace.WorkspaceResolver.ResolvedRoots,
+            ): RootsSpec = RootsSpec(jarSpecs = resolved.jarSpecs, includeJdk = resolved.includeJdk)
+        }
+    }
 
     /** `--kind` values for the members family (PROPOSAL.md §7.1). */
     public enum class KindFilter(public val flag: String) {
@@ -206,8 +213,9 @@ public object JdxService {
             return failure(
                 4,
                 rawRef,
-                "no workspace: no --jars given and --no-jdk set " +
-                    "(named workspaces arrive in T-015; pass --jars <path> or drop --no-jdk)",
+                "no workspace: no --jars given, no workspace selected (-w <name>, " +
+                    "JDX_WORKSPACE, jdx ws use) and --no-jdk set " +
+                    "(pass --jars <path>, select a workspace, or drop --no-jdk)",
             )
         }
         return try {

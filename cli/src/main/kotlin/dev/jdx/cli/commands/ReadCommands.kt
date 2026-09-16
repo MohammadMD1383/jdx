@@ -10,8 +10,11 @@ import com.github.ajalt.clikt.parameters.options.option
 import com.github.ajalt.clikt.parameters.types.choice
 import com.github.ajalt.clikt.parameters.types.int
 import dev.jdx.cli.effectiveJson
+import dev.jdx.cli.effectiveWorkspace
 import dev.jdx.core.render.ErrorResult
 import dev.jdx.index.service.JdxService
+import dev.jdx.index.workspace.FileWorkspaceStore
+import dev.jdx.index.workspace.WorkspaceStore
 import kotlin.system.exitProcess
 
 /**
@@ -26,6 +29,8 @@ import kotlin.system.exitProcess
 class MembersCommand(
     private val query: MemberQuery = ::defaultMemberQuery,
     private val terminate: (Int) -> Nothing = ::exitProcess,
+    private val store: WorkspaceStore = FileWorkspaceStore.system(),
+    private val getenv: (String) -> String? = { name -> System.getenv(name) },
 ) : CoreCliktCommand(name = "members") {
     override fun help(context: Context): String =
         "List the members of a type — the '.' completion equivalent. Inherited members " +
@@ -99,8 +104,15 @@ class MembersCommand(
 
     private val jars by option(
         "--jars",
-        help = "Binary roots: jar files, class directories or globs (repeatable).",
+        help = "Binary roots: jar files, class directories or globs (repeatable). " +
+            "Merge in front of the selected workspace's roots.",
     ).multiple()
+
+    private val workspace by option(
+        "-w",
+        "--workspace",
+        help = "Use a named workspace (see jdx ws). Explicit --jars merge in front of it.",
+    )
 
     private val noJdk by option(
         "--no-jdk",
@@ -118,6 +130,7 @@ class MembersCommand(
     ).flag()
 
     override fun run() {
+        val json = effectiveJson(json)
         val usageError = ReadCommandSupport.validateMemberFlags(
             static = staticOnly,
             instance = instanceOnly,
@@ -129,7 +142,7 @@ class MembersCommand(
             val failure = JdxService.ServiceOutcome.Failure(
                 ErrorResult.generic(ref, exitCode = 3, message = usageError),
             )
-            ReadCommandSupport.finish(failure, "members", effectiveJson(json), noColor, terminate)
+            ReadCommandSupport.finish(failure, "members", json, noColor, terminate)
             return
         }
         val filters = JdxService.MemberFilters(
@@ -143,15 +156,21 @@ class MembersCommand(
             fromRef = from,
             grep = grep?.let { Regex(it) },
         )
-        val outcome = query(
-            ref,
-            ReadCommandSupport.rootsOf(jars, noJdk),
-            filters,
-            declared,
-            includeSynthetic,
-            limit,
-        )
-        ReadCommandSupport.finish(outcome, "members", effectiveJson(json), noColor, terminate)
+        when (val resolved = ReadCommandSupport.resolveRoots(jars, noJdk, effectiveWorkspace(workspace), store, getenv)) {
+            is ReadCommandSupport.RootsOrFailure.Ready -> {
+                val outcome = query(
+                    ref,
+                    resolved.roots,
+                    filters,
+                    declared,
+                    includeSynthetic,
+                    limit,
+                )
+                ReadCommandSupport.finish(outcome, "members", json, noColor, terminate)
+            }
+            is ReadCommandSupport.RootsOrFailure.Failed ->
+                ReadCommandSupport.finish(resolved.outcome, "members", json, noColor, terminate)
+        }
     }
 }
 
@@ -162,6 +181,8 @@ class MembersCommand(
 class OutlineCommand(
     private val query: MemberQuery = ::defaultMemberQuery,
     private val terminate: (Int) -> Nothing = ::exitProcess,
+    private val store: WorkspaceStore = FileWorkspaceStore.system(),
+    private val getenv: (String) -> String? = { name -> System.getenv(name) },
 ) : CoreCliktCommand(name = "outline") {
     override fun help(context: Context): String =
         "Outline a type: one dense line per member declared on it (never inherited " +
@@ -223,8 +244,15 @@ class OutlineCommand(
 
     private val jars by option(
         "--jars",
-        help = "Binary roots: jar files, class directories or globs (repeatable).",
+        help = "Binary roots: jar files, class directories or globs (repeatable). " +
+            "Merge in front of the selected workspace's roots.",
     ).multiple()
+
+    private val workspace by option(
+        "-w",
+        "--workspace",
+        help = "Use a named workspace (see jdx ws). Explicit --jars merge in front of it.",
+    )
 
     private val noJdk by option(
         "--no-jdk",
@@ -242,6 +270,7 @@ class OutlineCommand(
     ).flag()
 
     override fun run() {
+        val json = effectiveJson(json)
         val usageError = ReadCommandSupport.validateMemberFlags(
             static = staticOnly,
             instance = instanceOnly,
@@ -253,7 +282,7 @@ class OutlineCommand(
             val failure = JdxService.ServiceOutcome.Failure(
                 ErrorResult.generic(ref, exitCode = 3, message = usageError),
             )
-            ReadCommandSupport.finish(failure, "outline", effectiveJson(json), noColor, terminate)
+            ReadCommandSupport.finish(failure, "outline", json, noColor, terminate)
             return
         }
         val filters = JdxService.MemberFilters(
@@ -267,14 +296,20 @@ class OutlineCommand(
             fromRef = from,
             grep = grep?.let { Regex(it) },
         )
-        val outcome = query(
-            ref,
-            ReadCommandSupport.rootsOf(jars, noJdk),
-            filters,
-            true,
-            includeSynthetic,
-            limit,
-        )
-        ReadCommandSupport.finish(outcome, "outline", effectiveJson(json), noColor, terminate)
+        when (val resolved = ReadCommandSupport.resolveRoots(jars, noJdk, effectiveWorkspace(workspace), store, getenv)) {
+            is ReadCommandSupport.RootsOrFailure.Ready -> {
+                val outcome = query(
+                    ref,
+                    resolved.roots,
+                    filters,
+                    true,
+                    includeSynthetic,
+                    limit,
+                )
+                ReadCommandSupport.finish(outcome, "outline", json, noColor, terminate)
+            }
+            is ReadCommandSupport.RootsOrFailure.Failed ->
+                ReadCommandSupport.finish(resolved.outcome, "outline", json, noColor, terminate)
+        }
     }
 }

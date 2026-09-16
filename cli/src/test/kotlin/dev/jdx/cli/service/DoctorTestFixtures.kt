@@ -41,6 +41,12 @@ internal fun fakeEnvironment(
     indexDbPresent: Boolean = false,
     socketCount: Int = 0,
     workingDir: Path? = null,
+    /** `$JDX_WORKSPACE` stand-in for the workspace row (T-015); null means unset. */
+    workspaceEnv: String? = null,
+    /** Workspace files to pre-store as `name to jars` (T-015); empty means none. */
+    workspaces: Map<String, List<String>> = emptyMap(),
+    /** `jdx ws use` selection to pre-store (T-015); null means none. */
+    activeWorkspace: String? = null,
 ): DoctorEnvironment {
     val home = root.resolve("home").also { Files.createDirectories(it) }
     val javaHome = root.resolve("jdk").also { Files.createDirectories(it) }
@@ -70,6 +76,20 @@ internal fun fakeEnvironment(
         repeat(socketCount) { Files.createFile(socketDir.resolve("daemon-$it.sock")) }
     }
     val cwd = (workingDir ?: root.resolve("cwd")).also { Files.createDirectories(it) }
+    val configDir = home.resolve(".config/jdx")
+    if (workspaces.isNotEmpty() || activeWorkspace != null) {
+        Files.createDirectories(configDir.resolve("workspaces"))
+        for ((name, jars) in workspaces) {
+            val quoted = jars.joinToString(", ") { "\"$it\"" }
+            Files.writeString(
+                configDir.resolve("workspaces/$name.toml"),
+                "name = \"$name\"\njars = [$quoted]\ninclude_jdk = true\n",
+            )
+        }
+        if (activeWorkspace != null) {
+            Files.writeString(configDir.resolve("active-workspace"), "$activeWorkspace\n")
+        }
+    }
     return DoctorEnvironment(
         userHome = home,
         javaHome = javaHome,
@@ -77,6 +97,7 @@ internal fun fakeEnvironment(
         pathDirs = listOf(pathBin),
         runtimeDir = runtimeDir,
         workingDir = cwd,
+        workspaceEnv = workspaceEnv,
         runtime = RuntimeInfo(
             version = "26.0.2.1-test",
             jrtReachable = jrtReachable,

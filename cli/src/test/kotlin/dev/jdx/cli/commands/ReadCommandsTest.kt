@@ -20,6 +20,8 @@ import dev.jdx.core.render.buildClassCard
 import dev.jdx.core.render.buildMemberListing
 import dev.jdx.core.resolve.MemberResolver
 import dev.jdx.index.service.JdxService
+import dev.jdx.index.workspace.InMemoryWorkspaceStore
+import dev.jdx.index.workspace.WorkspaceDefinition
 import io.kotest.matchers.shouldBe
 import io.kotest.matchers.string.shouldContain
 import java.io.ByteArrayOutputStream
@@ -352,8 +354,7 @@ class ReadCommandsTest {
     // -- outline ------------------------------------------------------------------
 
     @Test
-    fun `outline always queries in declared-only mode`() {
-        var declared = false
+    fun `outline always queries in declared-only mode`() {        var declared = false
         val output = captureStdout {
             OutlineCommand(
                 query = { _, _, _, d, _, _ -> declared = d; pointListing() },
@@ -372,6 +373,128 @@ class ReadCommandsTest {
         }
         Json.parseToJsonElement(output.trim()).jsonObject["command"]
             ?.jsonPrimitive?.content shouldBe "outline"
+    }
+
+    // -- workspaces ---------------------------------------------------------------
+
+    private fun workspaceStore(): InMemoryWorkspaceStore = InMemoryWorkspaceStore().also {
+        it.save(WorkspaceDefinition("mc", listOf("ws.jar"), includeJdk = true))
+        it.save(WorkspaceDefinition("nojdk", listOf("ws.jar"), includeJdk = false))
+    }
+
+    @Test
+    fun `show -w resolves the workspace jars`() {
+        var seenRoots: JdxService.RootsSpec? = null
+        captureStdout {
+            ShowCommand(
+                query = { _, roots -> seenRoots = roots; pointCard() },
+                terminate = noExit,
+                store = workspaceStore(),
+                getenv = { null },
+            ).parse(listOf("Point", "-w", "mc"))
+        }
+        seenRoots shouldBe JdxService.RootsSpec(listOf("ws.jar"), includeJdk = true)
+    }
+
+    @Test
+    fun `explicit jars merge in front of workspace jars`() {
+        var seenRoots: JdxService.RootsSpec? = null
+        captureStdout {
+            ShowCommand(
+                query = { _, roots -> seenRoots = roots; pointCard() },
+                terminate = noExit,
+                store = workspaceStore(),
+                getenv = { null },
+            ).parse(listOf("Point", "--jars", "cli.jar", "-w", "mc"))
+        }
+        seenRoots shouldBe JdxService.RootsSpec(listOf("cli.jar", "ws.jar"), includeJdk = true)
+    }
+
+    @Test
+    fun `no-jdk wins over a workspace that keeps the JDK`() {
+        var seenRoots: JdxService.RootsSpec? = null
+        captureStdout {
+            ShowCommand(
+                query = { _, roots -> seenRoots = roots; pointCard() },
+                terminate = noExit,
+                store = workspaceStore(),
+                getenv = { null },
+            ).parse(listOf("Point", "-w", "mc", "--no-jdk"))
+        }
+        seenRoots shouldBe JdxService.RootsSpec(listOf("ws.jar"), includeJdk = false)
+    }
+
+    @Test
+    fun `-w before the subcommand flows to show`() {
+        var seenRoots: JdxService.RootsSpec? = null
+        captureStdout {
+            JdxCli().subcommands(
+                ShowCommand(
+                    query = { _, roots -> seenRoots = roots; pointCard() },
+                    terminate = noExit,
+                    store = workspaceStore(),
+                    getenv = { null },
+                ),
+            ).parse(listOf("-w", "mc", "show", "Point"))
+        }
+        seenRoots shouldBe JdxService.RootsSpec(listOf("ws.jar"), includeJdk = true)
+    }
+
+    @Test
+    fun `JDX_WORKSPACE and the use default feed resolution, flag wins`() {
+        var seenRoots: JdxService.RootsSpec? = null
+        fun parse(argv: List<String>, env: String?, active: String?) {
+            val store = workspaceStore().also { if (active != null) it.setActive(active) }
+            captureStdout {
+                ShowCommand(
+                    query = { _, roots -> seenRoots = roots; pointCard() },
+                    terminate = noExit,
+                    store = store,
+                    getenv = { if (it == "JDX_WORKSPACE") env else null },
+                ).parse(argv)
+            }
+        }
+        parse(listOf("Point"), env = "nojdk", active = "mc")
+        seenRoots shouldBe JdxService.RootsSpec(listOf("ws.jar"), includeJdk = false)
+        parse(listOf("Point"), env = null, active = "nojdk")
+        seenRoots shouldBe JdxService.RootsSpec(listOf("ws.jar"), includeJdk = false)
+        parse(listOf("Point", "-w", "mc"), env = "nojdk", active = "nojdk")
+        seenRoots shouldBe JdxService.RootsSpec(listOf("ws.jar"), includeJdk = true)
+    }
+
+    @Test
+    fun `a missing workspace exits 4 without querying`() {
+        var queried = false
+        val output = captureStdout {
+            val thrown = try {
+                ShowCommand(
+                    query = { _, _ -> queried = true; pointCard() },
+                    terminate = noExit,
+                    store = workspaceStore(),
+                    getenv = { null },
+                ).parse(listOf("Point", "-w", "ghost"))
+                null
+            } catch (e: TestExit) {
+                e
+            }
+            (thrown?.code) shouldBe 4
+        }
+        queried shouldBe false
+        output shouldContain "no such workspace 'ghost'"
+    }
+
+    @Test
+    fun `members -w resolves the workspace too`() {
+        var seenRoots: JdxService.RootsSpec? = null
+        captureStdout {
+            MembersCommand(
+                query = { _, roots, _, _, _, _ -> seenRoots = roots; pointListing() },
+                terminate = noExit,
+                store = workspaceStore(),
+                getenv = { null },
+            ).parse(listOf("Point", "--workspace", "mc"))
+        }
+        seenRoots shouldBe JdxService.RootsSpec(listOf("ws.jar"), includeJdk = true)
     }
 
     // -- pure flag mapping ----------------------------------------------------------

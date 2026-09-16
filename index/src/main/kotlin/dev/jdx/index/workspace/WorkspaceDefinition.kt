@@ -1,0 +1,44 @@
+package dev.jdx.index.workspace
+
+/**
+ * A named, ordered list of roots plus its resolution settings (PROPOSAL.md §5.3).
+ *
+ * Ordering is semantic, not cosmetic: earlier roots shadow later ones exactly like a JVM
+ * classpath — [JdxService][dev.jdx.index.service.JdxService] reports the class the JVM
+ * would actually load and warns `DUPLICATE_FQN` on every further provider. Explicit
+ * `--jars` values always merge *in front of* these roots (PROPOSAL.md §13), so a flag
+ * beats the workspace for the same class.
+ *
+ * Persisted as TOML in `~/.config/jdx/workspaces/<name>.toml` (see [WorkspaceToml]);
+ * read and written only through [WorkspaceStore]. Produced by `jdx ws create`, consumed
+ * by `jdx -w <name>` / `JDX_WORKSPACE` / `jdx ws use` via [WorkspaceResolver].
+ *
+ * v1 holds binary roots and the JDK switch only. Source dirs (`--src`, T-016/T-031) and
+ * Maven coordinates (`--coord`, T-019) are accepted by no v1 field — `jdx ws create`
+ * rejects them naming the owning task rather than storing something the reader ignores.
+ */
+public data class WorkspaceDefinition(
+    /** Workspace name; always equals the file stem. Validated by [validateWorkspaceName]. */
+    public val name: String,
+    /** Ordered binary roots: jar files, class directories or globs, as passed to `--jars`. */
+    public val jars: List<String>,
+    /** Whether the running JDK's stdlib is appended after these roots (default true). */
+    public val includeJdk: Boolean = true,
+)
+
+/**
+ * Workspace names are file stems under `workspaces/`, so they must be portable file names
+ * that cannot traverse directories: leading alphanumerics, then alphanumerics plus
+ * `.`, `_`, `-`, at most 64 characters. Returns the error, or `null` when valid.
+ * Pure — unit-tested directly.
+ */
+public fun validateWorkspaceName(name: String): String? {
+    if (name.isEmpty()) return "workspace name is empty"
+    if (name.length > 64) return "workspace name '$name' is longer than 64 characters"
+    if (!name[0].isLetterOrDigit()) return "workspace name '$name' must start with a letter or digit"
+    if (name.any { !(it.isLetterOrDigit() || it == '.' || it == '_' || it == '-') }) {
+        return "workspace name '$name' may only contain letters, digits, '.', '_' and '-'"
+    }
+    if (name == "." || name == "..") return "workspace name '$name' is reserved"
+    return null
+}

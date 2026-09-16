@@ -252,6 +252,49 @@ class DoctorServiceTest {
     }
 
     @Test
+    fun `workspace row names the JDX_WORKSPACE selection`() {
+        val service = DoctorService(
+            fakeEnvironment(tempDir("jdx-doctor-test-"), workspaceEnv = "mc"),
+        )
+
+        val report = service.probe()
+
+        val workspace = report.checks.first { it.name == "workspace" }
+        workspace.status shouldBe DoctorStatus.OK
+        workspace.detail shouldContain "workspace 'mc' (JDX_WORKSPACE)"
+    }
+
+    @Test
+    fun `workspace row names the use default and counts stored workspaces`() {
+        val service = DoctorService(
+            fakeEnvironment(
+                tempDir("jdx-doctor-test-"),
+                workspaces = mapOf("mc" to listOf("a.jar"), "other" to emptyList()),
+                activeWorkspace = "other",
+            ),
+        )
+
+        val report = service.probe()
+
+        val workspace = report.checks.first { it.name == "workspace" }
+        workspace.status shouldBe DoctorStatus.OK
+        workspace.detail shouldContain "workspace 'other' (default, jdx ws use)"
+        workspace.detail shouldContain "2 workspace(s)"
+    }
+
+    @Test
+    fun `workspace row on a fresh machine reports none and zero`() {
+        val service = DoctorService(fakeEnvironment(tempDir("jdx-doctor-test-")))
+
+        val report = service.probe()
+
+        val workspace = report.checks.first { it.name == "workspace" }
+        workspace.status shouldBe DoctorStatus.OK
+        workspace.detail shouldContain "no named workspace"
+        workspace.detail shouldContain "0 workspace(s)"
+    }
+
+    @Test
     fun `daemon sockets are reported without claiming the daemon runs`() {
         val service = DoctorService(fakeEnvironment(tempDir("jdx-doctor-test-"), socketCount = 2))
 

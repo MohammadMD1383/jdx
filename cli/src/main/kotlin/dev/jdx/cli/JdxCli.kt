@@ -11,6 +11,7 @@ import dev.jdx.cli.commands.MembersCommand
 import dev.jdx.cli.commands.OutlineCommand
 import dev.jdx.cli.commands.ShowCommand
 import dev.jdx.cli.commands.VersionCommand
+import dev.jdx.cli.commands.wsGroup
 
 /**
  * Root of the `jdx` command tree. A thin adapter (D-004): it wires options and subcommands
@@ -30,8 +31,23 @@ class JdxCli : CoreCliktCommand(name = "jdx") {
             "D-007). Accepted before or after the subcommand name (D-027).",
     ).flag()
 
+    val workspace by option(
+        "-w",
+        "--workspace",
+        help = "Use a named workspace (jdx ws create) for this query. Accepted before or " +
+            "after the subcommand name, like --json (D-027).",
+    )
+
     override fun run() = Unit
 }
+
+/**
+ * Effective workspace: the command's own `-w` or the root's (`jdx -w mc members ...`
+ * and `jdx members -w mc ...` are equivalent). `JDX_WORKSPACE` and `jdx ws use` fill
+ * in when neither flag is given (PROPOSAL.md §13).
+ */
+internal fun CoreCliktCommand.effectiveWorkspace(ownWorkspace: String?): String? =
+    ownWorkspace ?: (currentContext.parent?.command as? JdxCli)?.workspace
 
 /**
  * Effective `--json`: the command's own flag or the root's. `--json` is accepted in both
@@ -49,4 +65,5 @@ fun main(args: Array<String>): Unit =
         ShowCommand(),
         MembersCommand(),
         OutlineCommand(),
+        wsGroup(),
     ).main(args)

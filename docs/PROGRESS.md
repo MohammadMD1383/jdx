@@ -14,16 +14,16 @@ or delete a past entry — if one turned out to be wrong, say so in a *new* entr
 
 | | |
 |---|---|
-| **Last updated** | 2026-09-16 (session 19) |
+| **Last updated** | 2026-09-16 (session 20) |
 | **Repository** | <https://github.com/MohammadMD1383/jdx> (public, Apache-2.0) |
 | **Phase** | Design complete; **M0 done, M1 in progress** |
-| **Active milestone** | M1 — Read path |
-| **Next task** | **T-015 (workspaces)** — lowest unblocked TODO; or T-055 (property infra), T-062 (`--sort` orders), T-063 (share fixture-jar helpers) |
+| **Active milestone** | M2 — Index |
+| **Next task** | **T-016 (project auto-discovery)** — lowest unblocked TODO; or T-055 (property infra), T-062 (`--sort` orders), T-063 (share fixture-jar helpers) |
 | **Task count** | 63 tasks defined (T-001…T-065; M0–M2 in full detail, M3–M7 as one-liners) |
-| **Build status** | **Green.** `./gradlew build` passes. Runnable `jdx`: `./gradlew :app:installDist` → `app/build/jdx` (fat jar + POSIX launcher, JDK-21 gate, ~180 ms cold start); `install.sh` symlinks it into `~/.local/bin`. Commands so far: `--version`, `version [--json]`, `doctor [--json]`, **`show`, `members`, `outline` (all flags, text+JSON, exits 0–4)**. JDK root: zero-config `show`/`members` on `java.*` via `jrt:/`, module-as-artifact (`java.base`), `src.zip` paired from `java.home`/`$JAVA_HOME` (T-012). |
-| **Test status** | **496 tests, all green** (`./gradlew check` tiers 1+2; soak tier 3 green). T-013 added 16 tier-2: 12 `IndexStoreTest` examples (every fixture class round-trips exactly via ASM) + 2 properties (500-case fixed point, 200-case store-twice determinism) + 2 `SqliteContractTest` (WAL, newer-schema refusal). T-014 added 10 tier-2 (short-circuit, empty jar, corrupt/future-version entries, 10 %-step truncation sweep, parallel determinism across two stores, missing-path isolation, listener coverage) + 1 soak (full JDK index: 33,100 classes in ~13.2 s = 2,502/s end to end, 4 warnings for JFR `$$` classes). Shared `GoldenFiles`/`UnifiedDiff` helper (`testfixtures` testFixtures) backs all 280 `index`/`cli` goldens; update mode prints every rewritten path. |
-| **Docs** | Append-only logs sharded (D-023): sessions → `docs/progress/`, decisions → `docs/decisions/` (shard 2 open at D-028), lessons → `docs/lessons/` (`L-026-050.md` open — L-026/L-027 (session 14), L-028 (session 15), L-029 (session 17), L-030 (session 18), L-031/L-032/L-033 (session 19). Every hard-won lesson goes to `docs/LESSONS.md` (D-024). |
-| **Blocked on** | Nothing. **Push needs owner go-ahead (D-012)** — session 19 commits unpushed. |
+| **Build status** | **Green.** `./gradlew build` passes. Runnable `jdx`: `./gradlew :app:installDist` → `app/build/jdx` (fat jar + POSIX launcher, JDK-21 gate, ~180 ms cold start); `install.sh` symlinks it into `~/.local/bin`. Commands so far: `--version`, `version [--json]`, `doctor [--json]`, **`show`, `members`, `outline` (all flags, text+JSON, exits 0–4, `-w` workspaces)**, **`ws create|list|info|remove|use|add` (text+JSON, exits 0/1/3/4/6)**. JDK root: zero-config `show`/`members` on `java.*` via `jrt:/`, module-as-artifact (`java.base`), `src.zip` paired from `java.home`/`$JAVA_HOME` (T-012). Workspaces (T-015): TOML in `~/.config/jdx/workspaces/`, §13 resolution (`-w` > `JDX_WORKSPACE` > `ws use`, explicit `--jars` merge first), first-provider-wins shadowing with `DUPLICATE_FQN`. |
+| **Test status** | **569 tests, all green** (`./gradlew check` tiers 1+2; soak tier 3 green). T-015 added 73: validation/codec/resolver-order examples + 4 thousand-case properties (TOML fixed-point, merge law) + `WsCommandsTest` (16 in-process, text⊆JSON) + read-flag + doctor tests + 4 tier-2 (`WorkspaceServiceTest`: order-flip reverses the `DUPLICATE_FQN` winner). Shared `GoldenFiles`/`UnifiedDiff` helper (`testfixtures` testFixtures) backs all 280 `index`/`cli` goldens; update mode prints every rewritten path. |
+| **Docs** | Append-only logs sharded (D-023): sessions → `docs/progress/`, decisions → `docs/decisions/` (shard 2 open — D-029 workspace shape/semantics), lessons → `docs/lessons/` (`L-026-050.md` open — L-034 (`:` illegal in backtick test names), L-035 (capture stdout around the exit-throw). Every hard-won lesson goes to `docs/LESSONS.md` (D-024). |
+| **Blocked on** | Nothing. **Push needs owner go-ahead (D-012)** — session 20 commits unpushed. |
 
 ### What exists right now
 
@@ -154,6 +154,20 @@ suite, and real-JVM end-to-end tests.
     warn as designed (T-065). Proven by 10 tier-2 tests (incl. a 10 %-step
     truncation sweep and a two-store determinism metamorphic) + 1 soak test
     (full JDK, excluded from `check`).
+
+11. **Named workspaces** (`index/.../workspace/`, `cli/.../commands/WsCommands.kt`,
+    T-015, session 20): `WorkspaceDefinition` + hand-rolled 3-key `WorkspaceToml`
+    codec + `WorkspaceStore` (file: `~/.config/jdx/workspaces/<name>.toml`,
+    `active-workspace` default; in-memory fake) + pure `WorkspaceResolver`
+    (§13: `-w` > `JDX_WORKSPACE` > `ws use`, explicit `--jars` merge first,
+    `--no-jdk` always wins). `jdx ws create|list|info|remove|use|add`
+    (text+JSON, exits 0/1/3/4/6); `-w/--workspace` on `show`/`members`/`outline`
+    in both flag positions; `doctor` workspace row reports the selection +
+    project root + stored count. Shadowing/`DUPLICATE_FQN` reuse the existing
+    first-provider-wins order (decision record: D-029). Proven by 4 tier-1
+    suites (incl. 4 thousand-case properties) + 16 in-process `ws` tests +
+    read-flag/doctor tests + 4 tier-2 service tests (order-flip reverses the
+    `DUPLICATE_FQN` winner).
 
 Docs of note: `docs/LESSONS.md` (+ `docs/lessons/` shards) — mistakes already paid for,
 now L-001…L-025 (`L-001-025.md` full — next lesson creates `L-026-050.md`). Skim its index before fighting a toolchain or spec.

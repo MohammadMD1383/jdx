@@ -90,6 +90,8 @@ data class DoctorEnvironment(
     val workingDir: Path,
     val runtime: RuntimeInfo,
     val processRunner: ProcessRunner,
+    /** `$JDX_WORKSPACE` when set — the named-workspace override (T-015). Null means unset. */
+    val workspaceEnv: String? = null,
 ) {
     companion object {
         /**
@@ -117,6 +119,7 @@ data class DoctorEnvironment(
                 workingDir = workingDir,
                 runtime = RuntimeInfo.current(),
                 processRunner = RealProcessRunner,
+                workspaceEnv = System.getenv("JDX_WORKSPACE"),
             )
         }
     }
@@ -275,7 +278,26 @@ class DoctorService(private val environment: DoctorEnvironment) {
     }
 
     private fun workspaceCheck(): DoctorCheck {
-        // Nearest-build-file detection only; workspace derivation is T-016 (M2).
+        // Named workspaces (T-015) plus nearest-build-file detection (T-016 owns derivation).
+        // One line, three facts: the §13 selection, the project root, the stored count.
+        // Read-only: a garbage active file reads as none, a missing dir as zero.
+        val store = dev.jdx.index.workspace.FileWorkspaceStore(environment.userHome.resolve(".config/jdx"))
+        val envName = environment.workspaceEnv?.trim().orEmpty().ifEmpty { null }
+        val activeName = try {
+            store.activeName()
+        } catch (e: Exception) {
+            null
+        }
+        val count = try {
+            store.listNames().size
+        } catch (e: Exception) {
+            null
+        }
+        val selection = when {
+            envName != null -> "workspace '$envName' (JDX_WORKSPACE)"
+            activeName != null -> "workspace '$activeName' (default, jdx ws use)"
+            else -> "no named workspace"
+        }
         val markers = listOf(
             "settings.gradle.kts", "settings.gradle",
             "build.gradle.kts", "build.gradle",
@@ -285,11 +307,13 @@ class DoctorService(private val environment: DoctorEnvironment) {
         val hit = generateSequence(start) { it.parent }.firstNotNullOfOrNull { dir ->
             markers.firstOrNull { Files.exists(dir.resolve(it)) }?.let { dir to it }
         }
-        return if (hit != null) {
-            check("workspace", DoctorStatus.OK, "project root: ${hit.first} (nearest build file: ${hit.second})")
+        val project = if (hit != null) {
+            "project root: ${hit.first} (nearest build file: ${hit.second})"
         } else {
-            check("workspace", DoctorStatus.OK, "none detected (auto-discovery lands in M2)")
+            "no project files (auto-discovery lands in T-016)"
         }
+        val stored = if (count == null) "workspaces: unreadable" else "$count workspace(s)"
+        return check("workspace", DoctorStatus.OK, "$selection; $project; $stored")
     }
 
     private fun check(name: String, status: DoctorStatus, detail: String): DoctorCheck =

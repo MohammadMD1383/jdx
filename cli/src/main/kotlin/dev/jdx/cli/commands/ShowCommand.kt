@@ -7,6 +7,10 @@ import com.github.ajalt.clikt.parameters.options.flag
 import com.github.ajalt.clikt.parameters.options.multiple
 import com.github.ajalt.clikt.parameters.options.option
 import dev.jdx.cli.effectiveJson
+import dev.jdx.cli.effectiveWorkspace
+import dev.jdx.index.service.JdxService
+import dev.jdx.index.workspace.FileWorkspaceStore
+import dev.jdx.index.workspace.WorkspaceStore
 import kotlin.system.exitProcess
 
 /**
@@ -19,21 +23,32 @@ import kotlin.system.exitProcess
 class ShowCommand(
     private val query: ShowQuery = ::defaultShowQuery,
     private val terminate: (Int) -> Nothing = ::exitProcess,
+    private val store: WorkspaceStore = FileWorkspaceStore.system(),
+    private val getenv: (String) -> String? = { name -> System.getenv(name) },
 ) : CoreCliktCommand(name = "show") {
     override fun help(context: Context): String =
         "Show the class card for a type: kind, modifiers, supertypes, member counts, " +
             "provenance and the next command to run. Takes a type reference " +
             "(e.g. 'com.example.Point', 'Gson', 'java.util.Map\$Entry'); " +
             "member references are a usage error. " +
-            "Reads --jars roots plus the JDK stdlib unless --no-jdk. " +
-            "Exits 1 when the type is unknown, 2 when a short name is ambiguous."
+            "Reads --jars roots plus the selected workspace (-w, JDX_WORKSPACE, jdx ws use) " +
+            "plus the JDK stdlib unless --no-jdk. " +
+            "Exits 1 when the type is unknown, 2 when a short name is ambiguous, " +
+            "4 when the workspace cannot be resolved."
 
     private val ref by argument(help = "Type reference to show (full, short or nested form).")
 
     private val jars by option(
         "--jars",
-        help = "Binary roots: jar files, class directories or globs (repeatable).",
+        help = "Binary roots: jar files, class directories or globs (repeatable). " +
+            "Merge in front of the selected workspace's roots.",
     ).multiple()
+
+    private val workspace by option(
+        "-w",
+        "--workspace",
+        help = "Use a named workspace (see jdx ws). Explicit --jars merge in front of it.",
+    )
 
     private val noJdk by option(
         "--no-jdk",
@@ -51,7 +66,14 @@ class ShowCommand(
     ).flag()
 
     override fun run() {
-        val outcome = query(ref, ReadCommandSupport.rootsOf(jars, noJdk))
-        ReadCommandSupport.finish(outcome, "show", effectiveJson(json), noColor, terminate)
+        val json = effectiveJson(json)
+        when (val resolved = ReadCommandSupport.resolveRoots(jars, noJdk, effectiveWorkspace(workspace), store, getenv)) {
+            is ReadCommandSupport.RootsOrFailure.Ready -> {
+                val outcome = query(ref, resolved.roots)
+                ReadCommandSupport.finish(outcome, "show", json, noColor, terminate)
+            }
+            is ReadCommandSupport.RootsOrFailure.Failed ->
+                ReadCommandSupport.finish(resolved.outcome, "show", json, noColor, terminate)
+        }
     }
 }

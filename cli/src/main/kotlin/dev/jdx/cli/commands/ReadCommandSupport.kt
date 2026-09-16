@@ -1,6 +1,10 @@
 package dev.jdx.cli.commands
 
+import dev.jdx.core.render.ErrorResult
 import dev.jdx.index.service.JdxService
+import dev.jdx.index.workspace.FileWorkspaceStore
+import dev.jdx.index.workspace.WorkspaceResolver
+import dev.jdx.index.workspace.WorkspaceStore
 import kotlin.system.exitProcess
 
 /**
@@ -24,6 +28,65 @@ internal object ReadCommandSupport {
     /** Builds the workspace roots both commands read: repeatable `--jars`, JDK unless dropped. */
     internal fun rootsOf(jars: List<String>, noJdk: Boolean): JdxService.RootsSpec =
         JdxService.RootsSpec(jarSpecs = jars, includeJdk = !noJdk)
+
+    /**
+     * Resolves the roots one read query opens (PROPOSAL.md §13, T-015): explicit `--jars`
+     * merge in front of the selected workspace (`-w` beats `JDX_WORKSPACE` beats
+     * `jdx ws use`), the JDK stays unless `--no-jdk` or the workspace switches it off.
+     *
+     * [store] and [getenv] are injectable so command tests resolve without touching the
+     * real home directory or the process environment.
+     */
+    internal fun resolveRoots(
+        jars: List<String>,
+        noJdk: Boolean,
+        workspace: String?,
+        store: WorkspaceStore = FileWorkspaceStore.system(),
+        getenv: (String) -> String? = System::getenv,
+    ): RootsOrFailure {
+        val outcome = WorkspaceResolver.resolve(
+            explicitJars = jars,
+            explicitNoJdk = noJdk,
+            flagWorkspace = workspace,
+            envWorkspace = try {
+                getenv("JDX_WORKSPACE")
+            } catch (e: SecurityException) {
+                null
+            },
+            activeWorkspace = try {
+                store.activeName()
+            } catch (e: Exception) {
+                null
+            },
+            loadWorkspace = store::load,
+            listNames = {
+                try {
+                    store.listNames()
+                } catch (e: Exception) {
+                    emptyList()
+                }
+            },
+        )
+        return when (outcome) {
+            is WorkspaceResolver.Result.success ->
+                RootsOrFailure.Ready(JdxService.RootsSpec.fromResolved(outcome.value))
+            is WorkspaceResolver.Result.failure ->
+                RootsOrFailure.Failed(
+                    JdxService.ServiceOutcome.Failure(
+                        ErrorResult.generic("", exitCode = 4, message = outcome.error.message),
+                    ),
+                )
+        }
+    }
+
+    /** The two ways root resolution ends: roots to query with, or an exit-4 outcome to render. */
+    internal sealed interface RootsOrFailure {
+        /** Resolution succeeded — query with these roots. */
+        data class Ready(val roots: JdxService.RootsSpec) : RootsOrFailure
+
+        /** Resolution failed (unknown/corrupt workspace) — render this instead of querying. */
+        data class Failed(val outcome: JdxService.ServiceOutcome.Failure) : RootsOrFailure
+    }
 
     /** TTY-ness for the renderers (D-028): color only on a real console, never when piped. */
     internal fun useColor(noColor: Boolean): Boolean =

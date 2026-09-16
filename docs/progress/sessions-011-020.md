@@ -7,6 +7,96 @@ wrong, say so in a *new* entry.
 
 ---
 
+## Session 20 — 2026-09-16 — Named workspaces (T-015)
+**Agent:** Muse Spark (via opencode) · **Branch:** none (on `main` at `1f1c840`) ·
+**Commits:** `1f1c840` (claim), this session's work (to commit with this entry)
+
+### Goal
+Implement T-015 — the lowest-numbered unblocked TODO (15 < 55): TOML workspaces,
+ordered roots, `jdx ws …`, `-w`/`JDX_WORKSPACE`/`ws use` resolution, with the
+shadowing/`DUPLICATE_FQN` acceptance riding on the existing `JdxService` order.
+
+### What I did
+1. Claimed T-015 (`TODO`→`WIP`, commit `1f1c840`) before coding.
+2. **New `index/.../workspace/` package** (4 main files, KDoc'd):
+   - `WorkspaceDefinition` — model (`name`, ordered `jars`, `includeJdk`) + name
+     validation (traversal-proof file stems, pure).
+   - `WorkspaceToml` — hand-rolled 3-key codec (deterministic writer; unknown keys
+     rejected; `includeJdk` alias; name-must-match-stem); documented revisit trigger
+     (real TOML lib once the schema outgrows scalars).
+   - `WorkspaceStore` — `FileWorkspaceStore` (`~/.config/jdx/workspaces/`, read-only
+     reads, `active-workspace` selection, garbage-reads-as-none) throwing
+     `WorkspaceCorruptException` on unparseable files, plus `InMemoryWorkspaceStore`.
+   - `WorkspaceResolver` — pure §13 order (`-w` > `JDX_WORKSPACE` > `ws use`;
+     explicit `--jars` merge in front; `--no-jdk` always wins; miss →
+     did-you-mean + `jdx ws list` hint) with its own typed `Result` (failures are
+     exit-4 values, not exceptions) and a shared `suggestSimilar`.
+3. **CLI:** `jdx ws create|list|info|remove|use|add` group (`WsCommands.kt`, thin,
+   text+JSON via the shared envelope, exits 0/1/3/4/6); `-w/--workspace` on
+   `show`/`members`/`outline` in both flag positions (root-level too, D-027
+   pattern) with injectable store/getenv; `JdxService.RootsSpec.fromResolved`
+   converter and an updated exit-4 message (no more "arrives in T-015").
+4. **`doctor` workspace row** now reports the §13 selection + project root + stored
+   count on one line (matrix-safe: single-line, deterministic, OK always).
+5. **Tests, 73 new, all green:** 4 tier-1 suites (validation, codec, resolver order,
+   4 thousand-case kotest properties — TOML fixed-point, decode-never-throws, merge
+   law) + `WorkspaceStoreTest` (fabricated homes) + `WsCommandsTest` (16
+   in-process, text⊆JSON) + 7 read-flag tests + 3 doctor tests + 4 tier-2
+   (`WorkspaceServiceTest`: stored workspace answers, order-flip reverses the
+   `DUPLICATE_FQN` winner, explicit-first merge). Two reds along the way, both
+   test bugs: `../evil` hits the must-start rule before the charset rule, and a
+   `run` helper that caught the exit-throw outside its stdout capture read every
+   failure as empty (now L-035).
+6. `./gradlew check --offline` green (**569 tests**, 0 failures), `./gradlew soak
+   --offline` green. E2E against `app/build/jdx` with an isolated HOME: create →
+   list → info → use → `members` via the default (no flags) → `JDX_WORKSPACE=ghost`
+   exits 4 with a suggestion → root-position `-w` → `doctor` names the selection.
+7. Docs: Appendix B `-w` on the three read rows; **D-029** (file shape, merge order,
+   create-refuses, exit mapping, no-new-shadowing-code); **L-034** (`:` illegal in
+   backtick test names — verified with a throwaway probe, deleted after), **L-035**.
+
+### Decisions made
+**D-029** (workspace file shape and resolution semantics) — see
+`docs/decisions/D-026-050.md`. Judgement calls in code KDoc: no `--jdk` flag on
+read commands (the workspace owns the default); bare `jdx ws` prints the group
+help via Clikt default; `ws remove` clears a pointing default.
+
+### Tasks moved
+- T-015: TODO → WIP → DONE.
+- TASKS.md status summary widened to "T-001 through T-015" (T-014's session never
+  updated it from T-013).
+
+### Lessons distilled
+**L-034** (no `:` in backtick test names — kotlinc `Name contains illegal
+characters`) and **L-035** (capture stdout around the exit-throw) in
+`docs/lessons/L-026-050.md`; tag index + shard capacity updated.
+
+### What works now (and how to verify it yourself)
+```bash
+./gradlew check --offline                          # tiers 1+2 green (569 tests)
+./gradlew soak --offline                           # tier 3 green
+./gradlew :index:test --offline --tests "dev.jdx.index.workspace.*"
+./gradlew :index:tier2Test --offline --tests "dev.jdx.index.workspace.*"
+./gradlew :cli:test --offline --tests "dev.jdx.cli.commands.WsCommandsTest"
+export HOME=$(mktemp -d) && app/build/jdx ws create fx --jars testfixtures/build/libs/testfixtures-*.jar --no-jdk
+app/build/jdx ws use fx && app/build/jdx members dev.jdx.fixtures.VarargsAndModifiers --limit 3
+JDX_WORKSPACE=ghost app/build/jdx show dev.jdx.fixtures.VarargsAndModifiers; echo $?  # 4
+```
+
+### What is broken / half-done
+Nothing in T-015 scope. Known deferred paths, each labelled at runtime:
+`ws create --src` → T-016, `--coord` → T-019; source-dir and Maven roots are not
+stored fields yet. `jdx index`/`cache` commands from §7.4 are separate tasks.
+
+### Open questions / blockers
+None. **Push needs owner go-ahead (D-012)** — session 20 commits unpushed.
+
+### Next action
+**T-016** (project auto-discovery) — lowest unblocked TODO; builds directly on
+`WorkspaceResolver` (step 5 of §13). T-055/T-062/T-063 remain alternatives.
+
+---
+
 ## Session 19 — 2026-09-16 — Parallel indexer (T-014)
 **Agent:** Muse Spark (via opencode) · **Branch:** none (on `main` at `86c54a5`) ·
 **Commits:** `86c54a5` (claim), this session's work (to commit with this entry)
