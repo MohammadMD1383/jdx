@@ -663,7 +663,7 @@ empty segments in the model, or keep rejecting with a dedicated warning code.*
       dedicated warning explaining why not
 - [ ] Differential vs `javap` still green; no regression on `$` nesting rules (D-025)
 
-### T-015 — Workspaces (`jdx ws …`) · `TODO`
+### T-015 — Workspaces (`jdx ws …`) · `WIP`
 **Depends:** T-013 · TOML at `~/.config/jdx/workspaces/<name>.toml`, ordered roots,
 classpath-order shadowing, `DUPLICATE_FQN` warnings, `jdx ws use`, `JDX_WORKSPACE`.
 
