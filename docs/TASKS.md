@@ -414,7 +414,7 @@ JRT `Object`/`HashMap` smoke on major-70 JDK-26 bytes, flag spot-checks).*
 
 ---
 
-### T-009 — Member resolution with inheritance and generic substitution · `TODO`
+### T-009 — Member resolution with inheritance and generic substitution · `WIP`
 **Depends:** T-008 · **Files:** `core/.../resolve/MemberResolver.kt`
 
 Implement PROPOSAL.md §9.3 step by step. This is **the highest-value algorithm in the
