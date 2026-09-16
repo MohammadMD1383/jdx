@@ -532,7 +532,7 @@ extend `MemberListingOptions`, and pin both with goldens.
 
 ---
 
-### T-012 — JDK stdlib root via `jrt-fs` + `src.zip` · `TODO`
+### T-012 — JDK stdlib root via `jrt-fs` + `src.zip` · `WIP`
 **Depends:** T-007 · **Files:** `index/.../artifact/JrtRoot.kt`
 
 Expose the running JDK's modules as a root, paired with `$JAVA_HOME/lib/src.zip` as its
