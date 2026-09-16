@@ -7,6 +7,79 @@ wrong, say so in a *new* entry.
 
 ---
 
+## Session 18 — 2026-09-16 — `IndexStore` interface + SQLite implementation (T-013)
+**Agent:** Muse Spark (via opencode) · **Branch:** none (on `main` at `a739722`) ·
+**Commits:** `a739722` (claim), this session's work (to commit with this entry)
+
+### Goal
+Implement T-013 — the lowest-numbered unblocked TODO (13 < 55): the persistent-index
+seam (D-013) every M2 task builds on, with SQLite behind it and no SQL leaking out.
+
+### What I did
+1. Claimed T-013 (`TODO`→`WIP`, commit `a739722`) before coding.
+2. **Interface** (`index/.../store/IndexStore.kt`): speaks `ClassInfo` + content
+   hashes only — `upsertArtifact`/`findArtifactByHash`/`listArtifacts`/
+   `deleteArtifactByHash`/`replaceClasses`/`findClassesByFqn`→`ClassHit` (artifact
+   + class, so `DUPLICATE_FQN` can name every provider)/`loadClass`/`listClassFqns`/
+   `classCount`, plus `StoredArtifact.needsReindex` and `SqliteSchemaVersion`.
+3. **SQLite impl** (`index/.../store/sqlite/SqliteIndexStore.kt`, the only file
+   containing SQL): WAL + `busy_timeout`, `PRAGMA user_version` migration chain
+   (fresh → create v1; current-but-empty → create; newer → refuse naming both
+   versions), full PROPOSAL.md §10.3 tables + indices, one-transaction per-artifact
+   `replaceClasses` with prepared statements, manual cascade deletes shared by
+   replacement and gc. Documented v1 extensions on the class: binary-name keys,
+   `super_fqn`/`outer_fqn` text (`super_id`/`outer_id` NULL until T-014 links),
+   `member.constant_value`, `ORDER BY id` declaration order, `is_kotlin = 0`
+   until T-035. Value codecs: descriptors/signatures as re-parsed text
+   (`parseClass` for classes, L-024), param names as hand-rolled JSON array
+   (nulls significant), annotation maps as sorted-key JSON.
+4. **Tests, 16, all `@Tag("tier2")`:** `IndexStoreTest` (12 — every fixture class
+   round-trips *exactly* through ASM on first run, hostile unicode/quote/newline
+   values, scoping, hash-ordered duplicates, delete cascade, reopen persistence),
+   `IndexStorePropertyTest` (500-case store→load fixed point + 200-case
+   store-twice determinism over generated nasty classes, D-007 at store level),
+   `sqlite/SqliteContractTest` (WAL PRAGMA, newer-schema refusal — the only
+   tests allowed raw SQL, said in their KDoc).
+5. Caught while writing: hand-typed `\f` / separator escapes came out as raw
+   control bytes in literals — invisible in reads. Fixed to explicit `\uXXXX`
+   and logged as **L-030**.
+6. `./gradlew check --offline` green (486 tests, 0 failures), `./gradlew soak --offline` green.
+
+### Decisions made
+None at D-level. Judgement calls recorded in code KDoc: `upsert` records *fresh*
+metadata (stale rows surface via find/list `needsReindex`; indexer flow is
+upsert → replaceClasses); `findClassesByFqn` keys on the binary name; member
+order rides on monotonic `rowid` within one replacement (no position column).
+
+### Tasks moved
+- T-013: TODO → WIP → DONE.
+
+### Lessons distilled
+**L-030** (no raw control characters in string literals; grep for them after
+writing escape-heavy codecs).
+
+### What works now (and how to verify it yourself)
+```bash
+./gradlew check --offline                          # tiers 1+2 green (486 tests)
+./gradlew soak --offline                           # tier 3 green
+./gradlew :index:tier2Test --offline --tests "dev.jdx.index.store.*"  # just this task
+```
+
+### What is broken / half-done
+Nothing in T-013 scope. Known next: no indexer yet (`replaceClasses` is called
+only by tests until T-014); `DoctorService.indexCheck` still reports
+presence-only; `ktmeta`/`doc`/`srcmap`/`ref`/`name_idx` tables exist but have no
+writers (T-029/M3 fill them).
+
+### Open questions / blockers
+None. **Push needs owner go-ahead (D-012)** — session 18 commits unpushed.
+
+### Next action
+**T-014** (parallel indexer) — consumes `upsert → replaceClasses` directly;
+lowest unblocked TODO. T-055/T-062/T-063 remain available as alternatives.
+
+---
+
 ## Session 17 — 2026-09-16 — Shared golden-file test infrastructure (T-054)
 **Agent:** Muse Spark (via opencode) · **Branch:** none (on `main` at `009588c`) ·
 **Commits:** `448856b` (claim), this session's work (to commit with this entry)

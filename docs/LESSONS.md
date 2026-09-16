@@ -28,7 +28,7 @@ and never reused. Tags in use: `build` · `tooling` · `jvm-spec` · `kotlin` ·
 | Tag | Entries |
 |---|---|
 | `build` | L-001, L-004, L-012, L-017, L-019, L-020, L-029 |
-| `tooling` | L-002, L-003, L-015, L-018, L-026, L-028 |
+| `tooling` | L-002, L-003, L-015, L-018, L-026, L-028, L-030 |
 | `jvm-spec` | L-005, L-006, L-024 |
 | `kotlin` | L-009, L-010, L-011, L-014, L-016, L-021, L-022, L-023 |
 | `process` | L-007, L-008, L-013, L-025, L-027 |
@@ -36,7 +36,7 @@ and never reused. Tags in use: `build` · `tooling` · `jvm-spec` · `kotlin` ·
 | Shard | Entries | Status |
 |---|---|---|
 | `docs/lessons/L-001-025.md` | L-001…L-025 | full |
-| `docs/lessons/L-026-050.md` | L-026… | open (21 free) |
+| `docs/lessons/L-026-050.md` | L-026… | open (20 free) |
 
 ## Adding an entry
 

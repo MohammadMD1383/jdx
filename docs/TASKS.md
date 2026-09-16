@@ -51,7 +51,7 @@ be fiction.
 | **M6** | Serving: daemon, MCP, HTTP, `batch` | TODO |
 | **M7** | Polish: token budgets, AppCDS, mutation gates, docs, install | TODO |
 
-**T-001 through T-009, T-053, T-054 and T-061 are `DONE`.** M0's remaining test-spine task is
+**T-001 through T-013, T-053, T-054 and T-061 are `DONE`.** M0's remaining test-spine task is
 **T-055** (property infrastructure), unblocked now that T-053 is done; T-056…T-060 unblock as their milestones land. M1 starts at T-007.
 
 ---
@@ -583,10 +583,34 @@ precedence, absent WARN naming locations) + 1 tier-2 JSON test pinning
 
 # M2 — Index
 
-### T-013 — `IndexStore` interface + SQLite implementation · `WIP`
+### T-013 — `IndexStore` interface + SQLite implementation · `DONE` (session 18)
 **Depends:** T-008 · Schema in PROPOSAL.md §10.3. WAL mode, schema versioning with a
 migration path, artifact-scoped rows (D-013). **Keep SQLite behind the interface** — no SQL
 outside the implementation package.
+
+*Implementation notes (session 18): `index/.../store/IndexStore.kt` (interface over
+`ClassInfo` + content hashes — `upsertArtifact`/`findArtifactByHash`/`listArtifacts`/
+`deleteArtifactByHash`/`replaceClasses`/`findClassesByFqn`→`ClassHit`/`loadClass`/
+`listClassFqns`/`classCount`, plus `StoredArtifact.needsReindex` and
+`SqliteSchemaVersion.CURRENT = 1`) + `index/.../store/sqlite/SqliteIndexStore.kt`
+(the only file containing SQL: WAL + `busy_timeout`, `PRAGMA user_version` migration
+chain that refuses newer files by name, full §10.3 tables + indices, one-transaction
+per-artifact replacement with batched prepared statements). Deliberate v1 schema
+extensions, documented on the class: `class.fqn` holds the binary name (`$`-joined,
+the key the live reader matches on), `super_fqn`/`outer_fqn` denormalised text
+(`super_id`/`outer_id` stay NULL until T-014 can link cross-artifact edges),
+`member.constant_value` beside `default_value`, declaration order via `ORDER BY id`;
+signatures/descriptors stored as text and re-parsed (`parseClass` for classes, L-024),
+param names as a hand-rolled JSON array (nulls significant), annotation maps as
+sorted-key JSON objects. Tests (all `@Tag("tier2")`, 16): `IndexStoreTest` (12 —
+every fixture class round-trips exactly via ASM, hostile unicode/quote/newline
+values, per-artifact scoping, hash-ordered duplicates, delete cascade, reopen
+persistence), `IndexStorePropertyTest` (500-case store→load fixed point +
+200-case store-twice determinism over generated nasty classes), `sqlite/
+SqliteContractTest` (WAL PRAGMA, newer-schema refusal naming both versions —
+the only tests allowed raw SQL, said in their KDoc). Next: T-014 builds the
+parallel indexer on `upsert → replaceClasses`; `DoctorService.indexCheck` still
+reports presence-only until then.*
 
 ### T-014 — Parallel indexer · `TODO`
 **Depends:** T-013 · Virtual-thread fan-out across artifacts, batched transactions,
