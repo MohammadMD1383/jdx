@@ -194,6 +194,10 @@ Gson#toJson                                       short form → resolved, or ex
   work is useful; half-finished work reported as done is a trap.
 - **Write for a stranger.** Explicit over clever, named over inlined, invariants stated in
   comments where types don't enforce them.
+- **Batch independent tool calls in a single turn.** Plan the reads (or writes) you need,
+  then issue them together in one block instead of one per turn. Every turn costs an API
+  round-trip and re-sends context — batching saves both time and cost. Sequence calls only
+  when one genuinely depends on another's output.
 
 ## 8. Environment notes (this machine)
 
