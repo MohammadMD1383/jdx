@@ -23,7 +23,7 @@ or delete a past entry — if one turned out to be wrong, say so in a *new* entr
 | **Build status** | **Green.** `./gradlew build` passes. Runnable `jdx`: `./gradlew :app:installDist` → `app/build/jdx` (fat jar + POSIX launcher, JDK-21 gate, ~180 ms cold start); `install.sh` symlinks it into `~/.local/bin`. Commands so far: `--version`, `version [--json]`, `doctor [--json]`. |
 | **Test status** | **375 tests, all green** (314 tier 1 in **~4 s** via `./gradlew test`, 60 tier 2 via `check`, 1 soak proof via `soak`). T-010 added 52 tier-1 core + 3 tier-1 cli + 1 tier-2 golden test (70 golden files over 35 fixture classes). |
 | **Docs** | Append-only logs sharded (D-023): sessions → `docs/progress/`, decisions → `docs/decisions/` (shard 2 open at D-028), lessons → `docs/lessons/` (shard `L-001-025.md` **full** — next lesson creates `L-026-050.md`). Every hard-won lesson goes to `docs/LESSONS.md` (D-024). |
-| **Blocked on** | Nothing. Push needs owner go-ahead (D-012): local `main` is 5 commits ahead of `origin/main`. |
+| **Blocked on** | Nothing. `main` pushed to `origin/main` (`ebcdf5b`) with owner go-ahead — local and remote in sync. |
 
 ### What exists right now
 
