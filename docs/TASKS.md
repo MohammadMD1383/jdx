@@ -710,7 +710,7 @@ resolver order, 4 thousand-case properties incl. TOML fixed-point + merge law) +
 4 tier-2 (`WorkspaceServiceTest`: stored workspace answers, order flip reverses the
 `DUPLICATE_FQN` winner, explicit-first merge) — `./gradlew check` + `soak` green.*
 
-### T-016 — Project auto-discovery · `TODO`
+### T-016 — Project auto-discovery · `WIP`
 **Depends:** T-015 · Walk up for `settings.gradle(.kts)`/`build.gradle(.kts)`/`pom.xml`/
 `.idea`; derive roots per PROPOSAL.md §13 step 4. **Must not run Gradle or Maven** (N3).
 Cache derived workspace, invalidate on build-file change.
