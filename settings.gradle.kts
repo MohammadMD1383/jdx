@@ -1,3 +1,13 @@
+plugins {
+    // Toolchain download source (Gradle 10 forbids undeclared auto-provisioning).
+    // Version literal lives here, not in the catalog: catalog accessors are not
+    // generated for settings scripts in this build (probed 2026-09-17), so this
+    // file is the single source for this settings-only plugin. Fresh machines
+    // without a local JDK 21 download it from Foojay; machines with one (e.g.
+    // /usr/lib/jvm/java-21-openjdk) never hit the network for it.
+    id("org.gradle.toolchains.foojay-resolver-convention") version "1.0.0"
+}
+
 rootProject.name = "jdx"
 
 // Module layout — see CLAUDE.md §4.

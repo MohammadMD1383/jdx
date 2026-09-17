@@ -42,13 +42,19 @@ val corpusDir = (findProperty("corpus") as String?) ?: "${System.getProperty("us
 tasks.register("verifyTier1Budget") {
     group = "verification"
     description = "Enforces the tier-1 <30 s budget: prints total test time and the 10 slowest tests (docs/TESTING.md §2)."
+    // Resolved here, at configuration time: touching `subprojects`, the project
+    // version, or any script-level value from `doLast` captures the script object
+    // in the action and breaks the configuration cache (T-067). Plain values
+    // captured as locals serialize fine.
+    val tier1ResultsDirs: List<java.io.File> =
+        subprojects.map { it.layout.buildDirectory.dir("test-results/test").get().asFile }
+    val tier1Budget: Double = tier1BudgetSeconds
     doLast {
         var totalTime = 0.0
         var testCount = 0
         var failureCount = 0
         val slowest = mutableListOf<Triple<Double, String, String>>()
-        subprojects.forEach { subproject ->
-            val resultsDir = subproject.layout.buildDirectory.dir("test-results/test").get().asFile
+        tier1ResultsDirs.forEach { resultsDir ->
             if (!resultsDir.isDirectory) return@forEach
             resultsDir.walkTopDown().filter { it.isFile && it.extension == "xml" }.forEach { xml ->
                 try {
@@ -80,17 +86,17 @@ tasks.register("verifyTier1Budget") {
         logger.lifecycle(
             "[tier1] total test time: %.1fs (budget %.1fs) across %d tests".format(
                 totalTime,
-                tier1BudgetSeconds,
+                tier1Budget,
                 testCount,
             ),
         )
         slowest.sortedByDescending { it.first }.take(10).forEach { (time, className, name) ->
             logger.lifecycle("[tier1] slowest: %6.2fs %s — %s".format(time, className, name))
         }
-        if (failureCount == 0 && totalTime > tier1BudgetSeconds) {
+        if (failureCount == 0 && totalTime > tier1Budget) {
             throw GradleException(
                 "Tier-1 budget exceeded: %.1fs > %.1fs. Move the slowest suite to tier 2 " +
-                    "(@Tag(\"tier2\"), docs/TESTING.md §2).".format(totalTime, tier1BudgetSeconds),
+                    "(@Tag(\"tier2\"), docs/TESTING.md §2).".format(totalTime, tier1Budget),
             )
         }
     }

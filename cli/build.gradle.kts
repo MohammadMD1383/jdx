@@ -26,12 +26,15 @@ dependencies {
 // byte-determinism every jar here promises (CLAUDE.md §2.5).
 val generateBuildProperties = tasks.register("generateBuildProperties") {
     val outputFile = layout.buildDirectory.file("generated/build-info/dev/jdx/cli/build.properties")
-    inputs.property("version", provider { project.version.toString() })
+    // Captured at configuration time: reading `project` inside `doLast` (execution
+    // time) is deprecated and breaks the configuration cache (T-067).
+    val projectVersion = project.version.toString()
+    inputs.property("version", projectVersion)
     outputs.file(outputFile)
     doLast {
         val file = outputFile.get().asFile
         file.parentFile.mkdirs()
-        file.writeText("version=${project.version}\n")
+        file.writeText("version=$projectVersion\n")
     }
 }
 

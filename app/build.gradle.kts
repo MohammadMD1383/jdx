@@ -59,11 +59,15 @@ val installDist = tasks.register("installDist") {
     dependsOn(fatJar)
     inputs.file(launcherScript)
     outputs.file(layout.buildDirectory.file("jdx"))
+    // Resolved here, at configuration time: touching `layout` (i.e. the project)
+    // from `doLast` captures the project in the action and breaks the
+    // configuration cache (T-067). Plain Files serialize fine.
+    val launcherFile = launcherScript.asFile
+    val installedFile = layout.buildDirectory.file("jdx").get().asFile
     doLast {
-        val installed = layout.buildDirectory.file("jdx").get().asFile
-        installed.parentFile.mkdirs()
-        installed.writeText(launcherScript.asFile.readText())
-        installed.setExecutable(true, false)
+        installedFile.parentFile.mkdirs()
+        installedFile.writeText(launcherFile.readText())
+        installedFile.setExecutable(true, false)
     }
 }
 
