@@ -813,7 +813,7 @@ exit 1/3/4, determinism, text⊆JSON and the exact-FQN metamorphic law.
 T-066 ambient-workspace reds; `--no-configuration-cache` for the T-067
 pre-existing cache failure, both proven stashed-clean, L-045).*
 
-### T-059 — Corpus soak harness · `TODO`
+### T-059 — Corpus soak harness · `WIP`
 **Depends:** T-014, T-053 · **Files:** `index/src/test/kotlin/.../soak/*`
 
 Tier 3. Run every implemented command over the real local jar corpus (~2,183 jars) and assert
