@@ -322,7 +322,7 @@ Check green (586 tests) only with ambient `~/.config/jdx` shelved: 2 pre-existin
 
 ---
 
-### T-056 — `javap` differential harness · `TODO`
+### T-056 — `javap` differential harness · `WIP`
 **Depends:** T-006, T-008 · **Files:** `index/src/test/kotlin/.../differential/*`
 
 **The highest-value test in the project** (TESTING.md §5.1). Parse `javap -p -s` output into
