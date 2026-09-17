@@ -381,3 +381,83 @@ None. **Push needs owner go-ahead (D-012)** — session 21 commits unpushed
 ### Next action
 **T-016** (project auto-discovery) — lowest unblocked TODO; or **T-066** (small,
 hermetic, unblocks a green `check` on this machine).
+
+## Session 25 — 2026-09-17 — `cache info|gc|clear` (T-018) + Gradle deprecations and T-067
+**Agent/Author:** Muse Spark (opencode) · **Commits:** `2594773` (claim), `59110db` (T-018), `1a7d601` (build/T-067)
+
+### Goal
+Implement T-018 (`jdx cache info|gc|clear`, lowest unblocked TODO), then address the
+Gradle deprecation footer at the owner's end-of-session request — which turned into
+closing T-067 (configuration-cache storing failure).
+
+### What I did
+- **T-018:** `index/.../cache/CacheService.kt` (policy: `info` sizes/counts with empty-DB
+  report; `gc [--dry-run]` collecting stale + unreferenced artifacts, JRT kept while any
+  workspace includes the JDK or no workspaces exist, corrupt workspace → exit 4, DB/IO →
+  exit 6, never throws; `clear` wiping `v1.db*` + `auto/`), `cli/.../commands/CacheCommands.kt`
+  (thin group mirroring `wsGroup`: `--cache-dir`, `--dry-run`, text+JSON parity), registered
+  in `JdxCli`. PROPOSAL Appendix B line added (README already had the row).
+- **Drive-by fix (e2e find):** `jdx --json cache info` printed text — `effectiveJson`/`effectiveWorkspace`
+  read only one context parent, so grouped commands (`ws list`, `cache info`) lost root flags.
+  Added `rootCommand()` chain walk in `JdxCli.kt`; fixes `ws` too, pinned by a new test (L-048).
+- **Tests:** 12 tier-1 examples (`CacheServiceTest` over `FakeIndexStore`, no disk) + 3
+  thousand-case properties (`CacheServicePropertyTest`: info totals, dry-run purity +
+  determinism, gc idempotence + reference agreement) + 6 tier-2 SQLite tests
+  (`CacheServiceStoreTest`, real fixture jar via `ArtifactIndexer`) + 11 tier-2 CLI tests
+  (`CacheCommandsTest`: exits, text⊆JSON, determinism, root-position JSON, root-CLI wiring).
+- **Gradle deprecations:** problems report held exactly one deprecation (toolchain
+  auto-provisioning without repositories). Declared Foojay resolver 1.0.0 in settings
+  (version literal — catalog accessors don't resolve in settings scripts, L-046) and moved
+  the stale legacy-provisioned JetBrains JDK out of `~/.gradle/jdks` (backup at
+  `/tmp/stale-jdk-backup`); local OpenJDK 21 auto-detects, diagnostic gone, no download.
+- **T-067:** the config-cache report JSON named the real culprits — `:app:installDist`
+  (`layout` in `doLast`) and `:verifyTier1Budget` (`subprojects` + script-level budget in
+  `doLast`) capturing the script object — plus a `Task.project`-at-execution-time
+  deprecation in `:cli:generateBuildProperties`. All capture plain values at configuration
+  time now. Verified T-067 acceptance: plain `./gradlew :core:test` stores the entry,
+  `./gradlew check` stores and reuses it, zero config-cache problems. Caveat: verifying
+  needed `-Dhttp.nonProxyHosts='*'` — the localhost proxy was refusing connections and
+  `:mcp:` deps were uncached, which fails config-cache *storing* (resolution) with an
+  unrelated network error. Environmental, not a build bug.
+- **Not pushed** (D-012: no remote push without owner go-ahead in this session).
+
+### Decisions made
+- T-018 semantics recorded in its TASKS.md detail block: reference = expanded workspace
+  jar specs (tolerant skip); `clear` = DB files + `auto/`; no last-use tracking in v1
+  (PROPOSAL "recently used" approximated by reference only, said in the service KDoc).
+- No new D-nnn (all within existing contracts); T-067 fix is build-only.
+
+### Tasks moved
+- T-018: TODO → WIP (`2594773`) → DONE (`59110db`)
+- T-067: TODO → DONE (`1a7d601`, verified with proxy bypass)
+
+### Lessons distilled
+- L-046 (catalog accessors absent in settings), L-047 (config-cache report JSON diagnosis),
+  L-048 (root-flag chain walk for grouped commands), L-049 (stale provisioned JDK).
+
+### What works now (and how to verify it yourself)
+```bash
+mv ~/.config/jdx ~/.config/jdx.shelved  # T-066 ambient-workspace workaround, still open
+./gradlew check --no-configuration-cache   # tiers 1+2 green (BUILD SUCCESSFUL)
+./gradlew :core:test                       # config cache stores; repeat reuses (T-067 proof)
+./gradlew :app:installDist --no-configuration-cache -q
+app/build/jdx cache info                   # empty-DB report, exit 0
+app/build/jdx --json cache info            # JSON via root-position flag (was text before fix)
+app/build/jdx cache gc --dry-run; app/build/jdx cache clear
+mv ~/.config/jdx.shelved ~/.config/jdx
+```
+
+### What is broken / half-done
+- T-066 (ambient `fx` workspace reds 2 `ReadCommandsTest`s) still open — shelve workaround stands.
+- T-067 verification needed proxy bypass; with the flaky localhost proxy, config-cache
+  *storing* can still fail on `:mcp:` dependency resolution (network, not build logic).
+- `jdx index` CLI does not exist yet — the index DB on user machines is populated only by
+  tests/soak until the indexer gets its command (M2 follow-up, already tasked).
+
+### Open questions / blockers
+None. Push needs owner go-ahead (D-012) — two commits (`59110db`, `1a7d601`) unpushed.
+
+### Next action
+**T-019** (Maven coordinate resolution) or **T-057/T-058** (fault-injection/metamorphic
+suites) — lowest unblocked TODOs after T-018; or **T-066** (small, unblocks green `check`
+on this machine). Next lessons shard `L-051-075.md` opens at the next lesson (one free slot left).
