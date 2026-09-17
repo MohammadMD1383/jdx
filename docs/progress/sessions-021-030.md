@@ -461,3 +461,87 @@ None. Push needs owner go-ahead (D-012) — two commits (`59110db`, `1a7d601`) u
 **T-019** (Maven coordinate resolution) or **T-057/T-058** (fault-injection/metamorphic
 suites) — lowest unblocked TODOs after T-018; or **T-066** (small, unblocks green `check`
 on this machine). Next lessons shard `L-051-075.md` opens at the next lesson (one free slot left).
+
+## Session 26 — 2026-09-17 — Fault-injection suite (T-057)
+**Agent/Author:** Muse Spark (opencode) · **Commits:** `d2d9ed5` (claim), `f22fcbd` (T-057), this entry's docs commit
+
+### Goal
+Implement T-057, the lowest-numbered unblocked TODO (depends T-007 DONE): the
+fault-injection family from TESTING.md §7, asserting the D-015 exit code, the
+problem-naming output, and stream silence for every malformed input.
+
+### What I did
+1. Claimed T-057 (`TODO`→`WIP`, commit `d2d9ed5`) before coding.
+2. **New suite** `index/src/test/kotlin/dev/jdx/index/fault/` (all `@Tag("tier2")`,
+   27 tests, green first run):
+   - `FaultSupport.kt` — stream capture (restores `out`/`err` even on throw),
+     trace-marker assertion (`\tat `, `at dev.jdx.`/`java.`/`kotlin.`/`org.`,
+     `Exception in thread`, `Caused by:`), and `checkShow`/`checkMembers`
+     three-law checkers (documented exit + problem named in *both* renderings +
+     silence on both streams; JDK excluded so faults stay hermetic).
+   - `TruncationFaultTest.kt` — generated 10 %-step sweep (10..90) of real
+     fixture bytes through `show` + `members`: every cut exits 5 naming the
+     class with `"code":5` in JSON; uncut control + empty-class edge included.
+   - `ZipFaultTest.kt` — traversal entries unlisted/unopenable with entry-naming
+     errors, no escape file under the temp dir, D-017 marker absent after a full
+     hostile read, honest class in a hostile jar still exits 0; bombs proven at
+     the guards (`readCapped` vs an infinite zero stream, declared/total/count
+     caps, all naming artifact + "probable zip bomb"); corrupt zip exits 5.
+   - `ArtifactShapeFaultTest.kt` — empty/resources-only/`X.class`-dir/
+     module-info-only jars exit 1; corrupt target + future-version exit 5
+     (reader-level `CORRUPT_CLASS`/`UNSUPPORTED_CLASS_VERSION` pinned too);
+     corrupt neighbour still exits 0 (lazy reads); missing/deleted/unmatched-glob
+     artifacts exit 5 naming the path; duplicate FQN exits 0 with `DUPLICATE_FQN`
+     naming both jars (first wins); MR conflict serves the newest applicable
+     variant (`Nesting` bytes win over `Generics` base) with
+     `MULTI_RELEASE_VARIANT`; `-g:none` `NoDebug` exits 0 with `arg0`/`arg1`;
+     mismatched sources pair by stem and answer from bytecode, foreign stems
+     never pair (pins the degrade half of T-028).
+3. **Deferred with pointers, not dropped:** decompiler timeout/crash faults attach
+   under T-026/T-027 (no engine to fault yet); `SOURCES_VERSION_MISMATCH`
+   detection is T-028. Both named in the suite KDoc and the TASKS.md notes.
+4. **Verification:** new suite 27/27 green; `./gradlew check` green with
+   `~/.config/jdx` shelved (tiers 1+2; tier-1 12.1 s of 30 s across 542 tests).
+   `./gradlew soak` reds in `JavapCorpusSoakTest`: the seeded sample now reaches
+   `$$` classes (compose/firebase jars) and the harness builds query refs for
+   unnameable classes instead of skipping them — **reproduced on the
+   stashed-clean tree** (pre-existing corpus drift, T-065 family), not mine.
+5. **Not pushed** (D-012: no remote push without owner go-ahead in this session).
+
+### Decisions made
+- None (no new D-nnn). Fault-to-exit mapping follows D-015 as written:
+  unreadable target → 5, nothing queryable → 1, degraded-but-answered → 0 +
+  warning. Decompiler/sources deferrals reuse existing task IDs (T-026/T-027/T-028).
+
+### Tasks moved
+- T-057: TODO → WIP (`d2d9ed5`) → DONE (`f22fcbd`)
+
+### Lessons distilled
+- L-050 (prove the funnel, not the mountain). Shard `L-026-050.md` now full;
+  opened `L-051-075.md` and updated the `LESSONS.md` index.
+
+### What works now (and how to verify it yourself)
+```bash
+mv ~/.config/jdx ~/.config/jdx.shelved  # T-066 ambient-workspace workaround, still open
+./gradlew :index:tier2Test --tests "dev.jdx.index.fault.*"  # 27/27 green
+./gradlew check                           # tiers 1+2 green (BUILD SUCCESSFUL)
+mv ~/.config/jdx.shelved ~/.config/jdx
+```
+
+### What is broken / half-done
+- T-066 (ambient `fx` workspace reds 2 `ReadCommandsTest`s) still open — shelve workaround stands.
+- Soak: `JavapCorpusSoakTest` fails on `$$`-named classes from newer cache jars
+  (e.g. `LambdaParameterVisitor$references_delegate$lambda$0$$inlined$…`,
+  `Segment$Internal$$serializer`); proven stashed-clean. The harness should skip
+  classes the model cannot name (fuel for T-065); filed here, not fixed (one task
+  per session).
+- Decompiler timeout/crash + `SOURCES_VERSION_MISMATCH` faults still unwritten —
+  owned by T-026/T-027/T-028, which extend this suite.
+
+### Open questions / blockers
+None. Push needs owner go-ahead (D-012) — three commits
+(`d2d9ed5`, `f22fcbd`, this docs commit) unpushed.
+
+### Next action
+**T-058** (metamorphic suite — lowest unblocked TODO) or **T-019** (Maven
+coordinates). Next progress shard `sessions-031-040.md` opens after 4 more sessions.
