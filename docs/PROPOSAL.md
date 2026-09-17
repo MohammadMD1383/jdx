@@ -1122,6 +1122,7 @@ calls     --depth N --external-only --limit
 samples   --limit N --prefer-sources
 ws        create|list|info|remove|add|use   --auto --jars --src --coord --jdk
 index     --force -w
+cache     info|gc|clear [--cache-dir --json]  (gc: --dry-run)
 daemon    start|stop|status|restart --idle <duration>
 serve     --port --bind
 mcp       (no flags; stdio)

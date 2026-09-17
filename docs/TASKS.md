@@ -800,7 +800,7 @@ See `docs/TESTING.md` §8.
 
 ---
 
-### T-018 — `jdx cache info|gc|clear` · `WIP`
+### T-018 — `jdx cache info|gc|clear` · `DONE` (session 25)
 **Depends:** T-013 · **Files:** `index/.../cache/CacheService.kt`, `cli/.../commands/CacheCommands.kt`
 
 `info` reports the index DB (location, size, schema version, artifact and class
@@ -815,16 +815,26 @@ in v1: `indexed_at` is creation time, so the PROPOSAL §10.2 "recently used"
 clause is approximated by reference only (documented in the service KDoc).
 
 **Acceptance**
-- [ ] `cache info|gc|clear` work in text and JSON with the same information (D-007)
-- [ ] Exit codes: 0 ok (incl. empty DB / nothing to delete) · 3 usage · 4 corrupt
+- [x] `cache info|gc|clear` work in text and JSON with the same information (D-007)
+- [x] Exit codes: 0 ok (incl. empty DB / nothing to delete) · 3 usage · 4 corrupt
       workspace encountered by `gc` · 6 DB/IO failure; no stack trace on any path
-- [ ] `gc` deletes stale + unreferenced artifacts, keeps referenced ones and the
+- [x] `gc` deletes stale + unreferenced artifacts, keeps referenced ones and the
       JRT rule above; `--dry-run` deletes nothing and reports what it would
-- [ ] `clear` removes the DB; a following `info` shows the empty report
-- [ ] Tier-1: service tests over a fake `IndexStore` + a generative property
+- [x] `clear` removes the DB; a following `info` shows the empty report
+- [x] Tier-1: service tests over a fake `IndexStore` + a generative property
       (gc idempotence, info totals law); tier-2: real-SQLite service tests and
       in-process CLI tests (exits, text⊆JSON, determinism)
-- [ ] README command-table row + PROPOSAL Appendix B flag entries
+- [x] README command-table row + PROPOSAL Appendix B flag entries
+
+*Implementation notes (session 25): `CacheService` (`index/.../cache/`, injectable
+store/workspace-store/expansion/presence seams) + `cacheGroup()` (`cli`, same
+thin/exit/JSON patterns as `wsGroup`, `--cache-dir` per command, `--dry-run` on
+`gc`). Drive-by fix: root `--json`/`-w` now walk the full context chain, so
+`jdx --json cache/ws ...` emits JSON (one-level lookup dropped grouped commands;
+`rootCommand()` in `JdxCli.kt`, pinned by a new test). Truncation: none — one
+short line per artifact, bounded by workspace size in practice. `clear()` never
+throws (walks wrapped to exit 6). Tests: 12 tier-1 examples + 3 thousand-case
+properties (fake store, no disk) + 6 tier-2 SQLite tests + 11 tier-2 CLI tests.*
 
 ### T-019 — Maven coordinate resolution and opt-in fetching · `TODO`
 **Depends:** T-015 · Resolve from `~/.gradle/caches` and `~/.m2` first; fetch from Maven
@@ -898,7 +908,7 @@ shelving `~/.config/jdx`: green without it, red with it.
 
 ---
 
-### T-067 — Repair the configuration-cache storing failure · `TODO`
+### T-067 — Repair the configuration-cache storing failure · `DONE` (session 25)
 **Depends:** — · **Files:** `gradle.properties`, root `build.gradle.kts`
 *(Added in session 24: found while verifying T-017 — pre-existing, not caused
 by T-017. Proven by stashing all T-017 work and rerunning on the clean tree:
@@ -910,9 +920,22 @@ Any `./gradlew` invocation currently ends `BUILD FAILED` unless passed
 fails the build. Either fix the storing problems or revert the flag.
 
 **Acceptance**
-- [ ] Plain `./gradlew :core:test` (no flags) ends `BUILD SUCCESSFUL`
-- [ ] The problems-report shows zero configuration-cache problems
-- [ ] No production behaviour change (build-only task)
+- [x] Plain `./gradlew :core:test` (no flags) ends `BUILD SUCCESSFUL`
+- [x] The problems-report shows zero configuration-cache problems
+- [x] No production behaviour change (build-only task)
+
+*Fixed in session 25 while addressing the Gradle deprecation footer (owner
+request): the config-cache report named two task actions capturing the script
+object — `:app:installDist` (`layout` in `doLast`) and `:verifyTier1Budget`
+(`subprojects` + script-level budget in `doLast`) — plus a `Task.project`-
+at-execution-time deprecation in `:cli:generateBuildProperties`. All three now
+capture plain values at configuration time; the toolchain deprecation is gone
+via the Foojay resolver plugin (settings) with the stale legacy-provisioned
+JDK removed from `~/.gradle/jdks` (local OpenJDK 21 auto-detects). Verified:
+`./gradlew :core:test` stores the entry, `./gradlew check` stores and reuses
+it. Caveat: verifying needed the proxy bypassed (`-Dhttp.nonProxyHosts=*`),
+as the localhost proxy was refusing connections and `:mcp:` deps were
+uncached — environmental, not a build bug.*
 
 ---
 
