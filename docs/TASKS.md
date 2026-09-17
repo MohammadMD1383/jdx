@@ -360,7 +360,7 @@ in 51 s.*
 
 ---
 
-### T-057 — Fault-injection suite · `TODO`
+### T-057 — Fault-injection suite · `WIP`
 **Depends:** T-007 · **Files:** `index/src/test/kotlin/.../fault/*`
 
 Generate malformed inputs programmatically rather than collecting them by hand. Full list in
