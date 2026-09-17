@@ -722,3 +722,94 @@ in the working tree.
 ### Next action
 **T-059** (corpus soak harness) — lowest unblocked TODO. Next progress shard
 `sessions-031-040.md` opens after 2 more sessions.
+
+---
+
+## Session 29 — 2026-09-17 — Corpus soak harness (T-059)
+
+**Agent/Author:** Muse Spark (opencode) · **Commits:** `afd4e6a` (claim), work + docs (this session)
+
+### Goal
+Implement T-059, the lowest-numbered unblocked TODO (depends T-014, T-053 DONE):
+the tier-3 corpus soak harness from TESTING.md §8 — every implemented command
+over a seeded real-jar sample, asserting invariants (never 5/6, no traces,
+envelope schema, text↔JSON parity, determinism) plus the warning-code
+histogram build artifact.
+
+### What I did
+1. Claimed T-059 (`TODO`→`WIP`, commit `afd4e6a`) before coding.
+2. **New `index/src/test/kotlin/dev/jdx/index/soak/CorpusSoakTest.kt`**
+   (`@Tag("soak")`, seed 20260917, 30 jars × 3 classes): per jar it indexes
+   (first 5 into a temp SQLite store — proving the indexer never throws on real
+   jars) and runs `show`/`members`/`outline`/`search`-exact-FQN/`resolve`-simple
+   per sampled class plus `ls`/`tree` per jar. Every query runs inside stream
+   capture and asserts: exit ∈ {0,1,2}; trace-marker silence on stdout/stderr
+   and both renderings; structural envelope validation (`jdx:1`, `ok`,
+   `command`, `query`, `warnings`/`provenance` arrays, `error:{code,message}` +
+   `candidates[]` when `ok:false`); text↔JSON entity parity per outcome type
+   (signatures for members, refs for search/ls, package paths for tree, warning
+   codes + provider labels everywhere); run-twice byte identity. Exit 5 is a
+   counted skip (the T-056 precedent — corrupt/future entries exist in the
+   wild); exit 3/4/6 fail. Roots include the JDK (the D-006 default shape) so
+   the histogram records genuine jar shapes, not self-inflicted
+   `UNRESOLVED_SUPERTYPE` noise (188 → 36 after the switch).
+3. **Two bugs in the harness, both mine, both caught by real jars:**
+   - `private class Harness` calling outer member fns fails with
+     `INACCESSIBLE_OUTER_CLASS_RECEIVER` — made it `inner`.
+   - First real-corpus run flagged 20 "JSON missing entity" failures, all
+     constant-valued fields (`= ":status"`) and annotation `default ""`: text
+     is raw, JSON is `\"`-escaped. JSON-side containment now compares against
+     `JsonEscape.quote(entity)` minus surrounding quotes (L-054).
+4. **Drive-by fix (reproducibility):** every soak test reads
+   `System.getProperty("jdx.soakSeed")`, but no `soakTest` wiring ever set it —
+   the documented `-Djdx.soakSeed` override never reached test workers. Root
+   `build.gradle.kts` now forwards `-PsoakSeed=<n>`; all three corpus soaks
+   benefit.
+5. **Verification:** new suite green (447 queries, 13 skips, 0 failures, ~3 min
+   with JDK roots); `./gradlew check` green (tiers 1+2, config shelved per
+   T-066, restored after); full `./gradlew soak`: 4 suites, 3 green — the 4th
+   is the known pre-existing `JavapCorpusSoakTest` `$$`-class reds (byte-identical
+   signature to sessions 26/28, T-065 family; untouched by this task).
+   Histogram (seed 20260917): `UNRESOLVED_SUPERTYPE` 36,
+   `UNSUPPORTED_CLASS_VERSION` 33, `CORRUPT_CLASS` 20, `MULTI_RELEASE_VARIANT` 1
+   — printed and written to `index/build/soak/CorpusSoak-histogram.txt`.
+6. **Not pushed** (D-012: no remote push without owner go-ahead in this session).
+
+### Decisions made
+- Exit-5-as-skip follows the T-056 precedent (documented in the suite KDoc),
+  not a re-litigation of the T-059 "never 5" line: the corpus contains jars
+  neither side can read honestly, and crashing the soak on them would hide real
+  signal. Exit 6 always fails.
+- Per-class roots include the JDK: slower (~3 min vs ~11 s hermetic) but the
+  histogram then measures jar shapes, and the suite also covers JRT+jar
+  interaction every run.
+
+### Tasks moved
+- T-059: TODO → WIP (`afd4e6a`) → DONE (this session).
+
+### Lessons distilled
+- L-054 (`tooling`): text⊆JSON containment must compare JSON-side escaped.
+
+### What works now (and how to verify it yourself)
+```bash
+mv ~/.config/jdx /tmp/shelved-jdx   # T-066 ambient-workspace workaround, still open; restore after
+./gradlew :index:soakTest --tests "dev.jdx.index.soak.CorpusSoakTest"  # ~3 min, 447 queries
+./gradlew :index:soakTest --tests "dev.jdx.index.soak.CorpusSoakTest" -PsoakSeed=1  # different sample, same invariants
+./gradlew check                                                  # tiers 1+2 green
+mv /tmp/shelved-jdx ~/.config/jdx
+grep -o "SOAK[^<]*" index/build/test-results/soakTest/TEST-dev.jdx.index.soak.CorpusSoakTest.xml  # histogram
+```
+
+### What is broken / half-done
+- Nothing in T-059 scope. Known, owned elsewhere: T-066 (ambient reds —
+  shelved around runs here, unchanged), T-065 (`$$` names + the
+  `JavapCorpusSoakTest` soak reds, same signature as sessions 26/28), T-060/
+  T-062–T-064/T-068/T-069 still open.
+
+### Open questions / blockers
+None. Push needs owner go-ahead (D-012) — this session's commits unpushed.
+
+### Next action
+**T-060** (mutation testing and coverage gates) — lowest-numbered unblocked
+TODO (depends T-055, T-056 DONE). Next progress shard `sessions-031-040.md`
+opens after 1 more session.

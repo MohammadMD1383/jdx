@@ -243,6 +243,11 @@ subprojects {
         }
         systemProperty("jdx.tier", "soak")
         systemProperty("jdx.corpusDir", corpusDir)
+        // Seeded sampling (T-059): `-PsoakSeed=<n>` reproduces a failing sample.
+        // Only forwarded when given; tests fall back to their DEFAULT_SEED.
+        (findProperty("soakSeed") as String?)?.let { seed ->
+            systemProperty("jdx.soakSeed", seed)
+        }
     }
 
     // Tier 4: benchmarks. Benchmarks themselves land in T-050.

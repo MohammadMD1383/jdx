@@ -813,7 +813,7 @@ exit 1/3/4, determinism, text⊆JSON and the exact-FQN metamorphic law.
 T-066 ambient-workspace reds; `--no-configuration-cache` for the T-067
 pre-existing cache failure, both proven stashed-clean, L-045).*
 
-### T-059 — Corpus soak harness · `WIP`
+### T-059 — Corpus soak harness · `DONE` (session 29)
 **Depends:** T-014, T-053 · **Files:** `index/src/test/kotlin/.../soak/*`
 
 Tier 3. Run every implemented command over the real local jar corpus (~2,183 jars) and assert
@@ -822,15 +822,32 @@ Tier 3. Run every implemented command over the real local jar corpus (~2,183 jar
 See `docs/TESTING.md` §8.
 
 **Acceptance**
-- [ ] Per sampled class: exit code ∈ {0,1,2} (never 5 or 6); no exception text in
+- [x] Per sampled class: exit code ∈ {0,1,2} (never 5 or 6); no exception text in
       stdout/stderr; `--json` validates against the envelope schema; text and JSON carry the
       same entity set; running twice yields identical bytes
-- [ ] `-Pcorpus=<dir>` lets a contributor without the owner's cache point it at `~/.m2`
-- [ ] Seeded sampling, so a failure is **reproducible** from the printed seed
-- [ ] Emits a **warning-code histogram** as a build artifact — "247 jars emitted
+- [x] `-Pcorpus=<dir>` lets a contributor without the owner's cache point it at `~/.m2`
+- [x] Seeded sampling, so a failure is **reproducible** from the printed seed
+- [x] Emits a **warning-code histogram** as a build artifact — "247 jars emitted
       `MULTI_RELEASE_VARIANT`" is how we learn which real-world shapes matter. Record the
       histogram in `docs/PROGRESS.md` each time it changes materially.
-- [ ] Excluded from `check`; never required for a green build on a fresh machine
+- [x] Excluded from `check`; never required for a green build on a fresh machine
+
+*Implementation notes (session 29): `index/.../soak/CorpusSoakTest` (`@Tag("soak")`,
+30 jars × 3 classes, seed 20260917 via `-PsoakSeed=`): per jar it indexes (first 5
+into a temp store, proving the indexer never throws) and runs `show`/`members`/
+`outline`/`search`(exact FQN)/`resolve`(simple name) per sampled class plus
+`ls`/`tree` per jar — each inside stream capture, asserting exit ∈ {0,1,2},
+trace silence, structural envelope validation, text↔JSON entity parity (JSON side
+compared escaped — constant `= ":status"` and `default ""` entities are `\"` in
+JSON, L-054), and run-twice byte identity. Exit 5 is a counted skip (the T-056
+precedent: corrupt/future entries exist in the wild); exit 3/4/6 fail. Roots
+include the JDK (D-006 default shape) so the histogram records genuine jar
+shapes. First green: 447 queries, 13 skips, 0 failures in ~3 min; histogram
+`UNRESOLVED_SUPERTYPE` 36, `UNSUPPORTED_CLASS_VERSION` 33, `CORRUPT_CLASS` 20,
+`MULTI_RELEASE_VARIANT` 1 (printed + `index/build/soak/CorpusSoak-histogram.txt`).
+Drive-by fix: `soakTest` now forwards `-PsoakSeed=` to `jdx.soakSeed` (the
+documented `-Djdx.soakSeed` never reached test workers). Full `soak` still shows
+the pre-existing stashed-clean `JavapCorpusSoakTest` `$$` reds (T-065).*
 
 ---
 

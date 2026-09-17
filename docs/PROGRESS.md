@@ -14,15 +14,15 @@ or delete a past entry — if one turned out to be wrong, say so in a *new* entr
 
 | | |
 |---|---|
-| **Last updated** | 2026-09-17 (session 28) |
+| **Last updated** | 2026-09-17 (session 29) |
 | **Repository** | <https://github.com/MohammadMD1383/jdx> (public, Apache-2.0) |
 | **Phase** | Design complete; **M0 done (test spine complete), M1 in progress** |
 | **Active milestone** | M2 — Index |
-| **Next task** | **T-059** (corpus soak harness) — lowest unblocked TODO; T-062 (`--sort` orders), T-063 (share fixture-jar helpers), T-064 (indexer speed), T-065 (`$$` names), T-066 (`ReadCommandsTest` hermeticity), T-068 (identical-root dedupe), T-069 (`--repo` flag) also open. T-019 (Maven coordinates) closed in session 28. |
+| **Next task** | **T-060** (mutation testing and coverage gates) — lowest unblocked TODO; T-062 (`--sort` orders), T-063 (share fixture-jar helpers), T-064 (indexer speed), T-065 (`$$` names), T-066 (`ReadCommandsTest` hermeticity), T-068 (identical-root dedupe), T-069 (`--repo` flag) also open. T-059 (corpus soak harness) closed in session 29 — first histogram (seed 20260917, 30 jars, 447 queries): `UNRESOLVED_SUPERTYPE` 36, `UNSUPPORTED_CLASS_VERSION` 33, `CORRUPT_CLASS` 20, `MULTI_RELEASE_VARIANT` 1. |
 | **Task count** | 67 tasks defined (T-001…T-069; M0–M2 in full detail, M3–M7 as one-liners) |
 | **Build status** | **Green.** `./gradlew build` passes. Runnable `jdx`: `./gradlew :app:installDist` → `app/build/jdx` (fat jar + POSIX launcher, JDK-21 gate, ~180 ms cold start); `install.sh` symlinks it into `~/.local/bin`. Commands so far: `--version`, `version [--json]`, `doctor [--json]`, **`show`, `members`, `outline` (all flags, text+JSON, exits 0–4, `-w` workspaces, `--coord`/`--fetch`, `g:a:v/`-scoped refs)**, **`search`, `resolve`, `ls`, `tree` (glob/regex/camel-hump/fuzzy, text+JSON, exits 0/1/3/4/5/6, `-w` workspaces, `--coord`/`--fetch`)**, **`ws create\|list\|info\|remove\|use\|add` (text+JSON, exits 0/1/3/4/6; `create`/`info` carry `coords`)**, **`cache info\|gc\|clear` (`CacheService` in `index`, thin group in `cli`, exits 0/3/4/6, `--cache-dir`, `--dry-run` on `gc`)**. Maven (T-019): `index/.../maven/` resolves `g:a:v` fetch-cache → Gradle → `~/.m2` → Central (only with `--fetch`, SHA-1 fail-closed, `-sources.jar` alongside into `~/.cache/jdx/m2`). JDK root: zero-config `show`/`members` on `java.*` via `jrt:/`, module-as-artifact (`java.base`), `src.zip` paired from `java.home`/`$JAVA_HOME` (T-012). Workspaces (T-015): TOML in `~/.config/jdx/workspaces/` (now with optional `coords`), §13 resolution (`-w` > `JDX_WORKSPACE` > `ws use`, explicit `--jars`/`--coord` merge first), first-provider-wins shadowing with `DUPLICATE_FQN`. Auto-discovery (T-016): Gradle/Maven projects contribute `build/classes`/`target/classes` + referenced cache jars when no workspace is selected (cached in `~/.cache/jdx/auto/`, `PROJECT_DISCOVERY_FALLBACK` when coordinates are unknown). Build: zero Gradle deprecations and configuration cache stores + reuses (T-067 closed). |
 | **Test status** | **All green** (`./gradlew check` tiers 1+2 green; `./gradlew soak` green except the known `JavapCorpusSoakTest` reds) — **only with `~/.config/jdx` shelved**, see caveats. T-019 added: `index/.../maven/` suites (`MavenCoordsTest` tier 1 incl. 2 thousand-case properties, `MavenFetchTest` tier 1 incl. loopback-http, `MavenResolverTest` 9 tier-2, `MavenQueryTest` 5 tier-2) + `cli/.../MavenRootsTest` (4 tier-2) + extended TOML/resolver/ws suites. **Caveat 1 (L-038, T-066):** a bare `check` on *this* machine still needs `~/.config/jdx` shelved — the ambient `fx` active workspace reds 2 `ReadCommandsTest` store tests. **Caveat 2 (sessions 26–28):** `./gradlew soak` reds in `JavapCorpusSoakTest` — the seeded sample reaches `$$`-named classes (compose/firebase jars) and the harness builds query refs for unnameable classes instead of skipping them. Re-proven stashed-clean in session 28 (corpus drift, T-065 family); `MetamorphicCorpusSoakTest` stays green. `check` stays green. |
-| **Docs** | Append-only logs sharded (D-023): sessions → `docs/progress/` (session 28 in `sessions-021-030.md`), decisions → `docs/decisions/` (shard 2 open — D-032 maven semantics), lessons → `docs/lessons/` (`L-051-075.md` open at L-054). Every hard-won lesson goes to `docs/LESSONS.md` (D-024). |
+| **Docs** | Append-only logs sharded (D-023): sessions → `docs/progress/` (session 29 in `sessions-021-030.md`), decisions → `docs/decisions/` (shard 2 open — D-032 maven semantics), lessons → `docs/lessons/` (`L-051-075.md` open at L-055). Every hard-won lesson goes to `docs/LESSONS.md` (D-024). |
 | **Blocked on** | Nothing. Sessions 24–28 unpushed (incl. T-017, T-018, T-067, T-057, T-058, T-019); **push still needs owner go-ahead per session (D-012)**. |
 
 ### What exists right now
@@ -279,7 +279,7 @@ when it holds 10 sessions, create the next (`sessions-011-020.md`) and update th
 |---|---|---|
 | `docs/progress/sessions-001-010.md` | 1–10 | full |
 | `docs/progress/sessions-011-020.md` | 11–20 | full |
-| `docs/progress/sessions-021-030.md` | 21–26 | open (4 free) |
+| `docs/progress/sessions-021-030.md` | 21–29 | open (1 free) |
 
 ---
 
