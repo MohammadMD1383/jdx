@@ -4,6 +4,7 @@ import dev.jdx.core.model.AccessFlag
 import dev.jdx.core.model.TypeKind
 import dev.jdx.index.artifact.ArtifactLoader
 import dev.jdx.index.artifact.ArtifactTestJars
+import dev.jdx.index.differential.Javap
 import io.kotest.matchers.collections.shouldContain
 import io.kotest.matchers.shouldBe
 import io.kotest.matchers.types.shouldBeInstanceOf
@@ -34,7 +35,9 @@ class AsmClassReaderDifferentialTest {
         val javap = assumeJavap()
         val failures = mutableListOf<String>()
         for (binaryName in fixtureClassNames()) {
-            val expected = javapMembers(runJavap(javap, binaryName))
+            val javapOutput = Javap.tryRun(javap, binaryJar.absolutePath, binaryName)
+            check(javapOutput != null) { "javap failed for $binaryName" }
+            val expected = Javap.parseMembers(javapOutput)
             val bytes = ArtifactTestJars.fixtureClassBytes(binaryJar, entryPath(binaryName))
             val result = AsmClassReader.read(bytes, entryPath(binaryName))
             val info = result.shouldBeInstanceOf<ClassReadResult.Ok>().info
@@ -162,83 +165,24 @@ class AsmClassReaderDifferentialTest {
 
     private fun entryPath(binaryName: String): String = binaryName.replace('.', '/') + ".class"
 
-    private data class MemberKey(val name: String, val descriptor: String)
-
-    private fun readerMembers(info: dev.jdx.core.model.ClassInfo): Set<MemberKey> =
-        (info.fields.map { MemberKey(it.name, it.type.descriptor) } +
-            info.methods.map { MemberKey(it.name, it.descriptor.descriptor) }).toSet()
-
-    /**
-     * Parses `javap -p -s` output into `(name, descriptor)` pairs. Each member line is
-     * followed by its `descriptor:` line; constructors print as the FQN (they contain a
-     * `.`, unlike method names) and `static {};` is the class initialiser.
-     */
-    private fun javapMembers(output: List<String>): Set<MemberKey> {
-        val members = mutableSetOf<MemberKey>()
-        var pending: String? = null
-        for (line in output) {
-            val trimmed = line.trim()
-            if (trimmed.isEmpty() || trimmed == "}" ||
-                trimmed.startsWith("Compiled from") || trimmed.endsWith("{")
-            ) {
-                continue
-            }
-            if (trimmed.startsWith("descriptor:")) {
-                val descriptor = trimmed.removePrefix("descriptor:").trim()
-                check(pending != null) { "javap descriptor without a member line: $trimmed" }
-                members.add(MemberKey(pending, descriptor))
-                pending = null
-            } else {
-                pending = normaliseMemberLine(trimmed)
-            }
-        }
-        return members
-    }
-
-    private fun normaliseMemberLine(line: String): String {
-        val bare = line.removeSuffix(";")
-        if ('(' in bare) {
-            val nameToken = bare.substringBefore('(').trim().substringAfterLast(' ')
-            return if ('.' in nameToken) "<init>" else nameToken
-        }
-        if (bare.trim() == "static {}") return "<clinit>"
-        return bare.trim().substringAfterLast(' ')
-    }
+    private fun readerMembers(info: dev.jdx.core.model.ClassInfo): Set<Javap.MemberKey> =
+        (info.fields.map { Javap.MemberKey(it.name, it.type.descriptor) } +
+            info.methods.map { Javap.MemberKey(it.name, it.descriptor.descriptor) }).toSet()
 
     private fun formatMismatch(
         binaryName: String,
-        expected: Set<MemberKey>,
-        actual: Set<MemberKey>,
+        expected: Set<Javap.MemberKey>,
+        actual: Set<Javap.MemberKey>,
     ): String = buildString {
         appendLine("MISMATCH $binaryName (javap -p -s vs AsmClassReader):")
         (expected - actual).sortedBy { it.name }.forEach { appendLine("- javap only:  ${it.name} ${it.descriptor}") }
         (actual - expected).sortedBy { it.name }.forEach { appendLine("+ reader only: ${it.name} ${it.descriptor}") }
     }
 
-    /** Locates `javap`: the test runtime's JDK first, `PATH` as a fallback. Never throws. */
+    /** Locates `javap` via the shared harness; skips gracefully when absent. */
     private fun assumeJavap(): String {
-        val homeJavap = File(System.getProperty("java.home"), "bin/javap")
-        if (homeJavap.canExecute()) return homeJavap.absolutePath
-        val onPath = try {
-            val probe = ProcessBuilder("javap", "-version").redirectErrorStream(true).start()
-            val exitedZero = probe.waitFor() == 0
-            probe.inputStream.readBytes()
-            exitedZero
-        } catch (_: Exception) {
-            false
-        }
-        assumeTrue(onPath, "javap not found: skipping javap-agreement checks (TESTING.md §5.1)")
-        return "javap"
-    }
-
-    private fun runJavap(javap: String, binaryName: String): List<String> {
-        // Flags before the class name: a trailing `-s` is parsed as a class name (L-018).
-        val process = ProcessBuilder(javap, "-p", "-s", "-classpath", binaryJar.absolutePath, binaryName)
-            .redirectErrorStream(true)
-            .start()
-        val output = process.inputStream.readBytes().toString(Charsets.UTF_8)
-        val exit = process.waitFor()
-        check(exit == 0) { "javap failed for $binaryName:\n$output" }
-        return output.lines()
+        val javap = Javap.findJavap()
+        assumeTrue(javap != null, "javap not found: skipping javap-agreement checks (TESTING.md §5.1)")
+        return javap!!
     }
 }

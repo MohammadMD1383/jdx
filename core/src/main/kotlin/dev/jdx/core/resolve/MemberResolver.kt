@@ -187,10 +187,27 @@ public object MemberResolver {
     }
 
     private data class GenericRef(val signature: ClassTypeSignature) : SuperRef {
-        override fun toTypeName(): TypeName.ClassType = TypeName.ClassType(
-            packageName = signature.packageName,
-            nestedNames = listOf(signature.simpleName) + signature.innerClasses.map { it.simpleName },
-        )
+        override fun toTypeName(): TypeName.ClassType? {
+            // Signatures name nested classes two ways: the grammar `.Inner`
+            // suffix and the binary `$Inner` form kotlinc emits for supertype
+            // edges (e.g. `Landroidx/savedstate/SavedStateRegistry$SavedStateProvider;`).
+            // The model splits nesting on `$` exactly like binary names
+            // (typeNameFromBinaryName); building the edge without splitting
+            // threw and turned the whole query into exit 6 (T-056 soak find).
+            // An edge that still will not model (empty segments from hostile
+            // `$` shapes) maps to null — the linearisation skips it, like any
+            // unmappable signature, instead of failing the query.
+            val nested = listOf(signature.simpleName)
+                .plus(signature.innerClasses.map { it.simpleName })
+                .flatMap { it.split('$') }
+                .filter { it.isNotEmpty() }
+            if (nested.isEmpty()) return null
+            return try {
+                TypeName.ClassType(signature.packageName, nested)
+            } catch (_: IllegalArgumentException) {
+                null
+            }
+        }
     }
 
     private data class ErasedRef(val type: TypeName) : SuperRef {

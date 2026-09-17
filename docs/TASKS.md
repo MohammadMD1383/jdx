@@ -51,8 +51,8 @@ be fiction.
 | **M6** | Serving: daemon, MCP, HTTP, `batch` | TODO |
 | **M7** | Polish: token budgets, AppCDS, mutation gates, docs, install | TODO |
 
-**T-001 through T-015, T-053, T-054, T-055 and T-061 are `DONE`.** M0's test spine is
-complete; T-056…T-060 unblock as their milestones land. M1 starts at T-007.
+**T-001 through T-016, T-053, T-054, T-055, T-056 and T-061 are `DONE`.** M0's test spine is
+complete; T-057…T-060 unblock as their milestones land. M1 starts at T-007.
 
 ---
 
@@ -322,7 +322,7 @@ Check green (586 tests) only with ambient `~/.config/jdx` shelved: 2 pre-existin
 
 ---
 
-### T-056 — `javap` differential harness · `WIP`
+### T-056 — `javap` differential harness · `DONE` (session 23)
 **Depends:** T-006, T-008 · **Files:** `index/src/test/kotlin/.../differential/*`
 
 **The highest-value test in the project** (TESTING.md §5.1). Parse `javap -p -s` output into
@@ -330,12 +330,33 @@ a member set and diff it against `jdx members --declared --access all --include-
 --json` for every fixture class and a sampled slice of the real corpus.
 
 **Acceptance**
-- [ ] Runs over the whole fixture corpus in tier 2
-- [ ] Runs over a seeded random sample of the local jar corpus in tier 3
-- [ ] Disagreements report **which member and which field differs**, not just "sets differ"
-- [ ] Skips gracefully with a clear message when `javap` is absent (don't fail the build)
-- [ ] Known, documented `javap` quirks live in one allowlist file with a comment each —
+- [x] Runs over the whole fixture corpus in tier 2
+- [x] Runs over a seeded random sample of the local jar corpus in tier 3
+- [x] Disagreements report **which member and which field differs**, not just "sets differ"
+- [x] Skips gracefully with a clear message when `javap` is absent (don't fail the build)
+- [x] Known, documented `javap` quirks live in one allowlist file with a comment each —
       an unexplained entry in that file is a review blocker
+
+*Implementation notes (session 23): `index/.../differential/` — `Javap.kt`
+(find/run/parse, shared: the T-008 reader differential now delegates to it, its
+7 tests green unmodified), `JavapQuirks.kt` (single allowlist; one entry:
+`<clinit>` — `javap` reports `static {};`, the resolver never lists it by
+design), `ServiceDifferential.kt` (one-class compare through `JdxService` with
+`--declared` + access-all + `--include-synthetic` + limit 1M: presence,
+per-base overload counts incl. bridges, `--json` ref carriage, truncation
+refused). Comparison is on canonical refs with `:return`-suffix prefix
+matching (refs erase return/field types by design; descriptor fidelity stays
+with the reader-level check — said in the KDoc). Tier 2
+(`JavapDifferentialTest`) covers all 35 fixture classes; tier 3
+(`JavapCorpusSoakTest`, `@Tag("soak")`, seed 20260917, `-Djdx.soakSeed`
+override, `-Pcorpus` via `jdx.corpusDir`) samples 30 jars × 4 classes;
+exit-5/corrupt classes are counted skips, anything else fails with the
+per-member report. The first soak run found a real production bug (exit 6 on
+androidx jars: kotlinc `$`-nested supertype edges in generic signatures —
+fixed test-first in `core`, see `MemberResolverTest` + L-042) and a sampler
+bug of mine (raw zip entries bypass multi-release selection — fixed via
+`ArtifactLoader`, L-043). First green soak: 104 classes, 0 skips, 0 failures
+in 51 s.*
 
 ---
 

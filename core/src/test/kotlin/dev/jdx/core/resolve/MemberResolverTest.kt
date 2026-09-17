@@ -397,4 +397,29 @@ class MemberResolverTest {
         resolved.methods.map { it.member.name } shouldBe listOf("own")
         resolved.missingSupertypes.map { it.binaryName } shouldBe listOf("t.Missing")
     }
+
+    @Test
+    fun `dollar nested supertype edges in generic signatures resolve as nesting`() {
+        // kotlinc emits nested supertypes in the binary `$` form inside generic
+        // signatures (real shape from androidx, found by the T-056 soak: a class
+        // implementing `SavedStateRegistry$SavedStateProvider` carries the edge
+        // `Landroidx/savedstate/SavedStateRegistry$SavedStateProvider;`). The
+        // resolver must read the `$` as nesting — building the edge name
+        // without splitting threw `name segment ... contains a separator` and
+        // turned the whole query into exit 6.
+        val provider = testInterface("androidx.savedstate.SavedStateRegistry\$SavedStateProvider")
+        val target = testClass(
+            binary = "t.Delegate",
+            superclass = "java.lang.Object",
+            genericSignature =
+                "Ljava/lang/Object;Landroidx/savedstate/SavedStateRegistry\$SavedStateProvider;",
+        )
+        val lookup = mapLookup(objectInfo, provider, target)
+
+        val resolved = MemberResolver.resolve(target, lookup)
+
+        val edge = resolved.linearization.single { it.type.simpleName == "SavedStateProvider" }
+        edge.type.nestedNames shouldBe listOf("SavedStateRegistry", "SavedStateProvider")
+        edge.type.binaryName shouldBe "androidx.savedstate.SavedStateRegistry\$SavedStateProvider"
+    }
 }

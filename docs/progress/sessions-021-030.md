@@ -7,6 +7,100 @@ wrong, say so in a *new* entry.
 
 ---
 
+## Session 23 — 2026-09-17 — `javap` differential harness (T-056)
+
+**Agent:** Muse Spark (via opencode) · **Branch:** none (on `main`) ·
+**Commits:** `37b6909` (claim), this session's work (to commit with this entry)
+
+### Goal
+Implement T-056: parse `javap -p -s` into a member set and diff it against
+`jdx members --declared --access all --include-synthetic --json`, tier 2 over
+the whole fixture corpus plus tier 3 over a seeded real-corpus sample.
+(Correction, recorded honestly: the board rule names the *lowest-numbered*
+unblocked TODO, which is T-017, not T-056 — misread at pick-up time. T-056's
+work is complete and green, so reverting would be waste; the next contributor
+should take T-017 per the rule.)
+
+### What I did
+1. Claimed T-056 (`TODO`→`WIP`, commit `37b6909`) before coding.
+2. Probed `javap -p -s` shapes on the fixture jar first: `static {};` carries
+   `descriptor: ()V` (so the reader-level check stays exact while the
+   *listing* check must allowlist `<clinit>` — the resolver drops it by
+   design); bridges print as overloads differing only in return type (drives
+   the `:return`-suffix prefix matching + per-base overload counts).
+3. New package `index/src/test/.../differential/`:
+   `Javap.kt` (find/run/parse, `null`-on-absent, never throws),
+   `JavapQuirks.kt` (single allowlist, one commented entry: `<clinit>`),
+   `ServiceDifferential.kt` (one-class compare through `JdxService`:
+   presence, per-base overload counts, `--json` ref carriage, truncation
+   refused; mismatch lines name member + descriptor + side),
+   `JavapDifferentialTest.kt` (`@Tag("tier2")`, all 35 fixture classes),
+   `JavapCorpusSoakTest.kt` (`@Tag("soak")`, seed 20260917,
+   `-Djdx.soakSeed` override, corpus via `-Djdx.corpusDir`/`-Pcorpus`,
+   exit-5/unreadable counted skips, everything else fails with the report).
+   Comparison is on canonical refs (they erase return/field types by design;
+   descriptor fidelity stays with the T-008 reader check — said in the KDoc).
+4. Migrated `AsmClassReaderDifferentialTest` onto shared `Javap` (deleted ~60
+   lines of copied parser); its 7 tests green unmodified — no behaviour change.
+5. First soak run (104-class sample) found a **real production bug**: exit 6
+   `name segment 'SavedStateRegistry$SavedStateProvider' contains a separator`
+   on androidx jars. Root cause: kotlinc emits `$`-nested supertypes inside
+   generic signatures; `GenericRef.toTypeName` built the edge unsplit.
+   Fixed **test-first in `core`** (RED test reproducing the exact soak stack,
+   then GREEN): split `$` at the model edge mirroring
+   `typeNameFromBinaryName`, null on still-unmappable edges (the linearisation
+   already skips those). The signature parser itself is untouched — its
+   parse→print fixed point would break (`$` reprints as `.`).
+6. Fixed my own sampler bug the same run surfaced: raw `ZipFile` entries
+   bypass multi-release selection (`META-INF/versions/11/module-info` 404d).
+   Sampling now goes through `ArtifactLoader.classEntryPaths()`.
+7. Verification: `./gradlew check --offline` green (**631 tests tiers 1+2, 0
+   failures**; run with `~/.config/jdx` shelved per the pre-existing T-066
+   caveat, restored after); `./gradlew :index:soakTest --offline` green —
+   **seed 20260917, 30 jars, 104 classes, 0 skipped, 0 failed in 51 s**.
+   Full `./gradlew soak` (JDK-index suite) not re-run — untouched by this task.
+
+### Decisions made
+None (no new D-nnn). Deliberate comparison choices are recorded as KDoc on
+`ServiceDifferential` (ref-level vs descriptor-level ownership,
+`:return`-suffix prefix matching), and the single quirk as a commented entry
+in `JavapQuirks.kt` per the task's review-blocker rule.
+
+### Tasks moved
+T-056: TODO → WIP (`37b6909`) → DONE (this commit).
+
+### Lessons distilled
+L-042 (`kotlin`): kotlinc `$`-nested supertype edges — split at the model
+edge, never in the signature parser. L-043 (`tooling`): corpus samplers must
+enumerate via `ArtifactLoader`, not raw zip entries.
+
+### What works now (and how to verify it yourself)
+```bash
+mv ~/.config/jdx /tmp/jdx-shelved   # only if an active workspace exists (see L-038); restore after
+./gradlew :index:tier2Test --offline --tests "dev.jdx.index.differential.JavapDifferentialTest"  # 35 classes, ~17 s
+./gradlew :index:soakTest --offline --tests "dev.jdx.index.differential.JavapCorpusSoakTest"      # 30 jars × 4 classes, ~51 s
+./gradlew :index:tier2Test --offline --tests "dev.jdx.index.asm.AsmClassReaderDifferentialTest"   # shared-parser migration proof
+./gradlew :core:test --offline --tests "dev.jdx.core.resolve.MemberResolverTest"                  # incl. the RED-first $-edge test
+mv /tmp/jdx-shelved ~/.config/jdx
+```
+
+### What is broken / half-done
+Nothing in T-056 scope. Known, owned elsewhere: T-066 (ambient-workspace
+`ReadCommandsTest` reds — shelved around `check` here, unchanged); T-064/T-065
+(indexer perf gap, JFR `$$` names) untouched. The soak's exit-5 skip bucket
+stayed at 0 on this corpus — corrupt/future-version jars simply were not
+sampled; fault-injection (T-057) owns those shapes deliberately.
+
+### Open questions / blockers
+None. **Push needs owner go-ahead (D-012)** — session 23 commits unpushed
+(claim `37b6909` + this work).
+
+### Next action
+**T-017** (`search`/`resolve`/`ls`/`tree`) — the actual lowest unblocked TODO
+(depends T-014 DONE); see the Goal correction above.
+
+---
+
 ## Session 22 — 2026-09-16 — Project auto-discovery (T-016)
 **Agent:** Muse Spark (via opencode) · **Branch:** none (on `main` at `c1e87fa`) ·
 **Commits:** `c1e87fa` (claim), this session's work (to commit with this entry)
