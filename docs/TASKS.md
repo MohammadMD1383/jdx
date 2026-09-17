@@ -800,8 +800,31 @@ See `docs/TESTING.md` §8.
 
 ---
 
-### T-018 — `jdx cache info|gc|clear` · `TODO`
-**Depends:** T-013 · Size reporting, eviction of artifacts no workspace references.
+### T-018 — `jdx cache info|gc|clear` · `WIP`
+**Depends:** T-013 · **Files:** `index/.../cache/CacheService.kt`, `cli/.../commands/CacheCommands.kt`
+
+`info` reports the index DB (location, size, schema version, artifact and class
+counts) plus the cache-dir size; a missing DB is an empty report, exit 0.
+`gc [--dry-run]` deletes artifacts whose stored file no longer exists (stale)
+or that no workspace references (workspace globs expanded tolerantly;
+unresolvable specs skipped); `JRT` rows are kept while any workspace includes
+the JDK, or when no workspaces exist (the default query includes the JDK).
+`clear` deletes the index DB files (`v1.db*`) and the derived `auto/` project
+cache — everything regenerable — and reports bytes freed. No last-use tracking
+in v1: `indexed_at` is creation time, so the PROPOSAL §10.2 "recently used"
+clause is approximated by reference only (documented in the service KDoc).
+
+**Acceptance**
+- [ ] `cache info|gc|clear` work in text and JSON with the same information (D-007)
+- [ ] Exit codes: 0 ok (incl. empty DB / nothing to delete) · 3 usage · 4 corrupt
+      workspace encountered by `gc` · 6 DB/IO failure; no stack trace on any path
+- [ ] `gc` deletes stale + unreferenced artifacts, keeps referenced ones and the
+      JRT rule above; `--dry-run` deletes nothing and reports what it would
+- [ ] `clear` removes the DB; a following `info` shows the empty report
+- [ ] Tier-1: service tests over a fake `IndexStore` + a generative property
+      (gc idempotence, info totals law); tier-2: real-SQLite service tests and
+      in-process CLI tests (exits, text⊆JSON, determinism)
+- [ ] README command-table row + PROPOSAL Appendix B flag entries
 
 ### T-019 — Maven coordinate resolution and opt-in fetching · `TODO`
 **Depends:** T-015 · Resolve from `~/.gradle/caches` and `~/.m2` first; fetch from Maven
