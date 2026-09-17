@@ -51,7 +51,7 @@ be fiction.
 | **M6** | Serving: daemon, MCP, HTTP, `batch` | TODO |
 | **M7** | Polish: token budgets, AppCDS, mutation gates, docs, install | TODO |
 
-**T-001 through T-017, T-053, T-054, T-055, T-056 and T-061 are `DONE`.** M0's test spine is
+**T-001 through T-018, T-053, T-054, T-055, T-056, T-057, T-061 and T-067 are `DONE`.** M0's test spine is
 complete; T-057…T-060 unblock as their milestones land. M1 starts at T-007.
 
 ---
@@ -360,19 +360,40 @@ in 51 s.*
 
 ---
 
-### T-057 — Fault-injection suite · `WIP`
+### T-057 — Fault-injection suite · `DONE` (session 26)
 **Depends:** T-007 · **Files:** `index/src/test/kotlin/.../fault/*`
 
 Generate malformed inputs programmatically rather than collecting them by hand. Full list in
 TESTING.md §7.
 
 **Acceptance**
-- [ ] Every case in TESTING.md §7 has a test
-- [ ] Each asserts **both** a documented exit code (D-015) **and** that the output names the
+- [x] Every case in TESTING.md §7 has a test
+- [x] Each asserts **both** a documented exit code (D-015) **and** that the output names the
       problem
-- [ ] **No stack trace ever reaches stdout or stderr** — asserted, for every case
-- [ ] Zip-slip and zip-bomb cases prove the D-017 defences, not just that nothing crashed
-- [ ] Truncation cases are generated (cut at every 10 % boundary), not hand-picked
+- [x] **No stack trace ever reaches stdout or stderr** — asserted, for every case
+- [x] Zip-slip and zip-bomb cases prove the D-017 defences, not just that nothing crashed
+- [x] Truncation cases are generated (cut at every 10 % boundary), not hand-picked
+
+*Implementation notes (session 26): `index/.../fault/` — `FaultSupport` (stream
+capture, trace-marker assertion, show/members three-law checkers) + `TruncationFaultTest`
+(generated 10 %-step sweep through `JdxService.show`/`members`: every cut exits 5
+naming the class, the uncut control exits 0) + `ZipFaultTest` (traversal entries
+unlisted/unopenable, no escape file under the temp dir, D-017 marker absent after a
+full hostile read, honest class in a hostile jar still exits 0; bombs proven at the
+guards every production path funnels through — infinite stream vs `readCapped`,
+declared/total/count caps, all naming artifact + "probable zip bomb"; corrupt zip
+exits 5) + `ArtifactShapeFaultTest` (empty/resources-only/`X.class`-dir/module-info-only
+jars exit 1; corrupt target and future-version exit 5; corrupt neighbour still exits 0;
+missing/deleted/unmatched-glob artifacts exit 5 naming the path; duplicate FQN exits 0
+with `DUPLICATE_FQN` naming both jars; MR conflict serves the newest applicable variant
+with `MULTI_RELEASE_VARIANT`; `-g:none` `NoDebug` exits 0 with `arg0`/`arg1`; mismatched
+sources still pair by stem and answer from bytecode, foreign stems never pair — pinning
+the degrade half of T-028). Deferred with pointers, not dropped: decompiler
+timeout/crash faults attach under T-026/T-027 (no engine to fault yet),
+`SOURCES_VERSION_MISMATCH` detection is T-028. 27 tests, all `@Tag("tier2")`.
+Soak note: `JavapCorpusSoakTest` reds on `$$` classes from corpus drift (compose/
+firebase jars) — reproduced stashed-clean, T-065 family; the harness builds query
+refs for unnameable classes instead of skipping them.*
 
 ---
 
