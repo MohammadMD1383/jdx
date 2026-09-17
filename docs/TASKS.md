@@ -756,7 +756,7 @@ end-to-end, 4 CLI incl. a real-command end-to-end); goldens byte-identical
 (discovery pinned off there). `./gradlew check` + `soak` green; tier-1 8.0 s
 of 30 s across 480 tests.*
 
-### T-017 — `jdx search`, `jdx resolve`, `jdx ls`, `jdx tree` · `TODO`
+### T-017 — `jdx search`, `jdx resolve`, `jdx ls`, `jdx tree` · `WIP`
 **Depends:** T-014 · Glob, regex, and IntelliJ-style camel-hump matching; `--fuzzy`
 Levenshtein fallback; the "did you mean" path from PROPOSAL.md §16.
 
