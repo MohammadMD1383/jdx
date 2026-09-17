@@ -1,0 +1,2 @@
+search results for '.*Record'
+  record dev.jdx.fixtures.PersonRecord  fixture-corpus.jar

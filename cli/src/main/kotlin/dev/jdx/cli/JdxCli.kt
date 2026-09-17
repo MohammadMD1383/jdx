@@ -7,9 +7,13 @@ import com.github.ajalt.clikt.parameters.options.flag
 import com.github.ajalt.clikt.parameters.options.option
 import com.github.ajalt.clikt.parameters.options.versionOption
 import dev.jdx.cli.commands.DoctorCommand
+import dev.jdx.cli.commands.LsCommand
 import dev.jdx.cli.commands.MembersCommand
 import dev.jdx.cli.commands.OutlineCommand
+import dev.jdx.cli.commands.ResolveCommand
+import dev.jdx.cli.commands.SearchCommand
 import dev.jdx.cli.commands.ShowCommand
+import dev.jdx.cli.commands.TreeCommand
 import dev.jdx.cli.commands.VersionCommand
 import dev.jdx.cli.commands.wsGroup
 
@@ -65,5 +69,9 @@ fun main(args: Array<String>): Unit =
         ShowCommand(),
         MembersCommand(),
         OutlineCommand(),
+        SearchCommand(),
+        ResolveCommand(),
+        LsCommand(),
+        TreeCommand(),
         wsGroup(),
     ).main(args)

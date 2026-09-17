@@ -94,6 +94,7 @@ net.minecraft.world.item.ItemStack#getMaxStackSize()
 | `jdx outline <type>` | File structure (`Ctrl+F12`) |
 | `jdx search <pattern>` | Search everywhere (`Shift Shift`) |
 | `jdx resolve <name>` | "What is this symbol?" |
+| `jdx ls [package]` / `jdx tree [artifact]` | External library browser |
 | `jdx usages <symbol>` | Find usages (`Alt+F7`) |
 | `jdx hierarchy <type>` | Type hierarchy (`Ctrl+H`) |
 | `jdx callers` / `jdx calls` | Call hierarchy (`Ctrl+Alt+H`) |

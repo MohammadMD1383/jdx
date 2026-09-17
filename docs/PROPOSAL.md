@@ -1111,6 +1111,9 @@ body      --engine vineflower|javap --with-doc --with-signature --context N
 source    --lines A:B --around <ref> --context N
 doc       --inherited/--no-inherited --raw
 search    --kind --regex --fuzzy --in --package --limit
+resolve   <name> [--limit]
+ls        [package-glob] [--limit]
+tree      [artifact-glob] [--depth --counts --limit]
 usages    --kind call|ref|impl|override|read|write|new|throw|annotation|all
           --in --exclude --limit --context
 hierarchy --up --down --direct --depth N --in

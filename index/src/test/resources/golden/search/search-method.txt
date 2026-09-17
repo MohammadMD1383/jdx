@@ -1,0 +1,2 @@
+search results for 'identity'
+  method dev.jdx.fixtures.Generics#identity(java.lang.Object)  fixture-corpus.jar

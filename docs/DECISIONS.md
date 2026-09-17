@@ -59,3 +59,4 @@ log.
 | D-028 | Renderer placement, signature layout, JSON contract (T-010) | proposed-by-implementer | `D-026-050.md` |
 | D-029 | Workspace file shape and resolution semantics (T-015) | proposed-by-implementer | `D-026-050.md` |
 | D-030 | Project auto-discovery semantics and deviations (T-016) | proposed-by-implementer | `D-026-050.md` |
+| D-031 | Search, resolve, ls and tree semantics (T-017) | proposed-by-implementer | `D-026-050.md` |

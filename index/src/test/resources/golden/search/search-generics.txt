@@ -1,0 +1,3 @@
+search results for 'Generics'
+  class dev.jdx.fixtures.Generics  fixture-corpus.jar
+  class dev.jdx.fixtures.Generics$Recursive  fixture-corpus.jar

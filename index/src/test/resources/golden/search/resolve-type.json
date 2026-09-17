@@ -1,0 +1,1 @@
+{"jdx":1,"ok":true,"command":"resolve","query":"Generics","result":{"hits":[{"kind":"class","ref":"dev.jdx.fixtures.Generics","artifact":"fixture-corpus.jar","package":"dev.jdx.fixtures"}]},"warnings":[],"provenance":[]}

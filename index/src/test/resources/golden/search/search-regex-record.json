@@ -1,0 +1,1 @@
+{"jdx":1,"ok":true,"command":"search","query":".*Record","result":{"hits":[{"kind":"record","ref":"dev.jdx.fixtures.PersonRecord","artifact":"fixture-corpus.jar","package":"dev.jdx.fixtures"}]},"warnings":[],"provenance":[]}

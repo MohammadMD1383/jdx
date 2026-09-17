@@ -1,0 +1,1 @@
+{"jdx":1,"ok":true,"command":"search","query":"CovOver","result":{"hits":[{"kind":"class","ref":"dev.jdx.fixtures.CovariantOverrides","artifact":"fixture-corpus.jar","package":"dev.jdx.fixtures"}]},"warnings":[],"provenance":[]}

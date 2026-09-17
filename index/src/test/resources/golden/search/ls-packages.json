@@ -1,0 +1,1 @@
+{"jdx":1,"ok":true,"command":"ls","query":"dev.jdx.*","result":{"packages":[{"name":"dev.jdx.fixtures","types":35}],"types":[]},"warnings":[],"provenance":[]}

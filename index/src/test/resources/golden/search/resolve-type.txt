@@ -1,0 +1,2 @@
+search results for 'Generics'
+  class dev.jdx.fixtures.Generics  fixture-corpus.jar

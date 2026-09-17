@@ -51,7 +51,7 @@ be fiction.
 | **M6** | Serving: daemon, MCP, HTTP, `batch` | TODO |
 | **M7** | Polish: token budgets, AppCDS, mutation gates, docs, install | TODO |
 
-**T-001 through T-016, T-053, T-054, T-055, T-056 and T-061 are `DONE`.** M0's test spine is
+**T-001 through T-017, T-053, T-054, T-055, T-056 and T-061 are `DONE`.** M0's test spine is
 complete; T-057…T-060 unblock as their milestones land. M1 starts at T-007.
 
 ---
@@ -756,9 +756,28 @@ end-to-end, 4 CLI incl. a real-command end-to-end); goldens byte-identical
 (discovery pinned off there). `./gradlew check` + `soak` green; tier-1 8.0 s
 of 30 s across 480 tests.*
 
-### T-017 — `jdx search`, `jdx resolve`, `jdx ls`, `jdx tree` · `WIP`
+### T-017 — `jdx search`, `jdx resolve`, `jdx ls`, `jdx tree` · `DONE` (session 24)
 **Depends:** T-014 · Glob, regex, and IntelliJ-style camel-hump matching; `--fuzzy`
 Levenshtein fallback; the "did you mean" path from PROPOSAL.md §16.
+
+*Implementation notes (session 24): `core/.../search/SymbolSearch` (pure
+glob/regex/camel-hump/fuzzy matcher — the never-throws property caught three
+real `globToRegex` bugs before review: nested `[`, empty/negated-empty
+classes, reversed ranges; each pinned as an example, L-044) + `core/.../
+render/SearchResults` (`SearchListing`/`LsListing`/`TreeListing` with text+JSON
+parity, truncation, determinism properties) + `JdxService.search/resolve/ls/
+tree` over live roots (name-match first, ASM-parse only matches; member
+search parses the scope — index-backed member search deferred to M4, D-031)
++ four thin Clikt commands registered in `JdxCli`. Matching semantics
+(dotted-word-as-location vs bare-word search, default kind excludes members,
+per-provider hits, ls-exact-vs-glob, tree grouping) recorded as D-031.
+Tests: 4 core suites (examples + 6 thousand-case properties) + 9-example
+`SearchNameMatchingTest` (tier 1) + 28-test `SearchServiceTest`, 20-file
+`SearchGoldenTest` and 8-test `SearchCommandsServiceTest` (tier 2) incl.
+exit 1/3/4, determinism, text⊆JSON and the exact-FQN metamorphic law.
+`./gradlew check` + `soak` green (with `~/.config/jdx` shelved for the known
+T-066 ambient-workspace reds; `--no-configuration-cache` for the T-067
+pre-existing cache failure, both proven stashed-clean, L-045).*
 
 ### T-059 — Corpus soak harness · `TODO`
 **Depends:** T-014, T-053 · **Files:** `index/src/test/kotlin/.../soak/*`
@@ -853,6 +872,45 @@ shelving `~/.config/jdx`: green without it, red with it.
 - [ ] `./gradlew :cli:test` passes with an active workspace present in `~/.config/jdx`
       (prove by creating one in the test run setup, not by relying on the machine's)
 - [ ] No production behaviour change (test-only task)
+
+---
+
+### T-067 — Repair the configuration-cache storing failure · `TODO`
+**Depends:** — · **Files:** `gradle.properties`, root `build.gradle.kts`
+*(Added in session 24: found while verifying T-017 — pre-existing, not caused
+by T-017. Proven by stashing all T-017 work and rerunning on the clean tree:
+`org.gradle.configuration-cache=true` (commit `1ebfe56`) fails every build at
+"2 problems were found storing the configuration cache", L-045.)*
+
+Any `./gradlew` invocation currently ends `BUILD FAILED` unless passed
+`--no-configuration-cache` — the tests themselves run, then cache-storing
+fails the build. Either fix the storing problems or revert the flag.
+
+**Acceptance**
+- [ ] Plain `./gradlew :core:test` (no flags) ends `BUILD SUCCESSFUL`
+- [ ] The problems-report shows zero configuration-cache problems
+- [ ] No production behaviour change (build-only task)
+
+---
+
+### T-068 — Dedupe identical resolved roots before querying · `TODO`
+**Depends:** — · **Files:** `index/.../workspace/WorkspaceResolver.kt` or `index/.../service/JdxService.kt`
+*(Added in session 24: found during T-017's real-binary e2e — not a T-017 bug,
+correct per the §13 merge + D-031 per-provider rules, but noisy.)*
+
+Explicit `--jars testfixtures/build/libs/testfixtures-0.1.0-SNAPSHOT.jar` merged
+in front of the ambient `fx` workspace (which holds the same jar via a relative
+glob) opens one file as two roots: `search` lists every hit twice and `tree`
+prints the artifact twice (second suffixed `(2)`). Same *file*, not same *name*.
+
+**Acceptance**
+- [ ] Roots resolving to the same normalised absolute path open once (explicit
+      occurrence keeps its position for shadowing order)
+- [ ] Same file via `--jars` + workspace lists each symbol once in
+      `search`/`resolve`/`ls`/`tree`
+- [ ] Same file *name* in different directories still lists per provider
+      (shading visibility must not be lost)
+- [ ] Tier-2 test with one jar passed twice (directly and via a workspace)
 
 ---
 

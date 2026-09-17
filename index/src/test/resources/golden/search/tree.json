@@ -1,0 +1,1 @@
+{"jdx":1,"ok":true,"command":"tree","query":"fixture-corpus.jar","result":{"artifacts":[{"artifact":"fixture-corpus.jar","packages":[{"package":"dev","types":35,"children":[{"package":"dev.jdx","types":35,"children":[{"package":"dev.jdx.fixtures","types":35,"children":[]}]}]}]}]},"warnings":[],"provenance":[]}

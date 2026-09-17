@@ -1,0 +1,5 @@
+package tree for 'fixture-corpus.jar'
+fixture-corpus.jar
+  dev (35 types)
+    dev.jdx (35 types)
+      dev.jdx.fixtures (35 types)

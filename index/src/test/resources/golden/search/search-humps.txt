@@ -1,0 +1,2 @@
+search results for 'CovOver'
+  class dev.jdx.fixtures.CovariantOverrides  fixture-corpus.jar

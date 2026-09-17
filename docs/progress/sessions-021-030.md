@@ -7,6 +7,119 @@ wrong, say so in a *new* entry.
 
 ---
 
+## Session 24 — 2026-09-17 — `search`/`resolve`/`ls`/`tree` (T-017)
+
+**Agent:** Muse Spark (via opencode) · **Branch:** none (on `main`) ·
+**Commits:** `55a03de` (claim), this session's work (to commit with this entry)
+
+### Goal
+Implement T-017, the lowest-numbered unblocked TODO (depends T-014 DONE):
+`jdx search`, `jdx resolve`, `jdx ls`, `jdx tree` with glob, regex and
+IntelliJ-style camel-hump matching, `--fuzzy` Levenshtein fallback and the
+§16 did-you-mean path — behind the standing test bar (tiers 1+2 green, tier 3
+green for index/rendering changes, one generative family minimum).
+
+### What I did
+1. Claimed T-017 (`TODO`→`WIP`, commit `55a03de`) before coding.
+2. **Core, test-first:** `core/.../search/SymbolSearch.kt` (pure
+   glob/regex/camel-hump/fuzzy matcher) with `SymbolSearchTest` (15 examples)
+   written first (RED on missing symbol, GREEN after). Then
+   `core/.../render/SearchResults.kt` (`SearchHit`/`SearchListing`,
+   `PackageEntry`/`LsTypeEntry`/`LsListing`, `TreeNode`/`ArtifactTree`/
+   `TreeListing`, all with text+JSON parity, truncation, deterministic order)
+   with `SearchResultsTest` + `SearchResultsPropertyTest` (determinism,
+   truncation law, text⊆JSON, tree node-count law).
+3. **Generative law paid off immediately (L-044):** the 1,000-case
+   never-throws property failed three consecutive runs, each a real
+   `PatternSyntaxException` in `globToRegex`: `[F[ßN]` (nested `[` is no legal
+   Java class), `[]`/`[^]` (empty/negated-empty classes are unclosed), and a
+   reversed range (`[Q-9]` is illegal in regex, literal in globs). Fixed by
+   escaping `[`/`\`/`&` inside classes, literal `[]`, literal leading `^`,
+   and `-`-as-range-only-between-ascending-alphanumerics; each pinned as an
+   example. Three extra full-property reruns (fresh seeds) green.
+4. **Index:** `JdxService.search/resolve/ls/tree` over live roots (name-match
+   on entry names first, ASM-parse only matches — except member search, which
+   parses the scope and is documented slow pending index-backed search).
+   Two service bugs found test-first and fixed: exact-FQN search returned the
+   `$`-nested family too (substring), breaking the TESTING.md metamorphic law
+   — fixed by the dotted-word-names-a-location rule; `PersonRecord` missed by
+   `--kind class` (it is a `RECORD` — test bug, fixed to `RECORD`).
+   `JdxService.levenshtein` now delegates to `SymbolSearch` (one impl).
+5. **CLI:** `SearchCommands.kt` (`SearchCommand`, `ResolveCommand`,
+   `LsCommand`, `TreeCommand` — thin, D-004), query typealiases in
+   `ReadCommandSupport`, registration in `JdxCli`.
+6. **Tests (tier 2):** `SearchServiceTest` (28 tests: modes, kinds incl.
+   JDK-module via real JRT, `--in`/`--package`, fuzzy, truncation, exits
+   1/3/4, determinism, text⊆JSON, exact-FQN metamorphic),
+   `SearchGoldenTest` (20 files over 10 queries, hermetic via jar-name
+   sanitising to `fixture-corpus.jar` + `--no-jdk`; diff read before keeping —
+   kinds/refs/counts all honest), `SearchCommandsServiceTest` (8 in-process
+   CLI tests incl. JSON-parses-with-same-hits). New CLI tests inject
+   `InMemoryWorkspaceStore()` + null `getenv` + null discovery — the first
+   run exited 5 everywhere from the ambient `fx` workspace, i.e. the T-066
+   trap live (L-038); hermetic from the start, unlike the suite T-066 fixes.
+7. **Verification:** `./gradlew check` green (tiers 1+2) and `./gradlew soak`
+   green — both only with `~/.config/jdx` shelved (known T-066 ambient reds)
+   and `--no-configuration-cache` (T-067 pre-existing cache-storing failure).
+   Both workarounds proven stashed-clean on the unmodified tree (L-045):
+   2 `ReadCommandsTest` reds with config present / green shelved; config-cache
+   "2 problems storing" fails even `:core:test` on the clean tree.
+8. **Real-binary e2e** (`:app:installDist` → `app/build/jdx`): `search`,
+   `--json`, `ls`, `tree --counts`, `resolve 'Generics#identity'` and a
+   miss (exit 1) all behave. First run listed every hit twice — same jar via
+   explicit `--jars` *and* the ambient `fx` workspace (which globs the fixture
+   jar): correct per the §13 merge + D-031 per-provider rules, but noisy;
+   filed as T-068 (dedupe identical resolved roots). Hermetic rerun (active
+   workspace shelved) is clean, with an honest `PROJECT_DISCOVERY_FALLBACK`.
+
+### Decisions made
+- **D-031** (proposed-by-implementer): search semantics — mode order
+  (regex > glob > plain), dotted-word-as-location vs bare-word search,
+  default kind excludes members (perf), per-provider hits instead of
+  `DUPLICATE_FQN`, resolve-exact semantics, ls-exact-vs-glob, tree grouping,
+  live-roots (no persistent index yet).
+
+### Tasks moved
+- T-017: TODO → WIP (`55a03de`) → DONE (this session).
+- T-067 (new): configuration-cache storing failure — pre-existing, filed, not
+  fixed here.
+- T-068 (new): dedupe identical resolved roots — e2e observation, correct
+  per-design today, filed as polish.
+
+### Lessons distilled
+- L-044 (tooling): never-throws regex property first; pin each shrink as an
+  example.
+- L-045 (build): stash-and-rerun to prove red-cause ownership before fixing.
+
+### What works now (and how to verify it yourself)
+```bash
+./gradlew :app:installDist --no-configuration-cache  # then use app/build/jdx
+mv ~/.config/jdx /tmp/shelved-jdx  # dodge the known T-066 ambient reds
+./gradlew check --no-configuration-cache   # tiers 1+2, green
+./gradlew soak --no-configuration-cache    # tier 3, green
+mv /tmp/shelved-jdx ~/.config/jdx
+./gradlew :index:tier2Test --tests "dev.jdx.index.service.SearchServiceTest" --no-configuration-cache
+./gradlew :index:tier2Test --tests "dev.jdx.index.render.SearchGoldenTest" --no-configuration-cache
+./gradlew :cli:tier2Test --tests "dev.jdx.cli.commands.SearchCommandsServiceTest" --no-configuration-cache
+```
+
+### What is broken / half-done
+- Nothing from T-017. Member search over JDK-scale workspaces parses the whole
+  scope per query (documented in D-031 §5); index-backed member search waits
+  for the M4 graph work.
+- Pre-existing, not mine: T-066 (ambient workspace reds 2 tier-1 tests),
+  T-067 (config-cache storing fails every build without the flag).
+
+### Open questions / blockers
+- None.
+
+### Next action
+- **T-018** (`jdx cache info|gc|clear`) — lowest unblocked TODO (depends T-013
+  DONE). Note: it will need the same `--no-configuration-cache` + shelved-home
+  workarounds until T-066/T-067 land.
+
+---
+
 ## Session 23 — 2026-09-17 — `javap` differential harness (T-056)
 
 **Agent:** Muse Spark (via opencode) · **Branch:** none (on `main`) ·

@@ -294,3 +294,59 @@ internal fun defaultMemberQuery(
 
 internal fun defaultShowQuery(ref: String, roots: JdxService.RootsSpec): JdxService.ServiceOutcome =
     JdxService.show(ref, roots)
+
+/** Query behind `search`, injectable so command tests run without IO (T-017). */
+internal typealias SearchQuery = (
+    pattern: String,
+    roots: JdxService.RootsSpec,
+    options: JdxService.SearchOptions,
+) -> JdxService.ServiceOutcome
+
+/** Query behind `resolve`, injectable so command tests run without IO (T-017). */
+internal typealias ResolveQuery = (
+    name: String,
+    roots: JdxService.RootsSpec,
+    limit: Int,
+) -> JdxService.ServiceOutcome
+
+/** Query behind `ls`, injectable so command tests run without IO (T-017). */
+internal typealias LsQuery = (
+    packageGlob: String?,
+    roots: JdxService.RootsSpec,
+    limit: Int,
+) -> JdxService.ServiceOutcome
+
+/** Query behind `tree`, injectable so command tests run without IO (T-017). */
+internal typealias TreeQuery = (
+    artifactGlob: String?,
+    roots: JdxService.RootsSpec,
+    depth: Int,
+    withCounts: Boolean,
+    limit: Int,
+) -> JdxService.ServiceOutcome
+
+internal fun defaultSearchQuery(
+    pattern: String,
+    roots: JdxService.RootsSpec,
+    options: JdxService.SearchOptions,
+): JdxService.ServiceOutcome = JdxService.search(pattern, roots, options)
+
+internal fun defaultResolveQuery(
+    name: String,
+    roots: JdxService.RootsSpec,
+    limit: Int,
+): JdxService.ServiceOutcome = JdxService.resolve(name, roots, limit)
+
+internal fun defaultLsQuery(
+    packageGlob: String?,
+    roots: JdxService.RootsSpec,
+    limit: Int,
+): JdxService.ServiceOutcome = JdxService.ls(packageGlob, roots, limit)
+
+internal fun defaultTreeQuery(
+    artifactGlob: String?,
+    roots: JdxService.RootsSpec,
+    depth: Int,
+    withCounts: Boolean,
+    limit: Int,
+): JdxService.ServiceOutcome = JdxService.tree(artifactGlob, roots, depth, withCounts, limit)

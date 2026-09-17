@@ -14,14 +14,14 @@ or delete a past entry — if one turned out to be wrong, say so in a *new* entr
 
 | | |
 |---|---|
-| **Last updated** | 2026-09-17 (session 23) |
+| **Last updated** | 2026-09-17 (session 24) |
 | **Repository** | <https://github.com/MohammadMD1383/jdx> (public, Apache-2.0) |
 | **Phase** | Design complete; **M0 done, M1 in progress** |
 | **Active milestone** | M2 — Index |
-| **Next task** | **T-017 (`search`/`resolve`/`ls`/`tree`)** — lowest unblocked TODO (depends T-014 DONE); T-057 (fault injection), T-062 (`--sort` orders), T-066 (`ReadCommandsTest` store hermeticity), T-063 (share fixture-jar helpers) also open |
-| **Task count** | 64 tasks defined (T-001…T-066; M0–M2 in full detail, M3–M7 as one-liners) |
-| **Build status** | **Green.** `./gradlew build` passes. Runnable `jdx`: `./gradlew :app:installDist` → `app/build/jdx` (fat jar + POSIX launcher, JDK-21 gate, ~180 ms cold start); `install.sh` symlinks it into `~/.local/bin`. Commands so far: `--version`, `version [--json]`, `doctor [--json]`, **`show`, `members`, `outline` (all flags, text+JSON, exits 0–4, `-w` workspaces)**, **`ws create|list|info|remove|use|add` (text+JSON, exits 0/1/3/4/6)**. JDK root: zero-config `show`/`members` on `java.*` via `jrt:/`, module-as-artifact (`java.base`), `src.zip` paired from `java.home`/`$JAVA_HOME` (T-012). Workspaces (T-015): TOML in `~/.config/jdx/workspaces/`, §13 resolution (`-w` > `JDX_WORKSPACE` > `ws use`, explicit `--jars` merge first), first-provider-wins shadowing with `DUPLICATE_FQN`. Auto-discovery (T-016): Gradle/Maven projects contribute `build/classes`/`target/classes` + referenced cache jars when no workspace is selected (cached in `~/.cache/jdx/auto/`, `PROJECT_DISCOVERY_FALLBACK` when coordinates are unknown). |
-| **Test status** | **All green** (`./gradlew check` tiers 1+2: 631 tests, 0 failures; soak tier 3 green). T-056 added the `javap` differential: tier-2 suite over all 35 fixture classes (presence, per-base overload counts incl. bridges, `--json` ref carriage) + a seeded tier-3 corpus sample (seed 20260917: 30 jars, 104 classes, 0 skips, 0 failures in ~51 s) + one test-first `core` fix (`$`-nested generic supertype edges read as nesting, L-042). **Caveat (L-038):** a bare `check` on *this* machine still needs `~/.config/jdx` shelved — the ambient `fx` active workspace reds 2 `ReadCommandsTest` store tests (T-066, pre-existing). Shared `GoldenFiles`/`UnifiedDiff` helper (`testfixtures` testFixtures) backs all goldens; update mode prints every rewritten path. |
+| **Next task** | **T-018 (`cache info\|gc\|clear`)** — lowest unblocked TODO (depends T-013 DONE); T-057 (fault injection), T-058 (metamorphic), T-062 (`--sort` orders), T-063 (share fixture-jar helpers), T-064 (indexer speed), T-065 (`$$` names), T-066 (`ReadCommandsTest` hermeticity), T-067 (config-cache failure), T-068 (identical-root dedupe) also open |
+| **Task count** | 66 tasks defined (T-001…T-068; M0–M2 in full detail, M3–M7 as one-liners) |
+| **Build status** | **Green with two workarounds (both pre-existing, both proven stashed-clean, L-045).** `./gradlew build` passes. Runnable `jdx`: `./gradlew :app:installDist` → `app/build/jdx` (fat jar + POSIX launcher, JDK-21 gate, ~180 ms cold start); `install.sh` symlinks it into `~/.local/bin`. Commands so far: `--version`, `version [--json]`, `doctor [--json]`, **`show`, `members`, `outline` (all flags, text+JSON, exits 0–4, `-w` workspaces)**, **`search`, `resolve`, `ls`, `tree` (glob/regex/camel-hump/fuzzy, text+JSON, exits 0/1/3/4/5/6, `-w` workspaces)**, **`ws create\|list\|info\|remove\|use\|add` (text+JSON, exits 0/1/3/4/6)**. JDK root: zero-config `show`/`members` on `java.*` via `jrt:/`, module-as-artifact (`java.base`), `src.zip` paired from `java.home`/`$JAVA_HOME` (T-012). Workspaces (T-015): TOML in `~/.config/jdx/workspaces/`, §13 resolution (`-w` > `JDX_WORKSPACE` > `ws use`, explicit `--jars` merge first), first-provider-wins shadowing with `DUPLICATE_FQN`. Auto-discovery (T-016): Gradle/Maven projects contribute `build/classes`/`target/classes` + referenced cache jars when no workspace is selected (cached in `~/.cache/jdx/auto/`, `PROJECT_DISCOVERY_FALLBACK` when coordinates are unknown). |
+| **Test status** | **All green** (`./gradlew check` tiers 1+2 ≈ 700 tests, 0 failures; soak tier 3 green) — **only with `~/.config/jdx` shelved and `--no-configuration-cache`**, see caveats. T-017 added: `SymbolSearch` matcher (4 core suites incl. 6 thousand-case properties — the never-throws property caught 3 real `globToRegex` bugs pre-review, L-044), `SearchNameMatchingTest` (tier 1), `SearchServiceTest` (28 tests), `SearchGoldenTest` (20 files), `SearchCommandsServiceTest` (8 tests). Tier-2 search suite over all fixture classes + seeded tier-3 corpus sample still green from T-056. **Caveat 1 (L-038, T-066):** a bare `check` on *this* machine still needs `~/.config/jdx` shelved — the ambient `fx` active workspace reds 2 `ReadCommandsTest` store tests. **Caveat 2 (T-067):** `org.gradle.configuration-cache=true` (commit `1ebfe56`) fails every build at cache-storing time ("2 problems found"); tests run, then storing fails the build. Pre-existing — reproduced on the stashed-clean tree. Shared `GoldenFiles`/`UnifiedDiff` helper (`testfixtures` testFixtures) backs all goldens; update mode prints every rewritten path. |
 | **Docs** | Append-only logs sharded (D-023): sessions → `docs/progress/`, decisions → `docs/decisions/` (shard 2 open — D-030 discovery semantics/deviations), lessons → `docs/lessons/` (`L-026-050.md` open — latest L-039 (nested Kotlin comments), L-040 (deepest package roots), L-041 (the checkout is ambient discovery state). Every hard-won lesson goes to `docs/LESSONS.md` (D-024). |
 | **Blocked on** | Nothing. Pushed through session 22 (`b53b7d4`); **push still needs owner go-ahead per session (D-012)**. |
 
@@ -171,7 +171,7 @@ suite, and real-JVM end-to-end tests.
 
 12. **Project auto-discovery** (`index/.../workspace/ProjectDiscovery.kt` +
     `ProjectCache`, `cli/.../commands/ReadCommandSupport.kt`, T-016, session
-    22): nearest-marker walk (`settings.gradle.kts` first), coordinates from
+     22): nearest-marker walk (`settings.gradle.kts` first), coordinates from
     `gradle.lockfile`/scripts/`pom.xml` (never running a build), jars resolved
     from the Gradle files cache + `~/.m2` (sources/javadoc excluded), deepest
     package roots kept, cached as `~/.cache/jdx/auto/<hash>.toml` plus a
@@ -181,6 +181,24 @@ suite, and real-JVM end-to-end tests.
     whole cache (D-030). Proven by 11 new tier-1 tests (incl. two 1,000-case
     properties) + 31 tier-2 tests (incl. a real-command end-to-end); commands
     take an injectable `ProjectDiscoveryFn` so tier-1 stays hermetic (L-041).
+
+13. **Search and navigation** (`core/.../search/SymbolSearch.kt`,
+    `core/.../render/SearchResults.kt`, `JdxService.search/resolve/ls/tree`,
+    `cli/.../commands/SearchCommands.kt`, T-017, session 24): glob (with a
+    hardened `[...]` compiler — nested `[`, empty/negated-empty classes and
+    reversed ranges are literal, never throws), regex (`--regex`, invalid is
+    exit 3), camel-hump (`HMap` → `HashMap`) and substring on bare words,
+    `--fuzzy` Levenshtein-2 fallback, did-you-mean on misses. A dotted plain
+    word names a location (exact or `.`-boundary suffix — the exact-FQN
+    metamorphic law); the default `--kind` covers types+packages+modules while
+    `method`/`field` scan members explicitly (live roots, no persistent index
+    yet). `resolve` is exact-match (several candidates are exit 0);
+    `ls [package-glob]` lists packages-with-counts or one package's types;
+    `tree [artifact-glob]` nests the package forest (`--depth`, `--counts`,
+    JRT grouped by module). Matching semantics in D-031. Proven by 4 core
+    suites (examples + 6 thousand-case properties) + 9 tier-1 name-matching
+    tests + 28 service tests + 20 golden files + 8 CLI tests; `check` + `soak`
+    green.
 
 Docs of note: `docs/LESSONS.md` (+ `docs/lessons/` shards) — mistakes already paid for,
 now L-001…L-025 (`L-001-025.md` full — next lesson creates `L-026-050.md`). Skim its index before fighting a toolchain or spec.
@@ -261,7 +279,7 @@ when it holds 10 sessions, create the next (`sessions-011-020.md`) and update th
 |---|---|---|
 | `docs/progress/sessions-001-010.md` | 1–10 | full |
 | `docs/progress/sessions-011-020.md` | 11–20 | full |
-| `docs/progress/sessions-021-030.md` | 21– | open (9 free) |
+| `docs/progress/sessions-021-030.md` | 21– | open (6 free) |
 
 ---
 

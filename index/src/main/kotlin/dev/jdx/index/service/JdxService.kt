@@ -15,17 +15,34 @@ import dev.jdx.core.model.WarningCode
 import dev.jdx.core.model.typeNameFromBinaryName
 import dev.jdx.core.ref.SymbolRefParser
 import dev.jdx.core.ref.SymbolRefParseResult
+import dev.jdx.core.ref.SymbolRefPrinter
 import dev.jdx.core.render.ClassCard
 import dev.jdx.core.render.DEFAULT_MEMBER_LIMIT
+import dev.jdx.core.render.DEFAULT_SEARCH_LIMIT
+import dev.jdx.core.render.DEFAULT_TREE_DEPTH
 import dev.jdx.core.render.ErrorResult
+import dev.jdx.core.render.LsListing
+import dev.jdx.core.render.LsTypeEntry
 import dev.jdx.core.render.MemberListing
 import dev.jdx.core.render.MemberListingOptions
 import dev.jdx.core.render.OBJECT_BINARY_NAME
+import dev.jdx.core.render.PackageEntry
+import dev.jdx.core.render.SearchHit
+import dev.jdx.core.render.SearchListing
+import dev.jdx.core.render.SignatureLines
+import dev.jdx.core.render.TreeListing
+import dev.jdx.core.render.buildArtifactTree
+import dev.jdx.core.render.buildLsListing
+import dev.jdx.core.render.buildSearchListing
+import dev.jdx.core.render.buildTreeListing
 import dev.jdx.core.render.buildClassCard
 import dev.jdx.core.render.buildMemberListing
+import dev.jdx.core.render.countNodes
+import dev.jdx.core.render.searchKindWord
 import dev.jdx.core.resolve.MemberResolutionOptions
 import dev.jdx.core.resolve.MemberResolver
 import dev.jdx.core.resolve.ResolvedMembers
+import dev.jdx.core.search.SymbolSearch
 import dev.jdx.index.artifact.ArtifactKind
 import dev.jdx.index.artifact.ArtifactLoader
 import dev.jdx.index.artifact.ArtifactReadException
@@ -122,6 +139,27 @@ public object JdxService {
             override val exitCode: Int = 0
             override fun renderText(color: Boolean): String = card.renderText(color)
             override fun toJson(command: String): String = card.toJson(command)
+        }
+
+        /** A symbol search (`search`, `resolve`) — exit 0. */
+        public data class SearchList(public val listing: SearchListing) : ServiceOutcome {
+            override val exitCode: Int = 0
+            override fun renderText(color: Boolean): String = listing.renderText(color)
+            override fun toJson(command: String): String = listing.toJson(command)
+        }
+
+        /** A package listing (`ls`) — exit 0. */
+        public data class LsList(public val listing: LsListing) : ServiceOutcome {
+            override val exitCode: Int = 0
+            override fun renderText(color: Boolean): String = listing.renderText(color)
+            override fun toJson(command: String): String = listing.toJson(command)
+        }
+
+        /** A package forest (`tree`) — exit 0. */
+        public data class TreeList(public val listing: TreeListing) : ServiceOutcome {
+            override val exitCode: Int = 0
+            override fun renderText(color: Boolean): String = listing.renderText(color)
+            override fun toJson(command: String): String = listing.toJson(command)
         }
 
         /** A machine-legible failure — exit 1..6, never a guess, never a trace. */
@@ -522,23 +560,11 @@ public object JdxService {
         return (sameName + near).take(cap)
     }
 
-    internal fun levenshtein(a: String, b: String): Int {
-        if (a == b) return 0
-        var previous = IntArray(b.length + 1) { it }
-        for (i in 1..a.length) {
-            val current = IntArray(b.length + 1)
-            current[0] = i
-            for (j in 1..b.length) {
-                current[j] = minOf(
-                    previous[j] + 1,
-                    current[j - 1] + 1,
-                    previous[j - 1] + if (a[i - 1] == b[j - 1]) 0 else 1,
-                )
-            }
-            previous = current
-        }
-        return previous[b.length]
-    }
+    /**
+     * Edit distance, behind did-you-mean (PROPOSAL.md §16). Delegates to
+     * [SymbolSearch] so the CLI and the search fallback share one implementation.
+     */
+    internal fun levenshtein(a: String, b: String): Int = SymbolSearch.levenshtein(a, b)
 
     // -- member filtering (pure, unit-tested) -----------------------------------
 
@@ -584,6 +610,701 @@ public object JdxService {
             true
         }
         return resolved.copy(methods = methods, fields = fields)
+    }
+
+    // -- search / resolve / ls / tree (T-017) ------------------------------------
+
+    /** `--kind` values for `search` (PROPOSAL.md §7.2), plus `type` and `all`. */
+    public enum class SearchKindFilter(public val flag: String) {
+        ALL("all"),
+        TYPE("type"),
+        CLASS("class"),
+        INTERFACE("interface"),
+        ENUM("enum"),
+        RECORD("record"),
+        ANNOTATION("annotation"),
+        OBJECT("object"),
+        COMPANION("companion"),
+        METHOD("method"),
+        FIELD("field"),
+        PACKAGE("package"),
+        MODULE("module"),
+    }
+
+    /**
+     * Options for `search`: which symbols match and how much to show. `inArtifact`
+     * is the `--in` glob over artifact labels (jar file names, class-dir names,
+     * JDK module names); `inPackage` is `--package` over dotted package names.
+     * Both accept globs, else match as case-insensitive substrings (D-031).
+     */
+    public data class SearchOptions(
+        public val kind: SearchKindFilter = SearchKindFilter.ALL,
+        public val regex: Boolean = false,
+        public val fuzzy: Boolean = false,
+        public val inArtifact: String? = null,
+        public val inPackage: String? = null,
+        public val limit: Int = DEFAULT_SEARCH_LIMIT,
+    )
+
+    /**
+     * Answers `search <pattern>`: symbol search across the workspace's roots.
+     * Name matching is [SymbolSearch] (glob, regex, camel-hump, fuzzy fallback);
+     * orchestration here only enumerates entry names and parses the classes the
+     * pattern actually touches — a live-roots search, no persistent index yet
+     * (index-backed search will land with the M4 graph work).
+     */
+    public fun search(rawPattern: String, roots: RootsSpec, options: SearchOptions = SearchOptions()): ServiceOutcome {
+        if (options.limit < 0) {
+            return failure(3, rawPattern, "usage error: --limit must be >= 0, got ${options.limit}")
+        }
+        if (options.regex && !SymbolSearch.isValidRegex(rawPattern)) {
+            return failure(3, rawPattern, "usage error: invalid --regex pattern '$rawPattern'")
+        }
+        if (roots.jarSpecs.isEmpty() && !roots.includeJdk) {
+            return failure(
+                4,
+                rawPattern,
+                "no workspace: no --jars given, no workspace selected (-w <name>, " +
+                    "JDX_WORKSPACE, jdx ws use) and --no-jdk set " +
+                    "(pass --jars <path>, select a workspace, or drop --no-jdk)",
+            )
+        }
+        return try {
+            executeSearch(rawPattern, roots, options)
+        } catch (e: ArtifactReadException) {
+            failure(5, rawPattern, e.message ?: "artifact read error")
+        } catch (e: Exception) {
+            failure(6, rawPattern, "internal error: ${e.javaClass.simpleName}: ${e.message ?: "no detail"}")
+        }
+    }
+
+    /**
+     * Answers `resolve <name>`: exact-match disambiguation for an unqualified or
+     * partial name. Every candidate lists kind and artifact; several candidates
+     * are success (exit 0) here — that is the point of the command — while none
+     * is exit 1 with did-you-mean suggestions.
+     */
+    public fun resolve(rawName: String, roots: RootsSpec, limit: Int = DEFAULT_SEARCH_LIMIT): ServiceOutcome {
+        if (limit < 0) {
+            return failure(3, rawName, "usage error: --limit must be >= 0, got $limit")
+        }
+        if (roots.jarSpecs.isEmpty() && !roots.includeJdk) {
+            return failure(
+                4,
+                rawName,
+                "no workspace: no --jars given, no workspace selected (-w <name>, " +
+                    "JDX_WORKSPACE, jdx ws use) and --no-jdk set " +
+                    "(pass --jars <path>, select a workspace, or drop --no-jdk)",
+            )
+        }
+        return try {
+            executeResolve(rawName, roots, limit)
+        } catch (e: ArtifactReadException) {
+            failure(5, rawName, e.message ?: "artifact read error")
+        } catch (e: Exception) {
+            failure(6, rawName, "internal error: ${e.javaClass.simpleName}: ${e.message ?: "no detail"}")
+        }
+    }
+
+    /**
+     * Answers `ls [package-glob]`: packages matching the glob with type counts —
+     * or, when the glob names one exact package, the types inside it.
+     */
+    public fun ls(packageGlob: String?, roots: RootsSpec, limit: Int = DEFAULT_SEARCH_LIMIT): ServiceOutcome {
+        val query = packageGlob ?: "*"
+        if (limit < 0) {
+            return failure(3, query, "usage error: --limit must be >= 0, got $limit")
+        }
+        if (roots.jarSpecs.isEmpty() && !roots.includeJdk) {
+            return failure(
+                4,
+                query,
+                "no workspace: no --jars given, no workspace selected (-w <name>, " +
+                    "JDX_WORKSPACE, jdx ws use) and --no-jdk set " +
+                    "(pass --jars <path>, select a workspace, or drop --no-jdk)",
+            )
+        }
+        return try {
+            executeLs(query, packageGlob, roots, limit)
+        } catch (e: ArtifactReadException) {
+            failure(5, query, e.message ?: "artifact read error")
+        } catch (e: Exception) {
+            failure(6, query, "internal error: ${e.javaClass.simpleName}: ${e.message ?: "no detail"}")
+        }
+    }
+
+    /**
+     * Answers `tree [artifact-glob]`: the package forest of each matching
+     * artifact, nested to [depth] (0 shows top-level segments only).
+     */
+    public fun tree(
+        artifactGlob: String?,
+        roots: RootsSpec,
+        depth: Int = DEFAULT_TREE_DEPTH,
+        withCounts: Boolean = false,
+        limit: Int = DEFAULT_SEARCH_LIMIT,
+    ): ServiceOutcome {
+        val query = artifactGlob ?: "*"
+        if (limit < 0) {
+            return failure(3, query, "usage error: --limit must be >= 0, got $limit")
+        }
+        if (depth < 0) {
+            return failure(3, query, "usage error: --depth must be >= 0, got $depth")
+        }
+        if (roots.jarSpecs.isEmpty() && !roots.includeJdk) {
+            return failure(
+                4,
+                query,
+                "no workspace: no --jars given, no workspace selected (-w <name>, " +
+                    "JDX_WORKSPACE, jdx ws use) and --no-jdk set " +
+                    "(pass --jars <path>, select a workspace, or drop --no-jdk)",
+            )
+        }
+        return try {
+            executeTree(query, roots, depth, withCounts, limit)
+        } catch (e: ArtifactReadException) {
+            failure(5, query, e.message ?: "artifact read error")
+        } catch (e: Exception) {
+            failure(6, query, "internal error: ${e.javaClass.simpleName}: ${e.message ?: "no detail"}")
+        }
+    }
+
+    // -- search execution -------------------------------------------------------
+
+    private data class SearchEntry(
+        val binary: String,
+        val packageName: String,
+        val artifact: String,
+        val rootIndex: Int,
+    )
+
+    private class SearchWorkspace(
+        val entries: List<SearchEntry>,
+        val workspace: Workspace,
+        val warnings: MutableList<Warning>,
+        val opened: List<OpenRoot>,
+    )
+
+    private fun openSearchWorkspace(roots: RootsSpec): SearchWorkspace {
+        val opened = openRoots(roots)
+        try {
+            val warnings = mutableListOf<Warning>()
+            warnings.addAll(roots.extraWarnings)
+            for (open in opened) warnings.addAll(open.root.warnings)
+            // Per-provider rows: shadowing duplicates list one hit per artifact
+            // (the honest answer for search — D-031), so nothing is keyed away.
+            // `rootIndex` disambiguates same-named artifacts in `tree` (D-031).
+            val entries = opened.flatMapIndexed { rootIndex, open ->
+                open.root.classEntryPaths().map { path ->
+                    val binary = entryToBinary(path)
+                    SearchEntry(
+                        binary = binary,
+                        packageName = binary.substringBeforeLast('.', ""),
+                        artifact = rootLabel(open, binary),
+                        rootIndex = rootIndex,
+                    )
+                }
+            }
+            val providers = mutableMapOf<String, MutableList<Int>>()
+            opened.forEachIndexed { index, open ->
+                for (binary in open.root.classEntryPaths().map(::entryToBinary)) {
+                    providers.getOrPut(binary) { mutableListOf() }.add(index)
+                }
+            }
+            return SearchWorkspace(entries, Workspace(opened, providers, warnings), warnings, opened)
+        } catch (e: Exception) {
+            opened.forEach { runCatching { it.root.close() } }
+            throw e
+        }
+    }
+
+    private fun SearchWorkspace.close(): Unit = opened.forEach { it.root.close() }
+
+    private fun executeSearch(rawPattern: String, roots: RootsSpec, options: SearchOptions): ServiceOutcome {
+        val search = openSearchWorkspace(roots)
+        try {
+            val scope = search.entries.filter { entry ->
+                matchesArtifactFilter(options.inArtifact, entry.artifact) &&
+                    matchesPackageFilter(options.inPackage, entry.packageName)
+            }
+            val hits = mutableListOf<SearchHit>()
+            val wantTypes = options.kind == SearchKindFilter.ALL ||
+                options.kind == SearchKindFilter.TYPE || isTypeKind(options.kind)
+            val wantMembers = options.kind == SearchKindFilter.METHOD || options.kind == SearchKindFilter.FIELD
+            val wantPackages = options.kind == SearchKindFilter.ALL || options.kind == SearchKindFilter.PACKAGE
+            val wantModules = options.kind == SearchKindFilter.ALL || options.kind == SearchKindFilter.MODULE
+            if (wantTypes) hits.addAll(matchTypes(search, scope, rawPattern, options))
+            if (wantMembers) hits.addAll(matchMembers(search, scope, rawPattern, options))
+            if (wantPackages) hits.addAll(matchPackages(scope, rawPattern, options))
+            if (wantModules) hits.addAll(matchModules(search, rawPattern, options))
+            // The `--fuzzy` fallback runs only when the precise modes find nothing.
+            if (hits.isEmpty() && options.fuzzy && !options.regex) {
+                hits.addAll(fuzzyMatchTypes(search, scope, rawPattern, options))
+            }
+            if (hits.isEmpty()) {
+                val suggestions = suggestSimilar(
+                    rawPattern.substringAfterLast('.').substringAfterLast('$'),
+                    scope.map { it.binary }.toSet(),
+                )
+                return ServiceOutcome.Failure(ErrorResult.notFound(rawPattern, suggestions))
+            }
+            val sorted = hits.sortedWith(compareBy({ it.ref }, { it.artifact }))
+            val warnings = search.warnings.sortedBy { it.code }
+            val listing = buildSearchListing(rawPattern, sorted, options.limit, warnings)
+            return ServiceOutcome.SearchList(listing)
+        } finally {
+            search.close()
+        }
+    }
+
+    private fun isTypeKind(kind: SearchKindFilter): Boolean = when (kind) {
+        SearchKindFilter.CLASS, SearchKindFilter.INTERFACE, SearchKindFilter.ENUM,
+        SearchKindFilter.RECORD, SearchKindFilter.ANNOTATION,
+        SearchKindFilter.OBJECT, SearchKindFilter.COMPANION -> true
+        else -> false
+    }
+
+    private fun matchTypes(
+        search: SearchWorkspace,
+        scope: List<SearchEntry>,
+        pattern: String,
+        options: SearchOptions,
+    ): List<SearchHit> {
+        // Name-match first (entry names only, no parsing), then load the winners
+        // for their kind words — one ASM parse per *matched* class, never a scan.
+        val nameMatched = scope.filter { matchesTypeName(pattern, it.binary, options.regex) }.distinctBy { it.binary }
+        if (nameMatched.isEmpty()) return emptyList()
+        val kinds = nameMatched.associate { entry ->
+            entry.binary to search.workspace.load(entry.binary)?.kind
+        }
+        return scope
+            .filter { matchesTypeName(pattern, it.binary, options.regex) }
+            .filter { entry ->
+                when (options.kind) {
+                    SearchKindFilter.ALL, SearchKindFilter.TYPE -> true
+                    else -> {
+                        val kind = kinds[entry.binary] ?: return@filter false
+                        searchKindWord(kind).equals(options.kind.flag, ignoreCase = true)
+                    }
+                }
+            }
+            .map { entry ->
+                val kind = kinds[entry.binary]
+                SearchHit(
+                    kind = if (kind == null) "class" else searchKindWord(kind),
+                    ref = entry.binary,
+                    artifact = entry.artifact,
+                    packageName = entry.packageName,
+                )
+            }
+    }
+
+    private fun fuzzyMatchTypes(
+        search: SearchWorkspace,
+        scope: List<SearchEntry>,
+        pattern: String,
+        options: SearchOptions,
+    ): List<SearchHit> {
+        val nameMatched = scope.filter {
+            SymbolSearch.fuzzyMatches(pattern, it.binary.substringAfterLast('.').substringAfterLast('$'))
+        }.distinctBy { it.binary }
+        if (nameMatched.isEmpty()) return emptyList()
+        val kinds = nameMatched.associate { entry ->
+            entry.binary to search.workspace.load(entry.binary)?.kind
+        }
+        return scope
+            .filter {
+                SymbolSearch.fuzzyMatches(pattern, it.binary.substringAfterLast('.').substringAfterLast('$'))
+            }
+            .filter { entry ->
+                when (options.kind) {
+                    SearchKindFilter.ALL, SearchKindFilter.TYPE -> true
+                    else -> {
+                        val kind = kinds[entry.binary] ?: return@filter false
+                        searchKindWord(kind).equals(options.kind.flag, ignoreCase = true)
+                    }
+                }
+            }
+            .map { entry ->
+                val kind = kinds[entry.binary]
+                SearchHit(
+                    kind = if (kind == null) "class" else searchKindWord(kind),
+                    ref = entry.binary,
+                    artifact = entry.artifact,
+                    packageName = entry.packageName,
+                )
+            }
+    }
+
+    private fun matchMembers(
+        search: SearchWorkspace,
+        scope: List<SearchEntry>,
+        pattern: String,
+        options: SearchOptions,
+    ): List<SearchHit> {
+        // Member search parses every in-scope class (the slow path — index-backed
+        // member search will lift this with the M4 graph work). Bridge/synthetic
+        // members stay hidden, mirroring `members` (D-031).
+        val wantMethods = options.kind == SearchKindFilter.METHOD
+        val hits = mutableListOf<SearchHit>()
+        for (entry in scope.distinctBy { it.binary }) {
+            val info = search.workspace.load(entry.binary) ?: continue
+            val methodSiblings = info.methods.groupingBy {
+                it.name to it.descriptor.parameters.joinToString("") { parameter -> parameter.descriptor }
+            }.eachCount()
+            if (wantMethods) {
+                for (method in info.methods) {
+                    if (method.name == "<clinit>") continue
+                    if (method.access.has(AccessFlag.SYNTHETIC) || method.access.has(AccessFlag.BRIDGE)) continue
+                    if (!matchesMemberName(pattern, method.name, options.regex)) continue
+                    val baseRef = SymbolRefPrinter.print(
+                        MemberSymbolRef(
+                            declaringType = info.name,
+                            name = method.name,
+                            parameterTypes = method.descriptor.parameters,
+                        ),
+                    )
+                    val key = method.name to
+                        method.descriptor.parameters.joinToString("") { parameter -> parameter.descriptor }
+                    val ref = if ((methodSiblings[key] ?: 0) > 1 && method.name != "<init>") {
+                        baseRef + ":" + SignatureLines.renderTypeName(method.descriptor.returnType)
+                    } else {
+                        baseRef
+                    }
+                    providersOf(search, entry.binary, entry).forEach { artifact ->
+                        hits.add(
+                            SearchHit(
+                                kind = if (method.name == "<init>") "constructor" else "method",
+                                ref = ref,
+                                artifact = artifact,
+                                packageName = entry.packageName,
+                            ),
+                        )
+                    }
+                }
+            } else {
+                for (field in info.fields) {
+                    if (field.access.has(AccessFlag.SYNTHETIC)) continue
+                    if (!matchesMemberName(pattern, field.name, options.regex)) continue
+                    val ref = SymbolRefPrinter.print(MemberSymbolRef(info.name, field.name))
+                    providersOf(search, entry.binary, entry).forEach { artifact ->
+                        hits.add(
+                            SearchHit(
+                                kind = "field",
+                                ref = ref,
+                                artifact = artifact,
+                                packageName = entry.packageName,
+                            ),
+                        )
+                    }
+                }
+            }
+        }
+        return hits
+    }
+
+    private fun providersOf(search: SearchWorkspace, binary: String, entry: SearchEntry): List<String> {
+        // Every provider of the binary lists its own artifact label (D-031).
+        return search.entries.filter { it.binary == binary }.map { it.artifact }.distinct().ifEmpty {
+            listOf(entry.artifact)
+        }
+    }
+
+    private fun matchPackages(
+        scope: List<SearchEntry>,
+        pattern: String,
+        options: SearchOptions,
+    ): List<SearchHit> {
+        val pairs = scope.map { it.packageName to it.artifact }.distinct()
+            .filter { (packageName, _) -> matchesPackageName(pattern, packageName, options.regex) }
+        return pairs.map { (packageName, artifact) ->
+            SearchHit(kind = "package", ref = packageName, artifact = artifact, packageName = packageName)
+        }
+    }
+
+    private fun matchModules(
+        search: SearchWorkspace,
+        pattern: String,
+        options: SearchOptions,
+    ): List<SearchHit> {
+        val modules = search.opened.flatMap { open ->
+            val jrtModuleFor = open.jrtModuleFor ?: return@flatMap emptyList()
+            open.root.classEntryPaths().mapNotNull { jrtModuleFor(it) }
+        }.distinct()
+        return modules.filter { matchesMemberName(pattern, it, options.regex) }.map { module ->
+            SearchHit(kind = "module", ref = module, artifact = module, packageName = "")
+        }
+    }
+
+    // -- name matching over workspace names (pure, unit-tested) ------------------
+
+    /**
+     * Matches [pattern] against a binary type name. Regex tries the binary, dotted
+     * and simple forms; a dotted glob tries binary and dotted forms; a bare glob
+     * tries the simple name and the binary. A dotted plain word names a location:
+     * it matches exactly or as a `.`-boundary suffix (`dev.jdx.fixtures.Generics`
+     * finds that type but not `Generics$Recursive` — the TESTING.md metamorphic
+     * law). A bare plain word is a case-insensitive substring or a camel-hump on
+     * the simple name (`JsonAdapter` also finds `JsonAdapterAnnotation...`, D-031).
+     */
+    internal fun matchesTypeName(pattern: String, binary: String, regex: Boolean): Boolean {
+        val dotted = binary.replace('$', '.')
+        val simple = binary.substringAfterLast('.').substringAfterLast('$')
+        if (regex) {
+            return SymbolSearch.matchesRegex(pattern, binary) ||
+                SymbolSearch.matchesRegex(pattern, dotted) ||
+                SymbolSearch.matchesRegex(pattern, simple)
+        }
+        if (SymbolSearch.isGlobPattern(pattern)) {
+            return if ('.' in pattern) {
+                SymbolSearch.matchesGlob(pattern, binary) || SymbolSearch.matchesGlob(pattern, dotted)
+            } else {
+                SymbolSearch.matchesGlob(pattern, simple) || SymbolSearch.matchesGlob(pattern, binary)
+            }
+        }
+        if ('.' in pattern) {
+            return binary == pattern || dotted == pattern ||
+                (binary.endsWith(pattern) && binary[binary.length - pattern.length - 1] == '.') ||
+                (dotted.endsWith(pattern) && dotted[dotted.length - pattern.length - 1] == '.')
+        }
+        return SymbolSearch.matchesSubstring(pattern, simple) ||
+            SymbolSearch.matchesSubstring(pattern, binary) ||
+            SymbolSearch.camelHumpMatches(pattern, simple)
+    }
+
+    /** Matches [pattern] against a member or module name (no package structure). */
+    internal fun matchesMemberName(pattern: String, name: String, regex: Boolean): Boolean {
+        if (regex) return SymbolSearch.matchesRegex(pattern, name)
+        if (SymbolSearch.isGlobPattern(pattern)) return SymbolSearch.matchesGlob(pattern, name)
+        return SymbolSearch.matchesSubstring(pattern, name) || SymbolSearch.camelHumpMatches(pattern, name)
+    }
+
+    /** Matches [pattern] against a dotted package name. */
+    internal fun matchesPackageName(pattern: String, packageName: String, regex: Boolean): Boolean {
+        if (regex) return SymbolSearch.matchesRegex(pattern, packageName)
+        if (SymbolSearch.isGlobPattern(pattern)) return SymbolSearch.matchesGlob(pattern, packageName)
+        return SymbolSearch.matchesSubstring(pattern, packageName) ||
+            SymbolSearch.camelHumpMatches(pattern, packageName.substringAfterLast('.'))
+    }
+
+    /** `--in` matches artifact labels: glob when wild, substring otherwise. */
+    internal fun matchesArtifactFilter(filter: String?, artifact: String): Boolean {
+        if (filter == null) return true
+        return if (SymbolSearch.isGlobPattern(filter)) SymbolSearch.matchesGlob(filter, artifact)
+        else artifact.contains(filter, ignoreCase = true)
+    }
+
+    /** `--package` matches dotted package names: glob when wild, substring otherwise. */
+    internal fun matchesPackageFilter(filter: String?, packageName: String): Boolean {
+        if (filter == null) return true
+        return if (SymbolSearch.isGlobPattern(filter)) SymbolSearch.matchesGlob(filter, packageName)
+        else packageName.contains(filter, ignoreCase = true)
+    }
+
+    // -- resolve / ls / tree execution ------------------------------------------
+
+    private fun executeResolve(rawName: String, roots: RootsSpec, limit: Int): ServiceOutcome {
+        val search = openSearchWorkspace(roots)
+        try {
+            // A `#`/`::` suffix names a member; anything else is a type or package.
+            val hashIndex = rawName.indexOf('#').takeIf { it >= 0 }
+                ?: rawName.indexOf("::").takeIf { it >= 0 }
+            val typePart = if (hashIndex == null) rawName else rawName.substring(0, hashIndex)
+            val memberPart = if (hashIndex == null) {
+                null
+            } else if (rawName[hashIndex] == '#') {
+                rawName.substring(hashIndex + 1)
+            } else {
+                rawName.substring(hashIndex + 2)
+            }
+            val scope = search.entries
+            val typeBinaries = scope.map { it.binary }.distinct().filter { binary ->
+                binary == typePart ||
+                    binary.replace('$', '.') == typePart ||
+                    binary.substringAfterLast('.') == typePart ||
+                    binary.substringAfterLast('.').substringAfterLast('$') == typePart
+            }
+            val hits = mutableListOf<SearchHit>()
+            if (memberPart == null) {
+                for (binary in typeBinaries) {
+                    val kind = search.workspace.load(binary)?.kind
+                    if (kind == null) continue
+                    for (artifact in scope.filter { it.binary == binary }.map { it.artifact }.distinct()) {
+                        val packageName = binary.substringBeforeLast('.', "")
+                        hits.add(SearchHit(searchKindWord(kind), binary, artifact, packageName))
+                    }
+                }
+                if (hits.isEmpty()) {
+                    // An exact package name resolves to its providers (D-031).
+                    for (artifact in scope.filter { it.packageName == typePart }.map { it.artifact }.distinct()) {
+                        hits.add(SearchHit("package", typePart, artifact, typePart))
+                    }
+                }
+            } else {
+                for (binary in typeBinaries) {
+                    val info = search.workspace.load(binary) ?: continue
+                    val packageName = binary.substringBeforeLast('.', "")
+                    val artifacts = scope.filter { it.binary == binary }.map { it.artifact }.distinct()
+                    for (method in info.methods.filter { it.name == memberPart }) {
+                        if (method.name == "<clinit>") continue
+                        val ref = SymbolRefPrinter.print(
+                            MemberSymbolRef(
+                                declaringType = info.name,
+                                name = method.name,
+                                parameterTypes = method.descriptor.parameters,
+                            ),
+                        )
+                        for (artifact in artifacts) {
+                            hits.add(
+                                SearchHit(
+                                    if (method.name == "<init>") "constructor" else "method",
+                                    ref,
+                                    artifact,
+                                    packageName,
+                                ),
+                            )
+                        }
+                    }
+                    for (field in info.fields.filter { it.name == memberPart }) {
+                        val ref = SymbolRefPrinter.print(MemberSymbolRef(info.name, field.name))
+                        for (artifact in artifacts) {
+                            hits.add(SearchHit("field", ref, artifact, packageName))
+                        }
+                    }
+                }
+            }
+            if (hits.isEmpty()) {
+                val suggestions = suggestSimilar(
+                    typePart.substringAfterLast('.').substringAfterLast('$'),
+                    scope.map { it.binary }.toSet(),
+                )
+                return ServiceOutcome.Failure(ErrorResult.notFound(rawName, suggestions))
+            }
+            val sorted = hits.sortedWith(compareBy({ it.ref }, { it.artifact }))
+            val listing = buildSearchListing(rawName, sorted, limit, search.warnings.sortedBy { it.code })
+            return ServiceOutcome.SearchList(listing)
+        } finally {
+            search.close()
+        }
+    }
+
+    private fun executeLs(query: String, packageGlob: String?, roots: RootsSpec, limit: Int): ServiceOutcome {
+        val search = openSearchWorkspace(roots)
+        try {
+            if (packageGlob != null && !SymbolSearch.isGlobPattern(packageGlob)) {
+                // Exact package: the types directly inside it (D-031).
+                val inPackage = search.entries.filter { it.packageName == packageGlob }.distinct()
+                if (inPackage.isEmpty()) {
+                    return ServiceOutcome.Failure(ErrorResult.notFound(query))
+                }
+                val kinds = inPackage.distinctBy { it.binary }.associate { entry ->
+                    entry.binary to search.workspace.load(entry.binary)?.kind
+                }
+                val types = inPackage.map { entry ->
+                    val kind = kinds[entry.binary]
+                    LsTypeEntry(
+                        kind = if (kind == null) "class" else searchKindWord(kind),
+                        ref = entry.binary,
+                        artifact = entry.artifact,
+                    )
+                }.sortedWith(compareBy({ it.ref }, { it.artifact }))
+                val packages = listOf(PackageEntry(packageGlob, inPackage.distinctBy { it.binary }.size))
+                val listing = buildLsListing(query, packages, types, limit, search.warnings.sortedBy { it.code })
+                return ServiceOutcome.LsList(listing)
+            }
+            val binariesByPackage = search.entries.distinctBy { it.binary to it.artifact }
+                .groupBy({ it.packageName }, { it.binary })
+            val packages = binariesByPackage
+                .filter { (packageName, _) ->
+                    packageGlob == null || SymbolSearch.matchesGlob(packageGlob, packageName)
+                }
+                .map { (packageName, binaries) -> PackageEntry(packageName, binaries.distinct().size) }
+                .sortedBy { it.name }
+            if (packages.isEmpty()) {
+                return ServiceOutcome.Failure(ErrorResult.notFound(query))
+            }
+            val listing = buildLsListing(query, packages, emptyList(), limit, search.warnings.sortedBy { it.code })
+            return ServiceOutcome.LsList(listing)
+        } finally {
+            search.close()
+        }
+    }
+
+    private fun executeTree(
+        query: String,
+        roots: RootsSpec,
+        depth: Int,
+        withCounts: Boolean,
+        limit: Int,
+    ): ServiceOutcome {
+        val search = openSearchWorkspace(roots)
+        try {
+            // JRT entries group by module (the artifact an agent recognises);
+            // jars and dirs group by display label. A label served by several
+            // roots gains a `(2)`-style suffix — deterministic by root order.
+            val jrtModules = search.opened.flatMap { open ->
+                val moduleFor = open.jrtModuleFor ?: return@flatMap emptyList<String>()
+                open.root.classEntryPaths().mapNotNull { moduleFor(it) }
+            }.toSet()
+            val rootsByLabel = search.entries.groupBy({ it.artifact }, { it.rootIndex })
+                .mapValues { it.value.toSet() }
+            fun groupLabel(entry: SearchEntry): String {
+                if (entry.artifact in jrtModules) return entry.artifact
+                val rootIndexes = rootsByLabel.getValue(entry.artifact).sorted()
+                if (rootIndexes.size == 1) return entry.artifact
+                val ordinal = rootIndexes.indexOf(entry.rootIndex) + 1
+                return if (ordinal <= 1) entry.artifact else "${entry.artifact} ($ordinal)"
+            }
+            val labels = mutableMapOf<String, MutableSet<String>>()
+            val packagesOf = mutableMapOf<String, MutableMap<String, MutableSet<String>>>()
+            for (entry in search.entries) {
+                val label = groupLabel(entry)
+                labels.getOrPut(label) { mutableSetOf() }.add(entry.binary)
+                packagesOf.getOrPut(label) { mutableMapOf() }
+                    .getOrPut(entry.packageName) { mutableSetOf() }.add(entry.binary)
+            }
+            val matched = labels.keys.filter { label -> matchesArtifactFilter(query, label) }.sorted()
+            if (matched.isEmpty()) {
+                return ServiceOutcome.Failure(ErrorResult.notFound(query))
+            }
+            val trees = matched.map { label ->
+                val packageNames = packagesOf.getValue(label).keys.filter { it.isNotEmpty() }.sorted()
+                val direct = packagesOf.getValue(label)
+                val subtree = mutableMapOf<String, Int>()
+                for (packageName in packageNames) {
+                    val segments = packageName.split('.')
+                    for (end in 1..segments.size) {
+                        val path = segments.take(end).joinToString(".")
+                        if (path == packageName) {
+                            subtree[path] = (subtree[path] ?: 0) + direct.getValue(packageName).size
+                        } else {
+                            subtree.putIfAbsent(path, 0)
+                        }
+                    }
+                }
+                // Roll up descendant counts after the direct pass.
+                val ordered = subtree.keys.sortedByDescending { it.length }
+                for (path in ordered) {
+                    val parent = path.substringBeforeLast('.', "")
+                    if (parent.isNotEmpty() && subtree.containsKey(parent)) {
+                        subtree[parent] = subtree.getValue(parent) + subtree.getValue(path)
+                    }
+                }
+                buildArtifactTree(label, packageNames, typeCountOf = { subtree.getValue(it) }, depth = depth)
+            }
+            val nodeTotal = trees.sumOf { countNodes(it.roots) }
+            val listing = buildTreeListing(
+                query,
+                trees,
+                withCounts,
+                nodeTotal,
+                limit,
+                search.warnings.sortedBy { it.code },
+            )
+            return ServiceOutcome.TreeList(listing)
+        } finally {
+            search.close()
+        }
     }
 
     // -- paths ------------------------------------------------------------------

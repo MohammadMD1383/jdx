@@ -1,0 +1,1 @@
+{"jdx":1,"ok":true,"command":"search","query":"identity","result":{"hits":[{"kind":"method","ref":"dev.jdx.fixtures.Generics#identity(java.lang.Object)","artifact":"fixture-corpus.jar","package":"dev.jdx.fixtures"}]},"warnings":[],"provenance":[]}
