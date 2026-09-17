@@ -617,3 +617,108 @@ None. Push needs owner go-ahead (D-012).
 
 ### Next action
 **T-019** (Maven coordinate resolution) — lowest unblocked TODO; or **T-059** (corpus soak harness) / **T-066** (make `ReadCommandsTest` hermetic). Next progress shard `sessions-031-040.md` opens after 3 more sessions.
+
+---
+
+## Session 28 — 2026-09-17 — Maven coordinate resolution and opt-in fetching (T-019)
+
+**Agent/Author:** Muse Spark (opencode) · **Commits:** none (no commit/push without owner go-ahead — working tree holds the task + this entry; `docs/TASKS.md` T-019 already flipped TODO→WIP→DONE in the tree)
+
+### Goal
+Implement T-019, the lowest-numbered unblocked TODO (depends T-015 DONE):
+resolve `group:artifact:version` from `~/.gradle/caches` and `~/.m2` first,
+fetch from Maven Central into `~/.cache/jdx/m2` only with `--fetch`, verify
+checksums, fetch the `-sources.jar` too — behind the standing test bar
+(tiers 1+2 green, tier 3 green for artifact/index changes, one generative
+family minimum).
+
+### What I did
+1. Claimed T-019 (`TODO`→`WIP` in `docs/TASKS.md`, uncommitted) before coding.
+2. **New `index/.../maven/` package** (all total — failures are values, never throws):
+   - `MavenCoords.kt` — strict `g:a:v` parse (denylist: separators, glob
+     chars since resolved jars flow into glob-capable specs, whitespace,
+     quotes, `..`), `~/.m2` paths, Central download URLs.
+   - `MavenFetch.kt` — injectable `Fetcher`, SHA-1 verification against
+     `$url.sha1` that **fails closed** (missing/mismatching checksum writes
+     nothing), atomic write (temp + move with plain-replace fallback),
+     `httpGet` with timeouts + 512 MB cap.
+   - `MavenResolver.kt` — order fetch-cache → Gradle (exact-name preferred)
+     → `~/.m2` → Central iff `allowFetch`; sources best-effort; `resolveAll`
+     stops at the first failure. `MavenResolveFn` seam + production ref.
+3. **Wiring:** `--coord` (repeatable) + `--fetch` on all seven read commands
+   (`show`, `members`, `outline`, `search`, `resolve`, `ls`, `tree`); a
+   `g:a:v/` ref prefix scopes candidates to the artifact while supertypes
+   still resolve from the full workspace; `WorkspaceDefinition.coords` +
+   optional TOML `coords` key (pre-coords files decode); stored coords
+   resolve behind workspace jars; `ws create --coord` stores (validates,
+   exit 3) and `ws info` shows them. Semantics recorded as **D-032**.
+4. **Tests (29 new, all green):** tier-1 `MavenCoordsTest` (examples + 2
+   thousand-case properties: parse/format fixed point, never-throws) and
+   `MavenFetchTest` (fake-fetcher checksum suite + loopback-`HttpServer`
+   production-path test); tier-2 `MavenResolverTest` (9: fabricated-layout
+   precedence, exact-name preference, fetch-then-cache-hit, sources
+   best-effort, checksum-reject writes nothing, exit-3-vs-5 taxonomy),
+   `MavenQueryTest` (5: prefix scoping incl. coord-only/no-JDK reads, miss
+   scoping, `--fetch` hint), `MavenRootsTest` (4: flag plumbing through
+   `resolveRoots` into a real `show`); extended TOML/resolver `fixed-point`
+   properties with coords + `WsCommandsTest` coord store/reject/info tests.
+5. **One self-caught bug:** a fresh `mavenResolve` lambda per `resolveRoots`
+   call broke `RootsSpec` value-equality in 7 existing `ReadCommandsTest`s —
+   fixed by keeping the production `::productionMavenResolve` reference when
+   no test seam is injected (L-052).
+6. **Verification:** `./gradlew check` green with `~/.config/jdx` shelved
+   (T-066 workaround, config restored after); `./gradlew soak` green except
+   `JavapCorpusSoakTest`, **re-proven stashed-clean this session** (same
+   `$$`-class reds, T-065 corpus drift — L-045). Live e2e via
+   `:app:installDist`: gson 2.14.0 resolved local-first from the Gradle
+   cache; gson 2.10.1 (in no cache) fetched with binary + `-sources.jar`
+   into `~/.cache/jdx/m2` and answered exit 0; malformed coords exit 3,
+   absent coords exit 5 naming `--fetch`. E2e litter (fabricated `~/.m2`
+   demo coord, `/tmp` files) removed; the genuine gson fetch cache kept.
+7. **Not committed, not pushed** — no commit/push without an explicit owner
+   request in this session. Everything is in the working tree, reviewed
+   below via `git status`.
+
+### Decisions made
+- **D-032** (proposed-by-implementer): lookup order, checksum fail-closed,
+  sources best-effort, prefix-scope semantics, exit mapping (3 malformed /
+  5 absent-or-fetch-failed / 6 internal), stored-coord failure fails the
+  query, no `--repo` flag in v1 (filed as T-069).
+
+### Tasks moved
+- T-019: TODO → WIP → DONE.
+- T-069 (new, TODO): configurable Maven repositories (`--repo` flag).
+
+### Lessons distilled
+- L-052 (`kotlin`): function-typed fields break data-class value equality —
+  keep a canonical reference.
+- L-053 (`tooling`): prove network code without the network (fake fetcher +
+  loopback server + `unused.invalid` base URL).
+
+### What works now (and how to verify it yourself)
+```bash
+mv ~/.config/jdx /tmp/shelved-jdx   # T-066 ambient-workspace workaround, still open
+./gradlew check                     # tiers 1+2 green (BUILD SUCCESSFUL)
+mv /tmp/shelved-jdx ~/.config/jdx
+./gradlew :index:tier2Test --tests "dev.jdx.index.maven.*" --tests "dev.jdx.index.service.MavenQueryTest"
+./gradlew :cli:tier2Test --tests "dev.jdx.cli.commands.MavenRootsTest"
+./gradlew :app:installDist && ./app/build/jdx show com.google.code.gson:gson:2.14.0/com.google.gson.Gson --fetch
+```
+
+### What is broken / half-done
+- Nothing in T-019 scope. Known, owned elsewhere: T-066 (ambient reds —
+  shelved around `check` here, unchanged), T-065 (`$$` names + the
+  `JavapCorpusSoakTest` soak reds, re-proven pre-existing), T-068 (a coord
+  jar also present via workspace lists twice — same-file dedupe still open),
+  T-069 (no `--repo` flag; Central only).
+- `search`/`resolve`/`ls`/`tree` take `--coord` roots but their *patterns*
+  accept no `g:a:v/` prefix (only `show`/`members`/`outline` type refs do —
+  that is where the grammar supports it).
+
+### Open questions / blockers
+None. Push needs owner go-ahead (D-012) — the whole session is uncommitted
+in the working tree.
+
+### Next action
+**T-059** (corpus soak harness) — lowest unblocked TODO. Next progress shard
+`sessions-031-040.md` opens after 2 more sessions.

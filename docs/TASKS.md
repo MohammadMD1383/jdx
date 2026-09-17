@@ -51,7 +51,7 @@ be fiction.
 | **M6** | Serving: daemon, MCP, HTTP, `batch` | TODO |
 | **M7** | Polish: token budgets, AppCDS, mutation gates, docs, install | TODO |
 
-**T-001 through T-018, T-053, T-054, T-055, T-056, T-057, T-058, T-061 and T-067 are `DONE`.** M0's test spine is
+**T-001 through T-019, T-053, T-054, T-055, T-056, T-057, T-058, T-061 and T-067 are `DONE`.** M0's test spine is
 complete; T-057…T-060 unblock as their milestones land. M1 starts at T-007.
 
 ---
@@ -870,10 +870,40 @@ short line per artifact, bounded by workspace size in practice. `clear()` never
 throws (walks wrapped to exit 6). Tests: 12 tier-1 examples + 3 thousand-case
 properties (fake store, no disk) + 6 tier-2 SQLite tests + 11 tier-2 CLI tests.*
 
-### T-019 — Maven coordinate resolution and opt-in fetching · `TODO`
+### T-019 — Maven coordinate resolution and opt-in fetching · `DONE` (session 28)
 **Depends:** T-015 · Resolve from `~/.gradle/caches` and `~/.m2` first; fetch from Maven
 Central into `~/.cache/jdx/m2/` **only** with `--fetch`; verify checksums; fetch the
 `-sources.jar` too.
+
+*Implementation notes (session 28): `index/.../maven/` — `MavenCoords`
+(strict `g:a:v` parse, `~/.m2` paths, Central URLs), `MavenFetch`
+(injectable `Fetcher`, SHA-1 fail-closed, atomic write), `MavenResolver`
+(fetch-cache → Gradle → `~/.m2` → Central iff `allowFetch`, sources
+best-effort, never throws). `--coord`/`--fetch` on all seven read commands;
+`g:a:v/` prefix scopes candidates to the artifact with hierarchy from the full
+workspace (`JdxService.RootsSpec.mavenResolve`, default production ref so
+value-equality holds — L-052); `WorkspaceDefinition.coords` + TOML `coords`
+key (optional, pre-coords files decode); stored coords resolve behind
+workspace jars. Semantics in D-032. Tests: tier-1 parse/path examples + 2
+thousand-case properties (round-trip, never-throws) + fake-fetcher checksum
+suite + loopback-http e2e; tier-2 fabricated-layout precedence/fetch tests,
+prefix query tests, `--coord` root tests (29 new). `check` green (shelved
+`~/.config/jdx`, T-066); soak green except the pre-existing stashed-clean
+`JavapCorpusSoakTest` `$$` reds (T-065). Live proof: gson 2.14.0 resolved
+local-first, 2.10.1 fetched with binary+sources into `~/.cache/jdx/m2`.*
+
+### T-069 — Configurable Maven repositories (`--repo`) · `TODO`
+**Depends:** T-019 · **Files:** `cli/.../commands/*`, `index/.../maven/*`
+*(Added in session 28: D-032 §6 deferred it.)*
+
+`MavenResolver.Repositories.repoBaseUrl` is code-configurable but the CLI only
+speaks Maven Central. Add `--repo <url>` (repeatable?) to the read commands
+and `ws create`, flowing into resolution and fetch URLs.
+
+**Acceptance**
+- [ ] `--repo` with a trailing-slash-less URL resolves and fetches from it
+- [ ] Invalid (non-http(s)) `--repo` is exit 3 naming the value
+- [ ] Tier-2 test over a loopback server as the repo (no real network)
 
 ---
 

@@ -13,9 +13,11 @@ package dev.jdx.index.workspace
  * read and written only through [WorkspaceStore]. Produced by `jdx ws create`, consumed
  * by `jdx -w <name>` / `JDX_WORKSPACE` / `jdx ws use` via [WorkspaceResolver].
  *
- * v1 holds binary roots and the JDK switch only. Source dirs (`--src`, T-031) and
- * Maven coordinates (`--coord`, T-019) are accepted by no v1 field — `jdx ws create`
- * rejects them naming the owning task rather than storing something the reader ignores.
+ * v1 holds binary roots, Maven coordinates and the JDK switch. Source dirs
+ * (`--src`, T-031) are accepted by no v1 field — `jdx ws create` rejects them
+ * naming the owning task rather than storing something the reader ignores.
+ * Coordinates (`--coord`, T-019) resolve to jars at query time (local caches
+ * first, Maven Central only with `--fetch`), ordered after [jars].
  * Project auto-discovery (T-016) derives these same binary roots from Gradle/Maven
  * projects; it never stores source dirs either.
  */
@@ -26,6 +28,8 @@ public data class WorkspaceDefinition(
     public val jars: List<String>,
     /** Whether the running JDK's stdlib is appended after these roots (default true). */
     public val includeJdk: Boolean = true,
+    /** Maven coordinates (`group:artifact:version`, as passed to `--coord`), in order. */
+    public val coords: List<String> = emptyList(),
 )
 
 /**

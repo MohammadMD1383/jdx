@@ -35,6 +35,14 @@ public object WorkspaceResolver {
         public val selection: String = "none",
         /** Warnings contributed by root resolution itself (e.g. discovery fallback). */
         public val warnings: List<Warning> = emptyList(),
+        /**
+         * Maven coordinates still to resolve to jars: explicit `--coord` values
+         * first, then the selected workspace's stored coords (T-019). The caller
+         * ([ReadCommandSupport]) resolves them via `MavenResolver` and appends
+         * the jars after [jarSpecs] — kept separate here so this pure resolver
+         * never does IO.
+         */
+        public val coords: List<String> = emptyList(),
     )
 
     /** A resolution failure: the message already names the problem and the fix. */
@@ -56,6 +64,7 @@ public object WorkspaceResolver {
         discoveredJars: List<String> = emptyList(),
         discoveredSelection: String? = null,
         discoveredWarnings: List<Warning> = emptyList(),
+        explicitCoords: List<String> = emptyList(),
     ): Result<ResolvedRoots, ResolutionFailure> {
         val flag = flagWorkspace?.trim().orEmpty().ifEmpty { null }
         val env = envWorkspace?.trim().orEmpty().ifEmpty { null }
@@ -84,6 +93,7 @@ public object WorkspaceResolver {
                         workspaceName = null,
                         selection = discoveredSelection,
                         warnings = discoveredWarnings,
+                        coords = explicitCoords,
                     ),
                 )
             }
@@ -92,7 +102,12 @@ public object WorkspaceResolver {
                     jarSpecs = explicitJars,
                     includeJdk = !explicitNoJdk,
                     workspaceName = null,
-                    selection = if (explicitJars.isNotEmpty() || explicitNoJdk) "flags" else "none",
+                    selection = if (explicitJars.isNotEmpty() || explicitNoJdk || explicitCoords.isNotEmpty()) {
+                        "flags"
+                    } else {
+                        "none"
+                    },
+                    coords = explicitCoords,
                 ),
             )
         }
@@ -118,6 +133,7 @@ public object WorkspaceResolver {
                 includeJdk = if (explicitNoJdk) false else definition.includeJdk,
                 workspaceName = definition.name,
                 selection = selection,
+                coords = explicitCoords + definition.coords,
             ),
         )
     }

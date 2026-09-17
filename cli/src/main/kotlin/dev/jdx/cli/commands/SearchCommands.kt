@@ -98,6 +98,19 @@ class SearchCommand(
         help = "Do not include the running JDK's stdlib (included by default).",
     ).flag()
 
+    private val coord by option(
+        "--coord",
+        help = "Maven coordinate root group:artifact:version (repeatable). Resolved from " +
+            "~/.gradle/caches and ~/.m2 first; with --fetch, downloaded from Maven Central " +
+            "into ~/.cache/jdx/m2 with checksum verification. Merges in front of the workspace.",
+    ).multiple()
+
+    private val fetch by option(
+        "--fetch",
+        help = "Allow downloading --coord artifacts (and their -sources.jar) from Maven " +
+            "Central. Without it, coordinates resolve from the local caches only.",
+    ).flag()
+
     private val json by option(
         "--json",
         help = "Emit machine-readable JSON instead of human-readable text (same information, D-007).",
@@ -117,6 +130,8 @@ class SearchCommand(
             store,
             getenv,
             discover = discover ?: ReadCommandSupport::discoverProject,
+            coords = coord,
+            allowFetch = fetch,
         )) {
             is ReadCommandSupport.RootsOrFailure.Ready -> {
                 val outcome = query(
@@ -180,6 +195,19 @@ class ResolveCommand(
         help = "Do not include the running JDK's stdlib (included by default).",
     ).flag()
 
+    private val coord by option(
+        "--coord",
+        help = "Maven coordinate root group:artifact:version (repeatable). Resolved from " +
+            "~/.gradle/caches and ~/.m2 first; with --fetch, downloaded from Maven Central " +
+            "into ~/.cache/jdx/m2 with checksum verification. Merges in front of the workspace.",
+    ).multiple()
+
+    private val fetch by option(
+        "--fetch",
+        help = "Allow downloading --coord artifacts (and their -sources.jar) from Maven " +
+            "Central. Without it, coordinates resolve from the local caches only.",
+    ).flag()
+
     private val json by option(
         "--json",
         help = "Emit machine-readable JSON instead of human-readable text (same information, D-007).",
@@ -199,6 +227,8 @@ class ResolveCommand(
             store,
             getenv,
             discover = discover ?: ReadCommandSupport::discoverProject,
+            coords = coord,
+            allowFetch = fetch,
         )) {
             is ReadCommandSupport.RootsOrFailure.Ready -> {
                 val outcome = query(name, resolved.roots, limit)
@@ -252,6 +282,19 @@ class LsCommand(
         help = "Do not include the running JDK's stdlib (included by default).",
     ).flag()
 
+    private val coord by option(
+        "--coord",
+        help = "Maven coordinate root group:artifact:version (repeatable). Resolved from " +
+            "~/.gradle/caches and ~/.m2 first; with --fetch, downloaded from Maven Central " +
+            "into ~/.cache/jdx/m2 with checksum verification. Merges in front of the workspace.",
+    ).multiple()
+
+    private val fetch by option(
+        "--fetch",
+        help = "Allow downloading --coord artifacts (and their -sources.jar) from Maven " +
+            "Central. Without it, coordinates resolve from the local caches only.",
+    ).flag()
+
     private val json by option(
         "--json",
         help = "Emit machine-readable JSON instead of human-readable text (same information, D-007).",
@@ -271,6 +314,8 @@ class LsCommand(
             store,
             getenv,
             discover = discover ?: ReadCommandSupport::discoverProject,
+            coords = coord,
+            allowFetch = fetch,
         )) {
             is ReadCommandSupport.RootsOrFailure.Ready -> {
                 val outcome = query(packageGlob, resolved.roots, limit)
@@ -334,6 +379,19 @@ class TreeCommand(
         help = "Do not include the running JDK's stdlib (included by default).",
     ).flag()
 
+    private val coord by option(
+        "--coord",
+        help = "Maven coordinate root group:artifact:version (repeatable). Resolved from " +
+            "~/.gradle/caches and ~/.m2 first; with --fetch, downloaded from Maven Central " +
+            "into ~/.cache/jdx/m2 with checksum verification. Merges in front of the workspace.",
+    ).multiple()
+
+    private val fetch by option(
+        "--fetch",
+        help = "Allow downloading --coord artifacts (and their -sources.jar) from Maven " +
+            "Central. Without it, coordinates resolve from the local caches only.",
+    ).flag()
+
     private val json by option(
         "--json",
         help = "Emit machine-readable JSON instead of human-readable text (same information, D-007).",
@@ -353,6 +411,8 @@ class TreeCommand(
             store,
             getenv,
             discover = discover ?: ReadCommandSupport::discoverProject,
+            coords = coord,
+            allowFetch = fetch,
         )) {
             is ReadCommandSupport.RootsOrFailure.Ready -> {
                 val outcome = query(artifact, resolved.roots, depth, counts, limit)

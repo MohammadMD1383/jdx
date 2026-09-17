@@ -90,14 +90,32 @@ class WsCommandsTest {
     }
 
     @Test
-    fun `create rejects src and coord naming the owning task`() {
+    fun `create rejects src naming the owning task`() {
         val (group, _) = testWsGroup()
         val (srcOut, srcCode) = run(group, listOf("create", "mc", "--src", "src/main/java"))
         srcCode shouldBe 3
         srcOut shouldContain "T-031"
-        val (coordOut, coordCode) = run(group, listOf("create", "mc", "--coord", "g:a:1"))
-        coordCode shouldBe 3
-        coordOut shouldContain "T-019"
+    }
+
+    @Test
+    fun `create stores coord roots and rejects malformed ones`() {
+        val (group, store) = testWsGroup()
+        val (output, code) = run(group, listOf("create", "mc", "--coord", "com.google.code.gson:gson:2.14.0"))
+        code shouldBe null
+        output shouldContain "workspace 'mc' created"
+        store.load("mc")?.coords shouldBe listOf("com.google.code.gson:gson:2.14.0")
+        val (badOut, badCode) = run(group, listOf("create", "bad", "--coord", "not-a-coordinate"))
+        badCode shouldBe 3
+        badOut shouldContain "group:artifact:version"
+    }
+
+    @Test
+    fun `info shows stored coords`() {
+        val (group, _) = testWsGroup()
+        run(group, listOf("create", "mc", "--coord", "com.google.code.gson:gson:2.14.0"))
+        val (output, code) = run(group, listOf("info", "mc"))
+        code shouldBe null
+        output shouldContain "coords:\n    com.google.code.gson:gson:2.14.0"
     }
 
     // -- list / info ----------------------------------------------------------

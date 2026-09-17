@@ -2,6 +2,11 @@ package dev.jdx.cli.commands
 
 import dev.jdx.core.model.Warning
 import dev.jdx.core.render.ErrorResult
+import dev.jdx.index.maven.MavenCoords
+import dev.jdx.index.maven.MavenFetch
+import dev.jdx.index.maven.MavenResolveFn
+import dev.jdx.index.maven.MavenResolver
+import dev.jdx.index.maven.productionMavenResolve
 import dev.jdx.index.service.JdxService
 import dev.jdx.index.workspace.FileWorkspaceStore
 import dev.jdx.index.workspace.ProjectCache
@@ -57,6 +62,10 @@ internal object ReadCommandSupport {
         gradleFilesRoot: Path? = defaultGradleFilesRoot(),
         m2Repo: Path? = defaultM2Repo(),
         discover: ProjectDiscoveryFn = ::discoverProject,
+        coords: List<String> = emptyList(),
+        allowFetch: Boolean = false,
+        mavenRepositories: MavenResolver.Repositories? = null,
+        mavenFetcher: MavenFetch.Fetcher? = null,
     ): RootsOrFailure {
         val envWorkspace = try {
             getenv("JDX_WORKSPACE")
@@ -68,6 +77,46 @@ internal object ReadCommandSupport {
         } catch (e: Exception) {
             null
         }
+        val repositories = mavenRepositories ?: MavenResolver.Repositories(
+            gradleFilesRoot = gradleFilesRoot,
+            m2Repo = m2Repo,
+            fetchCacheRoot = MavenResolver.defaultFetchCacheRoot(),
+        )
+        val fetcher = mavenFetcher ?: MavenFetch.httpFetcher()
+        // Keep the production function reference (not a fresh lambda) when no
+        // test seam is injected: `RootsSpec` is a data class, and command tests
+        // assert it by value — a new lambda would break equality by identity.
+        val mavenResolve: MavenResolveFn =
+            if (mavenRepositories == null && mavenFetcher == null) {
+                ::productionMavenResolve
+            } else {
+                { text, fetch -> MavenResolver.resolve(text, fetch, repositories, fetcher) }
+            }
+        // Explicit `--coord` values are usage input: malformed ones fail fast
+        // with exit 3 before any workspace or network IO happens.
+        for (text in coords) {
+            if (MavenCoords.parse(text) == null) {
+                return RootsOrFailure.Failed(
+                    JdxService.ServiceOutcome.Failure(
+                        ErrorResult.generic("", exitCode = 3, message = "usage error: ${MavenCoords.invalidReason(text)}"),
+                    ),
+                )
+            }
+        }
+        // Explicit coordinates resolve now so their jars shadow the workspace
+        // exactly like `--jars` (PROPOSAL.md §13: explicit flags merge in front).
+        val explicitCoordJars = when (
+            val resolved = MavenResolver.resolveAll(coords, allowFetch, repositories, fetcher)
+        ) {
+            is MavenResolver.ResolveAllOutcome.Ok ->
+                resolved.artifacts.map { it.binaryJar.toString() }
+            is MavenResolver.ResolveAllOutcome.Failed ->
+                return RootsOrFailure.Failed(
+                    JdxService.ServiceOutcome.Failure(
+                        ErrorResult.generic("", exitCode = 5, message = "artifact read error: ${resolved.message}"),
+                    ),
+                )
+        }
         // Auto-discovery runs only when no named workspace is in play; a named
         // workspace always wins (PROPOSAL.md §13). Never throws — discovery failure
         // reads as "no project", never as a failed query.
@@ -77,7 +126,7 @@ internal object ReadCommandSupport {
             runCatching { discover(workingDir, cacheBase, gradleFilesRoot, m2Repo) }.getOrNull()
         }
         val outcome = WorkspaceResolver.resolve(
-            explicitJars = jars,
+            explicitJars = jars + explicitCoordJars,
             explicitNoJdk = noJdk,
             flagWorkspace = workspace,
             envWorkspace = envWorkspace,
@@ -95,8 +144,34 @@ internal object ReadCommandSupport {
             discoveredWarnings = discovered?.warnings ?: emptyList(),
         )
         return when (outcome) {
-            is WorkspaceResolver.Result.success ->
-                RootsOrFailure.Ready(JdxService.RootsSpec.fromResolved(outcome.value))
+            is WorkspaceResolver.Result.success -> {
+                // Stored workspace coords resolve after the workspace's own jars.
+                // A stored coord that no longer resolves fails the query (exit 5),
+                // naming the coordinate — the workspace file is user config, and
+                // silently dropping a root would mislead worse than an error.
+                val stored = when (
+                    val resolved = MavenResolver.resolveAll(outcome.value.coords, allowFetch, repositories, fetcher)
+                ) {
+                    is MavenResolver.ResolveAllOutcome.Ok ->
+                        resolved.artifacts.map { it.binaryJar.toString() }
+                    is MavenResolver.ResolveAllOutcome.Failed ->
+                        return RootsOrFailure.Failed(
+                            JdxService.ServiceOutcome.Failure(
+                                ErrorResult.generic("", exitCode = 5, message = "artifact read error: ${resolved.message}"),
+                            ),
+                        )
+                }
+                val resolved = outcome.value
+                RootsOrFailure.Ready(
+                    JdxService.RootsSpec(
+                        jarSpecs = resolved.jarSpecs + stored,
+                        includeJdk = resolved.includeJdk,
+                        extraWarnings = resolved.warnings,
+                        allowFetch = allowFetch,
+                        mavenResolve = mavenResolve,
+                    ),
+                )
+            }
             is WorkspaceResolver.Result.failure ->
                 RootsOrFailure.Failed(
                     JdxService.ServiceOutcome.Failure(

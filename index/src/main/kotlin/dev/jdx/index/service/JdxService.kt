@@ -49,6 +49,9 @@ import dev.jdx.index.artifact.ArtifactReadException
 import dev.jdx.index.artifact.ArtifactRoot
 import dev.jdx.index.asm.AsmClassReader
 import dev.jdx.index.asm.ClassReadResult
+import dev.jdx.index.maven.MavenResolveFn
+import dev.jdx.index.maven.MavenResolver
+import dev.jdx.index.maven.productionMavenResolve
 import java.nio.file.FileSystems
 import java.nio.file.Files
 import java.nio.file.Path
@@ -75,6 +78,18 @@ public object JdxService {
         public val includeJdk: Boolean = true,
         /** Warnings contributed by root resolution itself (e.g. discovery fallback). */
         public val extraWarnings: List<Warning> = emptyList(),
+        /**
+         * Whether a `g:a:v/` ref prefix may hit the network (T-019). False by
+         * default: without `--fetch` a prefix resolves from the local caches
+         * only (D-006).
+         */
+        public val allowFetch: Boolean = false,
+        /**
+         * Resolves one `g:a:v` prefix text to jars. Defaults to the production
+         * [MavenResolver][dev.jdx.index.maven.MavenResolver]; tests inject a
+         * fake over fabricated repositories so no test touches the network.
+         */
+        public val mavenResolve: MavenResolveFn = ::productionMavenResolve,
     ) {
         public companion object {
             /** Converts a resolved workspace selection into the roots a query opens. */
@@ -244,16 +259,9 @@ public object JdxService {
             return failure(3, rawRef, "usage error: ${mode.flag} takes a type, got '$rawRef'")
         }
         val typeRef = ref as TypeSymbolRef
-        if (typeRef.coordinate != null) {
-            return failure(
-                3,
-                rawRef,
-                "usage error: Maven coordinates are not yet implemented (T-019): '$rawRef'",
-            )
-        }
         val typeName = typeRef.type as? TypeName.ClassType
             ?: return failure(3, rawRef, "usage error: ${mode.flag} takes a class, got '$rawRef'")
-        if (roots.jarSpecs.isEmpty() && !roots.includeJdk) {
+        if (roots.jarSpecs.isEmpty() && !roots.includeJdk && typeRef.coordinate == null) {
             return failure(
                 4,
                 rawRef,
@@ -262,8 +270,41 @@ public object JdxService {
                     "(pass --jars <path>, select a workspace, or drop --no-jdk)",
             )
         }
+        // A `g:a:v/` prefix scopes the query to one artifact (T-019): its jar
+        // reads first (shadowing order), and candidates match inside it only —
+        // while supertypes still resolve from the full workspace behind it.
+        var scopedRoots = roots
+        var candidateScope: Set<String>? = null
+        val coordinate = typeRef.coordinate
+        if (coordinate != null) {
+            val coordText = "${coordinate.group}:${coordinate.artifact}:${coordinate.version}"
+            val outcome = try {
+                roots.mavenResolve(coordText, roots.allowFetch)
+            } catch (e: Exception) {
+                return failure(
+                    6,
+                    rawRef,
+                    "internal error: coordinate resolution failed: ${e.message ?: e.javaClass.simpleName}",
+                )
+            }
+            val artifact = when (outcome) {
+                is MavenResolver.Outcome.Resolved -> outcome.artifact
+                is MavenResolver.Outcome.Unresolved ->
+                    return failure(5, rawRef, "artifact read error: ${outcome.message}")
+            }
+            val binarySpec = artifact.binaryJar.toString()
+            val scope = try {
+                ArtifactLoader.open(artifact.binaryJar).use { root -> root.classEntryPaths().map(::entryToBinary).toSet() }
+            } catch (e: ArtifactReadException) {
+                return failure(5, rawRef, e.message ?: "artifact read error")
+            } catch (e: Exception) {
+                return failure(6, rawRef, "internal error: ${e.javaClass.simpleName}: ${e.message ?: "no detail"}")
+            }
+            scopedRoots = roots.copy(jarSpecs = listOf(binarySpec) + roots.jarSpecs)
+            candidateScope = scope
+        }
         return try {
-            execute(typeName, rawRef, roots, mode, filters, maxMembers, declaredOnly, includeSynthetic)
+            execute(typeName, rawRef, scopedRoots, mode, filters, maxMembers, declaredOnly, includeSynthetic, candidateScope)
         } catch (e: ArtifactReadException) {
             failure(5, rawRef, e.message ?: "artifact read error")
         } catch (e: Exception) {
@@ -289,6 +330,7 @@ public object JdxService {
         maxMembers: Int,
         declaredOnly: Boolean,
         includeSynthetic: Boolean,
+        candidateScope: Set<String>? = null,
     ): ServiceOutcome {
         val opened = openRoots(roots)
         try {
@@ -301,7 +343,9 @@ public object JdxService {
             }
             val allBinaries = providers.keys
 
-            val candidates = matchCandidates(typeName, allBinaries)
+            // A coordinate prefix restricts candidates to the scoped artifact;
+            // everything else (supertype reads, did-you-mean breadth) stays full.
+            val candidates = matchCandidates(typeName, candidateScope ?: allBinaries)
             if (candidates.isEmpty()) {
                 val suggestions = suggestSimilar(typeName.simpleName, allBinaries)
                 return ServiceOutcome.Failure(ErrorResult.notFound(rawRef, suggestions))

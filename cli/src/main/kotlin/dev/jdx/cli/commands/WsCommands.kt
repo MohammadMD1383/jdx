@@ -72,6 +72,7 @@ class WsExit(val code: Int) : RuntimeException()
 private data class WsPayload(
     val workspace: String? = null,
     val jars: List<String> = emptyList(),
+    val coords: List<String> = emptyList(),
     val includeJdk: Boolean = true,
     val active: Boolean = false,
     val workspaces: List<String> = emptyList(),
@@ -109,11 +110,12 @@ private fun corruptOrIoMessage(action: String, name: String, e: IOException): St
     }
 
 /**
- * `jdx ws create <name> [--jars <path>...] [--jdk/--no-jdk]`.
+ * `jdx ws create <name> [--jars <path>...] [--coord <g:a:v>...] [--jdk/--no-jdk]`.
  *
  * Refuses when the name exists (exit 1) rather than silently overwriting ordered roots
- * the user crafted — `ws add` extends, `ws remove` clears the way. `--src`/`--coord`
- * fail naming the owning task instead of storing roots no reader honours yet.
+ * the user crafted — `ws add` extends, `ws remove` clears the way. `--src` fails
+ * naming the owning task instead of storing roots no reader honours yet; `--coord`
+ * values are stored and resolved to jars at query time (T-019).
  */
 class WsCreateCommand(
     private val store: WorkspaceStore = FileWorkspaceStore.system(),
@@ -142,7 +144,9 @@ class WsCreateCommand(
 
     private val coord by option(
         "--coord",
-        help = "Maven coordinates (not yet implemented, T-019).",
+        help = "Maven coordinate roots group:artifact:version (repeatable). Stored in the " +
+            "workspace and resolved to jars at query time (local caches first; --fetch on " +
+            "read commands allows Maven Central downloads).",
     ).multiple()
 
     private val json by option(
@@ -176,15 +180,18 @@ class WsCreateCommand(
             )
             return
         }
-        if (coord.isNotEmpty()) {
-            finishWs(
-                "usage error: --coord is not yet implemented (T-019: Maven coordinate resolution)",
-                WsPayload(workspace = name, message = "--coord is not yet implemented (T-019)"),
-                "ws create", json, 3, terminate,
-            )
-            return
+        for (text in coord) {
+            if (dev.jdx.index.maven.MavenCoords.parse(text) == null) {
+                val reason = dev.jdx.index.maven.MavenCoords.invalidReason(text)
+                finishWs(
+                    "usage error: $reason",
+                    WsPayload(workspace = name, message = reason),
+                    "ws create", json, 3, terminate,
+                )
+                return
+            }
         }
-        val definition = WorkspaceDefinition(name, jars, includeJdk = !noJdk)
+        val definition = WorkspaceDefinition(name, jars, includeJdk = !noJdk, coords = coord)
         try {
             if (store.load(name) != null) {
                 finishWs(
@@ -211,9 +218,15 @@ class WsCreateCommand(
         }
         val jdkWord = if (definition.includeJdk) "included" else "excluded"
         finishWs(
-            "workspace '$name' created\n  jars: ${jars.size} root(s)\n  jdk: $jdkWord\n" +
+            "workspace '$name' created\n  jars: ${jars.size} root(s)\n  coords: ${coord.size} root(s)\n  jdk: $jdkWord\n" +
                 "next: jdx -w $name members <type>",
-            WsPayload(workspace = name, jars = jars, includeJdk = definition.includeJdk, message = "created"),
+            WsPayload(
+                workspace = name,
+                jars = jars,
+                coords = coord,
+                includeJdk = definition.includeJdk,
+                message = "created",
+            ),
             "ws create", json, 0, terminate,
         )
     }
@@ -308,13 +321,16 @@ class WsInfoCommand(
         }
         val jarLines = if (definition.jars.isEmpty()) "  jars: (none)" else
             "  jars:\n" + definition.jars.joinToString("\n") { "    $it" }
+        val coordLines = if (definition.coords.isEmpty()) "  coords: (none)" else
+            "  coords:\n" + definition.coords.joinToString("\n") { "    $it" }
         val jdkWord = if (definition.includeJdk) "included" else "excluded"
         val defaultWord = if (active == name) "yes (jdx ws use)" else "no"
         finishWs(
-            "workspace '$name'\n$jarLines\n  jdk: $jdkWord\n  default: $defaultWord",
+            "workspace '$name'\n$jarLines\n$coordLines\n  jdk: $jdkWord\n  default: $defaultWord",
             WsPayload(
                 workspace = name,
                 jars = definition.jars,
+                coords = definition.coords,
                 includeJdk = definition.includeJdk,
                 active = active == name,
                 message = "ok",

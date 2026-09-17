@@ -15,13 +15,15 @@ package dev.jdx.index.workspace
  * # Managed by `jdx ws`. Human-editable: keep `name` equal to the file name.
  * name = "mc"
  * jars = ["~/.gradle/caches/**/*.jar", "./build/classes/java/main"]
+ * coords = ["com.google.code.gson:gson:2.14.0"]
  * include_jdk = true
  * ```
  *
  * Rules: `#` starts a comment outside a string; blank lines ignored; `include_jdk` accepts
- * the `includeJdk` camelCase spelling as an alias for hand-edits; unknown keys are rejected
- * (a typoed key silently doing nothing would mislead worse than an error); a `name` that
- * disagrees with the file stem is rejected — the stem is the identity.
+ * the `includeJdk` camelCase spelling as an alias for hand-edits; `coords` (T-019) is
+ * optional and defaults to empty, so pre-coords files still decode; unknown keys are
+ * rejected (a typoed key silently doing nothing would mislead worse than an error);
+ * a `name` that disagrees with the file stem is rejected — the stem is the identity.
  */
 public object WorkspaceToml {
 
@@ -33,6 +35,12 @@ public object WorkspaceToml {
         definition.jars.forEachIndexed { index, jar ->
             if (index > 0) append(", ")
             append(quote(jar))
+        }
+        appendLine("]")
+        append("coords = [")
+        definition.coords.forEachIndexed { index, coord ->
+            if (index > 0) append(", ")
+            append(quote(coord))
         }
         appendLine("]")
         appendLine("include_jdk = ${if (definition.includeJdk) "true" else "false"}")
@@ -48,6 +56,7 @@ public object WorkspaceToml {
         if (stemError != null) return Result.failure(IllegalArgumentException("invalid workspace file name '$fileName': $stemError"))
         var name: String? = null
         var jars: List<String>? = null
+        var coords: List<String>? = null
         var includeJdk: Boolean? = null
         val seen = mutableSetOf<String>()
         text.lines().forEachIndexed { index, rawLine ->
@@ -75,6 +84,10 @@ public object WorkspaceToml {
                     jars = parseStringArray(value)
                         ?: return Result.failure(IllegalArgumentException("$fileName:$lineNumber: `jars` must be an array of quoted strings"))
                 }
+                "coords" -> {
+                    coords = parseStringArray(value)
+                        ?: return Result.failure(IllegalArgumentException("$fileName:$lineNumber: `coords` must be an array of quoted strings"))
+                }
                 "include_jdk" -> {
                     includeJdk = when (value) {
                         "true" -> true
@@ -98,6 +111,7 @@ public object WorkspaceToml {
                 name = stem,
                 jars = jars ?: emptyList(),
                 includeJdk = includeJdk ?: true,
+                coords = coords ?: emptyList(),
             ),
         )
     }

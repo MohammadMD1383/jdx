@@ -29,8 +29,14 @@ class WorkspacePropertyTest {
 
     @Test
     fun `toml encode-decode is a fixed point for generated definitions`() = runBlocking<Unit> {
-        checkAll(1_000, validName, Arb.list(nastyString, 0..5), Arb.boolean()) { name, jars, includeJdk ->
-            val original = WorkspaceDefinition(name, jars, includeJdk)
+        checkAll(
+            1_000,
+            validName,
+            Arb.list(nastyString, 0..5),
+            Arb.boolean(),
+            Arb.list(nastyString, 0..3),
+        ) { name, jars, includeJdk, coords ->
+            val original = WorkspaceDefinition(name, jars, includeJdk, coords)
             val decoded = WorkspaceToml.decode(WorkspaceToml.encode(original), "$name.toml")
             (decoded.isSuccess) shouldBe true
             decoded.getOrThrow() shouldBe original
@@ -48,18 +54,27 @@ class WorkspacePropertyTest {
 
     @Test
     fun `resolver merges explicit jars in front of workspace jars`() = runBlocking<Unit> {
-        checkAll(1_000, Arb.list(nastyString, 0..4), Arb.list(nastyString, 0..4), Arb.boolean()) { explicit, stored, jdk ->
-            val lookup = mapOf("ws" to WorkspaceDefinition("ws", stored, jdk))
+        checkAll(
+            1_000,
+            Arb.list(nastyString, 0..4),
+            Arb.list(nastyString, 0..4),
+            Arb.boolean(),
+            Arb.list(nastyString, 0..3),
+            Arb.list(nastyString, 0..3),
+        ) { explicit, stored, jdk, explicitCoords, storedCoords ->
+            val lookup = mapOf("ws" to WorkspaceDefinition("ws", stored, jdk, storedCoords))
             val result = WorkspaceResolver.resolve(
                 explicitJars = explicit,
                 explicitNoJdk = false,
                 flagWorkspace = "ws",
                 loadWorkspace = { lookup[it] },
                 listNames = { listOf("ws") },
+                explicitCoords = explicitCoords,
             )
             (result is WorkspaceResolver.Result.success) shouldBe true
             val resolved = (result as WorkspaceResolver.Result.success).value
             resolved.jarSpecs shouldBe explicit + stored
+            resolved.coords shouldBe explicitCoords + storedCoords
             resolved.includeJdk shouldBe jdk
             resolved.workspaceName shouldBe "ws"
         }

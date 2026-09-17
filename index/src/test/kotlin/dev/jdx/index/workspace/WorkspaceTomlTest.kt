@@ -14,12 +14,33 @@ import org.junit.jupiter.api.Test
 class WorkspaceTomlTest {
 
     @Test
-    fun `encode writes the canonical three-line shape`() {
+    fun `encode writes the canonical shape`() {
         val text = WorkspaceToml.encode(WorkspaceDefinition("mc", listOf("a.jar", "b/*.jar"), true))
         text shouldBe "# Managed by `jdx ws`. Human-editable: keep `name` equal to the file name.\n" +
             "name = \"mc\"\n" +
             "jars = [\"a.jar\", \"b/*.jar\"]\n" +
+            "coords = []\n" +
             "include_jdk = true\n"
+    }
+
+    @Test
+    fun `coords round-trip through encode`() {
+        val original = WorkspaceDefinition(
+            "mc",
+            listOf("a.jar"),
+            false,
+            listOf("com.google.code.gson:gson:2.14.0", "org.example:lib:1.0"),
+        )
+        val decoded = WorkspaceToml.decode(WorkspaceToml.encode(original), "mc.toml")
+        (decoded.isSuccess) shouldBe true
+        decoded.getOrThrow() shouldBe original
+    }
+
+    @Test
+    fun `coords default to empty for pre-coords files`() {
+        val decoded = WorkspaceToml.decode("name = \"mc\"\njars = [\"a.jar\"]\ninclude_jdk = true\n", "mc.toml")
+        (decoded.isSuccess) shouldBe true
+        decoded.getOrThrow().coords shouldBe emptyList()
     }
 
     @Test
