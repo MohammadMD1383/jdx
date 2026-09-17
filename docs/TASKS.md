@@ -938,7 +938,7 @@ and `ws create`, flowing into resolution and fetch URLs.
 ### T-040 `JdxService` RPC protocol · **T-041** daemon + unix socket + 5-min idle shutdown (D-004) · **T-042** transparent CLI daemon client + `--no-daemon` · **T-043** MCP stdio server with generated schemas · **T-044** HTTP/JSON server on `com.sun.net.httpserver` · **T-045** `jdx batch` · **T-046** adapter parity test (CLI/HTTP/MCP byte-identical payloads)
 
 # M7 — Polish
-### T-060 — Mutation testing and coverage gates · `TODO`
+### T-060 — Mutation testing and coverage gates · `WIP`
 **Depends:** T-055, T-056 · Pitest wired as tier 4. Gates per `docs/TESTING.md` §10:
 `core` ≥ 95 % line and **≥ 80 % mutation score** (build-failing); `index`/`sources`/
 `decompile` ≥ 85 % line with mutation measured and reported; `cli`/`mcp`/`server`
