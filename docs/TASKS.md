@@ -51,7 +51,7 @@ be fiction.
 | **M6** | Serving: daemon, MCP, HTTP, `batch` | TODO |
 | **M7** | Polish: token budgets, AppCDS, mutation gates, docs, install | TODO |
 
-**T-001 through T-018, T-053, T-054, T-055, T-056, T-057, T-061 and T-067 are `DONE`.** M0's test spine is
+**T-001 through T-018, T-053, T-054, T-055, T-056, T-057, T-058, T-061 and T-067 are `DONE`.** M0's test spine is
 complete; T-057…T-060 unblock as their milestones land. M1 starts at T-007.
 
 ---
@@ -397,19 +397,32 @@ refs for unnameable classes instead of skipping them.*
 
 ---
 
-### T-058 — Metamorphic test suite · `WIP`
-**Depends:** T-009 · **Files:** `core/src/test/kotlin/.../metamorphic/*`
+### T-058 — Metamorphic test suite · `DONE` (session 27)
+**Depends:** T-009 · **Files:** `core/src/test/kotlin/.../metamorphic/*`, `index/src/test/kotlin/.../metamorphic/*`
 
 Relations that must hold between answers (TESTING.md §6). These catch the deep resolver and
 index bugs that example-based tests never reach. Start with the resolver relations; extend as
 `hierarchy`/`usages`/`callers` land in M4.
 
 **Acceptance**
-- [ ] Every relation listed in TESTING.md §6 is implemented or has a task naming the
+- [x] Every relation listed in TESTING.md §6 is implemented or has a task naming the
       milestone that will add it
-- [ ] Determinism relations (`run twice ⟹ identical bytes`, `index twice ⟹ identical rows`)
+- [x] Determinism relations (`run twice ⟹ identical bytes`, `index twice ⟹ identical rows`)
       are included — they protect the D-007 promise
-- [ ] Runs over the fixture corpus in tier 2 and a corpus sample in tier 3
+- [x] Runs over the fixture corpus in tier 2 and a corpus sample in tier 3
+
+*Implementation notes (session 27): `core/.../metamorphic/ResolverMetamorphicTest` (3
+tier-1 properties, 1,000 cases each: declared ⊆ inherited, superclass members minus
+private/overridden accounting for override collapse and field hiding in
+`overriddenTypes`/`hiddenTypes`, run-twice determinism) + `index/.../metamorphic/MetamorphicTest`
+(tier 2 over all 35 fixture classes: declared ⊆ inherited with full/default access,
+superclass members minus private/overridden, search exact FQN finds T, show counts ==
+declared counts, index fixture jar twice into independent SQLite stores ⟹ byte-identical
+rows with `indexedAt` normalised, show/members/search run twice ⟹ byte-identical
+stdout/JSON, tracked catalog for deferred relations M4/T-032, M4/T-030, M4/T-033,
+M3/T-022) + `index/.../metamorphic/MetamorphicCorpusSoakTest` (tier 3 soak over seeded
+sample from `~/.gradle/caches`, skipping unnameable `$$` names per T-065 and exit 5
+unreadable entries; verified zero failures across 25 sampled jars). All tiers green.*
 
 ### T-061 — Shard the growing docs; add the lessons log (D-023, D-024) · `DONE` (session 4)
 **Depends:** — · **Files:** `docs/PROGRESS.md`, `docs/progress/*`, `docs/DECISIONS.md`,

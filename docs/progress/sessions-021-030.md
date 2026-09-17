@@ -545,3 +545,75 @@ None. Push needs owner go-ahead (D-012) — three commits
 ### Next action
 **T-058** (metamorphic suite — lowest unblocked TODO) or **T-019** (Maven
 coordinates). Next progress shard `sessions-031-040.md` opens after 4 more sessions.
+
+## Session 27 — 2026-09-17 — Metamorphic test suite (T-058)
+**Agent/Author:** Antigravity · **Commits:** `9c42bf7` (claim), this session's work
+
+### Goal
+Implement T-058, the lowest-numbered unblocked TODO (depends T-009 DONE): the metamorphic
+test suite from TESTING.md §6, covering relations between answers over generated class
+graphs in tier 1, all 35 fixture classes in tier 2, and a seeded real-jar corpus sample
+in tier 3.
+
+### What I did
+1. Claimed T-058 (`TODO`→`WIP`, commit `9c42bf7`) before coding.
+2. **`core/.../metamorphic/ResolverMetamorphicTest.kt`** (3 tier-1 properties, 1,000 cases each):
+   - Relation 1: `members(T, --inherited) ⊇ members(T, --declared)` (declared methods and fields
+     always survive into inherited resolution at depth 0).
+   - Relation 2: `members(T, --inherited) ⊇ members(super(T), --inherited) minus private/overridden`
+     (accessible supertype members are present directly or tracked via `overriddenTypes`/`hiddenTypes`
+     when overridden or shadowed by a nearer declaration in BFS linearisation).
+   - Relation 10 (resolver determinism): `resolve(T) twice ⟹ identical ResolvedMembers`.
+3. **`index/.../metamorphic/MetamorphicTest.kt`** (tier 2 over all 35 fixture classes):
+   - Relation 1: declared rows are a strict subset of inherited rows for every fixture class under
+     both full access/synthetic and default flags.
+   - Relation 2: inherited members include accessible superclass members minus overridden methods
+     and shadowed fields.
+   - Relation 6: exact FQN search returns exactly the queried type across all fixture classes.
+   - Relation 7: `show` card member counts match declared members under all access & synthetic flags.
+   - Relation 9: indexing the fixture jar twice into independent SQLite stores produces identical
+     rows across all tables (`indexedAt` normalised to 0).
+   - Relation 10: `show`, `members --inherited`, and `search` run twice ⟹ byte-identical stdout & JSON.
+   - Catalog of deferred relations tracking M4/T-032 (`hierarchy`), M4/T-030 (`usages`),
+     M4/T-033 (`callers`), and M3/T-022 (`body`).
+4. **`index/.../metamorphic/MetamorphicCorpusSoakTest.kt`** (tier 3 soak):
+   - Seeded random sampling across 25 real jars from `~/.gradle/caches`.
+   - Skips unreadable classes (exit 5) and unnameable `$$` classes (T-065).
+   - Verified Relation 1, Relation 6, Relation 7, Relation 9 (index determinism), Relation 10 (run-twice
+     determinism): 0 failures across all sampled classes and jars (`BUILD SUCCESSFUL in 34s`).
+5. Verified tier 1 (`./gradlew test`: 13.3s across 545 tests) and tier 2 (`./gradlew check`: green with
+   shelve workaround for T-066).
+6. **Not pushed** (D-012: no remote push without owner go-ahead in this session).
+
+### Decisions made
+- None (no new D-nnn). Relations follow TESTING.md §6 specification exactly. Deferred relations are
+  explicitly catalogued and mapped to their planned milestones (M3/M4).
+
+### Tasks moved
+- T-058: TODO → WIP (`9c42bf7`) → DONE
+
+### Lessons distilled
+- L-051 (metamorphic inheritance relations must track collapse and timestamp non-determinism) in
+  `docs/lessons/L-051-075.md`; tag index in `docs/LESSONS.md` updated.
+
+### What works now (and how to verify it yourself)
+```bash
+./gradlew :core:test --tests "dev.jdx.core.metamorphic.*"       # tier-1 properties (3/3 green)
+./gradlew :index:tier2Test --tests "dev.jdx.index.metamorphic.*" # tier-2 fixture suite (7/7 green)
+./gradlew :index:soakTest --tests "dev.jdx.index.metamorphic.*"  # tier-3 corpus soak (green)
+mv ~/.config/jdx ~/.config/jdx.shelved                          # T-066 ambient-workspace workaround
+./gradlew check                                                 # tiers 1+2 green (BUILD SUCCESSFUL)
+mv ~/.config/jdx.shelved ~/.config/jdx
+```
+
+### What is broken / half-done
+- T-066 (ambient `fx` workspace reds 2 `ReadCommandsTest`s) still open — shelve workaround stands.
+- Soak: `JavapCorpusSoakTest` pre-existing failure on `$$` classes from newer cache jars remains open
+  under T-065; `MetamorphicCorpusSoakTest` avoids this by explicitly skipping unnameable classes.
+- Deferred relations (hierarchy, usages, callers, body) await M3 and M4.
+
+### Open questions / blockers
+None. Push needs owner go-ahead (D-012).
+
+### Next action
+**T-019** (Maven coordinate resolution) — lowest unblocked TODO; or **T-059** (corpus soak harness) / **T-066** (make `ReadCommandsTest` hermetic). Next progress shard `sessions-031-040.md` opens after 3 more sessions.
