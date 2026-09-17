@@ -397,7 +397,7 @@ refs for unnameable classes instead of skipping them.*
 
 ---
 
-### T-058 — Metamorphic test suite · `TODO`
+### T-058 — Metamorphic test suite · `WIP`
 **Depends:** T-009 · **Files:** `core/src/test/kotlin/.../metamorphic/*`
 
 Relations that must hold between answers (TESTING.md §6). These catch the deep resolver and
