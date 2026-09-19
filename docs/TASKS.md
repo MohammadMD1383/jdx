@@ -1070,7 +1070,7 @@ with `~/.config/jdx` shelved for the cli suites per the standing T-066 caveat.*
 
 ---
 
-### T-066 — Make `ReadCommandsTest` hermetic to the machine's workspaces · `TODO`
+### T-066 — Make `ReadCommandsTest` hermetic to the machine's workspaces · `WIP`
 **Depends:** T-015 · **Files:** `cli/src/test/kotlin/.../commands/ReadCommandsTest.kt`
 *(Added in session 21: found while verifying T-055 — pre-existing T-015 gap, not caused
 by T-055.)*
