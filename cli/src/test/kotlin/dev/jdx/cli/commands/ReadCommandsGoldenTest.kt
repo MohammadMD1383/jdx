@@ -1,11 +1,11 @@
 package dev.jdx.cli.commands
 
 import com.github.ajalt.clikt.core.parse
+import dev.jdx.testsupport.fixtures.FixtureJars
 import dev.jdx.testsupport.golden.GoldenFiles
 import java.io.ByteArrayOutputStream
 import java.io.File
 import java.io.PrintStream
-import java.util.zip.ZipFile
 import org.junit.jupiter.api.Tag
 import org.junit.jupiter.api.Test
 import org.junit.jupiter.api.fail
@@ -34,8 +34,8 @@ class ReadCommandsGoldenTest {
 
     @Test
     fun `text and json goldens cover every fixture class for show members and outline`() {
-        val jar = fixtureBinaryJar()
-        val names = fixtureClassNames(jar)
+        val jar = FixtureJars.binaryJar()
+        val names = FixtureJars.classNames(jar)
         val roots = listOf("--jars", jar.absolutePath, "--no-jdk")
         for ((command, run) in commands()) {
             val contents = buildMap {
@@ -91,23 +91,4 @@ class ReadCommandsGoldenTest {
     /** The real jar file name carries a version string — it must never leak into goldens. */
     private fun normalize(output: String, jar: File): String =
         output.replace(jar.name, "fixture-corpus.jar")
-
-    private fun fixtureBinaryJar(): File {
-        val dir = System.getProperty("jdx.fixturesDir")?.let { File(it) }
-            ?: fail("jdx.fixturesDir not set (cli build wires it; see cli/build.gradle.kts)")
-        val jars = dir.listFiles { file ->
-            file.isFile && file.name.startsWith("testfixtures-") && !file.name.endsWith("-sources.jar")
-        }?.toList().orEmpty()
-        if (jars.size != 1) fail("expected exactly one binary fixture jar in $dir, found: $jars")
-        return jars.single()
-    }
-
-    private fun fixtureClassNames(jar: File): List<String> = ZipFile(jar).use { zip ->
-        zip.entries().asSequence()
-            .map { it.name }
-            .filter { it.endsWith(".class") && it != "module-info.class" }
-            .map { it.removeSuffix(".class").replace('/', '.') }
-            .sorted()
-            .toList()
-    }
 }

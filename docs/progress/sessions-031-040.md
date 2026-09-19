@@ -4,6 +4,69 @@ Newest first. Each entry follows the template at the bottom of `docs/PROGRESS.md
 
 ---
 
+## Session 32 — 2026-09-19 — T-063 share the fixture-jar resolution helpers
+**Agent/Author:** Buffy (GLM, Freebuff) · **Commits:** claim + closing commit (this session)
+
+### Goal
+Implement T-063, the lowest-numbered unblocked TODO: promote the triplicated
+`fixtureBinaryJar()`/`fixtureClassNames()` copies into one shared helper beside the
+T-054 `GoldenFiles` helper, migrate the golden suites, and settle core's `Fixtures`.
+
+### What I did
+- New `dev.jdx.testsupport.fixtures.FixtureJars` in the `testfixtures` `testFixtures`
+  source set (index and cli already consume that jar via
+  `testImplementation(testFixtures(project(":testfixtures")))` — zero build changes).
+  Carries the canonical resolution: `jdx.fixturesDir` property → upward directory
+  search, the exactly-one jar-count guard (L-029 trap documented at the guard),
+  `classNames`, and `classBytes` (zip read, never a class load — D-017 rule restated).
+- New `FixtureJarsTest` (5 tier-2 tests, ported from core's `FixturesTest`, including
+  the duplicated-binary-jar ambiguity guard).
+- Migrated **four** copies, not the three the task text knew: index
+  `RendererGoldenTest` (jar + names + bytes), cli `ReadCommandsGoldenTest` (jar +
+  names), and cli `SortOrdersGoldenTest` (jar — a session-31 file the task predates).
+  The module-attributing `jdx.fixturesDir not set (… build wires it)` fail message
+  became the generic `build :testfixtures first` error.
+- core's `Fixtures` stays (not delegating) — KDoc now says why (dependency-light test
+  source set per T-055; D-017 marker helpers are the T-006 corpus contract) and pins
+  the mirror rule: change one, change both, `FixturesTest` pins the same behaviour.
+- Inspected and deliberately left: index-internal `ArtifactTestJars` — different
+  mechanism (resolution shaped for `ArtifactLoader` seams) plus `craftJar`/manifest
+  helpers; folding it into the shared helper would couple artifact tests to the
+  testFixtures jar for no dedupe gain.
+
+### Decisions made
+- None new (no genuine ambiguity; the "delegate or document" fork in the task text
+  resolved to *document* — recorded in `Fixtures`' KDoc and the task notes).
+
+### Tasks moved
+- T-063: TODO → WIP (claim commit) → DONE.
+
+### Lessons distilled
+- L-058 (promoted helpers must document which sibling copies must mirror them).
+
+### What works now (and how to verify it yourself)
+```bash
+mv ~/.config/jdx ~/.config/jdx.shelved  # T-066 ambient-workspace caveat, restore after
+./gradlew check   # tiers 1+2 green (tier-1 18.9 s of 30 s, 670 tests)
+git grep -n "private fun fixtureBinaryJar\|private fun fixtureClassNames"   # only index's ArtifactLoader-shaped copies remain
+git grep -n "FixtureJars" index/src cli/src testfixtures/src
+```
+
+### What is broken / half-done
+- Nothing from this task. Pre-existing, untouched: T-066 (cli store tests red with
+  ambient `~/.config/jdx` — the run above shelved it, same as sessions 24–31),
+  T-065 (soak `$$` reds).
+
+### Open questions / blockers
+- None.
+
+### Next action
+- **T-064** (close the indexer 3,000/s gap) — lowest-numbered open TODO; T-065
+  (`$$` names), T-066 (hermetic `ReadCommandsTest`), T-068 (identical-root dedupe),
+  T-069 (`--repo`) also open.
+
+---
+
 ## Session 31 — 2026-09-19 — T-062 member sort orders (`--sort name|declaring`)
 **Agent/Author:** Muse Spark 1.3 Free · **Commits:** `b7d0271` (claim) + closing commit (this session)
 

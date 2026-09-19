@@ -10,6 +10,15 @@ import java.util.zip.ZipFile
  * (see `core/build.gradle.kts`); an IDE run without that property falls back to searching
  * upward from the working directory. Either way the result is computed, never a literal.
  *
+ * ## Relationship to the shared `FixtureJars` helper (T-063)
+ *
+ * `dev.jdx.testsupport.fixtures.FixtureJars` (testfixtures' `testFixtures` source set) is the
+ * canonical copy for golden suites in other modules. This object does **not** delegate to it:
+ * core's test source set is deliberately dependency-light (property testing only — T-055),
+ * and the D-017 marker helpers below are part of the T-006 corpus contract, which lives with
+ * core's corpus tests. Resolution logic here is expected to mirror `FixtureJars` exactly;
+ * if you change one, change both (the `FixturesTest` assertions pin the same behaviour).
+ *
  * ## The rule that matters here (D-017)
  *
  * Fixture classes are **never loaded into the test JVM** — only read as bytes out of the jar.

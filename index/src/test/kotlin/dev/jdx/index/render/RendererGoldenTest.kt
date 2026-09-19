@@ -10,9 +10,9 @@ import dev.jdx.core.render.buildMemberListing
 import dev.jdx.core.resolve.MemberResolver
 import dev.jdx.index.asm.AsmClassReader
 import dev.jdx.index.asm.ClassReadResult
+import dev.jdx.testsupport.fixtures.FixtureJars
 import dev.jdx.testsupport.golden.GoldenFiles
 import java.io.File
-import java.util.zip.ZipFile
 import org.junit.jupiter.api.Tag
 import org.junit.jupiter.api.Test
 import org.junit.jupiter.api.fail
@@ -36,8 +36,8 @@ class RendererGoldenTest {
 
     @Test
     fun `text and json goldens cover every fixture class`() {
-        val jar = fixtureBinaryJar()
-        val names = fixtureClassNames(jar)
+        val jar = FixtureJars.binaryJar()
+        val names = FixtureJars.classNames(jar)
         val infos = names.associateWith { readFixtureClass(jar, it) }
         val lookup: (TypeName) -> ClassInfo? = { name ->
             infos[name.binaryName] ?: if (name.binaryName == "java.lang.Object") objectStub() else null
@@ -61,29 +61,9 @@ class RendererGoldenTest {
         GoldenFiles.verifyAll(goldenDir, contents)
     }
 
-    private fun fixtureBinaryJar(): File {
-        val dir = System.getProperty("jdx.fixturesDir")?.let { File(it) }
-            ?: fail("jdx.fixturesDir not set (index build wires it; see index/build.gradle.kts)")
-        val jars = dir.listFiles { file ->
-            file.isFile && file.name.startsWith("testfixtures-") && !file.name.endsWith("-sources.jar")
-        }?.toList().orEmpty()
-        if (jars.size != 1) fail("expected exactly one binary fixture jar in $dir, found: $jars")
-        return jars.single()
-    }
-
-    private fun fixtureClassNames(jar: File): List<String> = ZipFile(jar).use { zip ->
-        zip.entries().asSequence()
-            .map { it.name }
-            .filter { it.endsWith(".class") && it != "module-info.class" }
-            .map { it.removeSuffix(".class").replace('/', '.') }
-            .sorted()
-            .toList()
-    }
-
     /** Raw bytes, never a class load (D-017). */
     private fun readFixtureClass(jar: File, binaryName: String): ClassInfo {
-        val entry = binaryName.replace('.', '/') + ".class"
-        val bytes = ZipFile(jar).use { zip -> zip.getInputStream(zip.getEntry(entry)).readBytes() }
+        val bytes = FixtureJars.classBytes(jar, binaryName)
         return when (val result = AsmClassReader.read(bytes)) {
             is ClassReadResult.Ok -> result.info
             is ClassReadResult.UnsupportedVersion ->

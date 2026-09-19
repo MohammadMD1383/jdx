@@ -51,8 +51,9 @@ be fiction.
 | **M6** | Serving: daemon, MCP, HTTP, `batch` | TODO |
 | **M7** | Polish: token budgets, AppCDS, mutation gates, docs, install | TODO |
 
-**T-001 through T-019, T-053 through T-062, and T-067 are `DONE`.** M0's test spine is
-complete; T-057…T-060 unblock as their milestones land. M1 starts at T-007.
+**T-001 through T-019, T-053 through T-063, and T-067 are `DONE`.** M0's test spine is
+complete; T-057…T-060 unblock as their milestones land. M1 (read path) is complete;
+M2 hardening starts at T-064.
 
 ---
 
@@ -995,7 +996,7 @@ gate — diminishing returns past 91 %.*
 
 ---
 
-### T-063 — Share the fixture-jar resolution helpers · `WIP`
+### T-063 — Share the fixture-jar resolution helpers · `DONE` (session 32)
 **Depends:** — · **Files:** `core/.../fixtures/Fixtures.kt`, `index/.../render/RendererGoldenTest.kt`, `cli/.../commands/ReadCommandsGoldenTest.kt`
 *(Added in session 17: found while migrating golden suites to the T-054 helper.)*
 
@@ -1006,9 +1007,28 @@ to the T-054 helper (`testfixtures` `testFixtures` source set) and delete the
 copies — the same jar-count trap from L-029 is waiting in each copy.
 
 **Acceptance**
-- [ ] Index and cli golden tests resolve jars/classes through the shared helper
-- [ ] `core`'s `Fixtures` either delegates to it or documents why it cannot
-- [ ] No test hard-codes an absolute jar path (existing rule, still enforced)
+- [x] Index and cli golden tests resolve jars/classes through the shared helper
+- [x] `core`'s `Fixtures` either delegates to it or documents why it cannot
+- [x] No test hard-codes an absolute jar path (existing rule, still enforced)
+
+*Implementation notes (session 32): new `dev.jdx.testsupport.fixtures.FixtureJars`
+(`testfixtures` `testFixtures` source set, beside the T-054 `GoldenFiles` helper —
+index and cli already consume that jar, so no build changes). It carries the
+canonical resolution (property → upward search, exactly-one jar-count guard with
+the L-029 trap documented in place, `classNames`, `classBytes` with the D-017
+never-load rule) plus a 5-test tier-2 suite (`FixtureJarsTest`, ported from core's
+`FixturesTest`). Migrated all four golden-suite copies: index `RendererGoldenTest`
+and cli `ReadCommandsGoldenTest` + `SortOrdersGoldenTest` (a 4th copy the task text
+did not know about) — the old `jdx.fixturesDir not set` fail-message (module-build
+attribution) became a generic build-`:testfixtures` first error. core's `Fixtures`
+stays, documented why: its test source set is deliberately dependency-light (T-055)
+and the D-017 marker helpers are the T-006 corpus contract; the KDoc pins the
+mirror-mutual rule (change one, change both — `FixturesTest` pins the same
+behaviour). Also inspected and deliberately left: index-internal `ArtifactTestJars`
+(different mechanism — resolves through `ArtifactLoader`-shaped seams and adds
+`craftJar`/manifest helpers; consolidating it would couple the artifact tests to
+the testFixtures jar for no dedupe gain). `check` green (tier-1 18.9 s of 30 s) —
+with `~/.config/jdx` shelved for the cli suites per the standing T-066 caveat.*
 
 ---
 

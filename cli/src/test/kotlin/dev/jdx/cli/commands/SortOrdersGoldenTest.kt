@@ -1,6 +1,7 @@
 package dev.jdx.cli.commands
 
 import com.github.ajalt.clikt.core.parse
+import dev.jdx.testsupport.fixtures.FixtureJars
 import dev.jdx.testsupport.golden.GoldenFiles
 import java.io.ByteArrayOutputStream
 import java.io.File
@@ -51,7 +52,7 @@ class SortOrdersGoldenTest {
 
     @Test
     fun `text and json goldens cover every sort order`() {
-        val jar = fixtureBinaryJar()
+        val jar = FixtureJars.binaryJar()
         val roots = listOf("--jars", jar.absolutePath, "--no-jdk")
         val contents = buildMap {
             for (binaryName in classes) {
@@ -86,14 +87,4 @@ class SortOrdersGoldenTest {
     /** The real jar file name carries a version string — it must never leak into goldens. */
     private fun normalize(output: String, jar: File): String =
         output.replace(jar.name, "fixture-corpus.jar")
-
-    private fun fixtureBinaryJar(): File {
-        val dir = System.getProperty("jdx.fixturesDir")?.let { File(it) }
-            ?: fail("jdx.fixturesDir not set (cli build wires it; see cli/build.gradle.kts)")
-        val jars = dir.listFiles { file ->
-            file.isFile && file.name.startsWith("testfixtures-") && !file.name.endsWith("-sources.jar")
-        }?.toList().orEmpty()
-        if (jars.size != 1) fail("expected exactly one binary fixture jar in $dir, found: $jars")
-        return jars.single()
-    }
 }
