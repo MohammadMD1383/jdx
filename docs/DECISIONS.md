@@ -61,3 +61,4 @@ log.
 | D-030 | Project auto-discovery semantics and deviations (T-016) | proposed-by-implementer | `D-026-050.md` |
 | D-031 | Search, resolve, ls and tree semantics (T-017) | proposed-by-implementer | `D-026-050.md` |
 | D-032 | Maven coordinate resolution and fetching semantics (T-019) | proposed-by-implementer | `D-026-050.md` |
+| D-033 | Member `--sort` order semantics (T-062) | proposed-by-implementer | `D-026-050.md` |

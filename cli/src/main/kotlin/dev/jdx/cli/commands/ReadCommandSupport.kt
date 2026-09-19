@@ -269,6 +269,13 @@ internal object ReadCommandSupport {
         else -> JdxService.KindFilter.ALL
     }
 
+    /** Maps `--sort` to the listing order; Clikt's `choice()` guarantees the input range. */
+    internal fun sortOf(sort: String): dev.jdx.core.render.MemberSort = when (sort.lowercase()) {
+        "name" -> dev.jdx.core.render.MemberSort.NAME
+        "declaring" -> dev.jdx.core.render.MemberSort.DECLARING
+        else -> dev.jdx.core.render.MemberSort.KIND
+    }
+
     /**
      * Validates the flag combinations that reach the service. Returns the usage error
      * message, or `null` when the flags are coherent. Deferred flags fail here with the
@@ -294,8 +301,8 @@ internal object ReadCommandSupport {
         if (withDoc) {
             return "usage error: --with-doc is not yet implemented (T-025: javadoc/KDoc rendering)"
         }
-        if (sort != "kind") {
-            return "usage error: --sort $sort is not yet implemented (T-062: member sort orders)"
+        if (sortOf(sort) == dev.jdx.core.render.MemberSort.KIND && sort.lowercase() != "kind") {
+            return "usage error: invalid --sort '$sort' (expected kind|name|declaring)"
         }
         return null
     }

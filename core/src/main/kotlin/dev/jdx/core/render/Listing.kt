@@ -28,7 +28,10 @@ public enum class MemberKind(public val word: String, public val plural: String)
  * One member row: the text signature plus everything JSON needs structurally.
  * [canonicalRef] is the copy-pasteable canonical reference (D-016); a `:return`
  * suffix is added only when sibling rows share name and erased parameters
- * (bridge/covariant overloads, PROPOSAL.md §6).
+ * (bridge/covariant overloads, PROPOSAL.md §6). [memberName] is the raw member
+ * name (`<init>` for constructors) and exists so `--sort name` (T-062) orders
+ * by name without parsing display text; it is intentionally absent from JSON
+ * (the ref already carries the name — D-007 text⊆JSON is unchanged).
  */
 public data class MemberRow(
     public val canonicalRef: String,
@@ -39,6 +42,7 @@ public data class MemberRow(
     public val deprecated: Boolean,
     public val overriddenTypes: List<TypeName.ClassType>,
     public val hiddenTypes: List<TypeName.ClassType>,
+    public val memberName: String,
 ) {
     /** The text line: `  method public int getX()`. */
     public fun textLine(): String = "  ${kind.word} $signature"
@@ -98,6 +102,34 @@ public data class ObjectSummary(
         "{\"count\":$count,\"expandHint\":" + JsonEscape.quote(expandHint) + "}"
 }
 
+/**
+ * Row order for [buildMemberListing] (T-062, PROPOSAL.md §7.1).
+ *
+ * - [KIND] (default): groups in linearisation order (target first,
+ *   `java.lang.Object` last), kind-then-name inside each group. This is the
+ *   T-010 layout, preserved byte-identically.
+ * - [NAME]: flat name-first order across kinds and groups — every row sorted
+ *   by raw member name (`<init>` sorts as `<init>`), then signature, ref,
+ *   declaring type and depth. Group headers are kept (text and JSON share the
+ *   row order per D-007) but groups are run-length runs along the global
+ *   order, so a kind header may repeat when names interleave across kinds.
+ * - [DECLARING]: groups sorted alphabetically by declaring-type binary name,
+ *   then kind; rows inside each group sort exactly as [KIND]. This differs from
+ *   [KIND] whenever hierarchy names do not sort alphabetically.
+ */
+public enum class MemberSort(public val flag: String) {
+    KIND("kind"),
+    NAME("name"),
+    DECLARING("declaring"),
+    ;
+
+    public companion object {
+        /** Parses a `--sort` flag value case-insensitively, or null when unknown. */
+        public fun fromFlag(flag: String): MemberSort? =
+            entries.firstOrNull { it.flag.equals(flag, ignoreCase = true) }
+    }
+}
+
 /** Knobs for [buildMemberListing]. T-011's flags (`--sort`, `--grep`, `--from`) extend this. */
 public data class MemberListingOptions(
     /** Outline mode: only the target's own members, no inherited groups. */
@@ -106,6 +138,8 @@ public data class MemberListingOptions(
     public val collapseObjectMembers: Boolean = true,
     /** Maximum member rows shown; the rest become the truncation footer. */
     public val maxMembers: Int = DEFAULT_MEMBER_LIMIT,
+    /** Row order (T-062): kind (default), flat name-first, or alphabetical declaring. */
+    public val sort: MemberSort = MemberSort.KIND,
 )
 
 /**
@@ -178,9 +212,11 @@ public data class MemberListing(
 
 /**
  * Builds the listing from a target and its [ResolvedMembers]: rows grouped by
- * declaring type (linearisation order — target first, `java.lang.Object` last),
- * sorted kind-then-name inside each group, Object optionally collapsed, tail
- * truncated to whole rows. Missing supertypes become [WarningCode.UNRESOLVED_SUPERTYPE]
+ * declaring type (linearisation order for [MemberSort.KIND] — target first,
+ * `java.lang.Object` last — alphabetical for [MemberSort.DECLARING],
+ * first-row order for the flat [MemberSort.NAME]), sorted inside each group
+ * per the sort order, Object optionally collapsed, tail truncated to whole
+ * rows. Missing supertypes become [WarningCode.UNRESOLVED_SUPERTYPE]
  * warnings — labelled, never silent holes.
  */
 public fun buildMemberListing(
@@ -229,21 +265,18 @@ public fun buildMemberListing(
     val objectRows = if (collapsing) allRows.filter { it.declaringType.binaryName == OBJECT_BINARY_NAME } else emptyList()
     val objectSet = objectRows.map { it.canonicalRef }.toSet()
 
-    val groups = allRows
-        .filter { it.canonicalRef !in objectSet }
-        .groupBy { it.declaringType.binaryName to it.kind }
-        .map { (key, rows) ->
-            val representative = rows.first()
-            MemberGroup(
-                declaringType = representative.declaringType,
-                depth = representative.depth,
-                kind = key.second,
-                // kind-then-name: the group fixes the kind, so sort by signature text,
-                // tie-broken by ref (overload order is otherwise declaration order).
-                rows = rows.sortedWith(compareBy({ it.signature }, { it.canonicalRef })),
-            )
-        }
-        .sortedWith(compareBy({ order[it.declaringType.binaryName] ?: Int.MAX_VALUE }, { it.kind.ordinal }))
+    val groups = when (options.sort) {
+        MemberSort.KIND -> kindGroups(
+            allRows.filter { it.canonicalRef !in objectSet },
+            order,
+        )
+        MemberSort.DECLARING -> declaringGroups(
+            allRows.filter { it.canonicalRef !in objectSet },
+        )
+        MemberSort.NAME -> nameGroups(
+            allRows.filter { it.canonicalRef !in objectSet },
+        )
+    }
 
     val counts = MemberCounts(
         constructors = allRows.count { it.kind == MemberKind.CONSTRUCTOR },
@@ -292,6 +325,7 @@ private fun toMethodRow(resolved: ResolvedMethod, target: ClassInfo, disambiguat
         deprecated = resolved.member.deprecated,
         overriddenTypes = resolved.overriddenTypes,
         hiddenTypes = emptyList(),
+        memberName = resolved.member.name,
     )
 }
 
@@ -306,7 +340,94 @@ private fun toFieldRow(resolved: ResolvedField): MemberRow = MemberRow(
     deprecated = resolved.member.deprecated,
     overriddenTypes = emptyList(),
     hiddenTypes = resolved.hiddenTypes,
+    memberName = resolved.member.name,
 )
+
+/**
+ * The default (T-010) layout, preserved byte-identically: groups in
+ * linearisation order, kind-then-name inside each group.
+ */
+private fun kindGroups(rows: List<MemberRow>, order: Map<String, Int>): List<MemberGroup> =
+    rows
+        .groupBy { it.declaringType.binaryName to it.kind }
+        .map { (key, groupRows) ->
+            val representative = groupRows.first()
+            MemberGroup(
+                declaringType = representative.declaringType,
+                depth = representative.depth,
+                kind = key.second,
+                // kind-then-name: the group fixes the kind, so sort by signature text,
+                // tie-broken by ref (overload order is otherwise declaration order).
+                rows = groupRows.sortedWith(compareBy({ it.signature }, { it.canonicalRef })),
+            )
+        }
+        .sortedWith(compareBy({ order[it.declaringType.binaryName] ?: Int.MAX_VALUE }, { it.kind.ordinal }))
+
+/**
+ * Alphabetical declaring-type layout: groups sorted by declaring binary name,
+ * then kind; rows inside each group sort exactly as [kindGroups].
+ */
+private fun declaringGroups(rows: List<MemberRow>): List<MemberGroup> =
+    rows
+        .groupBy { it.declaringType.binaryName to it.kind }
+        .map { (key, groupRows) ->
+            val representative = groupRows.first()
+            MemberGroup(
+                declaringType = representative.declaringType,
+                depth = representative.depth,
+                kind = key.second,
+                rows = groupRows.sortedWith(compareBy({ it.signature }, { it.canonicalRef })),
+            )
+        }
+        .sortedWith(compareBy({ it.declaringType.binaryName }, { it.kind.ordinal }))
+
+/**
+ * Flat name-first layout: every row sorted globally by raw member name, then
+ * signature, ref, declaring type and depth. Groups are run-length runs along
+ * that order (a new group each time the declaring type or kind changes), so a
+ * kind header may repeat when names interleave across kinds — the price of
+ * true flatness. Flattening the groups yields the globally sorted sequence,
+ * in text and in JSON alike (D-007), and truncation keeps its prefix.
+ */
+private fun nameGroups(rows: List<MemberRow>): List<MemberGroup> {
+    val ordered = rows.sortedWith(
+        compareBy(
+            { it.memberName },
+            { it.signature },
+            { it.canonicalRef },
+            { it.declaringType.binaryName },
+            { it.depth },
+        ),
+    )
+    val groups = mutableListOf<MemberGroup>()
+    var currentKey: Pair<String, MemberKind>? = null
+    var currentRows = mutableListOf<MemberRow>()
+    fun flush() {
+        val key = currentKey
+        if (key != null && currentRows.isNotEmpty()) {
+            val representative = currentRows.first()
+            groups.add(
+                MemberGroup(
+                    declaringType = representative.declaringType,
+                    depth = representative.depth,
+                    kind = key.second,
+                    rows = currentRows.toList(),
+                ),
+            )
+            currentRows = mutableListOf()
+        }
+    }
+    for (row in ordered) {
+        val key = row.declaringType.binaryName to row.kind
+        if (key != currentKey) {
+            flush()
+            currentKey = key
+        }
+        currentRows.add(row)
+    }
+    flush()
+    return groups
+}
 
 /**
  * Keeps the first [limit] rows across [groups] in order, dropping trailing empty

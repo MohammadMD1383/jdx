@@ -100,7 +100,9 @@ class MembersCommand(
 
     private val sort by option(
         "--sort",
-        help = "Row order: kind (the default, kind-then-name); name and declaring arrive in T-062.",
+        help = "Row order: kind (the default, kind-then-name in linearisation order); " +
+            "name (flat name-first across kinds and groups); " +
+            "declaring (alphabetical by declaring type).",
     ).choice("kind", "name", "declaring", ignoreCase = true).default("kind")
 
     private val jars by option(
@@ -169,6 +171,7 @@ class MembersCommand(
             },
             fromRef = from,
             grep = grep?.let { Regex(it) },
+            sort = ReadCommandSupport.sortOf(sort),
         )
         when (val resolved = ReadCommandSupport.resolveRoots(
             jars,
@@ -263,7 +266,9 @@ class OutlineCommand(
 
     private val sort by option(
         "--sort",
-        help = "Row order: kind (the default, kind-then-name); name and declaring arrive in T-062.",
+        help = "Row order: kind (the default, kind-then-name in linearisation order); " +
+            "name (flat name-first across kinds and groups); " +
+            "declaring (alphabetical by declaring type).",
     ).choice("kind", "name", "declaring", ignoreCase = true).default("kind")
 
     private val jars by option(
@@ -332,6 +337,7 @@ class OutlineCommand(
             },
             fromRef = from,
             grep = grep?.let { Regex(it) },
+            sort = ReadCommandSupport.sortOf(sort),
         )
         when (val resolved = ReadCommandSupport.resolveRoots(
             jars,

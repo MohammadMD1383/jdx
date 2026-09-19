@@ -25,6 +25,7 @@ import dev.jdx.core.render.LsListing
 import dev.jdx.core.render.LsTypeEntry
 import dev.jdx.core.render.MemberListing
 import dev.jdx.core.render.MemberListingOptions
+import dev.jdx.core.render.MemberSort
 import dev.jdx.core.render.OBJECT_BINARY_NAME
 import dev.jdx.core.render.PackageEntry
 import dev.jdx.core.render.SearchHit
@@ -124,6 +125,13 @@ public object JdxService {
         public val staticOnly: Boolean? = null,
         public val fromRef: String? = null,
         public val grep: Regex? = null,
+        /**
+         * Row order (T-062). Presentation only: filtering hides rows, sorting
+         * orders the survivors. Kept here (rather than as a new `members()`
+         * parameter) so the thin-adapter [MemberQuery][dev.jdx.cli.commands.MemberQuery]
+         * arity stays stable across front-ends (D-004).
+         */
+        public val sort: MemberSort = MemberSort.KIND,
     ) {
         public companion object {
             /** The §7.1 default: `public` + `protected` only. */
@@ -433,6 +441,7 @@ public object JdxService {
                     // after it would hide exactly what was asked for.
                     collapseObjectMembers = fromBinary != OBJECT_BINARY_NAME,
                     maxMembers = maxMembers,
+                    sort = filters.sort,
                 ),
             )
             // Resolver warnings (UNRESOLVED_SUPERTYPE) join the artifact ones.

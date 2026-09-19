@@ -189,6 +189,38 @@ class ReadCommandsServiceTest {
     }
 
     @Test
+    fun `members --sort serves every order deterministically with the same rows (T-062)`() {
+        val ref = "dev.jdx.fixtures.Generics"
+        val rowLines = { output: String -> output.lines().filter { it.startsWith("  ") }.toSet() }
+        val seen = mutableListOf<Set<String>>()
+        for (sort in listOf("kind", "name", "declaring")) {
+            val text = run(listOf("members") + fixtureArgs(ref, "--sort", sort))
+            text.exit shouldBe 0
+            run(listOf("members") + fixtureArgs(ref, "--sort", sort)).output shouldBe text.output
+            val json = run(listOf("members") + fixtureArgs(ref, "--sort", sort, "--json"))
+            json.exit shouldBe 0
+            val parsed = Json.parseToJsonElement(json.output.trim()).jsonObject
+            parsed["command"]?.jsonPrimitive?.content shouldBe "members"
+            for (line in text.output.lines().filter { it.startsWith("  ") }) {
+                json.output shouldContain line.substringAfter("  ").substringAfter(" ")
+            }
+            seen.add(rowLines(text.output))
+        }
+        // Sorting reorders, never hides: every order carries the same row set.
+        seen.toSet().size shouldBe 1
+    }
+
+    @Test
+    fun `outline --sort serves every order with exit 0 (T-062)`() {
+        val ref = "dev.jdx.fixtures.KotlinMembers"
+        for (sort in listOf("kind", "name", "declaring")) {
+            val run = run(listOf("outline") + fixtureArgs(ref, "--sort", sort))
+            run.exit shouldBe 0
+            run.output shouldContain "members of $ref"
+        }
+    }
+
+    @Test
     fun `limit zero truncates everything with a footer`() {
         val run = run(listOf("members") + fixtureArgs("dev.jdx.fixtures.Generics", "--limit", "0"))
         run.exit shouldBe 0

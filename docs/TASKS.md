@@ -51,7 +51,7 @@ be fiction.
 | **M6** | Serving: daemon, MCP, HTTP, `batch` | TODO |
 | **M7** | Polish: token budgets, AppCDS, mutation gates, docs, install | TODO |
 
-**T-001 through T-019, T-053 through T-060, T-061 and T-067 are `DONE`.** M0's test spine is
+**T-001 through T-019, T-053 through T-062, and T-067 are `DONE`.** M0's test spine is
 complete; T-057…T-060 unblock as their milestones land. M1 starts at T-007.
 
 ---
@@ -612,10 +612,9 @@ to the model (T-008 normalises only interfaces).*
 
 ---
 
-### T-062 — Member sort orders (`--sort name|declaring`) · `WIP`
-**Depends:** T-011 · **Files:** `core/.../render/*`, `cli/.../commands/*`
-*(Added in session 14: T-011 accepts `--sort kind` (the current kind-then-name
-layout) and rejects anything else naming this task.)*
+### T-062 — Member sort orders (`--sort name|declaring`) · `DONE` (session 31)
+**Depends:** T-011 · **Files:** `core/.../render/Listing.kt`, `index/.../service/JdxService.kt`,
+`cli/.../commands/ReadCommands.kt`, `ReadCommandSupport.kt`
 
 `members`/`outline` row ordering beyond the default: `--sort name` (flat
 name-first order across kinds/groups) and `--sort declaring` (declaring-type
@@ -623,10 +622,29 @@ order semantics where they differ from linearisation). Decide the exact layouts,
 extend `MemberListingOptions`, and pin both with goldens.
 
 **Acceptance**
-- [ ] `--sort name|kind|declaring` all accepted by `members` and `outline`
-- [ ] Text and JSON agree on the order; determinism property holds per order
-- [ ] Golden files cover all three orders on at least one generic, one nested
+- [x] `--sort name|kind|declaring` all accepted by `members` and `outline`
+- [x] Text and JSON agree on the order; determinism property holds per order
+- [x] Golden files cover all three orders on at least one generic, one nested
       and one Kotlin fixture class
+
+*Implementation notes (session 31): layouts decided as D-033 — `kind` byte-
+identical to the T-010 default (linearisation-major, kind-minor, signature-then-
+ref); `declaring` alphabetical by declaring binary name, kind-minor, same rows;
+`name` strictly flat (global member-name → signature → ref → declaring → depth
+order, run-length groups so headers stay truthful and may repeat). `MemberRow`
+gained `memberName` (raw name, `<init>` as-is; absent from JSON — the ref already
+carries it, D-007 unchanged). Plumbing: `JdxService.MemberFilters.sort` (default
+`KIND`) so the thin-adapter `MemberQuery` arity stays stable (D-004); CLI maps
+`--sort` via `ReadCommandSupport.sortOf` into filters for both commands. Tests:
+6 core examples (`MemberSortTest`) + 2 consolidated thousand-case properties
+(shared-law per random sort; layout laws over all three sorts — one `checkAll`
+row covers all orders instead of tripling the loops, keeping the 1,000-case
+minimum inside the 30 s tier-1 budget at 23.6 s) + CLI tier-1 sort-plumbing tests
++ tier-2 `SortOrdersGoldenTest` (18 files: Generics, TrafficLight$1, KotlinMembers
+× 3 sorts × text/JSON; `kind` byte-identical to the existing default goldens) +
+tier-2 service tests (every sort exit 0, deterministic, same row set, outline
+covered). `check` green (shelved `~/.config/jdx`, T-066); soak green except the
+pre-existing stashed-clean `JavapCorpusSoakTest` `$$` red (T-065).*
 
 ---
 

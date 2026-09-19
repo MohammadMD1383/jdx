@@ -312,20 +312,41 @@ class ReadCommandsTest {
     }
 
     @Test
-    fun `members --sort name names T-062 and exits 3`() {
-        val thrown = try {
+    fun `members --sort reaches the service in every order (T-062)`() {
+        for ((flag, expected) in listOf(
+            "kind" to dev.jdx.core.render.MemberSort.KIND,
+            "name" to dev.jdx.core.render.MemberSort.NAME,
+            "declaring" to dev.jdx.core.render.MemberSort.DECLARING,
+        )) {
+            var seen: dev.jdx.core.render.MemberSort? = null
             captureStdout {
                 MembersCommand(
-                    query = { _, _, _, _, _, _ -> pointListing() },
+                    query = { _, _, filters, _, _, _ -> seen = filters.sort; pointListing() },
                     terminate = noExit,
                     discover = noDiscovery,
-                ).parse(listOf("Point", "--sort", "name"))
+                ).parse(listOf("Point", "--sort", flag))
             }
-            null
-        } catch (e: TestExit) {
-            e
+            seen shouldBe expected
         }
-        (thrown?.code) shouldBe 3
+    }
+
+    @Test
+    fun `outline --sort reaches the service in every order (T-062)`() {
+        for ((flag, expected) in listOf(
+            "kind" to dev.jdx.core.render.MemberSort.KIND,
+            "name" to dev.jdx.core.render.MemberSort.NAME,
+            "declaring" to dev.jdx.core.render.MemberSort.DECLARING,
+        )) {
+            var seen: dev.jdx.core.render.MemberSort? = null
+            captureStdout {
+                OutlineCommand(
+                    query = { _, _, filters, _, _, _ -> seen = filters.sort; pointListing() },
+                    terminate = noExit,
+                    discover = noDiscovery,
+                ).parse(listOf("Point", "--sort", flag))
+            }
+            seen shouldBe expected
+        }
     }
 
     @Test
@@ -545,8 +566,18 @@ class ReadCommandsTest {
     }
 
     @Test
-    fun `flag validation accepts the coherent combinations`() {
+    fun `sort mapping covers every choice value`() {
+        ReadCommandSupport.sortOf("kind") shouldBe dev.jdx.core.render.MemberSort.KIND
+        ReadCommandSupport.sortOf("NAME") shouldBe dev.jdx.core.render.MemberSort.NAME
+        ReadCommandSupport.sortOf("declaring") shouldBe dev.jdx.core.render.MemberSort.DECLARING
+        ReadCommandSupport.sortOf("bogus") shouldBe dev.jdx.core.render.MemberSort.KIND
+    }
+
+    @Test
+    fun `flag validation accepts every sort order`() {
         ReadCommandSupport.validateMemberFlags(false, false, null, false, "kind") shouldBe null
-        ReadCommandSupport.validateMemberFlags(true, false, "get.*", false, "kind") shouldBe null
+        ReadCommandSupport.validateMemberFlags(false, false, null, false, "name") shouldBe null
+        ReadCommandSupport.validateMemberFlags(false, false, null, false, "declaring") shouldBe null
+        ReadCommandSupport.validateMemberFlags(false, false, null, false, "bogus") shouldContain "--sort"
     }
 }
