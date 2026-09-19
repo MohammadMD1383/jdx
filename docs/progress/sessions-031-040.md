@@ -4,6 +4,72 @@ Newest first. Each entry follows the template at the bottom of `docs/PROGRESS.md
 
 ---
 
+## Session 33 — 2026-09-19 — T-064 close the indexer 3,000/s gap (no code change)
+**Agent/Author:** Muse Spark 1.3 Free · **Commits:** claim + closing commit (this session)
+
+### Goal
+Implement T-064, the lowest-numbered unblocked TODO: reach ≥ 3,000 classes/s
+end-to-end on the benchmark jar, or document why the target moved — with no
+behaviour change (T-013/T-014 tests green unmodified).
+
+### What I did
+- Claimed T-064 (`TODO`→`WIP` commit) and re-measured instead of optimising.
+- First attempt: a throwaway `@Tag("bench")` Gradle test indexing
+  `minecraft-client.jar` — indexed **0 classes** with 10,952
+  `UNSUPPORTED_CLASS_VERSION` warnings. Cause: Gradle tests run on toolchain
+  JDK 21, the jar is major 69 (needs JDK 25+), and `AsmClassReader` rejects
+  newer-than-runtime majors by design (L-059). Deleted the harness after use —
+  permanent benchmarks belong to T-050.
+- Real measurement: throwaway `T064Bench.java` run as plain
+  `java -cp index+core+asm(+tree/util)+sqlite-jdbc` under `/usr/lib/jvm/default`
+  (JDK 26.0.2.1), fresh temp store per run:
+  - `minecraft-client.jar` (10,952 classes): **4,004/s** first run (pays SQLite
+    native-load + JIT), **5,663–5,798/s** second run, 0 warnings.
+  - Full `jrt:/` (27,546 classes): **5,882–5,919/s**, 0 warnings.
+  - Gradle `ArtifactIndexerSoakTest` (toolchain JDK 21, 27,777 classes):
+    **4,575/s**, green.
+- Conclusion: the session-19 figure (2,502/s) is stale — predates the current
+  JDK and the `BulkWriter` statement-reuse. Target met on every benchmark jar
+  with headroom; per the task's own warning, the risky client-side id
+  assignment / JDBC-batching redesign was not attempted.
+- Docs-only change set: T-064 → DONE with notes, status-summary line,
+  `ArtifactIndexerSoakTest` KDoc re-measurement note, L-059, this entry,
+  CURRENT STATE handoff.
+
+### Decisions made
+- None new (no genuine ambiguity; the "optimise vs document" fork resolved to
+  *document* once every measurement cleared the target).
+
+### Tasks moved
+- T-064: TODO → WIP (claim commit) → DONE.
+
+### Lessons distilled
+- L-059 (indexer benchmarks must run under the runtime JDK, not the toolchain JDK).
+
+### What works now (and how to verify it yourself)
+```bash
+mv ~/.config/jdx ~/.config/jdx.shelved  # T-066 ambient-workspace caveat, restore after
+./gradlew check   # tiers 1+2 green (tier-1 18.9 s of 30 s, 670 tests)
+./gradlew :index:soakTest --tests "dev.jdx.index.index.ArtifactIndexerSoakTest"  # green; SOAK line in XML ~4,500/s+
+mv ~/.config/jdx.shelved ~/.config/jdx
+grep -rh "SOAK indexed" index/build/test-results/soakTest/
+```
+
+### What is broken / half-done
+- Nothing from this task. Pre-existing, untouched: T-066 (cli store tests red with
+  ambient `~/.config/jdx` — the run above shelved it), T-065 (soak `$$` reds in
+  `JavapCorpusSoakTest`).
+
+### Open questions / blockers
+- None.
+
+### Next action
+- **T-065** (handle JFR-style `$$` class names) — lowest-numbered open TODO;
+  T-066 (hermetic `ReadCommandsTest`), T-068 (identical-root dedupe), T-069
+  (`--repo`) also open.
+
+---
+
 ## Session 32 — 2026-09-19 — T-063 share the fixture-jar resolution helpers
 **Agent/Author:** Buffy (GLM, Freebuff) · **Commits:** claim + closing commit (this session)
 

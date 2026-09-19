@@ -19,6 +19,11 @@ import org.junit.jupiter.api.io.TempDir
  * Measured on 2026-09-16 (JDK 26, 33,104 entries): open 0.7 s, ASM read pass
  * 5.2–6.4k classes/s (beats the §10.5 target), SQLite write pass ~4.3k
  * classes/s after the `BulkWriter` statement-reuse fix, ~13.5 s end to end.
+ *
+ * Re-measured 2026-09-19 for T-064 (JDK 26.0.2.1): `minecraft-client.jar`
+ * (10,952 classes) 4,004/s first run, 5,663–5,798/s second run; full `jrt:/`
+ * (27,546 classes) ~5,900/s. The 3,000/s end-to-end target is met with no
+ * code change; see the T-064 notes in `docs/TASKS.md`.
  */
 @Tag("soak")
 class ArtifactIndexerSoakTest {

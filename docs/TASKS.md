@@ -51,9 +51,9 @@ be fiction.
 | **M6** | Serving: daemon, MCP, HTTP, `batch` | TODO |
 | **M7** | Polish: token budgets, AppCDS, mutation gates, docs, install | TODO |
 
-**T-001 through T-019, T-053 through T-063, and T-067 are `DONE`.** M0's test spine is
+**T-001 through T-019, T-053 through T-064, and T-067 are `DONE`.** M0's test spine is
 complete; T-057…T-060 unblock as their milestones land. M1 (read path) is complete;
-M2 hardening starts at T-064.
+M2 hardening continues at T-065.
 
 ---
 
@@ -730,7 +730,7 @@ tier-2 (short-circuit, empty jar, corrupt/future-version entries, 10 %-step
 truncation sweep, parallel determinism across two stores, missing-path isolation,
 listener coverage) + 1 soak (full JDK index, ~14 s, excluded from `check`).*
 
-### T-064 — Close the indexer 3,000/s end-to-end gap · `WIP`
+### T-064 — Close the indexer 3,000/s end-to-end gap · `DONE` (session 33)
 **Depends:** T-014 · **Files:** `index/.../store/sqlite/SqliteIndexStore.kt`
 
 *Session-19 measurement: full-JDK (33,100 classes) end-to-end 2,502/s cold —
@@ -741,10 +741,26 @@ processes under WAL — do not attempt without solving that. Natural home is the
 T-050 bench context with `minecraft-client.jar` as the fixture.*
 
 **Acceptance**
-- [ ] End-to-end ≥ 3,000 classes/s on the benchmark jar, or a documented reason
+- [x] End-to-end ≥ 3,000 classes/s on the benchmark jar, or a documented reason
       why the target moved
-- [ ] No behaviour change: T-013 round-trip tests and T-014 indexer tests green
+- [x] No behaviour change: T-013 round-trip tests and T-014 indexer tests green
       unmodified
+
+*Implementation notes (session 33): no code change — the gap is already closed.
+Re-measured 2026-09-19 on this machine under the runtime JDK 26.0.2.1 (direct
+`java -cp index+core+asm+sqlite-jdbc` harness, fresh temp store per run):
+`minecraft-client.jar` (10,952 classes) end-to-end 4,004/s first run and
+5,663–5,798/s second run (first run pays SQLite native-load + JIT), full
+`jrt:/` (27,546 classes) 5,882–5,919/s. The Gradle `ArtifactIndexerSoakTest`
+(toolchains JDK 21, 27,777 classes) reports 4,575/s. All well above the 3,000/s
+target; the session-19 figure (2,502/s cold) is stale — predates the current
+JDK and the `BulkWriter` statement-reuse now in the tree. Per the task's own
+warning, no client-side id assignment / JDBC batching was attempted: with the
+target met, that race-under-WAL redesign has no payoff to justify its risk.
+`check` (tiers 1+2) green unmodified; `ArtifactIndexerSoakTest` green. Lesson
+L-059 records the benchmark-JVM trap found along the way (Gradle tests run on
+toolchain JDK 21, which rejects the major-69 `minecraft-client.jar` classes by
+design — benchmark harnesses for it must run under the runtime JDK 26).*
 
 ### T-065 — Handle JFR-style `$$` class names · `TODO`
 **Depends:** T-008 · **Files:** `core/.../model/TypeName.kt`, `index/.../asm/*`
