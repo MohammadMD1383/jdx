@@ -16,12 +16,14 @@ package dev.jdx.index.workspace
  * name = "mc"
  * jars = ["~/.gradle/caches/**/*.jar", "./build/classes/java/main"]
  * coords = ["com.google.code.gson:gson:2.14.0"]
+ * repos = ["https://repo.example.com/maven2"]
  * include_jdk = true
  * ```
  *
  * Rules: `#` starts a comment outside a string; blank lines ignored; `include_jdk` accepts
  * the `includeJdk` camelCase spelling as an alias for hand-edits; `coords` (T-019) is
- * optional and defaults to empty, so pre-coords files still decode; unknown keys are
+ * optional and defaults to empty, so pre-coords files still decode; `repos` (T-069) is
+ * optional and defaults to empty, so pre-repos files still decode; unknown keys are
  * rejected (a typoed key silently doing nothing would mislead worse than an error);
  * a `name` that disagrees with the file stem is rejected — the stem is the identity.
  */
@@ -43,6 +45,12 @@ public object WorkspaceToml {
             append(quote(coord))
         }
         appendLine("]")
+        append("repos = [")
+        definition.repos.forEachIndexed { index, repo ->
+            if (index > 0) append(", ")
+            append(quote(repo))
+        }
+        appendLine("]")
         appendLine("include_jdk = ${if (definition.includeJdk) "true" else "false"}")
     }
 
@@ -57,6 +65,7 @@ public object WorkspaceToml {
         var name: String? = null
         var jars: List<String>? = null
         var coords: List<String>? = null
+        var repos: List<String>? = null
         var includeJdk: Boolean? = null
         val seen = mutableSetOf<String>()
         text.lines().forEachIndexed { index, rawLine ->
@@ -88,6 +97,10 @@ public object WorkspaceToml {
                     coords = parseStringArray(value)
                         ?: return Result.failure(IllegalArgumentException("$fileName:$lineNumber: `coords` must be an array of quoted strings"))
                 }
+                "repos" -> {
+                    repos = parseStringArray(value)
+                        ?: return Result.failure(IllegalArgumentException("$fileName:$lineNumber: `repos` must be an array of quoted strings"))
+                }
                 "include_jdk" -> {
                     includeJdk = when (value) {
                         "true" -> true
@@ -112,6 +125,7 @@ public object WorkspaceToml {
                 jars = jars ?: emptyList(),
                 includeJdk = includeJdk ?: true,
                 coords = coords ?: emptyList(),
+                repos = repos ?: emptyList(),
             ),
         )
     }

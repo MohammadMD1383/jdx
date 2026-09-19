@@ -1,8 +1,10 @@
 package dev.jdx.index.maven
 
+import com.sun.net.httpserver.HttpServer
 import io.kotest.matchers.shouldBe
 import io.kotest.matchers.string.shouldContain
 import java.io.File
+import java.net.InetSocketAddress
 import java.nio.file.Files
 import java.nio.file.Path
 import org.junit.jupiter.api.Tag
@@ -13,10 +15,12 @@ import org.junit.jupiter.api.io.TempDir
  * Tests for Maven coordinate resolution (T-019): local-cache precedence
  * (fetch cache → Gradle → `~/.m2`), opt-in fetching with checksum
  * verification, and the failure taxonomy (exit-3 shape vs exit-5 absence).
+ * T-069 adds configurable `--repo` mirrors: custom base URLs are tried in
+ * order before Central, over real loopback HTTP (no outside network).
  *
  * Filesystem fixtures are fabricated under `@TempDir`; the one real jar used
  * (the fixture corpus) is copied in, never referenced by absolute path. Tier 2:
- * jar-shaped IO, no network (fetching runs over an injected fake fetcher).
+ * jar-shaped IO, loopback HTTP only.
  */
 @Tag("tier2")
 class MavenResolverTest {
@@ -34,7 +38,7 @@ class MavenResolverTest {
             gradleFilesRoot = root.resolve("gradle"),
             m2Repo = root.resolve("m2"),
             fetchCacheRoot = root.resolve("cache"),
-            repoBaseUrl = repoBase,
+            repoBaseUrls = listOf(repoBase),
         )
 
     private fun fakeFetcher(files: Map<String, ByteArray>): MavenFetch.Fetcher =
@@ -182,5 +186,97 @@ class MavenResolverTest {
         )
         ((outcome is MavenResolver.ResolveAllOutcome.Failed)) shouldBe true
         (outcome as MavenResolver.ResolveAllOutcome.Failed).message shouldContain "group:artifact:version"
+    }
+
+    // -- T-069: configurable repositories over loopback HTTP ------------------
+
+    /**
+     * Serves [files] (path → bytes, plus a `.sha1` beside each) from a
+     * loopback server and runs [block] with its base URL (no trailing slash —
+     * the T-069 acceptance shape). Localhost only, real `HttpURLConnection`
+     * through the production fetcher.
+     */
+    private fun withLoopbackRepo(files: Map<String, ByteArray>, block: (baseUrl: String) -> Unit) {
+        val server = HttpServer.create(InetSocketAddress("127.0.0.1", 0), 0)
+        try {
+            for ((path, bytes) in files) {
+                server.createContext(path) { exchange ->
+                    exchange.sendResponseHeaders(200, bytes.size.toLong())
+                    exchange.responseBody.use { it.write(bytes) }
+                }
+            }
+            server.start()
+            block("http://127.0.0.1:${server.address.port}/repo")
+        } finally {
+            server.stop(0)
+        }
+    }
+
+    private fun shaBody(bytes: ByteArray): ByteArray =
+        "${MavenFetch.sha1Hex(bytes)}\n".toByteArray(Charsets.UTF_8)
+
+    @Test
+    fun `fetch tries custom repos in order before Central`(@TempDir root: Path) {
+        val binary = "mirror-binary".toByteArray(Charsets.UTF_8)
+        val sources = "mirror-sources".toByteArray(Charsets.UTF_8)
+        val path = "/repo/com/example/demo/1.0"
+        withLoopbackRepo(
+            mapOf(
+                "$path/demo-1.0.jar" to binary,
+                "$path/demo-1.0.jar.sha1" to shaBody(binary),
+                "$path/demo-1.0-sources.jar" to sources,
+                "$path/demo-1.0-sources.jar.sha1" to shaBody(sources),
+            ),
+        ) { base ->
+            val repos = repositories(root).copy(repoBaseUrls = listOf(base))
+            val outcome = MavenResolver.resolve("com.example:demo:1.0", true, repos)
+            ((outcome is MavenResolver.Outcome.Resolved)) shouldBe true
+            val artifact = (outcome as MavenResolver.Outcome.Resolved).artifact
+            (artifact.fetched) shouldBe true
+            Files.readAllBytes(artifact.binaryJar) shouldBe binary
+            (artifact.sourcesJar != null) shouldBe true
+            // A second resolution hits the cache — the server could go away.
+            val again = MavenResolver.resolve(
+                "com.example:demo:1.0",
+                false,
+                repositories(root).copy(repoBaseUrls = listOf(base)),
+                MavenFetch.Fetcher { error("must not fetch") },
+            )
+            ((again is MavenResolver.Outcome.Resolved)) shouldBe true
+        }
+    }
+
+    @Test
+    fun `fetch falls through to the next repo when the first misses`(@TempDir root: Path) {
+        val binary = "second-mirror-binary".toByteArray(Charsets.UTF_8)
+        val path = "/repo/com/example/demo/1.0"
+        withLoopbackRepo(
+            mapOf(
+                "$path/demo-1.0.jar" to binary,
+                "$path/demo-1.0.jar.sha1" to shaBody(binary),
+            ),
+        ) { good ->
+            // The first base serves nothing (unroutable port fails fast); the
+            // second serves the artifact. A 404 from the first would fall
+            // through the same way — `fetchVerified` reads both as failure.
+            val repos = repositories(root).copy(
+                repoBaseUrls = listOf("http://127.0.0.1:9/nothing", good),
+            )
+            val outcome = MavenResolver.resolve("com.example:demo:1.0", true, repos)
+            ((outcome is MavenResolver.Outcome.Resolved)) shouldBe true
+            Files.readAllBytes((outcome as MavenResolver.Outcome.Resolved).artifact.binaryJar) shouldBe binary
+        }
+    }
+
+    @Test
+    fun `fetch failure names every tried repository`(@TempDir root: Path) {
+        val repos = repositories(root).copy(
+            repoBaseUrls = listOf("http://127.0.0.1:9/first", "http://127.0.0.1:9/second"),
+        )
+        val outcome = MavenResolver.resolve("com.example:demo:1.0", true, repos)
+        ((outcome is MavenResolver.Outcome.Unresolved)) shouldBe true
+        val message = (outcome as MavenResolver.Outcome.Unresolved).message
+        message shouldContain "http://127.0.0.1:9/first"
+        message shouldContain "http://127.0.0.1:9/second"
     }
 }

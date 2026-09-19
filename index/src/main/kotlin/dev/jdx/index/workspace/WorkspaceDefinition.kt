@@ -17,7 +17,9 @@ package dev.jdx.index.workspace
  * (`--src`, T-031) are accepted by no v1 field — `jdx ws create` rejects them
  * naming the owning task rather than storing something the reader ignores.
  * Coordinates (`--coord`, T-019) resolve to jars at query time (local caches
- * first, Maven Central only with `--fetch`), ordered after [jars].
+ * first, remotes only with `--fetch`), ordered after [jars].
+ * Remote repositories (`--repo`, T-069) are stored alongside and prepended in
+ * flag order with Maven Central kept last when fetching.
  * Project auto-discovery (T-016) derives these same binary roots from Gradle/Maven
  * projects; it never stores source dirs either.
  */
@@ -30,6 +32,8 @@ public data class WorkspaceDefinition(
     public val includeJdk: Boolean = true,
     /** Maven coordinates (`group:artifact:version`, as passed to `--coord`), in order. */
     public val coords: List<String> = emptyList(),
+    /** Remote Maven repository base URLs (`--repo`, as passed to `ws create`), in order. */
+    public val repos: List<String> = emptyList(),
 )
 
 /**

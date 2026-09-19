@@ -386,3 +386,76 @@ git diff cli/src/test/resources/golden/members-sort/  # TrafficLight$1 differs 3
 ### Next action
 - **T-063** (share the fixture-jar resolution helpers) — lowest-numbered unblocked
   TODO after T-062; T-064, T-065, T-066, T-068, T-069 also open.
+
+---
+
+## Session 37 — 2026-09-19 — T-069 `--repo` configurable Maven repositories done
+**Agent/Author:** Muse Spark 1.3 Free · **Commits:** `963f01e` (claim) + closing commit (this session)
+
+### Goal
+Implement T-069, the lowest-numbered unblocked TODO: `--repo <url>` (repeatable)
+on all seven read commands and `ws create`, flowing into coordinate resolution
+and fetch URLs. All three acceptance lines plus the standing test bar (D-020).
+
+### What I did
+- `index/.../maven/MavenCoords.kt`: `isValidRepoUrl`/`invalidRepoReason` — http(s)
+  + host, no query/fragment/whitespace, trailing slash optional. Never throws.
+- `index/.../maven/MavenResolver.kt`: `Repositories.repoBaseUrl: String` became
+  `repoBaseUrls: List<String>` (first-element `repoBaseUrl` shorthand kept);
+  `fetch` tries each base in order (first verified binary wins, sources from the
+  same mirror best-effort); failure messages name all tried remotes; the
+  no-fetch hint names the configured remotes instead of hard-coded Central.
+- `index/.../workspace/`: `WorkspaceDefinition.repos` + optional TOML `repos` key
+  (pre-repos files decode to empty); `WorkspaceResolver` merges explicit + stored
+  repos (explicit first) alongside coords.
+- `cli/.../commands/ReadCommandSupport.kt`: new `repos` param; explicit `--repo`
+  validated fast (exit 3), stored validated after selection; workspace selection
+  now precedes explicit-coord resolution so both explicit and stored coords fetch
+  from the combined remotes (explicit jars still shadow first); injected test
+  `Repositories` keep their base URLs when no `--repo` is in play (L-062);
+  `buildRepoBaseUrls` (explicit → stored → Central-last, slash-insensitive dedupe).
+- `cli`: `--repo` (repeatable) + refreshed `--coord`/`--fetch` help on
+  show/members/outline/search/resolve/ls/tree; `ws create --repo` (validated,
+  stored) and `ws info` renders stored repos (text+JSON via `WsPayload.repos`).
+- Docs: D-034 (supersedes D-032 §6, noted in place), PROPOSAL §13 + Appendix B
+  flag rows, T-069 DONE with notes.
+- Tests: tier-1 repo-URL examples + never-throws/agreement property, order/dedupe
+  examples, `ws create`/`info` repos tests, TOML repos round-trip/defaults, repos
+  added to both workspace generative properties; tier-2 loopback suites with the
+  production fetcher over real `HttpServer` — resolver order/fall-through/failure
+  naming + CLI exit-3, trailing-slash-less fetch end to end through `show`,
+  stored-mirror-serves-explicit-coord.
+- Live proof: built `app/build/jdx` — bad `--repo` exits 3 naming the value
+  (read + `ws create`); `ws create/info` round-trips a stored mirror; pre-repos
+  `fx` workspace still decodes (probe workspace removed afterwards).
+
+### Decisions made
+- D-034 (configurable `--repo` semantics: mirrors-first/Central-last order,
+  exit-3 validation, TOML storage mirroring `--coord`, `repoBaseUrls` list).
+
+### Tasks moved
+- T-069: TODO → WIP (`963f01e`) → DONE.
+
+### Lessons distilled
+- L-062 (new flag dimensions must default to the injected seam, not production).
+
+### What works now (and how to verify it yourself)
+```bash
+mv ~/.config/jdx ~/.config/jdx.shelved  # T-070 ambient-workspace caveat, restore after
+./gradlew check   # tiers 1+2 green incl. JaCoCo gates
+./gradlew :index:tier2Test --tests 'dev.jdx.index.maven.*'  # 12 resolver + coords/fetch tests
+./gradlew :cli:tier2Test --tests 'dev.jdx.cli.commands.MavenRootsTest'  # 7 root-resolution tests
+./app/build/jdx show java.lang.String --repo 'ftp://bad.example.com/x' --no-jdk --jars testfixtures/build/libs/testfixtures-0.1.0-SNAPSHOT.jar  # exit 3 naming the value
+```
+
+### What is broken / half-done
+- Nothing from this task. Pre-existing, untouched: T-070 (tier-2 read-command
+  hermeticity — `:cli:tier2Test` with ambient `fx` fails the known 18-test set
+  with exit 5; shelved run green, new tests pass either way).
+
+### Open questions / blockers
+- None.
+
+### Next action
+- **T-070** (tier-2 read-command hermeticity) — the only open TODO; all other
+  numbered tasks are DONE.

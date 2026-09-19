@@ -109,4 +109,38 @@ public object MavenCoords {
         fileName: String,
         repoBaseUrl: String = CENTRAL_BASE_URL,
     ): String = repoBaseUrl.trimEnd('/') + "/" + repositoryPath(coordinate) + "/" + fileName
+
+    /**
+     * Returns true when [url] names a usable Maven repository base URL (T-069):
+     * an `http(s)` URL with a host, no whitespace, and no query or fragment
+     * (a base is a path prefix — `downloadUrl` joins it with `/`-separated
+     * segments, so a `?` or `#` would silently corrupt every fetch URL).
+     * The trailing slash is optional. Never throws.
+     */
+    public fun isValidRepoUrl(url: String): Boolean = invalidRepoReason(url) == null
+
+    /** Human-readable reason [isValidRepoUrl] rejected [url], or `null` when valid. */
+    public fun invalidRepoReason(url: String): String? {
+        val trimmed = url.trim()
+        if (trimmed.isEmpty()) return "invalid --repo '$url': expected an http(s) repository base URL"
+        if (trimmed != url || url.any { it.isWhitespace() }) {
+            return "invalid --repo '$url': repository URLs must not contain whitespace"
+        }
+        val uri = try {
+            java.net.URI(trimmed)
+        } catch (e: Exception) {
+            return "invalid --repo '$url': not a valid URL (${e.message ?: e.javaClass.simpleName})"
+        }
+        val scheme = uri.scheme?.lowercase()
+        if (scheme != "http" && scheme != "https") {
+            return "invalid --repo '$url': scheme must be http or https"
+        }
+        if (uri.host.isNullOrEmpty()) {
+            return "invalid --repo '$url': URL must have a host"
+        }
+        if (uri.rawQuery != null || uri.rawFragment != null) {
+            return "invalid --repo '$url': repository base URLs must not carry a query or fragment"
+        }
+        return null
+    }
 }

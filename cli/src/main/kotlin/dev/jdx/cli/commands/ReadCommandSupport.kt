@@ -66,6 +66,7 @@ internal object ReadCommandSupport {
         allowFetch: Boolean = false,
         mavenRepositories: MavenResolver.Repositories? = null,
         mavenFetcher: MavenFetch.Fetcher? = null,
+        repos: List<String> = emptyList(),
     ): RootsOrFailure {
         val envWorkspace = try {
             getenv("JDX_WORKSPACE")
@@ -77,23 +78,9 @@ internal object ReadCommandSupport {
         } catch (e: Exception) {
             null
         }
-        val repositories = mavenRepositories ?: MavenResolver.Repositories(
-            gradleFilesRoot = gradleFilesRoot,
-            m2Repo = m2Repo,
-            fetchCacheRoot = MavenResolver.defaultFetchCacheRoot(),
-        )
-        val fetcher = mavenFetcher ?: MavenFetch.httpFetcher()
-        // Keep the production function reference (not a fresh lambda) when no
-        // test seam is injected: `RootsSpec` is a data class, and command tests
-        // assert it by value — a new lambda would break equality by identity.
-        val mavenResolve: MavenResolveFn =
-            if (mavenRepositories == null && mavenFetcher == null) {
-                ::productionMavenResolve
-            } else {
-                { text, fetch -> MavenResolver.resolve(text, fetch, repositories, fetcher) }
-            }
         // Explicit `--coord` values are usage input: malformed ones fail fast
-        // with exit 3 before any workspace or network IO happens.
+        // with exit 3 before any workspace or network IO happens. Explicit
+        // `--repo` values are validated the same way (T-069).
         for (text in coords) {
             if (MavenCoords.parse(text) == null) {
                 return RootsOrFailure.Failed(
@@ -103,19 +90,14 @@ internal object ReadCommandSupport {
                 )
             }
         }
-        // Explicit coordinates resolve now so their jars shadow the workspace
-        // exactly like `--jars` (PROPOSAL.md §13: explicit flags merge in front).
-        val explicitCoordJars = when (
-            val resolved = MavenResolver.resolveAll(coords, allowFetch, repositories, fetcher)
-        ) {
-            is MavenResolver.ResolveAllOutcome.Ok ->
-                resolved.artifacts.map { it.binaryJar.toString() }
-            is MavenResolver.ResolveAllOutcome.Failed ->
+        for (url in repos) {
+            MavenCoords.invalidRepoReason(url)?.let { reason ->
                 return RootsOrFailure.Failed(
                     JdxService.ServiceOutcome.Failure(
-                        ErrorResult.generic("", exitCode = 5, message = "artifact read error: ${resolved.message}"),
+                        ErrorResult.generic("", exitCode = 3, message = "usage error: $reason"),
                     ),
                 )
+            }
         }
         // Auto-discovery runs only when no named workspace is in play; a named
         // workspace always wins (PROPOSAL.md §13). Never throws — discovery failure
@@ -126,7 +108,7 @@ internal object ReadCommandSupport {
             runCatching { discover(workingDir, cacheBase, gradleFilesRoot, m2Repo) }.getOrNull()
         }
         val outcome = WorkspaceResolver.resolve(
-            explicitJars = jars + explicitCoordJars,
+            explicitJars = jars,
             explicitNoJdk = noJdk,
             flagWorkspace = workspace,
             envWorkspace = envWorkspace,
@@ -142,15 +124,77 @@ internal object ReadCommandSupport {
             discoveredJars = discovered?.jars ?: emptyList(),
             discoveredSelection = discovered?.selection,
             discoveredWarnings = discovered?.warnings ?: emptyList(),
+            explicitCoords = coords,
+            explicitRepos = repos,
         )
+        // A stored `--repo` from a hand-edited workspace file is validated here,
+        // after selection: it names the value like the explicit flag (exit 3).
+        fun invalidStoredRepo(allRepos: List<String>): String? {
+            for (url in allRepos) {
+                MavenCoords.invalidRepoReason(url)?.let { return it }
+            }
+            return null
+        }
         return when (outcome) {
             is WorkspaceResolver.Result.success -> {
-                // Stored workspace coords resolve after the workspace's own jars.
-                // A stored coord that no longer resolves fails the query (exit 5),
-                // naming the coordinate — the workspace file is user config, and
-                // silently dropping a root would mislead worse than an error.
+                invalidStoredRepo(outcome.value.repos)?.let { reason ->
+                    return RootsOrFailure.Failed(
+                        JdxService.ServiceOutcome.Failure(
+                            ErrorResult.generic("", exitCode = 3, message = "usage error: $reason"),
+                        ),
+                    )
+                }
+                // Combined remotes: explicit `--repo` first, stored workspace
+                // repos next, Central last (T-069). Empty stays Central alone,
+                // so pre-`--repo` behaviour is byte-identical. An injected test
+                // `Repositories` keeps its own base URLs when no `--repo` is in
+                // play, so existing seams never change meaning.
+                val baseUrls = if (outcome.value.repos.isEmpty()) {
+                    mavenRepositories?.repoBaseUrls ?: listOf(MavenCoords.CENTRAL_BASE_URL)
+                } else {
+                    buildRepoBaseUrls(outcome.value.repos)
+                }
+                val effectiveRepositories = mavenRepositories?.copy(
+                    repoBaseUrls = baseUrls,
+                ) ?: MavenResolver.Repositories(
+                    gradleFilesRoot = gradleFilesRoot,
+                    m2Repo = m2Repo,
+                    fetchCacheRoot = MavenResolver.defaultFetchCacheRoot(),
+                    repoBaseUrls = baseUrls,
+                )
+                val effectiveFetcher = mavenFetcher ?: MavenFetch.httpFetcher()
+                // Keep the production function reference (not a fresh lambda)
+                // when no test seam is injected and no custom repo is in play:
+                // `RootsSpec` is a data class, and command tests assert it by
+                // value — a new lambda would break equality by identity.
+                val mavenResolve: MavenResolveFn =
+                    if (mavenRepositories == null && mavenFetcher == null && outcome.value.repos.isEmpty()) {
+                        ::productionMavenResolve
+                    } else {
+                        { text, fetch -> MavenResolver.resolve(text, fetch, effectiveRepositories, effectiveFetcher) }
+                    }
+                // Explicit coordinates resolve in front like `--jars`
+                // (PROPOSAL.md §13); stored workspace coords resolve behind
+                // the workspace's own jars. Both use the combined remotes, so
+                // a stored mirror serves an explicit `--coord` and vice versa.
+                // A stored coord that no longer resolves fails the query
+                // (exit 5), naming the coordinate — silently dropping a root
+                // would mislead worse than an error.
+                val explicitCoordJars = when (
+                    val resolved = MavenResolver.resolveAll(coords, allowFetch, effectiveRepositories, effectiveFetcher)
+                ) {
+                    is MavenResolver.ResolveAllOutcome.Ok ->
+                        resolved.artifacts.map { it.binaryJar.toString() }
+                    is MavenResolver.ResolveAllOutcome.Failed ->
+                        return RootsOrFailure.Failed(
+                            JdxService.ServiceOutcome.Failure(
+                                ErrorResult.generic("", exitCode = 5, message = "artifact read error: ${resolved.message}"),
+                            ),
+                        )
+                }
+                val storedCoords = outcome.value.coords.drop(coords.size)
                 val stored = when (
-                    val resolved = MavenResolver.resolveAll(outcome.value.coords, allowFetch, repositories, fetcher)
+                    val resolved = MavenResolver.resolveAll(storedCoords, allowFetch, effectiveRepositories, effectiveFetcher)
                 ) {
                     is MavenResolver.ResolveAllOutcome.Ok ->
                         resolved.artifacts.map { it.binaryJar.toString() }
@@ -164,7 +208,8 @@ internal object ReadCommandSupport {
                 val resolved = outcome.value
                 RootsOrFailure.Ready(
                     JdxService.RootsSpec(
-                        jarSpecs = resolved.jarSpecs + stored,
+                        jarSpecs = resolved.jarSpecs.take(jars.size) + explicitCoordJars +
+                            resolved.jarSpecs.drop(jars.size) + stored,
                         includeJdk = resolved.includeJdk,
                         extraWarnings = resolved.warnings,
                         allowFetch = allowFetch,
@@ -179,6 +224,23 @@ internal object ReadCommandSupport {
                     ),
                 )
         }
+    }
+
+    /**
+     * Combines explicit + stored `--repo` values into the fetch order (T-069):
+     * first occurrence wins (deduped by trailing-slash-insensitive form),
+     * Maven Central appended last unless already named.
+     */
+    internal fun buildRepoBaseUrls(customRepos: List<String>): List<String> {
+        val seen = LinkedHashSet<String>()
+        val ordered = ArrayList<String>(customRepos.size + 1)
+        for (url in customRepos) {
+            val key = url.trimEnd('/')
+            if (seen.add(key)) ordered.add(url)
+        }
+        val centralKey = MavenCoords.CENTRAL_BASE_URL.trimEnd('/')
+        if (seen.add(centralKey)) ordered.add(MavenCoords.CENTRAL_BASE_URL)
+        return ordered
     }
 
     private fun hasNamedSelection(flag: String?, env: String?, active: String?): Boolean =

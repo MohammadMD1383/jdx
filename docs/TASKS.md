@@ -51,9 +51,9 @@ be fiction.
 | **M6** | Serving: daemon, MCP, HTTP, `batch` | TODO |
 | **M7** | Polish: token budgets, AppCDS, mutation gates, docs, install | TODO |
 
-**T-001 through T-019, T-053 through T-068 are `DONE`.** M0's test spine is
+**T-001 through T-019, T-053 through T-069 are `DONE`.** M0's test spine is
 complete; T-057…T-060 unblock as their milestones land. M1 (read path) is complete;
-M2 hardening continues at T-069 (plus T-070, the tier-2 half of T-066).
+M2 hardening continues at T-070 (the tier-2 half of T-066).
 
 ---
 
@@ -966,7 +966,7 @@ prefix query tests, `--coord` root tests (29 new). `check` green (shelved
 `JavapCorpusSoakTest` `$$` reds (T-065). Live proof: gson 2.14.0 resolved
 local-first, 2.10.1 fetched with binary+sources into `~/.cache/jdx/m2`.*
 
-### T-069 — Configurable Maven repositories (`--repo`) · `WIP`
+### T-069 — Configurable Maven repositories (`--repo`) · `DONE` (session 37)
 **Depends:** T-019 · **Files:** `cli/.../commands/*`, `index/.../maven/*`
 *(Added in session 28: D-032 §6 deferred it.)*
 
@@ -975,9 +975,33 @@ speaks Maven Central. Add `--repo <url>` (repeatable?) to the read commands
 and `ws create`, flowing into resolution and fetch URLs.
 
 **Acceptance**
-- [ ] `--repo` with a trailing-slash-less URL resolves and fetches from it
-- [ ] Invalid (non-http(s)) `--repo` is exit 3 naming the value
-- [ ] Tier-2 test over a loopback server as the repo (no real network)
+- [x] `--repo` with a trailing-slash-less URL resolves and fetches from it
+- [x] Invalid (non-http(s)) `--repo` is exit 3 naming the value
+- [x] Tier-2 test over a loopback server as the repo (no real network)
+
+*Implementation notes (session 37): repeatable, decided as D-034 (supersedes
+D-032 §6) — explicit `--repo` in flag order, stored workspace repos next,
+Central last unless named (first verified binary wins). `MavenCoords`
+gained `isValidRepoUrl`/`invalidRepoReason` (http(s) + host, no
+query/fragment/whitespace, trailing slash optional); `Repositories.repoBaseUrl`
+became `repoBaseUrls: List<String>` (first-element shorthand kept). `fetch`
+tries each base in order; failure messages name all tried remotes.
+`WorkspaceDefinition.repos` + optional TOML `repos` key (pre-repos files
+decode empty) + `WorkspaceResolver` explicit/stored merge; `ReadCommandSupport`
+validates explicit fast (exit 3) and stored after selection, resolves explicit
+coords in front and stored coords behind from the combined remotes (so a stored
+mirror serves an explicit `--coord` and vice versa) — workspace selection now
+precedes explicit-coord resolution. All seven read commands plus `ws create`
+carry `--repo`; `ws info` renders stored repos; `--fetch`/`--coord` help text
+names `--repo`. Tests: tier-1 repo-URL examples + never-throws/agreement
+property (`MavenCoordsTest`), `buildRepoBaseUrls` order/dedupe examples,
+`ws create`/`info` repos tests, TOML repos round-trip/defaults, repos added to
+both workspace properties; tier-2 loopback suites — `MavenResolverTest`
+(order, fall-through, failure names every remote, all over real loopback HTTP
+with the production fetcher) and `MavenRootsTest` (exit-3 naming the value,
+trailing-slash-less loopback fetch end to end through `JdxService.show`,
+stored workspace mirror). `check` green shelved; `cli:tier2Test` with ambient
+`fx` shows only the known T-070 set (proven same shape, shelved run green).*
 
 ---
 

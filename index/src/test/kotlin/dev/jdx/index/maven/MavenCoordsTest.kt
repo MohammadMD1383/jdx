@@ -103,4 +103,53 @@ class MavenCoordsTest {
             (MavenCoords.invalidReason(text).isNotEmpty()) shouldBe true
         }
     }
+
+    @Test
+    fun `repo URLs accept http and https with optional trailing slash`() {
+        val valid = listOf(
+            "https://repo.maven.apache.org/maven2/",
+            "https://repo.maven.apache.org/maven2",
+            "http://localhost:8081/repo",
+            "http://127.0.0.1:9/maven2/",
+            "https://repo.example.com/artifactory/maven",
+            "HTTPS://REPO.EXAMPLE.COM/maven2/",
+        )
+        for (url in valid) {
+            (MavenCoords.isValidRepoUrl(url)) shouldBe true
+            (MavenCoords.invalidRepoReason(url) == null) shouldBe true
+        }
+    }
+
+    @Test
+    fun `repo URLs reject non-http schemes and shapeless values`() {
+        val bad = listOf(
+            "",
+            "   ",
+            "ftp://repo.example.com/maven2",
+            "file:///root/.m2/repository",
+            "repo.example.com/maven2",
+            "//repo.example.com/maven2",
+            "http://",
+            "https://?query",
+            "https://repo.example.com/maven2?query=1",
+            "https://repo.example.com/maven2#fragment",
+            "https://repo.example.com/ma ven2",
+            " https://repo.example.com/maven2",
+            "https://repo.example.com/maven2 ",
+        )
+        for (url in bad) {
+            (MavenCoords.isValidRepoUrl(url)) shouldBe false
+            val reason = MavenCoords.invalidRepoReason(url)
+            ((reason != null && reason.contains(url.trim().ifEmpty { "--repo" }))) shouldBe true
+        }
+    }
+
+    @Test
+    fun `repo validation never throws and agrees with itself on generated strings`() = runBlocking<Unit> {
+        checkAll(1_000, Arb.string(0..48)) { text ->
+            val reason = MavenCoords.invalidRepoReason(text)
+            (MavenCoords.isValidRepoUrl(text)) shouldBe (reason == null)
+            if (reason != null) (reason.contains("--repo")) shouldBe true
+        }
+    }
 }

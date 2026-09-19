@@ -35,8 +35,9 @@ class WorkspacePropertyTest {
             Arb.list(nastyString, 0..5),
             Arb.boolean(),
             Arb.list(nastyString, 0..3),
-        ) { name, jars, includeJdk, coords ->
-            val original = WorkspaceDefinition(name, jars, includeJdk, coords)
+            Arb.list(nastyString, 0..3),
+        ) { name, jars, includeJdk, coords, repos ->
+            val original = WorkspaceDefinition(name, jars, includeJdk, coords, repos)
             val decoded = WorkspaceToml.decode(WorkspaceToml.encode(original), "$name.toml")
             (decoded.isSuccess) shouldBe true
             decoded.getOrThrow() shouldBe original
@@ -61,8 +62,10 @@ class WorkspacePropertyTest {
             Arb.boolean(),
             Arb.list(nastyString, 0..3),
             Arb.list(nastyString, 0..3),
-        ) { explicit, stored, jdk, explicitCoords, storedCoords ->
-            val lookup = mapOf("ws" to WorkspaceDefinition("ws", stored, jdk, storedCoords))
+            Arb.list(nastyString, 0..3),
+            Arb.list(nastyString, 0..3),
+        ) { explicit, stored, jdk, explicitCoords, storedCoords, explicitRepos, storedRepos ->
+            val lookup = mapOf("ws" to WorkspaceDefinition("ws", stored, jdk, storedCoords, storedRepos))
             val result = WorkspaceResolver.resolve(
                 explicitJars = explicit,
                 explicitNoJdk = false,
@@ -70,11 +73,13 @@ class WorkspacePropertyTest {
                 loadWorkspace = { lookup[it] },
                 listNames = { listOf("ws") },
                 explicitCoords = explicitCoords,
+                explicitRepos = explicitRepos,
             )
             (result is WorkspaceResolver.Result.success) shouldBe true
             val resolved = (result as WorkspaceResolver.Result.success).value
             resolved.jarSpecs shouldBe explicit + stored
             resolved.coords shouldBe explicitCoords + storedCoords
+            resolved.repos shouldBe explicitRepos + storedRepos
             resolved.includeJdk shouldBe jdk
             resolved.workspaceName shouldBe "ws"
         }

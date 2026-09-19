@@ -767,8 +767,9 @@ Resolution order when a command runs. First match wins; `--jars`/`--src` always 
    works with zero configuration, with real JDK source and javadoc.
 
 **Maven coordinates** (`--coord g:a:v`, or a `g:a:v/` ref prefix) are resolved against
-`~/.gradle/caches` and `~/.m2` first; if absent, fetched from Maven Central (configurable
-repositories) into `~/.cache/jdx/m2/`, **including the `-sources.jar`**, with checksum
+`~/.gradle/caches` and `~/.m2` first; if absent, fetched from the configured
+repositories (`--repo` mirrors in flag order, Maven Central last) into
+`~/.cache/jdx/m2/`, **including the `-sources.jar`**, with checksum
 verification. This lets an agent evaluate a library the project does not yet depend on.
 Network fetching is opt-in per invocation via `--fetch` (or `fetch = true` in config) so the
 tool never surprises anyone with network traffic.
@@ -1087,9 +1088,10 @@ the authoritative machine-readable version.)*
     --jars <path|glob|dir>  add binary roots (repeatable)
     --src <dir>             add source roots (repeatable)
     --coord <g:a:v>         add a Maven coordinate root (repeatable)
+    --repo <url>            add a Maven repository base URL for --coord fetches (repeatable, T-069)
     --sources <path>        explicitly pair a sources jar
     --jdk / --no-jdk        include the JDK stdlib (default: include)
-    --fetch                 allow network fetches from Maven repositories
+    --fetch                 allow network fetches from Maven repositories (Central last by default)
     --json                  structured output
     --no-color              disable ANSI even on a TTY
     --max-lines <n>         bound output size
@@ -1122,7 +1124,7 @@ hierarchy --up --down --direct --depth N --in
 callers   --depth N --in --limit
 calls     --depth N --external-only --limit
 samples   --limit N --prefer-sources
-ws        create|list|info|remove|add|use   --auto --jars --src --coord --jdk
+ws        create|list|info|remove|add|use   --auto --jars --src --coord --repo --jdk
 index     --force -w
 cache     info|gc|clear [--cache-dir --json]  (gc: --dry-run)
 daemon    start|stop|status|restart --idle <duration>

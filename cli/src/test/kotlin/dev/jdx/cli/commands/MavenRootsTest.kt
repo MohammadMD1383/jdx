@@ -56,6 +56,8 @@ class MavenRootsTest {
         allowFetch: Boolean = false,
         workspace: String? = null,
         store: dev.jdx.index.workspace.WorkspaceStore = InMemoryWorkspaceStore(),
+        repos: List<String> = emptyList(),
+        fetcher: MavenFetch.Fetcher = MavenFetch.Fetcher { error("must not fetch") },
     ): ReadCommandSupport.RootsOrFailure = ReadCommandSupport.resolveRoots(
         jars = emptyList(),
         noJdk = true,
@@ -70,7 +72,8 @@ class MavenRootsTest {
         coords = coords,
         allowFetch = allowFetch,
         mavenRepositories = reposFor(root, m2),
-        mavenFetcher = MavenFetch.Fetcher { error("must not fetch") },
+        mavenFetcher = fetcher,
+        repos = repos,
     )
 
     @Test
@@ -120,5 +123,99 @@ class MavenRootsTest {
         (roots.jarSpecs.size) shouldBe 2
         roots.jarSpecs[0] shouldBe "other.jar"
         roots.jarSpecs[1] shouldContain "demo-1.0.jar"
+    }
+
+    // -- T-069: configurable repositories -------------------------------------
+
+    @Test
+    fun `an invalid repo is a usage error naming the value`(@TempDir root: Path) {
+        val m2 = m2WithDemo(root)
+        val resolved = resolve(root, m2, listOf("com.example:demo:1.0"), repos = listOf("ftp://mirror.example.com/maven2"))
+        ((resolved is ReadCommandSupport.RootsOrFailure.Failed)) shouldBe true
+        val outcome = (resolved as ReadCommandSupport.RootsOrFailure.Failed).outcome
+        (outcome.exitCode) shouldBe 3
+        outcome.renderText() shouldContain "ftp://mirror.example.com/maven2"
+    }
+
+    @Test
+    fun `a trailing-slash-less loopback repo fetches explicit coords`(@TempDir root: Path) {
+        val jarBytes = Files.readAllBytes(fixtureJar())
+        // 9.9.9 is absent from the local m2, so only the loopback mirror can serve it.
+        val path = "/repo/com/example/demo/9.9.9"
+        val files = mapOf(
+            "$path/demo-9.9.9.jar" to jarBytes,
+            "$path/demo-9.9.9.jar.sha1" to "${MavenFetch.sha1Hex(jarBytes)}\n".toByteArray(Charsets.UTF_8),
+        )
+        val server = com.sun.net.httpserver.HttpServer.create(java.net.InetSocketAddress("127.0.0.1", 0), 0)
+        try {
+            for ((contextPath, bytes) in files) {
+                server.createContext(contextPath) { exchange ->
+                    exchange.sendResponseHeaders(200, bytes.size.toLong())
+                    exchange.responseBody.use { it.write(bytes) }
+                }
+            }
+            server.start()
+            // No trailing slash — the T-069 acceptance shape.
+            val base = "http://127.0.0.1:${server.address.port}/repo"
+            val m2 = m2WithDemo(root)
+            val resolved = resolve(
+                root, m2,
+                coords = listOf("com.example:demo:9.9.9"),
+                allowFetch = true,
+                repos = listOf(base),
+                fetcher = MavenFetch.httpFetcher(),
+            )
+            ((resolved is ReadCommandSupport.RootsOrFailure.Ready)) shouldBe true
+            val roots = (resolved as ReadCommandSupport.RootsOrFailure.Ready).roots
+            (roots.jarSpecs.size) shouldBe 1
+            roots.jarSpecs.single() shouldContain "demo-9.9.9.jar"
+            // The fetched jar answers queries — the full --repo → fetch → read path.
+            // Note: the served bytes are the fixture jar, so any fixture class answers.
+            val outcome = JdxService.show("dev.jdx.fixtures.Generics", roots)
+            (outcome.exitCode) shouldBe 0
+            outcome.renderText() shouldContain "dev.jdx.fixtures.Generics"
+        } finally {
+            server.stop(0)
+        }
+    }
+
+    @Test
+    fun `stored workspace repos serve explicit coords`(@TempDir root: Path) {
+        val jarBytes = Files.readAllBytes(fixtureJar())
+        val path = "/repo/com/example/demo/1.0"
+        val files = mapOf(
+            "$path/demo-1.0.jar" to jarBytes,
+            "$path/demo-1.0.jar.sha1" to "${MavenFetch.sha1Hex(jarBytes)}\n".toByteArray(Charsets.UTF_8),
+        )
+        val server = com.sun.net.httpserver.HttpServer.create(java.net.InetSocketAddress("127.0.0.1", 0), 0)
+        try {
+            for ((contextPath, bytes) in files) {
+                server.createContext(contextPath) { exchange ->
+                    exchange.sendResponseHeaders(200, bytes.size.toLong())
+                    exchange.responseBody.use { it.write(bytes) }
+                }
+            }
+            server.start()
+            val base = "http://127.0.0.1:${server.address.port}/repo"
+            // Empty local m2: only the stored mirror can serve the coordinate.
+            val emptyM2 = root.resolve("empty-m2")
+            Files.createDirectories(emptyM2)
+            val store = InMemoryWorkspaceStore()
+            store.save(WorkspaceDefinition("ws", emptyList(), false, emptyList(), listOf(base)))
+            val resolved = resolve(
+                root, emptyM2,
+                coords = listOf("com.example:demo:1.0"),
+                allowFetch = true,
+                workspace = "ws",
+                store = store,
+                fetcher = MavenFetch.httpFetcher(),
+            )
+            ((resolved is ReadCommandSupport.RootsOrFailure.Ready)) shouldBe true
+            val roots = (resolved as ReadCommandSupport.RootsOrFailure.Ready).roots
+            (roots.jarSpecs.size) shouldBe 1
+            roots.jarSpecs.single() shouldContain "demo-1.0.jar"
+        } finally {
+            server.stop(0)
+        }
     }
 }

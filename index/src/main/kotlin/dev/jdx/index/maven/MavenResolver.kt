@@ -13,9 +13,10 @@ import java.nio.file.Paths
  * 1. the fetch cache (`~/.cache/jdx/m2`, `~/.m2`-shaped — our own past downloads);
  * 2. the Gradle files cache (`modules-2/files-2.1/<group>/<name>/<version>/…`);
  * 3. the local Maven repository (`~/.m2/repository`);
- * 4. Maven Central into `~/.cache/jdx/m2` — **only when [allowFetch]**, opt-in per
- *    invocation via `--fetch` (D-006), with SHA-1 verification and the `-sources.jar`
- *    fetched alongside the binary.
+ * 4. remote repositories into `~/.cache/jdx/m2` — **only when [allowFetch]**,
+ *    opt-in per invocation via `--fetch` (D-006), tried in [Repositories.repoBaseUrls]
+ *    order (custom `--repo` values first, Maven Central last by default), with
+ *    SHA-1 verification and the `-sources.jar` fetched alongside the binary.
  *
  * Every entry point is total: failures read as [Outcome.Unresolved] (callers map
  * them to exit 3 for malformed coordinates, exit 5 for missing/unfetchable ones),
@@ -28,8 +29,17 @@ public object MavenResolver {
         public val gradleFilesRoot: Path? = defaultGradleFilesRoot(),
         public val m2Repo: Path? = defaultM2Repo(),
         public val fetchCacheRoot: Path? = defaultFetchCacheRoot(),
-        public val repoBaseUrl: String = MavenCoords.CENTRAL_BASE_URL,
-    )
+        /**
+         * Remote repository base URLs tried in order on a fetch (T-069).
+         * Defaults to Maven Central alone; `--repo` values prepend in flag
+         * order with Central kept last as the fallback, so an explicit mirror
+         * wins without losing the default.
+         */
+        public val repoBaseUrls: List<String> = listOf(MavenCoords.CENTRAL_BASE_URL),
+    ) {
+        /** Single-repo shorthand: the first base URL, or Central when empty. */
+        public val repoBaseUrl: String get() = repoBaseUrls.firstOrNull() ?: MavenCoords.CENTRAL_BASE_URL
+    }
 
     /** One resolved coordinate: the binary jar plus its sources when found. */
     public data class ResolvedArtifact(
@@ -95,7 +105,7 @@ public object MavenResolver {
                 return Outcome.Unresolved(
                     "Maven coordinate '${MavenCoords.format(coordinate)}' is not in the local " +
                         "caches (${describeRoots(repositories)}). Re-run with --fetch to download " +
-                        "it (and its -sources.jar) from Maven Central into ~/.cache/jdx/m2 " +
+                        "it (and its -sources.jar) from ${describeRemotes(repositories)} into ~/.cache/jdx/m2 " +
                         "with checksum verification.",
                     fetchHint = true,
                 )
@@ -103,7 +113,7 @@ public object MavenResolver {
             fetch(coordinate, repositories, fetcher)?.let { return Outcome.Resolved(it) }
             Outcome.Unresolved(
                 "cannot fetch Maven coordinate '${MavenCoords.format(coordinate)}' " +
-                    "from ${repositories.repoBaseUrl} (network unreachable, artifact missing, " +
+                    "from ${repositories.repoBaseUrls.joinToString(", ")} (network unreachable, artifact missing, " +
                     "or checksum rejected — nothing was written)",
                 fetchHint = false,
             )
@@ -224,8 +234,23 @@ public object MavenResolver {
         fetcher: MavenFetch.Fetcher,
     ): ResolvedArtifact? {
         val cacheRoot = repositories.fetchCacheRoot ?: return null
+        // Custom `--repo` mirrors first, Central last (D-032 §6, T-069): the
+        // first base URL serving a checksum-verified binary wins. A binary
+        // fetched from one mirror never falls through to the next.
+        for (repoBaseUrl in repositories.repoBaseUrls) {
+            fetchFrom(coordinate, repoBaseUrl, cacheRoot, fetcher)?.let { return it }
+        }
+        return null
+    }
+
+    private fun fetchFrom(
+        coordinate: MavenCoordinate,
+        repoBaseUrl: String,
+        cacheRoot: Path,
+        fetcher: MavenFetch.Fetcher,
+    ): ResolvedArtifact? {
         val binaryName = MavenCoords.binaryFileName(coordinate)
-        val binaryUrl = MavenCoords.downloadUrl(coordinate, binaryName, repositories.repoBaseUrl)
+        val binaryUrl = MavenCoords.downloadUrl(coordinate, binaryName, repoBaseUrl)
         val binaryTarget = MavenCoords.m2BinaryPath(cacheRoot, coordinate)
         // A half-written target from a killed earlier run must never read as a hit:
         // only a checksum-verified download lands here, and it lands atomically.
@@ -238,7 +263,7 @@ public object MavenResolver {
         // Sources ride alongside, best-effort: a missing `-sources.jar` degrades
         // the query to bytecode, never fails it.
         val sourcesName = MavenCoords.sourcesFileName(coordinate)
-        val sourcesUrl = MavenCoords.downloadUrl(coordinate, sourcesName, repositories.repoBaseUrl)
+        val sourcesUrl = MavenCoords.downloadUrl(coordinate, sourcesName, repoBaseUrl)
         val sourcesTarget = MavenCoords.m2SourcesPath(cacheRoot, coordinate)
         if (!Files.isRegularFile(sourcesTarget)) {
             when (val downloaded = MavenFetch.fetchVerified(sourcesUrl, fetcher)) {
@@ -267,6 +292,9 @@ public object MavenResolver {
         )
         return if (roots.isEmpty()) "no local repositories readable" else roots.joinToString(", ")
     }
+
+    private fun describeRemotes(repositories: Repositories): String =
+        repositories.repoBaseUrls.joinToString(", ")
 }
 
 /**

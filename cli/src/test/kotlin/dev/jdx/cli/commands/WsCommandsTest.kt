@@ -118,6 +118,30 @@ class WsCommandsTest {
         output shouldContain "coords:\n    com.google.code.gson:gson:2.14.0"
     }
 
+    @Test
+    fun `create stores repo roots and rejects malformed ones`() {
+        val (group, store) = testWsGroup()
+        val (output, code) = run(
+            group,
+            listOf("create", "mc", "--repo", "https://repo.example.com/maven2"),
+        )
+        code shouldBe null
+        output shouldContain "workspace 'mc' created"
+        store.load("mc")?.repos shouldBe listOf("https://repo.example.com/maven2")
+        val (badOut, badCode) = run(group, listOf("create", "bad", "--repo", "ftp://mirror.example.com/maven2"))
+        badCode shouldBe 3
+        badOut shouldContain "ftp://mirror.example.com/maven2"
+    }
+
+    @Test
+    fun `info shows stored repos`() {
+        val (group, _) = testWsGroup()
+        run(group, listOf("create", "mc", "--repo", "https://repo.example.com/maven2"))
+        val (output, code) = run(group, listOf("info", "mc"))
+        code shouldBe null
+        output shouldContain "repos:\n    https://repo.example.com/maven2"
+    }
+
     // -- list / info ----------------------------------------------------------
 
     @Test

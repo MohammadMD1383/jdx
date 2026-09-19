@@ -616,4 +616,18 @@ class ReadCommandsTest {
         ReadCommandSupport.validateMemberFlags(false, false, null, false, "declaring") shouldBe null
         ReadCommandSupport.validateMemberFlags(false, false, null, false, "bogus") shouldContain "--sort"
     }
+
+    @Test
+    fun `repo base urls keep flag order and Central last`() {
+        val central = dev.jdx.index.maven.MavenCoords.CENTRAL_BASE_URL
+        ReadCommandSupport.buildRepoBaseUrls(emptyList()) shouldBe listOf(central)
+        ReadCommandSupport.buildRepoBaseUrls(listOf("https://mirror.example.com/maven2")) shouldBe
+            listOf("https://mirror.example.com/maven2", central)
+        // Trailing-slash variants dedupe; first occurrence wins.
+        ReadCommandSupport.buildRepoBaseUrls(
+            listOf("https://a.example.com/r/", "https://a.example.com/r", "https://b.example.com/r"),
+        ) shouldBe listOf("https://a.example.com/r/", "https://b.example.com/r", central)
+        // An explicit Central stays where it was named, not duplicated last.
+        ReadCommandSupport.buildRepoBaseUrls(listOf(central)) shouldBe listOf(central)
+    }
 }

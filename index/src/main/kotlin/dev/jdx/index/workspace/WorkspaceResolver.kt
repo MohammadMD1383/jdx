@@ -43,6 +43,13 @@ public object WorkspaceResolver {
          * never does IO.
          */
         public val coords: List<String> = emptyList(),
+        /**
+         * Remote Maven repository base URLs (T-069): explicit `--repo` values
+         * first, then the selected workspace's stored repos. The caller builds
+         * `MavenResolver.Repositories` from these, with Central last when the
+         * combined list is empty.
+         */
+        public val repos: List<String> = emptyList(),
     )
 
     /** A resolution failure: the message already names the problem and the fix. */
@@ -65,6 +72,7 @@ public object WorkspaceResolver {
         discoveredSelection: String? = null,
         discoveredWarnings: List<Warning> = emptyList(),
         explicitCoords: List<String> = emptyList(),
+        explicitRepos: List<String> = emptyList(),
     ): Result<ResolvedRoots, ResolutionFailure> {
         val flag = flagWorkspace?.trim().orEmpty().ifEmpty { null }
         val env = envWorkspace?.trim().orEmpty().ifEmpty { null }
@@ -94,6 +102,7 @@ public object WorkspaceResolver {
                         selection = discoveredSelection,
                         warnings = discoveredWarnings,
                         coords = explicitCoords,
+                        repos = explicitRepos,
                     ),
                 )
             }
@@ -102,12 +111,13 @@ public object WorkspaceResolver {
                     jarSpecs = explicitJars,
                     includeJdk = !explicitNoJdk,
                     workspaceName = null,
-                    selection = if (explicitJars.isNotEmpty() || explicitNoJdk || explicitCoords.isNotEmpty()) {
+                    selection = if (explicitJars.isNotEmpty() || explicitNoJdk || explicitCoords.isNotEmpty() || explicitRepos.isNotEmpty()) {
                         "flags"
                     } else {
                         "none"
                     },
                     coords = explicitCoords,
+                    repos = explicitRepos,
                 ),
             )
         }
@@ -134,6 +144,7 @@ public object WorkspaceResolver {
                 workspaceName = definition.name,
                 selection = selection,
                 coords = explicitCoords + definition.coords,
+                repos = explicitRepos + definition.repos,
             ),
         )
     }

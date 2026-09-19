@@ -20,6 +20,7 @@ class WorkspaceTomlTest {
             "name = \"mc\"\n" +
             "jars = [\"a.jar\", \"b/*.jar\"]\n" +
             "coords = []\n" +
+            "repos = []\n" +
             "include_jdk = true\n"
     }
 
@@ -41,6 +42,30 @@ class WorkspaceTomlTest {
         val decoded = WorkspaceToml.decode("name = \"mc\"\njars = [\"a.jar\"]\ninclude_jdk = true\n", "mc.toml")
         (decoded.isSuccess) shouldBe true
         decoded.getOrThrow().coords shouldBe emptyList()
+    }
+
+    @Test
+    fun `repos round-trip through encode`() {
+        val original = WorkspaceDefinition(
+            "mc",
+            listOf("a.jar"),
+            true,
+            emptyList(),
+            listOf("https://repo.example.com/maven2", "http://localhost:8081/repo"),
+        )
+        val decoded = WorkspaceToml.decode(WorkspaceToml.encode(original), "mc.toml")
+        (decoded.isSuccess) shouldBe true
+        decoded.getOrThrow() shouldBe original
+    }
+
+    @Test
+    fun `repos default to empty for pre-repos files`() {
+        val decoded = WorkspaceToml.decode(
+            "name = \"mc\"\njars = [\"a.jar\"]\ncoords = []\ninclude_jdk = true\n",
+            "mc.toml",
+        )
+        (decoded.isSuccess) shouldBe true
+        decoded.getOrThrow().repos shouldBe emptyList()
     }
 
     @Test

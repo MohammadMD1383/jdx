@@ -61,14 +61,22 @@ class ShowCommand(
     private val coord by option(
         "--coord",
         help = "Maven coordinate root group:artifact:version (repeatable). Resolved from " +
-            "~/.gradle/caches and ~/.m2 first; with --fetch, downloaded from Maven Central " +
+            "~/.gradle/caches and ~/.m2 first; with --fetch, downloaded from Maven repositories " +
             "into ~/.cache/jdx/m2 with checksum verification. Merges in front of the workspace.",
+    ).multiple()
+
+    private val repo by option(
+        "--repo",
+        help = "Maven repository base URL for --coord fetches (repeatable, e.g. " +
+            "--repo https://repo.example.com/maven2). Tried in flag order before Maven Central, " +
+            "which stays last as the fallback. Must be an http(s) URL.",
     ).multiple()
 
     private val fetch by option(
         "--fetch",
         help = "Allow downloading --coord artifacts (and their -sources.jar) from Maven " +
-            "Central. Without it, coordinates resolve from the local caches only.",
+            "repositories (Central by default, --repo to add mirrors). Without it, coordinates " +
+            "resolve from the local caches only.",
     ).flag()
 
     private val json by option(
@@ -92,6 +100,7 @@ class ShowCommand(
             discover = discover ?: ReadCommandSupport::discoverProject,
             coords = coord,
             allowFetch = fetch,
+            repos = repo,
         )) {
             is ReadCommandSupport.RootsOrFailure.Ready -> {
                 val outcome = query(ref, resolved.roots)
