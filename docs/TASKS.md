@@ -762,7 +762,7 @@ L-059 records the benchmark-JVM trap found along the way (Gradle tests run on
 toolchain JDK 21, which rejects the major-69 `minecraft-client.jar` classes by
 design — benchmark harnesses for it must run under the runtime JDK 26).*
 
-### T-065 — Handle JFR-style `$$` class names · `TODO`
+### T-065 — Handle JFR-style `$$` class names · `WIP`
 **Depends:** T-008 · **Files:** `core/.../model/TypeName.kt`, `index/.../asm/*`
 
 *Session-19 find: the running JDK ships `java/lang/Exception$JB$$Assertion`
