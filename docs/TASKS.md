@@ -1121,7 +1121,7 @@ uncached — environmental, not a build bug.*
 
 ---
 
-### T-068 — Dedupe identical resolved roots before querying · `TODO`
+### T-068 — Dedupe identical resolved roots before querying · `WIP`
 **Depends:** — · **Files:** `index/.../workspace/WorkspaceResolver.kt` or `index/.../service/JdxService.kt`
 *(Added in session 24: found during T-017's real-binary e2e — not a T-017 bug,
 correct per the §13 merge + D-031 per-provider rules, but noisy.)*
