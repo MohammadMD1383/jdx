@@ -730,7 +730,7 @@ tier-2 (short-circuit, empty jar, corrupt/future-version entries, 10 %-step
 truncation sweep, parallel determinism across two stores, missing-path isolation,
 listener coverage) + 1 soak (full JDK index, ~14 s, excluded from `check`).*
 
-### T-064 — Close the indexer 3,000/s end-to-end gap · `TODO`
+### T-064 — Close the indexer 3,000/s end-to-end gap · `WIP`
 **Depends:** T-014 · **Files:** `index/.../store/sqlite/SqliteIndexStore.kt`
 
 *Session-19 measurement: full-JDK (33,100 classes) end-to-end 2,502/s cold —
