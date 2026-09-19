@@ -966,7 +966,7 @@ prefix query tests, `--coord` root tests (29 new). `check` green (shelved
 `JavapCorpusSoakTest` `$$` reds (T-065). Live proof: gson 2.14.0 resolved
 local-first, 2.10.1 fetched with binary+sources into `~/.cache/jdx/m2`.*
 
-### T-069 — Configurable Maven repositories (`--repo`) · `TODO`
+### T-069 — Configurable Maven repositories (`--repo`) · `WIP`
 **Depends:** T-019 · **Files:** `cli/.../commands/*`, `index/.../maven/*`
 *(Added in session 28: D-032 §6 deferred it.)*
 
