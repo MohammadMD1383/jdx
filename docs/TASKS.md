@@ -51,9 +51,9 @@ be fiction.
 | **M6** | Serving: daemon, MCP, HTTP, `batch` | TODO |
 | **M7** | Polish: token budgets, AppCDS, mutation gates, docs, install | TODO |
 
-**T-001 through T-019, T-053 through T-067 are `DONE`.** M0's test spine is
+**T-001 through T-019, T-053 through T-068 are `DONE`.** M0's test spine is
 complete; T-057…T-060 unblock as their milestones land. M1 (read path) is complete;
-M2 hardening continues at T-068/T-069 (plus T-070, the tier-2 half of T-066).
+M2 hardening continues at T-069 (plus T-070, the tier-2 half of T-066).
 
 ---
 
@@ -1121,8 +1121,8 @@ uncached — environmental, not a build bug.*
 
 ---
 
-### T-068 — Dedupe identical resolved roots before querying · `WIP`
-**Depends:** — · **Files:** `index/.../workspace/WorkspaceResolver.kt` or `index/.../service/JdxService.kt`
+### T-068 — Dedupe identical resolved roots before querying · `DONE` (session 36)
+**Depends:** — · **Files:** `index/.../service/JdxService.kt`
 *(Added in session 24: found during T-017's real-binary e2e — not a T-017 bug,
 correct per the §13 merge + D-031 per-provider rules, but noisy.)*
 
@@ -1132,13 +1132,32 @@ glob) opens one file as two roots: `search` lists every hit twice and `tree`
 prints the artifact twice (second suffixed `(2)`). Same *file*, not same *name*.
 
 **Acceptance**
-- [ ] Roots resolving to the same normalised absolute path open once (explicit
+- [x] Roots resolving to the same normalised absolute path open once (explicit
       occurrence keeps its position for shadowing order)
-- [ ] Same file via `--jars` + workspace lists each symbol once in
+- [x] Same file via `--jars` + workspace lists each symbol once in
       `search`/`resolve`/`ls`/`tree`
-- [ ] Same file *name* in different directories still lists per provider
+- [x] Same file *name* in different directories still lists per provider
       (shading visibility must not be lost)
-- [ ] Tier-2 test with one jar passed twice (directly and via a workspace)
+- [x] Tier-2 test with one jar passed twice (directly and via a workspace)
+
+*Implementation notes (session 36): the fix lives in `JdxService.openRoots` (not
+the resolver — specs expand to concrete paths only there): after `expandJarSpec`,
+every path is keyed on `toAbsolutePath().normalize()`; the first occurrence wins,
+so explicit-first shadowing order is preserved by construction. Deliberately a
+*path* key, not a name key: the same file *name* in different directories
+(shading) keeps per-provider `search` rows and per-artifact `tree` entries — the
+workspace duplicate-FQN machinery stays untouched and still fires on two real
+files. Tests: `DuplicateRootsTest` (tier 2; the four acceptance bullets —
+search/resolve/ls/tree byte-identical to the single-root answer incl. the
+`--jars` + stored-workspace glob merge driven end to end through
+`WorkspaceResolver`, no `DUPLICATE_FQN` on one file, per-provider shading, no
+`(2)` suffix) + `DuplicateRootsPropertyTest` (tier 2, the §4 generative family:
+generated redundant path forms (`A/./f.jar`, `A/../A/f.jar`) all dedupe to the
+single-root answer, and N copies of one jar in generated distinct directories
+stay N providers). Gotchas went to L-061: stored workspace globs must be
+anchored absolutely (a relative glob resolves against the process CWD), and
+redundant `.`/`..` decorations only compose when each is derived from the base
+path — chained decorations land on absent paths (exit 5).*
 
 ### T-070 — Make the tier-2 read-command tests hermetic to the machine's workspaces · `TODO`
 **Depends:** T-066 · **Files:** `cli/src/test/kotlin/.../commands/ReadCommandsServiceTest.kt`, `ReadCommandsGoldenTest.kt`, `SortOrdersGoldenTest.kt`, `ReadCommandDiscoveryTest.kt`

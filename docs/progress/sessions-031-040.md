@@ -4,6 +4,82 @@ Newest first. Each entry follows the template at the bottom of `docs/PROGRESS.md
 
 ---
 
+## Session 36 — 2026-09-19 — T-068 dedupe identical resolved roots (WIP completion)
+**Agent/Author:** Buffy (Codebuff/GLM) · **Commits:** `6053a38` (prior claim) + closing commit (this session)
+
+### Goal
+Finish the session-24/35 WIP: T-068 was already claimed and the `openRoots`
+dedupe + a first `DuplicateRootsTest` draft existed uncommitted. Close the
+remaining acceptance gaps — the `--jars` + workspace case, the D-020 generative
+family — and verify, document, commit.
+
+### What I did
+- Reviewed the uncommitted tree: the fix (path-keyed dedupe in `openRoots`)
+  and 5 of the 7 example tests were in place; the acceptance bullet "one jar
+  passed twice (directly **and via a workspace") and the standing generative
+  bar were unmet.
+- `DuplicateRootsTest`: added the `--jars` + stored-workspace test driven end
+  to end through `WorkspaceResolver` → `RootsSpec.fromResolved` → `openRoots`
+  (the exact merge shape the bug was found under), plus a `members` variant
+  asserting no `DUPLICATE_FQN` for one file. Both workspace globs are anchored
+  absolutely (L-061).
+- New `DuplicateRootsPropertyTest` (tier 2, TESTING.md §4 family): 500-case
+  properties — (a) every generated redundant path form (`A/./f.jar`,
+  `A/../A/f.jar`, and all generated combinations, in one root list together)
+  yields byte-identical search output to the single-root answer with 1 hit;
+  (b) N copies of one jar in N generated distinct directories stay N providers
+  (shading visibility). Two property iterations were needed: chaining `.`/`..`
+  decorations from an already-decorated path lands on absent paths — each form
+  must derive from the base directory (L-061).
+- Verified: `:index:test` + `:index:tier2Test` green (9 new tier-2 tests);
+  full `soak` green (2m 8s); `check` tier 1 green (672 tests) with
+  `:cli:tier2Test` failing **only** in the four files T-070 names
+  (`ReadCommandsServiceTest`, both golden suites, `ReadCommandDiscoveryTest` —
+  all `exit 5 / no artifacts match` from the ambient `fx` glob, the exact
+  pre-existing set session 35 proved stashed-clean). Docs: TASKS.md T-068 →
+  DONE with implementation notes, PROGRESS.md CURRENT STATE, L-061,
+  this entry.
+
+### Decisions made
+- Dedupe stays in `JdxService.openRoots` (not the resolver): specs become
+  concrete paths only at `expandJarSpec`, and `WorkspaceResolver` is a pure,
+  IO-free layer — moving dedupe there would re-introduce IO. First occurrence
+  wins so explicit-first shadowing order is preserved by construction; the key
+  is the normalised absolute *path*, deliberately not the name, so shaded
+  same-named jars keep per-provider rows (D-031). Recorded in TASKS.md notes.
+
+### Tasks moved
+- T-068: WIP → DONE.
+
+### Lessons distilled
+- **L-061** — redundant `.`/`..` path decorations only compose from the base
+  path (chained ones land on absent paths, exit 5 masquerading as a dedupe
+  bug); workspace globs stored relative resolve against the process CWD, so
+  fabricated workspaces must anchor them absolutely.
+
+### What works now (and how to verify it yourself)
+```bash
+cat ~/.config/jdx/active-workspace  # fx stays in place — nothing here needs shelving
+./gradlew :index:test :index:tier2Test   # green incl. the 9 new DuplicateRoots* tests
+./gradlew soak                            # green (2m 8s)
+./gradlew check                           # tier 1 green; :cli:tier2Test red only on T-070's four files
+```
+
+### What is broken / half-done
+- Nothing from this task. Pre-existing, untouched: T-070 (the `check` blocker —
+  tier-2 read-command tests still pick up the ambient workspace),
+  T-069 (`--repo` flag); `verifyTier1Budget` machine variance (session 34)
+  unchanged.
+
+### Open questions / blockers
+- None.
+
+### Next action
+- **T-069** (`--repo` flag) — lowest open TODO with deps DONE; T-070
+  (tier-2 read-command hermeticity) also open and blocks a clean `check`.
+
+---
+
 ## Session 35 — 2026-09-19 — T-066 make `ReadCommandsTest` hermetic (test-only)
 **Agent/Author:** Muse Spark 1.3 Free · **Commits:** `68b49d4` (claim) + `2a496b3` (closing)
 
