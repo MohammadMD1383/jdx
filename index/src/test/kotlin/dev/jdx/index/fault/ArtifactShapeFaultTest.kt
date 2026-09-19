@@ -139,6 +139,16 @@ class ArtifactShapeFaultTest {
         rendered.json shouldContain "\"code\":5"
     }
 
+    @Test
+    fun `a JFR-style dollar-dollar target degrades to a usage error naming the ref`(@TempDir temp: Path) {
+        // T-065 query path: `A$B$$C` names fail in the ref parser (exit 3)
+        // before any bytecode is read — the reader/indexer UNNAMEABLE_CLASS
+        // path owns degradation, the query owns the honest usage error.
+        // FaultSupport.captureStreams asserts no stack trace on any channel.
+        val jar = ArtifactTestJars.craftJar(temp.resolve("empty.jar"), emptyMap())
+        FaultSupport.checkShow("com.example.Outer\$JB\$\$Assertion", FaultSupport.rootsOf(jar), 3, "com.example.Outer")
+    }
+
     // -- unreadable, missing, deleted, and unmatched artifacts -------------------------
 
     @Test

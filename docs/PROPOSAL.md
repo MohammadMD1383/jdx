@@ -870,7 +870,9 @@ Duplicate FQNs across artifacts (shading!), sources/binary mismatch, corrupt cla
 unsupported class-file major versions, multi-release jar variants, unresolvable supertypes
 (a hierarchy edge the workspace cannot provide — inherited members may be incomplete),
 project-discovery fallback (auto-discovery found the project but not its dependency set —
-dependency jars omitted, `PROJECT_DISCOVERY_FALLBACK`), sealed/hidden classes —
+dependency jars omitted, `PROJECT_DISCOVERY_FALLBACK`), unnameable class names (a class file
+whose own name carries an empty `$`-separated segment — JFR `Exception$JB$$Assertion` shapes —
+skipped with `UNNAMEABLE_CLASS`, never `CORRUPT_CLASS`), sealed/hidden classes —
 all surface as named warning codes in both text and JSON.
 
 ---

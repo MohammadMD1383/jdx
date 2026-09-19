@@ -25,6 +25,14 @@ public enum class WarningCode {
     UNRESOLVED_SUPERTYPE,
 
     /**
+     * A class file's own name cannot be modelled — an empty `$`-separated segment
+     * (JFR `Exception$JB$$Assertion` and friends, T-065). The bytes are fine;
+     * the model rejects empty nesting segments, so the class is skipped with
+     * this warning instead of [CORRUPT_CLASS].
+     */
+    UNNAMEABLE_CLASS,
+
+    /**
      * Project auto-discovery (T-016) found the project but could not determine its
      * dependency set from lock/metadata files, so dependency jars were omitted.
      * The project's own `build/classes`/`target/classes` roots still apply.

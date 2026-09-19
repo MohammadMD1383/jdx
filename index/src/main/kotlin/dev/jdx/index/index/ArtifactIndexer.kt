@@ -22,8 +22,9 @@ import java.util.concurrent.Executors
 /**
  * Thrown when a whole artifact cannot be indexed (unopenable jar, unreadable
  * directory, index write failure). Single-class failures never throw — they
- * become [WarningCode.CORRUPT_CLASS] or [WarningCode.UNSUPPORTED_CLASS_VERSION]
- * warnings on the result, so one bad entry never aborts its artifact (D-017).
+ * become [WarningCode.CORRUPT_CLASS], [WarningCode.UNSUPPORTED_CLASS_VERSION] or
+ * [WarningCode.UNNAMEABLE_CLASS] warnings on the result, so one bad entry never aborts
+ * its artifact (D-017).
  */
 public class IndexException(message: String, cause: Throwable? = null) :
     RuntimeException(message, cause)

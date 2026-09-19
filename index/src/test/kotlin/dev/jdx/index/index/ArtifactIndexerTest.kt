@@ -5,6 +5,7 @@ import dev.jdx.index.artifact.ArtifactLoader
 import dev.jdx.index.artifact.ArtifactTestJars
 import dev.jdx.index.asm.AsmClassReader
 import dev.jdx.index.asm.ClassReadResult
+import dev.jdx.index.asm.buildClass
 import dev.jdx.index.store.sqlite.SqliteIndexStore
 import io.kotest.matchers.collections.shouldContain
 import io.kotest.matchers.shouldBe
@@ -144,6 +145,36 @@ class ArtifactIndexerTest {
             }
             unsupported.size shouldBe 1
             unsupported.single().subject shouldBe "dev.jdx.fixtures.Generics"
+        }
+    }
+
+    @Test
+    fun `a JFR-style dollar-dollar entry indexes with UNNAMEABLE_CLASS`(@TempDir temp: Path) {
+        // T-065 fault injection: same mechanism as the corrupt-entry test — an
+        // entry whose own name carries an empty `$`-separated segment (JFR
+        // `Exception$JB$$Assertion` shapes) must degrade with the dedicated
+        // code, keep its good neighbour, and never throw. Bytes come from the
+        // shared ASM builder (no disk, no fixtures); ASM writes the name
+        // verbatim, the model rejects it, the indexer warns.
+        val goodEntry = "dev/jdx/fixtures/Generics.class"
+        val goodBytes = ArtifactTestJars.fixtureClassBytes(binaryJar, goodEntry)
+        val jfrBytes = buildClass("dev/jdx/fixtures/Generi\$\$s") { }
+        val jar = temp.resolve("jfr-names.jar")
+        ArtifactTestJars.craftJar(
+            jar,
+            mapOf(
+                goodEntry to goodBytes,
+                "dev/jdx/fixtures/Generi\$\$s.class" to jfrBytes,
+            ),
+        )
+        openStore(temp).use { store ->
+            val result = ArtifactIndexer.indexOne(store, jar)
+            result.status shouldBe EntryStatus.INDEXED
+            result.classCount shouldBe 1
+            val unnameable = result.warnings.filter { it.code == WarningCode.UNNAMEABLE_CLASS }
+            unnameable.size shouldBe 1
+            (unnameable.single().subject?.contains("Generi") ?: false) shouldBe true
+            store.loadClass(result.artifactId!!, "dev.jdx.fixtures.Generics") shouldNotBe null
         }
     }
 

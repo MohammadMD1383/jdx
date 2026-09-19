@@ -32,8 +32,10 @@ import org.objectweb.asm.tree.MethodNode
  *
  * Errors are values ([ClassReadResult]), never exceptions: a corrupt entry yields
  * [WarningCode.CORRUPT_CLASS], a too-new entry yields
- * [WarningCode.UNSUPPORTED_CLASS_VERSION], and in both cases the rest of the artifact
- * survives — the caller keeps reading the jar.
+ * [WarningCode.UNSUPPORTED_CLASS_VERSION], a name the model cannot represent
+ * (an empty `$`-separated segment — JFR `Exception$JB$$Assertion` and friends,
+ * T-065) yields [WarningCode.UNNAMEABLE_CLASS], and in every case the rest of
+ * the artifact survives — the caller keeps reading the jar.
  */
 public sealed interface ClassReadResult {
     /** The class parsed cleanly. [warnings] is empty today; kept for forward growth. */
@@ -62,6 +64,12 @@ public object AsmClassReader {
     /**
      * Reads one class file. Never throws: every failure mode is a [ClassReadResult]
      * carrying a warning that names [sourceHint] and the problem.
+     *
+     * A name the model cannot represent (an empty `$`-separated segment — JFR
+     * `Exception$JB$$Assertion` and friends, T-065) is **not** corruption: the
+     * bytes are fine, so [ClassReadResult.Corrupt] carries [WarningCode.UNNAMEABLE_CLASS]
+     * (message `unnameable class name ...`) while every other unparseable shape
+     * carries [WarningCode.CORRUPT_CLASS].
      */
     public fun read(bytes: ByteArray, sourceHint: String = "class"): ClassReadResult {
         if (bytes.size < 8) {
@@ -101,10 +109,10 @@ public object AsmClassReader {
                     ),
                 )
             } else {
-                corrupt(sourceHint, null, unsupported.message ?: "malformed class file")
+                unnameableOrCorrupt(sourceHint, null, unsupported)
             }
         } catch (failure: Exception) {
-            corrupt(sourceHint, null, failure.message ?: "malformed class file (${failure.javaClass.simpleName})")
+            unnameableOrCorrupt(sourceHint, null, failure)
         }
     }
 
@@ -119,6 +127,27 @@ public object AsmClassReader {
         ClassReadResult.Corrupt(
             Warning(WarningCode.CORRUPT_CLASS, "unparseable class file ($reason): $hint", subject),
         )
+
+    private fun unnameable(hint: String, subject: String?, reason: String): ClassReadResult.Corrupt =
+        ClassReadResult.Corrupt(
+            Warning(WarningCode.UNNAMEABLE_CLASS, "unnameable class name ($reason): $hint", subject),
+        )
+
+    /**
+     * Routes a mapping failure to [WarningCode.UNNAMEABLE_CLASS] when the model
+     * rejected an empty `$`-separated segment (T-065), else [WarningCode.CORRUPT_CLASS].
+     * Only the empty-segment message shape qualifies: corrupt descriptors,
+     * bad annotations and every other mapping throw stay corrupt so their
+     * count cannot smuggle real breakage into the unnameable bucket.
+     */
+    private fun unnameableOrCorrupt(hint: String, subject: String?, failure: Throwable): ClassReadResult.Corrupt {
+        val message = failure.message ?: "malformed class file (${failure.javaClass.simpleName})"
+        return if (isEmptySegmentFailure(message)) unnameable(hint, subject, message)
+        else corrupt(hint, subject, message)
+    }
+
+    private fun isEmptySegmentFailure(message: String): Boolean =
+        message.contains("empty name segment")
 
     // -- class mapping ---------------------------------------------------------
 

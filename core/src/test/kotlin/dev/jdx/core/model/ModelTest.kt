@@ -19,6 +19,7 @@ class ModelTest {
             "CORRUPT_CLASS",
             "MULTI_RELEASE_VARIANT",
             "UNRESOLVED_SUPERTYPE",
+            "UNNAMEABLE_CLASS",
             "PROJECT_DISCOVERY_FALLBACK",
         )
     }

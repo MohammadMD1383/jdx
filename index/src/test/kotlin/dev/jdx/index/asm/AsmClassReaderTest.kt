@@ -242,6 +242,37 @@ class AsmClassReaderTest {
     }
 
     @Test
+    fun `a JFR-style dollar-dollar name is unnameable not corrupt`() {
+        // T-065: `Exception$JB$$Assertion` shapes carry an empty `$`-separated
+        // segment the model rejects (TypeName invariant) — honest degradation
+        // with a dedicated code, never CORRUPT_CLASS. Bytes are built by ASM
+        // exactly like every other reader test (no disk, no jars).
+        val bytes = buildClass("com/example/Outer\$JB\$\$Assertion") { }
+        val result = AsmClassReader.read(bytes, "probe.class")
+        val corrupt = result.shouldBeInstanceOf<ClassReadResult.Corrupt>()
+        val warning = corrupt.warning
+        warning.code shouldBe WarningCode.UNNAMEABLE_CLASS
+        (warning.message.contains("unnameable class name")) shouldBe true
+        (warning.message.contains("probe.class")) shouldBe true
+    }
+
+    @Test
+    fun `a corrupt descriptor still reports corrupt not unnameable`() {
+        // The T-065 matcher must stay narrow: only the empty-segment shape
+        // routes to UNNAMEABLE_CLASS. A bad member descriptor is genuine
+        // corruption — pinning this keeps real breakage out of the new bucket.
+        val bytes = buildClass("com/example/BadDesc") {
+            method(Opcodes.ACC_PUBLIC, "broken", "()V", null, null)
+        }.copyOf()
+        // Corrupt the descriptor indirectly: truncate mid-constant-pool so the
+        // mapping throw cannot be an empty-segment message.
+        val cut = bytes.copyOfRange(0, bytes.size / 2)
+        val result = AsmClassReader.read(cut, "probe.class")
+        val corrupt = result.shouldBeInstanceOf<ClassReadResult.Corrupt>()
+        corrupt.warning.code shouldBe WarningCode.CORRUPT_CLASS
+    }
+
+    @Test
     fun `reading twice yields identical bytes of model`() {
         val bytes = buildClass("com/example/Stable") {
             field(Opcodes.ACC_PUBLIC, "x", "I", null, null)

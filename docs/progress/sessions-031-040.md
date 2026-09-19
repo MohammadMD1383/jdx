@@ -4,6 +4,60 @@ Newest first. Each entry follows the template at the bottom of `docs/PROGRESS.md
 
 ---
 
+## Session 34 — 2026-09-19 — T-065 JFR-style `$$` class names (dedicated warning)
+**Agent/Author:** Muse Spark 1.3 Free · **Commits:** closing commit (this session; claim `6cffef3` predates it)
+
+### Goal
+Complete the T-065 WIP found in the working tree: decide empty-segments-accept vs
+dedicated-warning, satisfy both acceptance lines, and keep tiers 1+2 green.
+
+### What I did
+- Kept the tree's decision (dedicated `WarningCode.UNNAMEABLE_CLASS`, model invariant
+  untouched) and finished it: removed a dead second matcher disjunct in
+  `AsmClassReader.isEmptySegmentFailure` (`"empty nesting segment after"` matches no
+  producer string — only `TypeName.ClassType`'s `"empty name segment"` exists; L-060),
+  verified `ArtifactIndexer` needs no logic change (generic warning pass-through),
+  verified the `$$`-skip widening in `ServiceDifferential` is exact (any `$$` implies
+  an empty segment under `$`-splitting).
+- Verified: targeted suites green; `test`+`tier2Test` green (672 + 268 tests,
+  0 failures, `~/.config/jdx` shelved per T-066 caveat).
+- `check` is red only on `verifyTier1Budget` (45.0 s vs 30 s) — re-ran stashed-clean
+  as the control: **31.4 s, also red**, with unrelated suites slowest
+  (`DoctorEnvironmentTest`, `JdkLayoutTest`, `InstallScriptTest`). Pre-existing machine
+  variance, not a T-065 regression; recorded here so the next contributor does not
+  chase it.
+
+### Decisions made
+- None new (the WIP's accept-vs-reject fork was already resolved to reject-with-code;
+  confirmed it is the right call — see implementation notes in T-065).
+
+### Tasks moved
+- T-065: WIP → DONE.
+
+### Lessons distilled
+- L-060 (matchers on exception message text must mirror the producer string exactly).
+
+### What works now (and how to verify it yourself)
+```bash
+mv ~/.config/jdx ~/.config/jdx.shelved  # T-066 ambient-workspace caveat, restore after
+./gradlew test tier2Test -x verifyTier1Budget  # green: 672 + 268 tests, 0 failures
+./gradlew :index:test --tests "dev.jdx.index.asm.AsmClassReaderTest"  # incl. 2 new T-065 tests
+./gradlew :index:tier2Test --tests "dev.jdx.index.index.ArtifactIndexerTest"  # incl. UNNAMEABLE_CLASS test
+```
+
+### What is broken / half-done
+- Nothing from this task. Pre-existing, untouched: T-066 (`ReadCommandsTest`
+  hermeticity), `verifyTier1Budget` red stashed-clean on this machine (see above).
+
+### Open questions / blockers
+- None.
+
+### Next action
+- **T-066** (make `ReadCommandsTest` hermetic to the machine's workspaces) — lowest
+  open TODO; T-068 (identical-root dedupe), T-069 (`--repo` flag) also open.
+
+---
+
 ## Session 33 — 2026-09-19 — T-064 close the indexer 3,000/s gap (no code change)
 **Agent/Author:** Muse Spark 1.3 Free · **Commits:** claim + closing commit (this session)
 

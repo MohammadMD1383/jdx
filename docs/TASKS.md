@@ -51,9 +51,9 @@ be fiction.
 | **M6** | Serving: daemon, MCP, HTTP, `batch` | TODO |
 | **M7** | Polish: token budgets, AppCDS, mutation gates, docs, install | TODO |
 
-**T-001 through T-019, T-053 through T-064, and T-067 are `DONE`.** M0's test spine is
+**T-001 through T-019, T-053 through T-065, and T-067 are `DONE`.** M0's test spine is
 complete; T-057…T-060 unblock as their milestones land. M1 (read path) is complete;
-M2 hardening continues at T-065.
+M2 hardening continues at T-066.
 
 ---
 
@@ -762,7 +762,7 @@ L-059 records the benchmark-JVM trap found along the way (Gradle tests run on
 toolchain JDK 21, which rejects the major-69 `minecraft-client.jar` classes by
 design — benchmark harnesses for it must run under the runtime JDK 26).*
 
-### T-065 — Handle JFR-style `$$` class names · `WIP`
+### T-065 — Handle JFR-style `$$` class names · `DONE` (session 34)
 **Depends:** T-008 · **Files:** `core/.../model/TypeName.kt`, `index/.../asm/*`
 
 *Session-19 find: the running JDK ships `java/lang/Exception$JB$$Assertion`
@@ -772,9 +772,31 @@ but they are the only 4 of 33,104 JDK classes we cannot name. Decide: accept
 empty segments in the model, or keep rejecting with a dedicated warning code.*
 
 **Acceptance**
-- [ ] The four JFR classes resolve to a named `TypeName` or a documented,
+- [x] The four JFR classes resolve to a named `TypeName` or a documented,
       dedicated warning explaining why not
-- [ ] Differential vs `javap` still green; no regression on `$` nesting rules (D-025)
+- [x] Differential vs `javap` still green; no regression on `$` nesting rules (D-025)
+
+*Implementation notes (session 34): kept rejecting, with a dedicated code —
+accepting empty segments would weaken the `ClassType` invariant every resolver
+and renderer builds on. `WarningCode.UNNAMEABLE_CLASS` (core, test-first;
+`ModelTest` closed-enum pin updated; PROPOSAL §16 updated) + `AsmClassReader`
+`unnameableOrCorrupt` routing: only the exact empty-segment message shape
+(`"empty name segment"`, mirroring `TypeName.ClassType`'s require text, L-060)
+routes there; corrupt descriptors, bad annotations and every other mapping throw
+stay `CORRUPT_CLASS`. `ArtifactIndexer` needed no logic change — it copies any
+reader warning verbatim with the binary name as subject (KDoc now names all
+three codes). Query path unchanged: `A$B$$C` refs fail in the ref parser (exit
+3) before bytecode is read, pinned by a fault test. Soak harnesses count the
+family as degradation, never failure: `ServiceDifferential.compare` skips
+`$$`-bearing names (any `$$` implies an empty segment under `$`-splitting, so
+the widening is exact, not over-broad), `CorpusSoakTest`/`MetamorphicCorpusSoakTest`
+already skipped them. Tests: `TypeNameTest` pins the JFR shape as rejected,
+`AsmClassReaderTest` (unnameable-not-corrupt + corrupt-stays-corrupt guard),
+`ArtifactIndexerTest` (mixed jar: good neighbour indexed, one
+`UNNAMEABLE_CLASS` warning), `ArtifactShapeFaultTest` (query-path exit 3).
+`test`+`tier2Test` green (672 + 268 tests, 0 failures); `check`'s `verifyTier1Budget`
+gate is red at 31–45 s on this machine stashed-clean too — pre-existing machine
+variance, not this task (session-33's 18.9 s predates it).*
 
 ### T-015 — Workspaces (`jdx ws …`) · `DONE` (session 20)
 **Depends:** T-013 · TOML at `~/.config/jdx/workspaces/<name>.toml`, ordered roots,

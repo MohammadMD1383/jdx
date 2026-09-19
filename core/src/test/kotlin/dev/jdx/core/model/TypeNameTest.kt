@@ -61,6 +61,9 @@ class TypeNameTest {
     fun `fromBinaryName rejects empty nesting segments`() {
         assertThrows<IllegalArgumentException> { typeNameFromBinaryName("java.util.Map\$") }
         assertThrows<IllegalArgumentException> { typeNameFromBinaryName("") }
+        // T-065: the JFR `Exception$JB$$Assertion` shape — the empty segment
+        // between the dollars is what AsmClassReader maps to UNNAMEABLE_CLASS.
+        assertThrows<IllegalArgumentException> { typeNameFromBinaryName("java.lang.Exception\$JB\$\$Assertion") }
     }
 
     @Test

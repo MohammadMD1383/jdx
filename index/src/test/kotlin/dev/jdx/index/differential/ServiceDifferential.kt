@@ -85,6 +85,15 @@ internal object ServiceDifferential {
      * [Comparison.Compared].
      */
     internal fun compare(jar: File, binaryName: String, javap: String): Comparison {
+        // T-065: names the model cannot represent (JFR `A$B$$C` shapes) fail in
+        // the ref parser with exit 3 before any bytecode is read — skip them
+        // here so the soak counts them as degradation, never as failure. The
+        // widening (`$$` anywhere, not only empty segments) is deliberate:
+        // `$$`-bearing names never survive `typeNameFromBinaryName` intact, so
+        // routing the whole family to Skipped keeps corpus drift out of the red.
+        if (binaryName.contains("$$")) {
+            return Comparison.Skipped(binaryName, "binary name is not a modellable type: $binaryName")
+        }
         val outcome = JdxService.members(
             binaryName,
             JdxService.RootsSpec(jarSpecs = listOf(jar.absolutePath), includeJdk = false),
