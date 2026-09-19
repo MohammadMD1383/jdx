@@ -612,7 +612,7 @@ to the model (T-008 normalises only interfaces).*
 
 ---
 
-### T-062 — Member sort orders (`--sort name|declaring`) · `TODO`
+### T-062 — Member sort orders (`--sort name|declaring`) · `WIP`
 **Depends:** T-011 · **Files:** `core/.../render/*`, `cli/.../commands/*`
 *(Added in session 14: T-011 accepts `--sort kind` (the current kind-then-name
 layout) and rejects anything else naming this task.)*
