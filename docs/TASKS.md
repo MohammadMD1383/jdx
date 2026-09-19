@@ -995,7 +995,7 @@ gate — diminishing returns past 91 %.*
 
 ---
 
-### T-063 — Share the fixture-jar resolution helpers · `TODO`
+### T-063 — Share the fixture-jar resolution helpers · `WIP`
 **Depends:** — · **Files:** `core/.../fixtures/Fixtures.kt`, `index/.../render/RendererGoldenTest.kt`, `cli/.../commands/ReadCommandsGoldenTest.kt`
 *(Added in session 17: found while migrating golden suites to the T-054 helper.)*
 
