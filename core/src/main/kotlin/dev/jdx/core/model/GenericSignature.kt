@@ -256,8 +256,6 @@ private class SignatureParser(private val text: String) {
 
     fun peek(): Char? = if (pos < text.length) text[pos] else null
 
-    private fun advance(): Char = text[pos++]
-
     private fun expect(expected: Char): Boolean =
         if (peek() == expected) {
             pos++

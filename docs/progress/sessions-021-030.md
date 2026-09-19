@@ -813,3 +813,102 @@ None. Push needs owner go-ahead (D-012) — this session's commits unpushed.
 **T-060** (mutation testing and coverage gates) — lowest-numbered unblocked
 TODO (depends T-055, T-056 DONE). Next progress shard `sessions-031-040.md`
 opens after 1 more session.
+
+---
+
+## Session 30 — 2026-09-19 — Mutation testing and coverage gates (T-060)
+
+**Agent/Author:** Muse Spark (opencode) · **Commits:** `3a279f2` (claim), work + docs (this session)
+
+### Goal
+Complete T-060, found `WIP`-claimed (`3a279f2`) with a full working tree of
+uncommitted build wiring + killer tests: verify every gate end to end
+(JaCoCo line + PIT mutation), run the first full `./gradlew mutationTest`,
+and close the docs.
+
+### What I did
+1. Found the WIP shape: 21 modified files + 1 untracked (`AnsiTest.kt`) —
+   build wiring (`build.gradle.kts`, `core`/`index`/`sources`/`decompile`
+   build files, catalog versions) plus ~1,230 lines of killer tests across 14
+   `core` test files, each block commented with the mutant it kills, plus two
+   production cleanups the mutant hunt exposed: dead
+   `SignatureParser.advance()` deleted (`GenericSignature.kt`), redundant
+   `MemberResolver.isVisible isTarget` parameter removed (both call sites
+   already guard `!isTarget`).
+2. Verified tiers 1+2 green with gates: `./gradlew check` BUILD SUCCESSFUL
+   (tier-1 16.6 s of 30 s across 660 tests; all four
+   `jacocoTestCoverageVerification` tasks pass) — with `~/.config/jdx`
+   shelved per the known T-066 workaround, restored after.
+3. Quoted the line gates from the JaCoCo XML reports: `core` **96.4 %**
+   (62 missed / 1725, gate 95), `index` **87.9 %** (362 missed / 2997, gate
+   85); `sources`/`decompile` are single-KDoc-`ModuleInfo` stubs — verification
+   passes vacuously, no report emitted (intentional, said in the build file).
+4. Ran the first full `./gradlew mutationTest`: BUILD SUCCESSFUL in ~30 min
+   (`:core:pitest` UP-TO-DATE from the WIP run — report newer than all
+   sources, so valid for this tree; `:index:pitest` full run ~30 min, 284
+   tests, 5959 runs; `sources`/`decompile` report "No mutations found",
+   no report file — correct for stubs with `failWhenNoMutations=false`).
+   Final mutation numbers (`mutations.xml` status counts):
+   - `core`: 1167 mutants — 1065 KILLED, 67 SURVIVED, 33 NO_COVERAGE,
+     2 TIMED_OUT → **91 %** (gate 80, build-failing) ✓
+   - `index`: 1705 mutants — 1164 KILLED, 310 SURVIVED, 194 NO_COVERAGE,
+     37 TIMED_OUT → **70 %** PIT headline (measured, not gated) ✓
+   - `sources`/`decompile`: 0 mutants ✓
+5. Triaged the survivors rather than chasing them past the gate: core's 67
+   survivors cluster in `render/ListingKt` boundary mutants (`388/392/396`
+   `<=`/`<` edges on truncation/grouping thresholds),
+   `SignatureParser.parseFormalTypeParameters/parseTypeArguments`
+   empty-vs-absent returns, `SymbolRefParser` position arithmetic
+   (`parseMember` ±1), and `SymbolSearch.camelHumpMatches/isRangeDash`
+   edge predicates; the 33 NO_COVERAGE are mostly inlined Kotlin getters
+   (`TypeName.getDescriptor` variants, `Access.getMask`, render-model
+   getters) that JaCoCo line coverage already sees — a known Kotlin+PIT
+   attribution wrinkle, not untested code. Index's 310 survivors are
+   un-gated by design (D-021): recorded, not killed. Judgment: diminishing
+   returns past 91 % on the gated module; the gate is the contract.
+6. Noticed the WIP's `index` PIT report was a stale `-PpitestScope` probe
+   (10 `artifact`-package classes, empty `mutations.xml`); the full run in
+   step 4 replaced it with the real module-wide report.
+7. Closed the docs: T-060 → DONE with implementation notes, this entry,
+   CURRENT STATE, L-055/L-056, TESTING.md §10 runbook paragraph.
+8. **Not pushed** (D-012: no remote push without owner go-ahead in this session).
+
+### Decisions made
+- None new (D-021 already settles the gate split; the survivor-triage
+  judgment above applies it, it doesn't extend it).
+
+### Tasks moved
+- T-060: WIP (`3a279f2`) → DONE (this session).
+
+### Lessons distilled
+- L-055 (`tooling`): PIT minions don't inherit `test` system properties.
+- L-056 (`tooling`): a scoped PIT probe report is not a module report.
+
+### What works now (and how to verify it yourself)
+```bash
+mv ~/.config/jdx /tmp/shelved-jdx   # T-066 ambient-workspace workaround, still open; restore after
+./gradlew check                     # tiers 1+2 green incl. all four jacocoTestCoverageVerification gates
+./gradlew mutationTest              # tier 4 green (~30 min, index dominates); core gate ≥ 80 % build-failing
+mv /tmp/shelved-jdx ~/.config/jdx
+python3 -c "import xml.etree.ElementTree as ET; [print(m, len(ET.parse(f'{m}/build/reports/pitest/mutations.xml').getroot().findall('mutation'))) for m in ['core','index']]"
+# reports: <module>/build/reports/pitest (XML + HTML); coverage: <module>/build/reports/jacoco/test/
+./gradlew :core:pitest -PpitestScope='dev.jdx.core.render.Truncation*'   # fast single-class iteration, never in CI
+```
+
+### What is broken / half-done
+- Nothing in T-060 scope. Known, owned elsewhere: T-066 (ambient reds —
+  shelved around runs here, unchanged), T-065 (`$$` names + the
+  `JavapCorpusSoakTest` soak reds), T-062 (`--sort` orders), T-063 (shared
+  fixture-jar helpers), T-064 (indexer 3,000/s gap), T-068 (identical-root
+  dedupe), T-069 (`--repo` flag).
+- `sources`/`decompile` line gates pass vacuously until M3 lands real code —
+  intentional tripwire (said in the root build file), not a hole.
+
+### Open questions / blockers
+None. Push needs owner go-ahead (D-012) — this session's work is uncommitted
+in the working tree (claim `3a279f2` plus this session).
+
+### Next action
+**T-062** (member sort orders `--sort name|declaring`) — lowest-numbered
+unblocked TODO (depends T-011 DONE). First task of the new
+`sessions-031-040.md` shard (this shard is now full at 10 sessions).

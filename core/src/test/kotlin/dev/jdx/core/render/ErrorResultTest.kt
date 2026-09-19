@@ -106,4 +106,41 @@ class ErrorResultTest {
             ErrorResult.generic(query = "x", exitCode = 0, message = "ok")
         }
     }
+
+    // -- T-060: error killers ---------------------------------------------------
+    //
+    // The `3..6` range edges and the not-found suggestion path were unasserted.
+
+    @Test
+    fun `generic errors accept the full 3 to 6 range`() {
+        // `exitCode in 3..6` boundary mutants reject 3 or 6.
+        ErrorResult.generic(query = "x", exitCode = 3, message = "usage").exitCode shouldBe 3
+        ErrorResult.generic(query = "x", exitCode = 6, message = "internal").exitCode shouldBe 6
+        io.kotest.assertions.throwables.shouldThrow<IllegalArgumentException> {
+            ErrorResult.generic(query = "x", exitCode = 2, message = "ambiguous")
+        }
+        io.kotest.assertions.throwables.shouldThrow<IllegalArgumentException> {
+            ErrorResult.generic(query = "x", exitCode = 7, message = "beyond")
+        }
+    }
+
+    @Test
+    fun `a generic error carries its query and no candidates`() {
+        val error = ErrorResult.generic(query = "members", exitCode = 4, message = "workspace error: x")
+        error.query shouldBe "members"
+        error.candidates shouldBe emptyList()
+    }
+
+    @Test
+    fun `not found suggestions double as candidates`() {
+        val result = ErrorResult.notFound(
+            query = "Gson#toJson",
+            suggestions = listOf("com.google.gson.Gson#toJson(java.lang.Object)"),
+        )
+        result.candidates shouldBe listOf("com.google.gson.Gson#toJson(java.lang.Object)")
+        result.renderText() shouldContain "did you mean:"
+        result.renderText() shouldContain "com.google.gson.Gson#toJson(java.lang.Object)"
+        result.toJson(command = "body") shouldContain
+            "\"candidates\":[\"com.google.gson.Gson#toJson(java.lang.Object)\"]"
+    }
 }

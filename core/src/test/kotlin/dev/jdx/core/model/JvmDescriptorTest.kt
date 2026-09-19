@@ -101,6 +101,7 @@ class JvmDescriptorTest {
             "L1C)1JQLB)Q.;",           // T-055 property find: threw instead of null
             "L\$Entry;",               // empty nesting segment
             "L/;",                     // separator as the whole name
+            "(I)",                     // missing return type (T-060: `<=` mutant reads past the end)
         ],
     )
     fun `malformed descriptors parse to null rather than throwing`(text: String) {

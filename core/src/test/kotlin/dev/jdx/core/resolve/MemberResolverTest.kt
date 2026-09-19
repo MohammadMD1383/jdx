@@ -2,9 +2,12 @@ package dev.jdx.core.resolve
 
 import dev.jdx.core.model.Access
 import dev.jdx.core.model.AccessFlag
+import dev.jdx.core.model.ClassInfo
+import dev.jdx.core.model.ClassTypeSignature
 import dev.jdx.core.model.FieldInfo
 import dev.jdx.core.model.JvmDescriptor
 import dev.jdx.core.model.MethodInfo
+import dev.jdx.core.model.ThrowsSignature
 import dev.jdx.core.model.TypeName
 import dev.jdx.core.model.Visibility
 import dev.jdx.core.model.typeNameFromBinaryName
@@ -421,5 +424,235 @@ class MemberResolverTest {
         val edge = resolved.linearization.single { it.type.simpleName == "SavedStateProvider" }
         edge.type.nestedNames shouldBe listOf("SavedStateRegistry", "SavedStateProvider")
         edge.type.binaryName shouldBe "androidx.savedstate.SavedStateRegistry\$SavedStateProvider"
+    }
+
+    // -- T-060: substitution killers ------------------------------------------------
+    //
+    // PIT found the generic-field path, the all-shadowed path, multi-parameter
+    // ordering and throws substitution uncovered-or-unasserted. Each test below
+    // pins the substituted shape exactly.
+
+    @Test
+    fun `a generic field inherits substituted`() {
+        // class Box<T> { T value; } under Box<String> shows String.
+        // Kills the field-substitution mutants (304/305) and the `?.let` guard
+        // (76): skipping substitution leaves T, substituting null crashes.
+        val box = testClass(
+            binary = "t.Box",
+            superclass = "java.lang.Object",
+            genericSignature = "<T:Ljava/lang/Object;>Ljava/lang/Object;",
+            fields = listOf(publicField("value", "Ljava/lang/Object;", "TT;")),
+        )
+        val stringBox = testClass(
+            binary = "t.StringBox",
+            superclass = "t.Box",
+            genericSignature = "Lt/Box<Ljava/lang/String;>;",
+        )
+        val lookup = mapLookup(objectInfo, box, stringBox)
+
+        val resolved = MemberResolver.resolve(stringBox, lookup)
+
+        val field = resolved.fields.single { it.member.name == "value" }
+        field.declaringType.binaryName shouldBe "t.Box"
+        field.depth shouldBe 1
+        field.member.genericSignature?.signature shouldBe "TT;"
+        field.substitutedSignature?.signature shouldBe "Ljava/lang/String;"
+    }
+
+    @Test
+    fun `a non-generic field resolves with no substituted signature`() {
+        val holder = testClass(
+            binary = "t.Holder",
+            superclass = "java.lang.Object",
+            fields = listOf(publicField("count", "I")),
+        )
+        val lookup = mapLookup(objectInfo, holder)
+
+        val resolved = MemberResolver.resolve(holder, lookup)
+
+        val field = resolved.fields.single { it.member.name == "count" }
+        field.substitutedSignature shouldBe null
+    }
+
+    @Test
+    fun `two type parameters substitute in order`() {
+        // class Pair<K, V> { K first(); V second(); } under Pair<String, Integer>:
+        // swapping the arguments (the `index` increment mutant) is observable.
+        val pair = testClass(
+            binary = "t.Pair",
+            superclass = "java.lang.Object",
+            genericSignature = "<K:Ljava/lang/Object;V:Ljava/lang/Object;>Ljava/lang/Object;",
+            methods = listOf(
+                publicMethod("first", "()Ljava/lang/Object;", "()TK;"),
+                publicMethod("second", "()Ljava/lang/Object;", "()TV;"),
+            ),
+        )
+        val stringInt = testClass(
+            binary = "t.StringInt",
+            superclass = "java.lang.Object",
+            interfaces = listOf("t.Pair"),
+            genericSignature = "Ljava/lang/Object;Lt/Pair<Ljava/lang/String;Ljava/lang/Integer;>;",
+        )
+        val lookup = mapLookup(objectInfo, pair, stringInt)
+
+        val resolved = MemberResolver.resolve(stringInt, lookup)
+
+        resolved.methods.single { it.member.name == "first" }
+            .substitutedSignature?.signature shouldBe "()Ljava/lang/String;"
+        resolved.methods.single { it.member.name == "second" }
+            .substitutedSignature?.signature shouldBe "()Ljava/lang/Integer;"
+    }
+
+    @Test
+    fun `a method shadowing every class variable keeps its signature whole`() {
+        // class Box<T> { <T> T id(T); }: the shadowed environment is empty, so
+        // the declared signature returns as-is (the 292 early return).
+        val box = testClass(
+            binary = "t.Box",
+            superclass = "java.lang.Object",
+            genericSignature = "<T:Ljava/lang/Object;>Ljava/lang/Object;",
+            methods = listOf(
+                publicMethod(
+                    "id",
+                    "(Ljava/lang/Object;)Ljava/lang/Object;",
+                    "<T:Ljava/lang/Object;>(TT;)TT;",
+                ),
+            ),
+        )
+        val stringBox = testClass(
+            binary = "t.StringBox",
+            superclass = "t.Box",
+            genericSignature = "Lt/Box<Ljava/lang/String;>;",
+        )
+        val lookup = mapLookup(objectInfo, box, stringBox)
+
+        val resolved = MemberResolver.resolve(stringBox, lookup)
+
+        resolved.methods.single { it.member.name == "id" }
+            .substitutedSignature?.signature shouldBe "<T:Ljava/lang/Object;>(TT;)TT;"
+    }
+
+    @Test
+    fun `a target declaring its own generic method keeps it as is`() {
+        // The target's environment is empty: substitution is the identity (290).
+        val box = testClass(
+            binary = "t.Box",
+            superclass = "java.lang.Object",
+            genericSignature = "<T:Ljava/lang/Object;>Ljava/lang/Object;",
+            methods = listOf(
+                publicMethod(
+                    "id",
+                    "(Ljava/lang/Object;)Ljava/lang/Object;",
+                    "<T:Ljava/lang/Object;>(TT;)TT;",
+                ),
+            ),
+        )
+        val lookup = mapLookup(objectInfo, box)
+
+        val resolved = MemberResolver.resolve(box, lookup)
+
+        resolved.methods.single { it.member.name == "id" }
+            .substitutedSignature?.signature shouldBe "<T:Ljava/lang/Object;>(TT;)TT;"
+    }
+
+    @Test
+    fun `a method level variable survives beside a substituted class variable`() {
+        // class Box<E> { <T> T mix(T, E); } under Box<String>: T stays, E binds.
+        val box = testClass(
+            binary = "t.Box",
+            superclass = "java.lang.Object",
+            genericSignature = "<E:Ljava/lang/Object;>Ljava/lang/Object;",
+            methods = listOf(
+                publicMethod(
+                    "mix",
+                    "(Ljava/lang/Object;Ljava/lang/Object;)Ljava/lang/Object;",
+                    "<T:Ljava/lang/Object;>(TT;TE;)TT;",
+                ),
+            ),
+        )
+        val stringBox = testClass(
+            binary = "t.StringBox",
+            superclass = "t.Box",
+            genericSignature = "Lt/Box<Ljava/lang/String;>;",
+        )
+        val lookup = mapLookup(objectInfo, box, stringBox)
+
+        val resolved = MemberResolver.resolve(stringBox, lookup)
+
+        resolved.methods.single { it.member.name == "mix" }
+            .substitutedSignature?.signature shouldBe "<T:Ljava/lang/Object;>(TT;Ljava/lang/String;)TT;"
+    }
+
+    @Test
+    fun `a generic throws variable substitutes with the method`() {
+        // `void clear() throws E` under Box<String> throws String (ClassThrows).
+        val box = testClass(
+            binary = "t.Box",
+            superclass = "java.lang.Object",
+            genericSignature = "<E:Ljava/lang/Object;>Ljava/lang/Object;",
+            methods = listOf(publicMethod("clear", "()V", "()V^TE;")),
+        )
+        val stringBox = testClass(
+            binary = "t.StringBox",
+            superclass = "t.Box",
+            genericSignature = "Lt/Box<Ljava/lang/String;>;",
+        )
+        val lookup = mapLookup(objectInfo, box, stringBox)
+
+        val resolved = MemberResolver.resolve(stringBox, lookup)
+
+        val throws = resolved.methods.single { it.member.name == "clear" }
+            .substitutedSignature?.throwsSignatures?.single()
+        throws shouldBe ThrowsSignature.ClassThrows(
+            ClassTypeSignature("java.lang", "String", emptyList(), emptyList()),
+        )
+    }
+
+    @Test
+    fun `an unmapped throws variable keeps its name`() {
+        // `void read() throws U` with U bound nowhere stays a variable throw.
+        val box = testClass(
+            binary = "t.Box",
+            superclass = "java.lang.Object",
+            genericSignature = "<E:Ljava/lang/Object;>Ljava/lang/Object;",
+            methods = listOf(publicMethod("read", "()V", "()V^TU;")),
+        )
+        val stringBox = testClass(
+            binary = "t.StringBox",
+            superclass = "t.Box",
+            genericSignature = "Lt/Box<Ljava/lang/String;>;",
+        )
+        val lookup = mapLookup(objectInfo, box, stringBox)
+
+        val resolved = MemberResolver.resolve(stringBox, lookup)
+
+        resolved.methods.single { it.member.name == "read" }
+            .substitutedSignature?.throwsSignatures?.single() shouldBe
+            ThrowsSignature.TypeVariableThrows("U")
+    }
+
+    @Test
+    fun `substitution flows transitively through a non-generic middle`() {
+        // class StringList extends ArrayList<String>; class Mine extends StringList:
+        // the middle declares no type variables of its own (the 247 early path),
+        // yet `add` still resolves to String transitively.
+        val arrayList = testClass(
+            binary = "t.ArrayList",
+            superclass = "java.lang.Object",
+            genericSignature = "<E:Ljava/lang/Object;>Ljava/lang/Object;",
+            methods = listOf(publicMethod("add", "(Ljava/lang/Object;)Z", "(TE;)Z")),
+        )
+        val stringList = testClass(
+            binary = "t.StringList",
+            superclass = "t.ArrayList",
+            genericSignature = "Lt/ArrayList<Ljava/lang/String;>;",
+        )
+        val mine = testClass(binary = "t.Mine", superclass = "t.StringList")
+        val lookup = mapLookup(objectInfo, arrayList, stringList, mine)
+
+        val resolved = MemberResolver.resolve(mine, lookup)
+
+        resolved.methods.single { it.member.name == "add" }
+            .substitutedSignature?.signature shouldBe "(Ljava/lang/String;)Z"
     }
 }

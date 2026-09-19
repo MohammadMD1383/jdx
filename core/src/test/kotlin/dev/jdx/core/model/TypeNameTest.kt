@@ -110,4 +110,31 @@ class TypeNameTest {
             TypeName.ArrayType(TypeName.PrimitiveType(JvmPrimitive.INT), 2)
         arrayTypeName(TypeName.PrimitiveType(JvmPrimitive.LONG), 2).binaryName shouldBe "[[J"
     }
+
+    // -- T-060: model killers --------------------------------------------------------
+
+    @Test
+    fun `a class type exposes its jvm descriptor`() {
+        typeNameFromBinaryName("java.lang.String").descriptor shouldBe "Ljava/lang/String;"
+        typeNameFromBinaryName("com.example.Outer\$Inner").descriptor shouldBe
+            "Lcom/example/Outer\$Inner;"
+    }
+
+    @Test
+    fun `a bare array prefix is malformed, not an exception`() {
+        // The `[` loop boundary: `<=` reads past the end instead of failing clean.
+        io.kotest.assertions.throwables.shouldThrow<IllegalArgumentException> {
+            typeNameFromBinaryName("[[")
+        }
+    }
+
+    @Test
+    fun `a class type rejects separator segments`() {
+        // The `none { it in ... }` construction guard: a `/` must throw, and a
+        // clean construction must pass (the negated mutant throws on clean input).
+        io.kotest.assertions.throwables.shouldThrow<IllegalArgumentException> {
+            TypeName.ClassType("", listOf("a/b"))
+        }
+        TypeName.ClassType("com.example", listOf("Point")).binaryName shouldBe "com.example.Point"
+    }
 }

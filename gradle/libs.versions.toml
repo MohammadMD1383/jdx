@@ -38,7 +38,19 @@ mcpKotlinSdk         = "0.15.0"
 # --- test ---
 junit                = "6.1.3"
 kotest               = "6.2.5"
+# PIT mutation tool version (used as `pitestVersion` in the per-module `pitest {}` blocks).
+# The Gradle plugin itself is versioned separately (`pitestPlugin` below) and defaults to
+# an older PIT; we override with this. Both versions live here per the T-001 rule.
 pitest               = "1.30.0"
+# `info.solidsoft.pitest` Gradle plugin (verified 2026-09-17: latest on the plugin portal).
+pitestPlugin         = "1.19.0"
+# `org.pitest:pitest-junit5-plugin` — JUnit Platform test discovery for PIT. NOTE: this line
+# only supports JUnit Platform 1.x (JUnit 5); JUnit 6 support is an open PIT issue
+# (pitest/pitest-junit5-plugin#113). This build runs JUnit 6.1.3, so the T-060 session
+# verifies empirically that discovery still works before trusting the gate.
+pitestJunitPlugin    = "1.2.3"
+# JaCoCo line-coverage tool version (Gradle default lags on new JDKs; pin explicitly).
+jacoco               = "0.8.15"
 
 [libraries]
 kotlin-stdlib               = { module = "org.jetbrains.kotlin:kotlin-stdlib",       version.ref = "kotlin" }
@@ -63,7 +75,9 @@ junit-jupiter               = { module = "org.junit.jupiter:junit-jupiter",     
 junit-platform-launcher     = { module = "org.junit.platform:junit-platform-launcher", version.ref = "junit" }
 kotest-assertions           = { module = "io.kotest:kotest-assertions-core",         version.ref = "kotest" }
 kotest-property             = { module = "io.kotest:kotest-property",                version.ref = "kotest" }
+pitest-junit5-plugin        = { module = "org.pitest:pitest-junit5-plugin",          version.ref = "pitestJunitPlugin" }
 
 [plugins]
 kotlin-jvm                  = { id = "org.jetbrains.kotlin.jvm",                     version.ref = "kotlin" }
 kotlin-serialization        = { id = "org.jetbrains.kotlin.plugin.serialization",    version.ref = "kotlin" }
+pitest                      = { id = "info.solidsoft.pitest",                       version.ref = "pitestPlugin" }

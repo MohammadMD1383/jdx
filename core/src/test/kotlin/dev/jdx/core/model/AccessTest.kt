@@ -38,4 +38,9 @@ class AccessTest {
         Access.of(AccessFlag.PUBLIC).has(AccessFlag.STATIC) shouldBe false
         Access.NONE.has(AccessFlag.PUBLIC) shouldBe false
     }
+
+    @Test
+    fun `none is the zero mask`() {
+        Access.NONE.mask shouldBe 0
+    }
 }

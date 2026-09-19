@@ -1,9 +1,16 @@
 import org.gradle.api.tasks.SourceSetContainer
 import org.gradle.api.tasks.testing.Test
 import org.gradle.api.tasks.testing.TestReport
+import org.gradle.testing.jacoco.plugins.JacocoPluginExtension
+import org.gradle.testing.jacoco.tasks.JacocoCoverageVerification
+import org.gradle.testing.jacoco.tasks.JacocoReport
 
 plugins {
     alias(libs.plugins.kotlin.jvm) apply false
+    // Declared (not applied) so gated modules can `alias(libs.plugins.pitest)` in their own
+    // build files (T-060). Applied per-module, never here: cli/mcp/server are thin adapters
+    // with no coverage gate (D-021), and testfixtures is fixtures, not product code.
+    alias(libs.plugins.pitest) apply false
 }
 
 // Shared configuration for every module.
@@ -22,6 +29,10 @@ val kotlinStdlib = libs.kotlin.stdlib
 val junitJupiter = libs.junit.jupiter
 val junitLauncher = libs.junit.platform.launcher
 val kotestAssertions = libs.kotest.assertions
+// T-060: every coverage/mutation tool version lives in the catalog (T-001 rule); captured
+// here at root scope for the shared gate configuration below. Module `pitest {}` blocks
+// read the same catalog entries through `libs.versions.*` directly.
+val jacocoToolVersion = libs.versions.jacoco.get()
 
 // --- Test tiers (T-053, docs/TESTING.md §2) ---
 //
@@ -144,13 +155,21 @@ tasks.register("bench") {
     }
 }
 
-// Tier 4: mutation testing (docs/TESTING.md §10). Full Pitest wiring with the T-060 gates
-// (core ≥ 95 % line / ≥ 80 % mutation) lands in T-060; this is the stable entry point.
+// Tier 4: mutation testing (docs/TESTING.md §10, T-060). Runs PIT over every gated module;
+// the per-module `pitest {}` blocks own their thresholds (core ≥ 80 % mutation, build-failing)
+// while this task is the single entry point from TESTING.md §13.
 tasks.register("mutationTest") {
     group = "verification"
-    description = "Tier-4 mutation testing. Full Pitest wiring lands in T-060."
+    description = "Tier-4 mutation testing (PIT): core gate ≥ 80 % mutation score, build-failing. Others measured and reported."
+    dependsOn(
+        project(":core").tasks.named("pitest"),
+        project(":index").tasks.named("pitest"),
+        project(":sources").tasks.named("pitest"),
+        project(":decompile").tasks.named("pitest"),
+    )
     doLast {
-        logger.lifecycle("mutationTest: Pitest wiring lands in T-060. Gates will be core ≥ 95 % line / ≥ 80 % mutation.")
+        logger.lifecycle("mutationTest: PIT reports in <module>/build/reports/pitest (XML + HTML, un-timestamped).")
+        logger.lifecycle("mutationTest: core gate is >= 80 % mutation score (build-failing); index/sources/decompile are measured and reported (D-021).")
     }
 }
 
@@ -228,6 +247,48 @@ subprojects {
         }
     }
     tasks.named("check") { dependsOn(tier2Test) }
+
+    // Line-coverage gates (T-060, docs/TESTING.md §10, D-021). Only the modules with a gate
+    // get the `jacoco` plugin: core/index/sources/decompile. cli/mcp/server are thin
+    // adapters with deliberately no gate; testfixtures/app are not product code.
+    if (project.name in setOf("core", "index", "sources", "decompile")) {
+        apply(plugin = "jacoco")
+        extensions.configure<JacocoPluginExtension> {
+            toolVersion = jacocoToolVersion
+        }
+        // core ≥ 95 % line; index/sources/decompile ≥ 85 % line. sources/decompile are
+        // KDoc-only stubs until M3 lands, so their gates pass vacuously today and start
+        // biting the moment real code arrives — that is intentional, not a hole.
+        val lineMinimum: Double = if (project.name == "core") 0.95 else 0.85
+        // Both tiers contribute coverage: tier-1 unit/property tests AND tier-2 golden,
+        // differential, fault-injection and parity suites. Gating on tier 1 alone would
+        // punish the tier split from T-053, where jar-reading tests live in tier 2.
+        val coverageExecData = files(
+            layout.buildDirectory.file("jacoco/test.exec"),
+            layout.buildDirectory.file("jacoco/tier2Test.exec"),
+        )
+        tasks.withType<JacocoReport>().configureEach {
+            dependsOn("test", "tier2Test")
+            executionData(coverageExecData)
+            reports {
+                xml.required.set(true)
+                html.required.set(true)
+            }
+        }
+        tasks.named<JacocoCoverageVerification>("jacocoTestCoverageVerification") {
+            dependsOn("test", "tier2Test")
+            executionData(coverageExecData)
+            violationRules {
+                rule {
+                    limit {
+                        counter = "LINE"
+                        minimum = lineMinimum.toBigDecimal()
+                    }
+                }
+            }
+        }
+        tasks.named("check") { dependsOn("jacocoTestCoverageVerification") }
+    }
 
     // Tier 3: corpus soak. Excluded from `check` by construction (a separate task nothing
     // in the default lifecycle depends on). `jdx.tier=soak` lets the exclusion proof test

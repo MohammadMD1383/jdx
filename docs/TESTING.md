@@ -339,6 +339,22 @@ Targets:
 Run in tier 4. A surviving mutant in `core` is a genuine gap: either write the test that
 kills it, or delete the unreachable code.
 
+Runbook: `./gradlew mutationTest` runs PIT over `core`, `index`, `sources` and
+`decompile` (only `core`'s ≥ 80 % gate fails the build; the rest are measured and
+reported per D-021). Reports land in `<module>/build/reports/pitest` (XML + HTML,
+un-timestamped); JaCoCo line reports sit beside them under `build/reports/jacoco/test/`.
+The full run takes ~30 min (the `index` suite dominates) and never runs in `check`.
+For fast iteration on one surviving mutant,
+`./gradlew :core:pitest -PpitestScope='dev.jdx.core.render.Truncation*'` narrows both
+the class and test filters to that glob — never quote a scoped run as the module's
+score (L-056). Three PIT/Kotlin wrinkles are handled in the build files, not worked
+around per-case: test discovery goes through `pitest-junit5-plugin` (JUnit-5-only
+upstream, verified working on this build's JUnit 6); `kotlin.jvm.internal.Intrinsics`
+calls are excluded via `avoidCallsTo` (equivalent mutants by construction); and PIT
+minions don't inherit `test` system properties, so `index` forwards `jdx.fixturesDir`
+via `jvmArgs` (L-055). Build-wiring proof tests (`core.tiers`, the index soak suites)
+are excluded from PIT targets — they assert runner invariants, not product behaviour.
+
 ---
 
 ## 11. The fixture corpus (T-006)

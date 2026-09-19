@@ -137,4 +137,79 @@ class SymbolSearchTest {
         SymbolSearch.fuzzyMatches("JsonParsr", "JsonParser") shouldBe true
         SymbolSearch.fuzzyMatches("JsonXyz", "JsonParser") shouldBe false
     }
+
+    // -- T-060: matcher killers ---------------------------------------------
+    //
+    // Each test below pins a branch PIT found uncovered-or-unasserted: a mutant
+    // that flips the branch must fail the test, or the branch is dead.
+
+    @Test
+    fun `a bracket before any close is literal, not a class`() {
+        // `indexOf(']', index + 1)` vs `index - 1`: with `']['` before the `[`,
+        // the mutant finds the earlier `]` and misparses (or throws).
+        SymbolSearch.matchesGlob("][a]", "]a") shouldBe true
+        SymbolSearch.matchesGlob("][a]", "xa") shouldBe false
+    }
+
+    @Test
+    fun `reversed ranges stay literal instead of throwing`() {
+        // `isRangeDash` false branch: the mutant treats `z-a` as a range and
+        // `Regex` throws; the glob must match one of `z`, `-`, `a` literally.
+        SymbolSearch.matchesGlob("[z-a]", "-") shouldBe true
+        SymbolSearch.matchesGlob("[z-a]", "m") shouldBe false
+    }
+
+    @Test
+    fun `an equal-letter dash is a real range`() {
+        // `left <= right` vs `<`: `[a-a]` as a range excludes `-` itself.
+        SymbolSearch.matchesGlob("[a-a]", "a") shouldBe true
+        SymbolSearch.matchesGlob("[a-a]", "-") shouldBe false
+    }
+
+    @Test
+    fun `regex validity is reported, never thrown`() {
+        SymbolSearch.isValidRegex("a.*b") shouldBe true
+        SymbolSearch.isValidRegex("a(b") shouldBe false
+        SymbolSearch.isValidRegex("[z-a]") shouldBe false
+    }
+
+    @Test
+    fun `substring matching is case-insensitive`() {
+        SymbolSearch.matchesSubstring("hash", "HashMap") shouldBe true
+        SymbolSearch.matchesSubstring("MAP", "HashMap") shouldBe true
+        SymbolSearch.matchesSubstring("xyz", "HashMap") shouldBe false
+    }
+
+    @Test
+    fun `a pattern longer than the value cannot hump-match`() {
+        // Lowercase landing past the end: `return false`, not `true`.
+        SymbolSearch.camelHumpMatches("abcdef", "ab") shouldBe false
+    }
+
+    @Test
+    fun `a lowercase hump resyncs past a mismatch`() {
+        // `gJson` skips `et`: the resync loop must find the later `J`.
+        SymbolSearch.camelHumpMatches("gJson", "getJson") shouldBe true
+    }
+
+    @Test
+    fun `a resync with no later occurrence fails`() {
+        // `found == -1` returns false; `!=` and `true` mutants return true.
+        SymbolSearch.camelHumpMatches("gZ", "getJson") shouldBe false
+    }
+
+    @Test
+    fun `a resync landing is exact, not off by one`() {
+        // `found + 1` vs `found - 1`: the remainder must align after the jump.
+        // Original: `b` resyncs to 1, `B` skips `x` to 3, `C` lands on 4.
+        // Mutant: `B` lands on 1 instead, then `C` misses the `B` at 3.
+        SymbolSearch.camelHumpMatches("bBC", "aBxBC") shouldBe true
+    }
+
+    @Test
+    fun `fuzzy matching allows exactly two edits`() {
+        // `<= maxDistance` vs `<`: distance 2 matches, distance 3 does not.
+        SymbolSearch.fuzzyMatches("abc", "axy") shouldBe true
+        SymbolSearch.fuzzyMatches("abc", "xyz") shouldBe false
+    }
 }

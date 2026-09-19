@@ -362,6 +362,91 @@ class SymbolRefParserTest {
         parseFail("foo(int)", "declaring type", 3)
     }
 
+    // ---------------------------------------------------------------- T-060: failure positions
+    //
+    // Every arithmetic term in a `fail(..., base + ...)` position must be pinned:
+    // PIT's Math mutants (`+1` to `-1`) survive whenever a test asserts the message
+    // but not the exact position. Each test below names the mutant it kills.
+
+    @Test
+    fun `a coordinate with nothing after the slash fails at the end`() {
+        // `restBase = base + slash + 1`: both additions are pinned.
+        parseFail("g:a:v/", "missing type", 6)
+    }
+
+    @Test
+    fun `a second slash after a coordinate fails naming its position`() {
+        // `restBase + secondSlash`.
+        parseFail("g:a:v/A/B", "only valid", 7)
+    }
+
+    @Test
+    fun `an all-blank coordinate is rejected like any other blank part`() {
+        // The `parts.any { it.isBlank() }` lambda: negating it still fails honest
+        // blanks but lets an all-blank coordinate through — this test pins it.
+        // (Blank means whitespace: `::` would be member syntax, not a coordinate;
+        // the leading space shifts `base`, pinning `base + slash` too.)
+        parseFail(" : : /T", "group:artifact:version", 5)
+    }
+
+    @Test
+    fun `a leading dot before the paren fails at the paren`() {
+        // `lastDot <= 0`: `0 < 0` is false, so `<` proceeds and reports elsewhere.
+        parseFail(".foo()", "before '('", 4)
+    }
+
+    @Test
+    fun `a package pattern rejects structural characters naming the position`() {
+        // `base + k` in parsePackagePattern.
+        parseFail("com.*;", "invalid character", 5)
+    }
+
+    @Test
+    fun `a valid package pattern parses`() {
+        // Valid input must NOT fail: kills the negated validity conditional.
+        parseOk("com.foo.*") shouldBe PackageSymbolRef("com.foo.*")
+    }
+
+    @Test
+    fun `a padded parameter reports errors past its leading space`() {
+        // `paramBase` carries `paramStartInPiece`: zero in every existing test.
+        // (`!` is legal in names — the poison character here is `;`.)
+        parseFail("Gson#m( vo;d)", "invalid character", 10)
+        parseFail("Gson#m(Object, vo;d)", "invalid character", 17)
+    }
+
+    @Test
+    fun `trailing text after the parameter list counts its leading space`() {
+        // `afterLead` in the "unexpected text" position.
+        parseFail("Gson#m() x", "unexpected text", 9)
+    }
+
+    @Test
+    fun `a blank return type counts the space before the colon`() {
+        // `afterLead` in the "missing return type" position. (Trailing spaces
+        // are trimmed by `parse`, so `returnLead` there is always zero — an
+        // equivalent mutant, not a gap.)
+        parseFail("Gson#m() :", "missing return type", 10)
+    }
+
+    @Test
+    fun `a malformed return type counts the colon lead`() {
+        // `returnLead` in the nested return-type base.
+        parseFail("Gson#m(): vo;d", "invalid character", 12)
+    }
+
+    @Test
+    fun `an invalid character in a later nesting segment names its position`() {
+        // `base + idx` / `idx += segment.length` need two `$` segments to differ.
+        parseFail("A\$B\$c;d", "invalid character", 5)
+    }
+
+    @Test
+    fun `an invalid character in a later dot segment names its position`() {
+        // `base + cursor` past the first dot segment.
+        parseFail("com.fo;o.Bar", "invalid character", 6)
+    }
+
     // ---------------------------------------------------------------- helpers
 
     private fun parseOk(text: String): dev.jdx.core.model.SymbolRef {

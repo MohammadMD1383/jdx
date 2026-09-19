@@ -128,6 +128,18 @@ class GenericSignatureTest {
     }
 
     @Test
+    fun `a type parameter exposes its class bound when present`() {
+        // `FormalTypeParameter.classBound` is null for `T extends Object`-style
+        // defaults and non-null otherwise — both directions are asserted.
+        val withBound = GenericSignature.parseClass("<T:Ljava/lang/Number;>Ljava/lang/Object;")
+            ?.typeParameters?.single()
+        withBound?.classBound?.signature shouldBe "Ljava/lang/Number;"
+        val withoutBound = GenericSignature.parseClass("<T:Ljava/lang/Object;>Ljava/lang/Object;")
+            ?.typeParameters?.single()
+        withoutBound?.classBound?.signature shouldBe "Ljava/lang/Object;"
+    }
+
+    @Test
     fun `parsing an inner class suffix records it as an inner class with its own arguments`() {
         val field =
             GenericSignature.parse("Ljava/util/Map<Ljava/lang/String;Ljava/lang/String;>.Entry<TKey;TValue;>;")

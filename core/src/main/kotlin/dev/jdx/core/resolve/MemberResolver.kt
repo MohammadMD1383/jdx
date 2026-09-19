@@ -64,7 +64,7 @@ public object MemberResolver {
 
             for (field in declaring.fields) {
                 if (!options.includeSynthetic && isSyntheticField(field)) continue
-                if (!isTarget && !isVisible(fieldAccess(field), declaringPackage, targetPackage, isTarget)) {
+                if (!isTarget && !isVisible(fieldAccess(field), declaringPackage, targetPackage)) {
                     continue
                 }
                 val existing = seenFields[field.name]
@@ -91,7 +91,7 @@ public object MemberResolver {
                 if (method.name == "<clinit>") continue // never a callable member
                 if (!isTarget && method.name == "<init>") continue // constructors are not inherited
                 if (!options.includeSynthetic && isSyntheticMethod(method)) continue
-                if (!isTarget && !isVisible(method.access.visibility, declaringPackage, targetPackage, isTarget)) {
+                if (!isTarget && !isVisible(method.access.visibility, declaringPackage, targetPackage)) {
                     continue
                 }
                 val key = MethodKey(method.name, method.descriptor.descriptor)
@@ -381,18 +381,19 @@ public object MemberResolver {
     private fun fieldAccess(field: FieldInfo): Visibility = field.access.visibility
 
     /**
-     * JLS visibility from the querying perspective (spec step 4): the target's own members
-     * are always visible (even `private` — `members` on the declaring type shows
-     * everything); `private` supertype members are never inherited; package-private
-     * members cross only into the same package; `public`/`protected` always cross.
+     * JLS visibility from the querying perspective (spec step 4): `private`
+     * supertype members are never inherited; package-private members cross only
+     * into the same package; `public`/`protected` always cross.
+     *
+     * The target's own members never reach this function — both call sites guard
+     * with `!isTarget` first, so every member here is genuinely inherited and the
+     * `private`-means-invisible rule has no target exception to carve out.
      */
     private fun isVisible(
         visibility: Visibility,
         declaringPackage: String,
         targetPackage: String,
-        isTarget: Boolean,
     ): Boolean {
-        if (isTarget) return true
         return when (visibility) {
             Visibility.PUBLIC, Visibility.PROTECTED -> true
             Visibility.PRIVATE -> false

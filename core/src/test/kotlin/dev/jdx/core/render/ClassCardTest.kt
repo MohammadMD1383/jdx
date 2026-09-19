@@ -123,4 +123,74 @@ class ClassCardTest {
         val text = buildClassCard(target = withPrivate, provenance = emptyList()).renderText()
         text shouldContain "members: 0 constructors, 1 method, 1 field"
     }
+
+    // -- T-060: card killers --------------------------------------------------
+    //
+    // The declaration line was asserted only by containment of other lines, so
+    // mutants blanking `declarationLine`, `superclassLine`, `interfacesLine`,
+    // `kindKeyword` or `modifiersOf` survived. Exact assertions fix that.
+
+    @Test
+    fun `the declaration line prints modifiers kind and simple name exactly`() {
+        // `point` is package-private: no visibility word prints.
+        cardOf().renderText().lines()[1] shouldBe "  class Point"
+    }
+
+    @Test
+    fun `modifiers print in declaration order for every visibility`() {
+        fun declaration(access: Access): String {
+            val info = point.copy(access = access)
+            return buildClassCard(target = info, provenance = emptyList())
+                .renderText().lines()[1].trim()
+        }
+        declaration(Access.of(AccessFlag.PUBLIC, AccessFlag.ABSTRACT)) shouldBe "public abstract class Point"
+        declaration(Access.of(AccessFlag.PROTECTED, AccessFlag.STATIC, AccessFlag.FINAL)) shouldBe
+            "protected static final class Point"
+        declaration(Access.of(AccessFlag.PRIVATE)) shouldBe "private class Point"
+        declaration(Access.of()) shouldBe "class Point"
+    }
+
+    @Test
+    fun `an annotation card declares an at-interface`() {
+        val text = buildClassCard(
+            target = point.copy(kind = TypeKind.ANNOTATION),
+            provenance = emptyList(),
+        ).renderText()
+        text.lines()[1] shouldBe "  @interface Point"
+    }
+
+    @Test
+    fun `an interface lists superinterfaces with extends`() {
+        // `interfacesLine` uses `extends` for interfaces, `implements` for classes.
+        val text = buildClassCard(
+            target = testClass(
+                binary = "com.example.Sealed",
+                interfaces = listOf("com.example.Marker"),
+            ).copy(kind = TypeKind.INTERFACE),
+            provenance = emptyList(),
+        ).renderText()
+        text shouldContain "extends com.example.Marker"
+        text shouldNotContain "implements"
+    }
+
+    @Test
+    fun `a static initialiser is not counted as a method`() {
+        // `buildClassCard` excludes `<clinit>`; the negated mutant counts it.
+        val withClinit = point.copy(
+            methods = point.methods + publicMethod("<clinit>", "()V"),
+        )
+        val text = buildClassCard(target = withClinit, provenance = emptyList()).renderText()
+        text shouldContain "members: 1 constructor, 1 method, 2 fields"
+    }
+
+    @Test
+    fun `singular and plural counts print exactly`() {
+        val one = buildClassCard(target = point, provenance = emptyList()).renderText()
+        one shouldContain "members: 1 constructor, 1 method, 2 fields"
+        val none = buildClassCard(
+            target = testClass(binary = "com.example.Empty"),
+            provenance = emptyList(),
+        ).renderText()
+        none shouldContain "members: 0 constructors, 0 methods, 0 fields"
+    }
 }

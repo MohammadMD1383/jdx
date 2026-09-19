@@ -123,6 +123,9 @@ class ModelTest {
     fun `a maven coordinate prints in group-artifact-version form`() {
         val coordinate = MavenCoordinate("com.google.code.gson", "gson", "2.14.0")
         coordinate.coordinate shouldBe "com.google.code.gson:gson:2.14.0"
+        coordinate.group shouldBe "com.google.code.gson"
+        coordinate.artifact shouldBe "gson"
+        coordinate.version shouldBe "2.14.0"
     }
 
     @Test
@@ -130,5 +133,65 @@ class ModelTest {
         val warning = Warning(WarningCode.DUPLICATE_FQN, "duplicate FQN in two artifacts", "com.example.Foo")
         warning.code shouldBe WarningCode.DUPLICATE_FQN
         warning.subject shouldBe "com.example.Foo"
+    }
+
+    // -- T-060: model killers -----------------------------------------------------
+    //
+    // Optional model slots (annotations, outer class, source file, deprecation)
+    // were never read in assertions, so every getter mutant survived.
+
+    @Test
+    fun `classinfo exposes annotations outer class source file and access`() {
+        val info = ClassInfo(
+            name = TypeName.ClassType("com.example", listOf("Outer", "Inner")),
+            kind = TypeKind.CLASS,
+            access = Access.of(AccessFlag.PUBLIC),
+            annotations = listOf(
+                AnnotationInfo(typeNameFromBinaryName("java.lang.Deprecated"), emptyMap()),
+            ),
+            outerClass = typeNameFromBinaryName("com.example.Outer") as TypeName.ClassType,
+            sourceFileName = "Outer.java",
+        )
+        info.access shouldBe Access.of(AccessFlag.PUBLIC)
+        info.annotations.single().type.fqn shouldBe "java.lang.Deprecated"
+        info.outerClass?.binaryName shouldBe "com.example.Outer"
+        info.sourceFileName shouldBe "Outer.java"
+        ClassInfo(
+            name = TypeName.ClassType("", listOf("Bare")),
+            kind = TypeKind.CLASS,
+        ).let {
+            it.annotations shouldBe emptyList()
+            it.outerClass shouldBe null
+            it.sourceFileName shouldBe null
+        }
+    }
+
+    @Test
+    fun `field info exposes annotations and deprecation both ways`() {
+        val plain = FieldInfo("x", TypeName.PrimitiveType(JvmPrimitive.INT), Access.NONE)
+        plain.deprecated shouldBe false
+        plain.annotations shouldBe emptyList()
+        val marked = plain.copy(
+            deprecated = true,
+            annotations = listOf(
+                AnnotationInfo(typeNameFromBinaryName("java.lang.Deprecated"), emptyMap()),
+            ),
+        )
+        marked.deprecated shouldBe true
+        marked.annotations.single().type.fqn shouldBe "java.lang.Deprecated"
+    }
+
+    @Test
+    fun `method info exposes annotations`() {
+        val method = MethodInfo("get", voidDescriptor, Access.NONE)
+        method.annotations shouldBe emptyList()
+        method.copy(
+            annotations = listOf(
+                AnnotationInfo(
+                    typeNameFromBinaryName("java.lang.Override"),
+                    mapOf("value" to "x"),
+                ),
+            ),
+        ).annotations.single().values shouldBe mapOf("value" to "x")
     }
 }
