@@ -521,8 +521,18 @@ public object JdxService {
     private fun openRoots(spec: RootsSpec): List<OpenRoot> {
         val opened = mutableListOf<OpenRoot>()
         try {
+            // Dedupe identical files before opening (T-068): explicit `--jars`
+            // merged in front of a workspace holding the same jar (e.g. once as a
+            // direct path, once via a workspace glob) would otherwise open one
+            // file as two roots — doubling every `search` hit and suffixing
+            // `tree` artifacts with `(2)`. The key is the normalised absolute
+            // path, so the same file *name* in different directories (shading)
+            // keeps per-provider rows. First occurrence wins, preserving the
+            // explicit-first shadowing order.
+            val seen = mutableSetOf<String>()
             for (jarSpec in spec.jarSpecs) {
                 for (path in expandJarSpec(jarSpec)) {
+                    if (!seen.add(path.toAbsolutePath().normalize().toString())) continue
                     opened.add(OpenRoot(ArtifactLoader.open(path)))
                 }
             }
