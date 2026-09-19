@@ -51,9 +51,9 @@ be fiction.
 | **M6** | Serving: daemon, MCP, HTTP, `batch` | TODO |
 | **M7** | Polish: token budgets, AppCDS, mutation gates, docs, install | TODO |
 
-**T-001 through T-019, T-053 through T-065, and T-067 are `DONE`.** M0's test spine is
+**T-001 through T-019, T-053 through T-067 are `DONE`.** M0's test spine is
 complete; T-057…T-060 unblock as their milestones land. M1 (read path) is complete;
-M2 hardening continues at T-066.
+M2 hardening continues at T-068/T-069 (plus T-070, the tier-2 half of T-066).
 
 ---
 
@@ -1070,7 +1070,7 @@ with `~/.config/jdx` shelved for the cli suites per the standing T-066 caveat.*
 
 ---
 
-### T-066 — Make `ReadCommandsTest` hermetic to the machine's workspaces · `WIP`
+### T-066 — Make `ReadCommandsTest` hermetic to the machine's workspaces · `DONE` (session 35)
 **Depends:** T-015 · **Files:** `cli/src/test/kotlin/.../commands/ReadCommandsTest.kt`
 *(Added in session 21: found while verifying T-055 — pre-existing T-015 gap, not caused
 by T-055.)*
@@ -1139,6 +1139,29 @@ prints the artifact twice (second suffixed `(2)`). Same *file*, not same *name*.
 - [ ] Same file *name* in different directories still lists per provider
       (shading visibility must not be lost)
 - [ ] Tier-2 test with one jar passed twice (directly and via a workspace)
+
+### T-070 — Make the tier-2 read-command tests hermetic to the machine's workspaces · `TODO`
+**Depends:** T-066 · **Files:** `cli/src/test/kotlin/.../commands/ReadCommandsServiceTest.kt`, `ReadCommandsGoldenTest.kt`, `SortOrdersGoldenTest.kt`, `ReadCommandDiscoveryTest.kt`
+*(Added in session 35: found while verifying T-066 — same trap as L-038/T-066, tier-2 half.)*
+
+T-066 fixed the tier-1 `ReadCommandsTest`; the tier-2 siblings still construct
+`ShowCommand`/`MembersCommand`/`OutlineCommand` with the real-home
+`FileWorkspaceStore.system()` default (and the default `System.getenv`), so an
+`active-workspace` file on the contributor's machine (e.g. `fx`) re-roots them:
+with ambient `fx` present, `ReadCommandsServiceTest` fails 15/18, both golden
+suites fail golden capture, and `ReadCommandDiscoveryTest`'s end-to-end test
+fails — all with `exit 5 / no artifacts match: testfixtures/...` from the `fx`
+glob (proven stashed-clean in session 35, so pre-existing, not a T-066
+regression).
+
+**Acceptance**
+- [ ] Every command construction in the four files above injects
+      `InMemoryWorkspaceStore()` (or an isolated temp-dir store) and
+      `getenv = { null }`, mirroring the T-066 pattern
+- [ ] `./gradlew :cli:tier2Test` passes with an active workspace present in
+      `~/.config/jdx` (prove by running with the ambient workspace in place)
+- [ ] No production behaviour change and no golden-file content change
+      (test-only task; goldens must rewrite byte-identically)
 
 ---
 

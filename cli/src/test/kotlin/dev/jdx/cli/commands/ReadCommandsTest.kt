@@ -48,6 +48,14 @@ class ReadCommandsTest {
     // Real discovery is covered in tier 2 (ReadCommandDiscoveryTest).
     private val noDiscovery: ProjectDiscoveryFn = { _, _, _, _ -> null }
 
+    // Hermetic roots (T-066): every command construction below resolves against an
+    // empty in-memory store and an empty environment, so the contributor's ambient
+    // `~/.config/jdx/active-workspace` (e.g. `fx`) and `JDX_WORKSPACE` can never
+    // re-root these assertions. Workspace resolution itself is covered by the
+    // `workspaceStore()` tests further down.
+    private val noEnv: (String) -> String? = { null }
+    private fun emptyStore(): InMemoryWorkspaceStore = InMemoryWorkspaceStore()
+
     private fun classType(binary: String): TypeName.ClassType =
         typeNameFromBinaryName(binary) as TypeName.ClassType
 
@@ -117,6 +125,8 @@ class ReadCommandsTest {
                 query = { ref, roots -> seenRoots = roots; ref shouldBe "com.example.Point"; pointCard() },
                 terminate = noExit,
                 discover = noDiscovery,
+                store = emptyStore(),
+                getenv = noEnv,
             ).parse(listOf("com.example.Point"))
         }
         output shouldContain "class com.example.Point"
@@ -132,6 +142,8 @@ class ReadCommandsTest {
                 query = { _, roots -> seenRoots = roots; pointCard() },
                 terminate = noExit,
                 discover = noDiscovery,
+                store = emptyStore(),
+                getenv = noEnv,
             ).parse(listOf("Point", "--jars", "a.jar", "--jars", "b/*.jar", "--no-jdk"))
         }
         seenRoots shouldBe JdxService.RootsSpec(listOf("a.jar", "b/*.jar"), includeJdk = false)
@@ -140,7 +152,7 @@ class ReadCommandsTest {
     @Test
     fun `show --json after the subcommand prints the envelope`() {
         val output = captureStdout {
-            ShowCommand(query = { _, _ -> pointCard() }, terminate = noExit, discover = noDiscovery)
+            ShowCommand(query = { _, _ -> pointCard() }, terminate = noExit, discover = noDiscovery, store = emptyStore(), getenv = noEnv)
                 .parse(listOf("Point", "--json"))
         }
         val parsed = Json.parseToJsonElement(output.trim()).jsonObject
@@ -152,7 +164,7 @@ class ReadCommandsTest {
     fun `--json before the subcommand flows to show`() {
         val output = captureStdout {
             JdxCli().subcommands(
-                ShowCommand(query = { _, _ -> pointCard() }, terminate = noExit, discover = noDiscovery),
+                ShowCommand(query = { _, _ -> pointCard() }, terminate = noExit, discover = noDiscovery, store = emptyStore(), getenv = noEnv),
             )
                 .parse(listOf("--json", "show", "Point"))
         }
@@ -170,6 +182,8 @@ class ReadCommandsTest {
                     },
                     terminate = noExit,
                     discover = noDiscovery,
+                    store = emptyStore(),
+                    getenv = noEnv,
                 ).parse(listOf("Missing"))
             }
             null
@@ -190,6 +204,8 @@ class ReadCommandsTest {
                 query = { _, _, f, d, _, _ -> filters = f; declared = d; pointListing() },
                 terminate = noExit,
                 discover = noDiscovery,
+                store = emptyStore(),
+                getenv = noEnv,
             ).parse(listOf("com.example.Point"))
         }
         declared shouldBe false
@@ -207,6 +223,8 @@ class ReadCommandsTest {
                 query = { _, _, _, d, _, _ -> declared = d; pointListing() },
                 terminate = noExit,
                 discover = noDiscovery,
+                store = emptyStore(),
+                getenv = noEnv,
             ).parse(listOf("Point", "--declared"))
         }
         declared shouldBe true
@@ -222,6 +240,8 @@ class ReadCommandsTest {
                 query = { _, _, f, _, s, m -> filters = f; synthetic = s; limit = m; pointListing() },
                 terminate = noExit,
                 discover = noDiscovery,
+                store = emptyStore(),
+                getenv = noEnv,
             ).parse(
                 listOf(
                     "Point", "--kind", "ctor", "--access", "all", "--static",
@@ -248,6 +268,8 @@ class ReadCommandsTest {
                 query = { _, _, f, _, _, _ -> filters = f; pointListing() },
                 terminate = noExit,
                 discover = noDiscovery,
+                store = emptyStore(),
+                getenv = noEnv,
             ).parse(listOf("Point", "--instance"))
         }
         filters?.staticOnly shouldBe false
@@ -262,6 +284,8 @@ class ReadCommandsTest {
                     query = { _, _, _, _, _, _ -> queried = true; pointListing() },
                     terminate = noExit,
                     discover = noDiscovery,
+                    store = emptyStore(),
+                    getenv = noEnv,
                 ).parse(listOf("Point", "--static", "--instance"))
                 null
             } catch (e: TestExit) {
@@ -282,6 +306,8 @@ class ReadCommandsTest {
                     query = { _, _, _, _, _, _ -> queried = true; pointListing() },
                     terminate = noExit,
                     discover = noDiscovery,
+                    store = emptyStore(),
+                    getenv = noEnv,
                 ).parse(listOf("Point", "--grep", "[unclosed"))
                 null
             } catch (e: TestExit) {
@@ -301,6 +327,8 @@ class ReadCommandsTest {
                     query = { _, _, _, _, _, _ -> pointListing() },
                     terminate = noExit,
                     discover = noDiscovery,
+                    store = emptyStore(),
+                    getenv = noEnv,
                 ).parse(listOf("Point", "--with-doc"))
                 null
             } catch (e: TestExit) {
@@ -324,6 +352,8 @@ class ReadCommandsTest {
                     query = { _, _, filters, _, _, _ -> seen = filters.sort; pointListing() },
                     terminate = noExit,
                     discover = noDiscovery,
+                    store = emptyStore(),
+                    getenv = noEnv,
                 ).parse(listOf("Point", "--sort", flag))
             }
             seen shouldBe expected
@@ -343,6 +373,8 @@ class ReadCommandsTest {
                     query = { _, _, filters, _, _, _ -> seen = filters.sort; pointListing() },
                     terminate = noExit,
                     discover = noDiscovery,
+                    store = emptyStore(),
+                    getenv = noEnv,
                 ).parse(listOf("Point", "--sort", flag))
             }
             seen shouldBe expected
@@ -352,11 +384,11 @@ class ReadCommandsTest {
     @Test
     fun `members json carries the same signatures as text`() {
         val text = captureStdout {
-            MembersCommand(query = { _, _, _, _, _, _ -> pointListing() }, terminate = noExit, discover = noDiscovery)
+            MembersCommand(query = { _, _, _, _, _, _ -> pointListing() }, terminate = noExit, discover = noDiscovery, store = emptyStore(), getenv = noEnv)
                 .parse(listOf("Point"))
         }
         val json = captureStdout {
-            MembersCommand(query = { _, _, _, _, _, _ -> pointListing() }, terminate = noExit, discover = noDiscovery)
+            MembersCommand(query = { _, _, _, _, _, _ -> pointListing() }, terminate = noExit, discover = noDiscovery, store = emptyStore(), getenv = noEnv)
                 .parse(listOf("Point", "--json"))
         }
         val parsed = Json.parseToJsonElement(json.trim()).jsonObject
@@ -379,6 +411,8 @@ class ReadCommandsTest {
                     },
                     terminate = noExit,
                     discover = noDiscovery,
+                    store = emptyStore(),
+                    getenv = noEnv,
                 ).parse(listOf("Point"))
                 null
             } catch (e: TestExit) {
@@ -399,6 +433,8 @@ class ReadCommandsTest {
                 query = { _, _, _, d, _, _ -> declared = d; pointListing() },
                 terminate = noExit,
                 discover = noDiscovery,
+                store = emptyStore(),
+                getenv = noEnv,
             ).parse(listOf("Point", "--kind", "method"))
         }
         declared shouldBe true
@@ -408,7 +444,7 @@ class ReadCommandsTest {
     @Test
     fun `outline --json prints the outline envelope`() {
         val output = captureStdout {
-            OutlineCommand(query = { _, _, _, _, _, _ -> pointListing() }, terminate = noExit, discover = noDiscovery)
+            OutlineCommand(query = { _, _, _, _, _, _ -> pointListing() }, terminate = noExit, discover = noDiscovery, store = emptyStore(), getenv = noEnv)
                 .parse(listOf("Point", "--json"))
         }
         Json.parseToJsonElement(output.trim()).jsonObject["command"]
