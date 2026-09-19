@@ -4,6 +4,68 @@ Newest first. Each entry follows the template at the bottom of `docs/PROGRESS.md
 
 ---
 
+## Session 35 — 2026-09-19 — T-066 make `ReadCommandsTest` hermetic (test-only)
+**Agent/Author:** Muse Spark 1.3 Free · **Commits:** `68b49d4` (claim) + `2a496b3` (closing)
+
+### Goal
+Implement T-066, the lowest open TODO: stop the ambient `~/.config/jdx`
+active-workspace (e.g. `fx`) from re-rooting the tier-1 `ReadCommandsTest`
+assertions. Test-only task — no production behaviour change.
+
+### What I did
+- Reproduced first: `./gradlew :cli:test --tests "...ReadCommandsTest"` with the
+  ambient `fx` workspace present → 2 red (`show prints the card text...`,
+  `show forwards jars...`), both `RootsSpec` mismatches carrying the `fx`
+  workspace's `testfixtures-*.jar` glob and `includeJdk=false`.
+- `cli/.../commands/ReadCommandsTest.kt`: added `noEnv` (`{ null }`) and
+  `emptyStore()` (`InMemoryWorkspaceStore()`) helpers and injected both into
+  every `ShowCommand`/`MembersCommand`/`OutlineCommand` construction that used
+  the real-home defaults (19 sites: 14 multi-line + 5 single-line; the 7
+  `workspaceStore()` tests already injected). `discover = noDiscovery` was
+  already everywhere, so roots are now fully hermetic (store + env + discovery).
+- Verified: `:cli:test` green with ambient `fx` present (29/29), and again
+  with `JDX_WORKSPACE=fx` forced in the environment (29/29, `--rerun-tasks`).
+- Standing-bar check `./gradlew check` with ambient `fx`: tier 1 green
+  (672 tests, 27.2 s of 30 s) but `:cli:tier2Test` red — `ReadCommandsServiceTest`
+  15/18, both golden suites, `ReadCommandDiscoveryTest` end-to-end, all `exit 5 /
+  no artifacts match: testfixtures/...` from the same `fx`-glob trap. Control:
+  stashed the T-066 fix and re-ran tier 2 → identical 15 failures, so
+  pre-existing and unrelated to this change. Filed as **T-070** (tier-2 half of
+  the same trap) instead of scope-creeping this task.
+
+### Decisions made
+- None.
+
+### Tasks moved
+- T-066: TODO → WIP (`68b49d4`) → DONE (`2a496b3`).
+- T-070 (new): tier-2 read-command tests hermeticity — TODO.
+
+### Lessons distilled
+- None new (the trap is L-038; the fix follows the `SearchCommandsServiceTest`
+  precedent that already cites T-066).
+
+### What works now (and how to verify it yourself)
+```bash
+cat ~/.config/jdx/active-workspace  # fx — ambient workspace stays in place, no shelving
+./gradlew :cli:test --tests "dev.jdx.cli.commands.ReadCommandsTest"  # 29/29 green
+JDX_WORKSPACE=fx ./gradlew :cli:test --tests "dev.jdx.cli.commands.ReadCommandsTest" --rerun-tasks -x verifyTier1Budget  # still 29/29
+./gradlew check  # tier 1 green; :cli:tier2Test still needs ~/.config/jdx shelved (T-070)
+```
+
+### What is broken / half-done
+- Nothing from this task. Pre-existing, untouched: T-070 (tier-2 sibling of
+  this fix), T-068 (identical-root dedupe), T-069 (`--repo` flag);
+  `verifyTier1Budget` variance noted in session 34 unchanged.
+
+### Open questions / blockers
+- None.
+
+### Next action
+- **T-068** (dedupe identical resolved roots) — lowest open TODO after T-066;
+  T-069 (`--repo`) and T-070 (tier-2 hermeticity) also open.
+
+---
+
 ## Session 34 — 2026-09-19 — T-065 JFR-style `$$` class names (dedicated warning)
 **Agent/Author:** Muse Spark 1.3 Free · **Commits:** closing commit (this session; claim `6cffef3` predates it)
 
