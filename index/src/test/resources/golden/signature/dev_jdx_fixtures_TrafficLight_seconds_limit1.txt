@@ -1,0 +1,5 @@
+signatures of dev.jdx.fixtures.TrafficLight#seconds
+  public int seconds()
+1 of 2 signatures shown (--limit 2 to see more)
+source: fixture-corpus.jar (bytecode)
+next: jdx show dev.jdx.fixtures.TrafficLight

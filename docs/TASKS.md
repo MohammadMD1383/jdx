@@ -1168,7 +1168,7 @@ context 1 --line-numbers`, member-ref → exit 3. Lessons L-068 (phantom
 trailing line), L-069 (seam-reuse degradations), L-070 (whole-output
 shouldNotContain); decision D-036.*
 
-### T-024 — `jdx signature` over bytecode · `WIP`
+### T-024 — `jdx signature` over bytecode · `DONE` (session 43)
 **Depends:** T-011 (read-command patterns), T-015/T-016 (roots) · **Files:** `core/.../render/Signature.kt`, `index/.../service/JdxService.kt` (`signature`), `cli/.../commands/SignatureCommand.kt`
 *(Third CLI slice of M3: member signatures from bytecode alone — the "parameter
 info" popup (PROPOSAL.md §7.1). No sources needed (works sources-less by
@@ -1185,26 +1185,65 @@ one signature line per overload with real parameter names, generics, throws
 and defaults.
 
 **Acceptance**
-- [ ] `jdx signature '<member-ref>'` returns one signature line per matching
+- [x] `jdx signature '<member-ref>'` returns one signature line per matching
       overload plus provenance (artifact, `BYTECODE`/`JRT`) — e.g.
       `dev.jdx.fixtures.Generics#identity` from the fixture binary jar
-- [ ] Under-specified refs list every overload exit 0 (a signature *can* show
+- [x] Under-specified refs list every overload exit 0 (a signature *can* show
       many — unlike `body`); unknown type/member exit 1 with did-you-mean;
       type refs exit 3 naming `show`/`members`; invalid refs exit 3
-- [ ] Bridge/synthetic hidden by default, shown with `--include-synthetic`;
+- [x] Bridge/synthetic hidden by default, shown with `--include-synthetic`;
       `<clinit>` exits 3; no roots exit 4; never throws, never a stack trace
-- [ ] Flags: `--include-synthetic`, `--limit N` work; `--jars`/`-w`/
+- [x] Flags: `--include-synthetic`, `--limit N` work; `--jars`/`-w`/
       `--no-jdk`/`--coord`/`--repo`/`--fetch`/`--json`/`--no-color` shared
       with the read commands
-- [ ] Text+JSON parity (D-007), deterministic bytes, `--limit` truncation
+- [x] Text+JSON parity (D-007), deterministic bytes, `--limit` truncation
       with `shown`/`total`/`hint`, `next:` hint line
-- [ ] Tests: core tier-1 examples + 1,000-case properties (determinism,
+- [x] Tests: core tier-1 examples + 1,000-case properties (determinism,
       text⊆JSON, truncation law); index tier-2 service tests over fixture jars
       (found/multi-overload/not-found/no-roots/determinism) + text+JSON
       goldens; cli tier-1 flag validation (hermetic) + tier-2 in-process tests
       (hermetic, exits/text⊆JSON/determinism); tiers 1+2 green
-- [ ] `--help` text, Appendix B signature flags verified, `TASKS.md` status,
+- [x] `--help` text, Appendix B body flags verified, `TASKS.md` status,
       `PROGRESS.md` entry
+
+*Implementation notes (session 43): `core/.../render/Signature.kt` —
+`SignatureBlock` (result model mirroring `BodyBlock`: `signatures of
+Declaring#name` header, one bare signature line per overload in declaration
+order, `source:` line, truncation footer, warnings, `next: jdx show` hint;
+text+JSON parity) + `buildSignatureBlock` (via `truncateEntities`,
+`--limit N` hint) + `DEFAULT_SIGNATURE_LIMIT = 50`. `index`:
+`JdxService.signature(rawRef, roots, SignatureOptions)` — type resolution
+with the T-011 machinery (exact/short-name, `g:a:v` scope, `DUPLICATE_FQN`),
+bytecode-authoritative (D-009); members match with the shared
+`matchBytecodeMembers` (name/arity/simple-name narrowing) minus
+bridge/synthetic unless `includeSynthetic`; under-specified names list every
+overload exit 0 (a signature can show many, unlike a body). New
+`ServiceOutcome.SignatureList` (+ the two `CorpusSoakTest` branches). `cli`:
+thin `SignatureCommand` (registered in `JdxCli`; `--include-synthetic`/
+`--limit` live) + `SignatureQuery` seam. `body --with-signature` (parked on
+this task) now works: `BodyOptions.withSignature` renders the matched
+bytecode line as `  signature:` between the source line and the slice
+(`BodyBlock.signature`, optional JSON key; off by default, goldens
+unaffected). Real bug caught by the golden review: refs were zipped from the
+sorted `canonicalMemberRefs` against declaration-ordered matches, swapping
+`:return` suffixes — fixed with `orderedMemberRefs` (pair in source order),
+pinned by two alignment tests (L-071). Tests: core `SignatureBlockTest` (9
+examples) + `SignatureBlockPropertyTest` (4 thousand-case properties);
+`BodyBlockTest` +3 for the header; index `SignatureServiceTest` (21 tier-2
+incl. bridge/field alignment) + `BodyServiceTest` +1 + `SignatureGoldenTest`
+(10 files over 4 fixture members incl. a synthetic-bridge and a limit
+variant); cli `SignatureCommandTest` (4 tier-1, hermetic) +
+`SignatureCommandsServiceTest` (8 tier-2, hermetic, incl. D-017) +
+`BodyCommandsServiceTest`/`BodyCommandTest` updates for the live flag.
+Standing bar: `test`+`tier2Test` 1,181 tests 0 failures; `check
+-x verifyTier1Budget` green incl. JaCoCo gates; full `check` red only on
+`verifyTier1Budget` (pre-existing machine variance, slowest are
+`DoctorEnvironmentTest`/`JavaBodiesTest`, none from this task). Live proof:
+`app/build/jdx signature 'dev.jdx.fixtures.Generics#identity(U)' --jars …`
+→ exit 0 `public U identity(U value)` with bytecode provenance; bridge pair
+→ aligned `:return` refs in JSON; `body … --with-signature` prepends the
+header. Lesson L-071 (never zip a sorted view against its source); Appendix
+B gains the `signature` row.*
 
 ### T-021 — JavaParser integration and Java body extraction · `DONE` (session 40)
 **Depends:** T-071 · **Files:** `sources/src/main/kotlin/dev/jdx/sources/JavaBodies.kt`

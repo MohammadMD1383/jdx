@@ -105,10 +105,10 @@ class BodyCommandTest {
     }
 
     @Test
-    fun `with-signature is rejected naming T-024`() {
+    fun `with-signature reaches the service`() {
         val run = run(listOf("com.example.Point#getX()", "--with-signature"))
-        run.exit shouldBe 3
-        run.output shouldContain "T-024"
+        run.exit shouldBe 0
+        run.options shouldBe JdxService.BodyOptions(withSignature = true)
     }
 
     @Test
@@ -127,6 +127,6 @@ class BodyCommandTest {
 
     @Test
     fun `validateBodyFlags accepts the defaults`() {
-        validateBodyFlags(context = 0, maxLines = 200, engine = null, withDoc = false, withSignature = false) shouldBe null
+        validateBodyFlags(context = 0, maxLines = 200, engine = null, withDoc = false) shouldBe null
     }
 }

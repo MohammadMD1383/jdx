@@ -1,0 +1,4 @@
+signatures of dev.jdx.fixtures.PersonRecord#<init>
+  public PersonRecord(java.lang.String name, int age)
+source: fixture-corpus.jar (bytecode)
+next: jdx show dev.jdx.fixtures.PersonRecord

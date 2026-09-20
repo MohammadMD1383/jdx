@@ -150,4 +150,26 @@ class BodyBlockTest {
         lines shouldBe emptyList()
         truncation shouldBe null
     }
+
+    @Test
+    fun `with-signature header prints between the source line and the body`() {
+        val text = blockOf().copy(signature = "public int getX()").renderText()
+        val lines = text.lines()
+        lines[1] shouldBe "  source: app-sources.jar · com/example/Point.java:6-8"
+        lines[2] shouldBe "  signature: public int getX()"
+        lines[3] shouldBe "    public int getX() {"
+    }
+
+    @Test
+    fun `without the flag no signature line prints and json carries no signature key`() {
+        val block = blockOf()
+        block.renderText() shouldNotContain "signature:"
+        block.toJson(command = "body") shouldNotContain "\"signature\""
+    }
+
+    @Test
+    fun `json carries the signature header when set`() {
+        val json = blockOf().copy(signature = "public int getX()").toJson(command = "body")
+        json shouldContain "\"signature\":\"public int getX()\""
+    }
 }

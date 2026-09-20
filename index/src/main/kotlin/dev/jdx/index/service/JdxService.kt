@@ -22,9 +22,14 @@ import dev.jdx.core.ref.SymbolRefPrinter
 import dev.jdx.core.render.BodyBlock
 import dev.jdx.core.render.ClassCard
 import dev.jdx.core.render.DEFAULT_BODY_MAX_LINES
+import dev.jdx.core.render.DEFAULT_SIGNATURE_LIMIT
 import dev.jdx.core.render.DEFAULT_SOURCE_MAX_LINES
+import dev.jdx.core.render.MemberKind
+import dev.jdx.core.render.SignatureBlock
+import dev.jdx.core.render.SignatureEntry
 import dev.jdx.core.render.SourceBlock
 import dev.jdx.core.render.buildBodyBlock
+import dev.jdx.core.render.buildSignatureBlock
 import dev.jdx.core.render.buildSourceBlock
 import dev.jdx.core.render.DEFAULT_MEMBER_LIMIT
 import dev.jdx.core.render.DEFAULT_SEARCH_LIMIT
@@ -208,6 +213,13 @@ public object JdxService {
             override fun toJson(command: String): String = block.toJson(command)
         }
 
+        /** Member signature(s) (`signature`) — exit 0. */
+        public data class SignatureList(val block: SignatureBlock) : ServiceOutcome {
+            override val exitCode: Int = 0
+            override fun renderText(color: Boolean): String = block.renderText(color)
+            override fun toJson(command: String): String = block.toJson(command)
+        }
+
         /** A machine-legible failure — exit 1..6, never a guess, never a trace. */
         public data class Failure(public val error: ErrorResult) : ServiceOutcome {
             override val exitCode: Int = error.exitCode
@@ -258,6 +270,8 @@ public object JdxService {
         public val lineNumbers: Boolean = false,
         /** Maximum shown lines; the rest become a truncation footer (`--max-lines N`). */
         public val maxLines: Int = DEFAULT_BODY_MAX_LINES,
+        /** Prepend the resolved bytecode signature header (`--with-signature`, T-024). */
+        public val withSignature: Boolean = false,
     )
 
     /**
@@ -493,6 +507,105 @@ public object JdxService {
     }
 
     // -- query pipeline ---------------------------------------------------------
+
+    /** Presentation options for `signature` (PROPOSAL.md §7.1). */
+    public data class SignatureOptions(
+        /** Show bridge/synthetic members (`--include-synthetic`); hidden by default. */
+        public val includeSynthetic: Boolean = false,
+        /** Maximum shown signature rows; the rest become a truncation footer (`--limit N`). */
+        public val maxSignatures: Int = DEFAULT_SIGNATURE_LIMIT,
+    )
+
+    /**
+     * Answers `signature <member>`: one signature line per matching overload (T-024).
+     *
+     * Structure is bytecode-authoritative (D-009): the declaring type resolves
+     * with the same machinery as [show], members match by name/arity/
+     * simple-name narrowing, and each renders through the T-010
+     * [SignatureLines] with real parameter names, generics, throws and
+     * defaults. No sources are read, so sources-less jars answer by design.
+     * An under-specified name lists every overload (exit 0) — a signature can
+     * show many, unlike a body.
+     */
+    public fun signature(
+        rawRef: String,
+        roots: RootsSpec,
+        options: SignatureOptions = SignatureOptions(),
+    ): ServiceOutcome {
+        if (options.maxSignatures < 0) {
+            return failure(3, rawRef, "usage error: --limit must be >= 0, got ${options.maxSignatures}")
+        }
+        val parsed = SymbolRefParser.parse(rawRef)
+        if (parsed is SymbolRefParseResult.Failure) {
+            return failure(
+                3,
+                rawRef,
+                "usage error: invalid reference '$rawRef': ${parsed.message} at column ${parsed.position}",
+            )
+        }
+        val ref = (parsed as SymbolRefParseResult.Ok).ref
+        if (ref is TypeSymbolRef) {
+            return failure(
+                3,
+                rawRef,
+                "usage error: signature takes a member reference like 'com.example.Foo#bar()', " +
+                    "got type '$rawRef' (whole types: jdx show, member lists: jdx members)",
+            )
+        }
+        if (ref is PackageSymbolRef || ref is ModuleSymbolRef) {
+            return failure(3, rawRef, "usage error: signature takes a member reference, got '$rawRef'")
+        }
+        val memberRef = ref as MemberSymbolRef
+        if (roots.jarSpecs.isEmpty() && !roots.includeJdk && memberRef.coordinate == null) {
+            return failure(
+                4,
+                rawRef,
+                "no workspace: no --jars given, no workspace selected (-w <name>, " +
+                    "JDX_WORKSPACE, jdx ws use) and --no-jdk set " +
+                    "(pass --jars <path>, select a workspace, or drop --no-jdk)",
+            )
+        }
+        // A `g:a:v/` prefix scopes the query to one artifact (T-019): its jar
+        // reads first (shadowing order), and candidates match inside it only —
+        // while supertypes still resolve from the full workspace behind it.
+        var scopedRoots = roots
+        var candidateScope: Set<String>? = null
+        val coordinate = memberRef.coordinate
+        if (coordinate != null) {
+            val coordText = "${coordinate.group}:${coordinate.artifact}:${coordinate.version}"
+            val outcome = try {
+                roots.mavenResolve(coordText, roots.allowFetch)
+            } catch (e: Exception) {
+                return failure(
+                    6,
+                    rawRef,
+                    "internal error: coordinate resolution failed: ${e.message ?: e.javaClass.simpleName}",
+                )
+            }
+            val artifact = when (outcome) {
+                is MavenResolver.Outcome.Resolved -> outcome.artifact
+                is MavenResolver.Outcome.Unresolved ->
+                    return failure(5, rawRef, "artifact read error: ${outcome.message}")
+            }
+            val binarySpec = artifact.binaryJar.toString()
+            val scope = try {
+                ArtifactLoader.open(artifact.binaryJar).use { root -> root.classEntryPaths().map(::entryToBinary).toSet() }
+            } catch (e: ArtifactReadException) {
+                return failure(5, rawRef, e.message ?: "artifact read error")
+            } catch (e: Exception) {
+                return failure(6, rawRef, "internal error: ${e.javaClass.simpleName}: ${e.message ?: "no detail"}")
+            }
+            scopedRoots = roots.copy(jarSpecs = listOf(binarySpec) + roots.jarSpecs)
+            candidateScope = scope
+        }
+        return try {
+            executeSignature(memberRef, rawRef, scopedRoots, options, candidateScope)
+        } catch (e: ArtifactReadException) {
+            failure(5, rawRef, e.message ?: "artifact read error")
+        } catch (e: Exception) {
+            failure(6, rawRef, "internal error: ${e.javaClass.simpleName}: ${e.message ?: "no detail"}")
+        }
+    }
 
     private enum class QueryMode(val flag: String) {
         SHOW("show"),
@@ -1635,6 +1748,137 @@ public object JdxService {
         }
     }
 
+    // -- signature execution (T-024) -----------------------------------------------
+
+    /**
+     * Serves `signature <member>`: resolves the declaring type from bytecode
+     * (D-009) with the T-011 machinery, matches members with the shared
+     * bytecode matcher, and renders one [SignatureLines] line per overload in
+     * declaration order.
+     */
+    private fun executeSignature(
+        memberRef: MemberSymbolRef,
+        rawRef: String,
+        roots: RootsSpec,
+        options: SignatureOptions,
+        candidateScope: Set<String>? = null,
+    ): ServiceOutcome {
+        val declaring = memberRef.declaringType as? TypeName.ClassType
+            ?: return failure(3, rawRef, "usage error: signature takes a class member, got '$rawRef'")
+        val opened = openRoots(roots)
+        try {
+            val binariesByRoot = opened.map { it.root.classEntryPaths().map(::entryToBinary).toSet() }
+            val providers = mutableMapOf<String, MutableList<Int>>()
+            binariesByRoot.forEachIndexed { index, binaries ->
+                for (binary in binaries) providers.getOrPut(binary) { mutableListOf() }.add(index)
+            }
+            val allBinaries = providers.keys
+
+            val candidates = matchCandidates(declaring, candidateScope ?: allBinaries)
+            if (candidates.isEmpty()) {
+                val suggestions = suggestSimilar(declaring.simpleName, allBinaries)
+                return ServiceOutcome.Failure(ErrorResult.notFound(rawRef, suggestions))
+            }
+            if (candidates.size > 1) {
+                return ServiceOutcome.Failure(ErrorResult.ambiguous(rawRef, candidates))
+            }
+            val binary = candidates.single()
+            val winner = providers.getValue(binary).first()
+
+            val warnings = mutableListOf<Warning>()
+            warnings.addAll(roots.extraWarnings)
+            for (open in opened) warnings.addAll(open.root.warnings)
+            val extraProviders = providers.getValue(binary).drop(1)
+            if (extraProviders.isNotEmpty()) {
+                val names = listOf(winner).plus(extraProviders).map { rootLabel(opened[it], binary) }
+                warnings.add(
+                    Warning(
+                        code = WarningCode.DUPLICATE_FQN,
+                        message = "$binary is provided by ${names.joinToString(", ")}; " +
+                            "showing ${names.first()} (classpath order)",
+                        subject = binary,
+                    ),
+                )
+            }
+
+            val workspace = Workspace(opened, providers, warnings)
+            val target = workspace.load(binary)
+            if (target == null) {
+                return failure(
+                    5,
+                    rawRef,
+                    "artifact read error: $binary in ${rootLabel(opened[winner], binary)} cannot be parsed",
+                )
+            }
+
+            val bytecodeMatches = matchBytecodeMembers(target, memberRef)
+                .filter { match -> options.includeSynthetic || !isSyntheticMember(match) }
+            if (bytecodeMatches.isEmpty()) {
+                if (memberRef.name == "<clinit>") {
+                    return failure(3, rawRef, "usage error: static initialisers have no signature to show: '$rawRef'")
+                }
+                return ServiceOutcome.Failure(
+                    ErrorResult.notFound(rawRef, suggestSimilarMember(target, memberRef.name)),
+                )
+            }
+
+            val matchRefs = canonicalMemberRefs(target, bytecodeMatches)
+            // Pair in declaration order first: `canonicalMemberRefs` sorts, and
+            // zipping a sorted list against declaration-ordered matches swaps
+            // refs whenever the orders differ (bridge/field siblings).
+            val entries = bytecodeMatches.zip(orderedMemberRefs(target, bytecodeMatches)).map { (match, ref) ->
+                when (match) {
+                    is BytecodeMember.Method -> SignatureEntry(
+                        canonicalRef = ref,
+                        kind = if (match.info.name == "<init>") MemberKind.CONSTRUCTOR else MemberKind.METHOD,
+                        signature = SignatureLines.methodLine(
+                            member = match.info,
+                            declaringSimpleName = target.name.simpleName,
+                        ),
+                        declaringType = binary,
+                    )
+                    is BytecodeMember.Field -> SignatureEntry(
+                        canonicalRef = ref,
+                        kind = MemberKind.FIELD,
+                        signature = SignatureLines.fieldLine(match.info),
+                        declaringType = binary,
+                    )
+                }
+            }
+            val header = SymbolRefPrinter.print(MemberSymbolRef(target.name, memberRef.name))
+            return ServiceOutcome.SignatureList(
+                buildSignatureBlock(
+                    query = header,
+                    declaringType = binary,
+                    entries = entries,
+                    provenance = listOf(
+                        Provenance(
+                            artifact = rootLabel(opened[winner], binary),
+                            origin = if (opened[winner].root.kind == ArtifactKind.JRT) Origin.JRT else Origin.BYTECODE,
+                        ),
+                    ),
+                    warnings = warnings.sortedBy { it.code },
+                    maxSignatures = options.maxSignatures,
+                ),
+            )
+        } finally {
+            opened.forEach { it.root.close() }
+        }
+    }
+
+    /**
+     * Bridge/synthetic members are compiler output, not source API (T-009):
+     * hidden from `signature` unless `--include-synthetic`. The bridge bit
+     * shares its mask with `VOLATILE`, so it is only meaningful on methods —
+     * fields check `SYNTHETIC` alone (mirrors `MemberResolver`).
+     */
+    private fun isSyntheticMember(match: BytecodeMember): Boolean = when (match) {
+        is BytecodeMember.Method ->
+            match.info.access.has(AccessFlag.SYNTHETIC) || match.info.access.has(AccessFlag.BRIDGE)
+        is BytecodeMember.Field ->
+            match.info.access.has(AccessFlag.SYNTHETIC)
+    }
+
     // -- body execution (T-022) ----------------------------------------------------
 
     private fun executeBody(
@@ -1711,6 +1955,22 @@ public object JdxService {
             if (specified && bytecodeMatches.size > 1 && memberRef.returnType == null) {
                 return ServiceOutcome.Failure(ErrorResult.ambiguous(rawRef, matchRefs))
             }
+            // `--with-signature` (T-024): the header comes from the same
+            // bytecode match the body is sliced for — the single match in the
+            // usual case; the first in declaration order for return-qualified
+            // bridge pairs that still resolve one source body.
+            val signatureLine = if (options.withSignature) {
+                val match = bytecodeMatches.singleOrNull() ?: bytecodeMatches.first()
+                when (match) {
+                    is BytecodeMember.Method -> SignatureLines.methodLine(
+                        member = match.info,
+                        declaringSimpleName = target.name.simpleName,
+                    )
+                    is BytecodeMember.Field -> SignatureLines.fieldLine(match.info)
+                }
+            } else {
+                null
+            }
 
             val effectiveRef = memberRef.copy(declaringType = target.name)
             // Source lookup spellings: the query as written, plus — for generic
@@ -1762,6 +2022,7 @@ public object JdxService {
                             warnings = warnings,
                             options = options,
                             rawRef = rawRef,
+                            signature = signatureLine,
                         )
                     }
                     is dev.jdx.sources.JavaBodyResult.MemberNotFound -> {
@@ -2169,6 +2430,7 @@ public object JdxService {
         warnings: List<Warning>,
         options: BodyOptions,
         rawRef: String,
+        signature: String? = null,
     ): ServiceOutcome {
         val fileLines = try {
             sources.openSource(body.file).use {
@@ -2198,6 +2460,7 @@ public object JdxService {
                 contextLines = options.contextLines,
                 lineNumbers = options.lineNumbers,
                 maxLines = options.maxLines,
+                signature = signature,
             ),
         )
     }
@@ -2287,9 +2550,19 @@ public object JdxService {
     /**
      * Canonical refs for bytecode matches: `:return` is suffixed only when sibling
      * rows share name and erased parameters (bridge/covariant overloads,
-     * PROPOSAL.md §6) — the same rule [buildMemberListing] uses.
+     * PROPOSAL.md §6) — the same rule [buildMemberListing] uses. Sorted, so
+     * ambiguity candidate lists are stable.
      */
-    private fun canonicalMemberRefs(target: ClassInfo, matches: List<BytecodeMember>): List<String> {
+    private fun canonicalMemberRefs(target: ClassInfo, matches: List<BytecodeMember>): List<String> =
+        orderedMemberRefs(target, matches).sorted()
+
+    /**
+     * The same refs in declaration order, for pairing against [matches] with
+     * [zip]: the sorted form above must never be zipped against the
+     * declaration-ordered match list — the orders differ for bridge/field
+     * siblings and the refs would land on the wrong rows.
+     */
+    private fun orderedMemberRefs(target: ClassInfo, matches: List<BytecodeMember>): List<String> {
         val methods = matches.filterIsInstance<BytecodeMember.Method>()
         val siblingCounts = methods.groupingBy {
             it.info.name to it.info.descriptor.parameters.joinToString("") { parameter -> parameter.descriptor }
@@ -2317,7 +2590,7 @@ public object JdxService {
                 is BytecodeMember.Field ->
                     SymbolRefPrinter.print(MemberSymbolRef(target.name, match.info.name))
             }
-        }.sorted()
+        }
     }
 
     /** Did-you-mean refs for a missed member: name-near members of the same type. */

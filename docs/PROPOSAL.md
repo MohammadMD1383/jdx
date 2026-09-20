@@ -1113,6 +1113,7 @@ members   --inherited/--declared --kind --static --instance --access --from
 body      --engine vineflower|javap --with-doc --with-signature --context N
           --line-numbers --max-lines
 source    --lines A:B --around <ref> --context N
+signature <member> [--include-synthetic --limit]
 doc       --inherited/--no-inherited --raw
 search    --kind --regex --fuzzy --in --package --limit
 resolve   <name> [--limit]

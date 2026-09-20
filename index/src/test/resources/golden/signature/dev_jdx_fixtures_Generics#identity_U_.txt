@@ -1,0 +1,4 @@
+signatures of dev.jdx.fixtures.Generics#identity
+  public U identity(U value)
+source: fixture-corpus.jar (bytecode)
+next: jdx show dev.jdx.fixtures.Generics

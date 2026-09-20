@@ -10,6 +10,7 @@ import dev.jdx.cli.commands.DoctorCommand
 import dev.jdx.cli.commands.LsCommand
 import dev.jdx.cli.commands.cacheGroup
 import dev.jdx.cli.commands.BodyCommand
+import dev.jdx.cli.commands.SignatureCommand
 import dev.jdx.cli.commands.SourceCommand
 import dev.jdx.cli.commands.MembersCommand
 import dev.jdx.cli.commands.OutlineCommand
@@ -90,6 +91,7 @@ fun main(args: Array<String>): Unit =
         OutlineCommand(),
         BodyCommand(),
         SourceCommand(),
+        SignatureCommand(),
         SearchCommand(),
         ResolveCommand(),
         LsCommand(),

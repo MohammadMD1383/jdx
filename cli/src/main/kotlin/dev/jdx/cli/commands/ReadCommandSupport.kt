@@ -465,6 +465,19 @@ internal fun defaultSourceQuery(
     options: JdxService.SourceOptions,
 ): JdxService.ServiceOutcome = JdxService.source(ref, roots, options)
 
+/** Query behind `signature`, injectable so command tests run without IO (T-024). */
+internal typealias SignatureQuery = (
+    ref: String,
+    roots: JdxService.RootsSpec,
+    options: JdxService.SignatureOptions,
+) -> JdxService.ServiceOutcome
+
+internal fun defaultSignatureQuery(
+    ref: String,
+    roots: JdxService.RootsSpec,
+    options: JdxService.SignatureOptions,
+): JdxService.ServiceOutcome = JdxService.signature(ref, roots, options)
+
 /** Query behind `search`, injectable so command tests run without IO (T-017). */
 internal typealias SearchQuery = (
     pattern: String,

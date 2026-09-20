@@ -17,6 +17,8 @@ public const val DEFAULT_BODY_MAX_LINES: Int = 200
  * slice after `--context` expansion and `--max-lines` truncation. With
  * `--line-numbers` each shown line is prefixed `NNN | ` in text; JSON always carries
  * the bare `text` plus the numeric ranges, so text⊆JSON (D-007) holds either way.
+ * [signature] is the `--with-signature` header (T-024): the resolved bytecode
+ * signature line, or `null` when the flag is off.
  */
 public data class BodyBlock(
     public val canonicalRef: String,
@@ -30,11 +32,13 @@ public data class BodyBlock(
     public val truncation: Truncation?,
     public val warnings: List<Warning>,
     public val provenance: List<Provenance>,
+    public val signature: String? = null,
 ) {
     /** Text layout per PROPOSAL.md §8.1: ref header, source line, verbatim body, next hint. */
     public fun renderText(color: Boolean = false): String {
         val out = mutableListOf(canonicalRef)
         out.add("  source: ${provenance.firstOrNull()?.artifact ?: "?"} · $file:$startLine-$endLine")
+        signature?.let { out.add("  signature: $it") }
         lines.forEachIndexed { index, line ->
             out.add(if (lineNumbers) "${displayStartLine + index} | $line" else line)
         }
@@ -51,6 +55,7 @@ public data class BodyBlock(
             append("{\"ref\":").append(JsonEscape.quote(canonicalRef))
             append(",\"declaring\":").append(JsonEscape.quote(declaringType))
             append(",\"file\":").append(JsonEscape.quote(file))
+            signature?.let { append(",\"signature\":").append(JsonEscape.quote(it)) }
             append(",\"lines\":[").append(startLine).append(",").append(endLine).append("]")
             append(",\"displayLines\":[").append(displayStartLine).append(",")
                 .append(displayStartLine + lines.size - 1).append("]")
@@ -118,6 +123,7 @@ public fun buildBodyBlock(
     contextLines: Int = 0,
     lineNumbers: Boolean = false,
     maxLines: Int = Int.MAX_VALUE,
+    signature: String? = null,
 ): BodyBlock {
     val (displayStart, shown, truncation) = sliceBodyLines(fileLines, startLine, endLine, contextLines, maxLines)
     return BodyBlock(
@@ -132,5 +138,6 @@ public fun buildBodyBlock(
         truncation = truncation,
         warnings = warnings,
         provenance = provenance,
+        signature = signature,
     )
 }

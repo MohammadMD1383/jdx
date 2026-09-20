@@ -4,6 +4,105 @@ Newest first. Each entry follows the template at the bottom of `docs/PROGRESS.md
 
 ---
 
+## Session 43 — 2026-09-20 — T-024 `jdx signature` over bytecode done
+**Agent/Author:** Muse Spark 1.3 Free · **Commits:** `1093bfa` (claim) + closing commit (this session)
+
+### Goal
+Implement T-024, the third M3 CLI slice: `jdx signature` — member
+signatures from bytecode alone (the parameter-info popup, PROPOSAL.md
+§7.1). No sources needed (sources-less jars answer by design), no
+decompilation (T-026/T-027), no Kotlin `@Metadata` views (T-035…T-037), no
+javadoc (T-025).
+
+### What I did
+- `core/.../render/Signature.kt` (new): `SignatureBlock` result model
+  (`signatures of Declaring#name` header, one bare signature line per
+  overload in declaration order, `source:` line, truncation footer,
+  warnings, `next: jdx show` hint; text+JSON parity like `BodyBlock`) +
+  `buildSignatureBlock` (via `truncateEntities`, `--limit N` hint) +
+  `DEFAULT_SIGNATURE_LIMIT = 50`.
+- `index`: `JdxService.signature(rawRef, roots, SignatureOptions)` — type
+  resolution with the T-011 machinery (exact/short-name, `g:a:v` scope,
+  `DUPLICATE_FQN`), bytecode-authoritative (D-009); members match with the
+  shared `matchBytecodeMembers`, bridge/synthetic filtered unless
+  `includeSynthetic`. Under-specified names list every overload exit 0 (a
+  signature can show many, unlike a body). New
+  `ServiceOutcome.SignatureList` (+ the two `CorpusSoakTest`
+  exhaustive-`when` branches).
+- `cli`: thin `SignatureCommand` (registered in `JdxCli`;
+  `--include-synthetic`/`--limit` live, shared roots flags) +
+  `SignatureQuery` seam in `ReadCommandSupport`.
+- `body --with-signature` (parked on this task) now works instead of
+  exiting 3: `BodyOptions.withSignature` renders the matched bytecode line
+  as `  signature:` between the source line and the slice
+  (`BodyBlock.signature`, optional JSON key, off by default — existing
+  goldens unaffected).
+- Real bug caught by the golden review (fixed, pinned): refs were zipped
+  from the sorted `canonicalMemberRefs` against declaration-ordered
+  matches, swapping `:return` suffixes (bridge JSON showed `Child copy()`
+  with a `:Base` ref; field/method refs swapped too). Split into
+  `orderedMemberRefs` (pair in source order) + sorted wrapper for
+  ambiguity lists — `body`/`source` behaviour byte-identical (L-071).
+- Tests: core `SignatureBlockTest` (9 examples) +
+  `SignatureBlockPropertyTest` (4 thousand-case properties: determinism,
+  text⊆JSON, truncation law, no-escapes) + 3 `BodyBlockTest` header tests;
+  index `SignatureServiceTest` (21 tier-2: generics/erased-spelling/ctor/
+  field+method/nesting/bridges/limit/usage/no-roots/determinism/JSON +
+  two alignment regression tests) + `SignatureGoldenTest` (10 files over 4
+  fixture members incl. synthetic-bridge and limit variants — diff read
+  before accepting) + `BodyServiceTest` header test; cli
+  `SignatureCommandTest` (4 tier-1, hermetic) +
+  `SignatureCommandsServiceTest` (8 tier-2, hermetic, incl. D-017) +
+  `BodyCommandTest`/`BodyCommandsServiceTest` updates for the live flag.
+- Verified: full `./gradlew check -x verifyTier1Budget` green incl. JaCoCo
+  gates (1,181 tests, 0 failures/errors across all result XML); full
+  `check` red only on `verifyTier1Budget` (pre-existing machine variance —
+  slowest are `DoctorEnvironmentTest`/`JavaBodiesTest`, none from this
+  task). Live proof via `app/build/jdx` (see below).
+- Docs: T-024 DONE with notes; PROGRESS.md CURRENT STATE + items 16/18;
+  Appendix B gains the `signature` row; L-071 distilled.
+
+### Decisions made
+- None (no new D-nnn). Under-specified member refs list all overloads exit
+  0 rather than exit 2: a signature block can hold many rows, so listing is
+  not guessing (D-016); type-level ambiguity still exits 2.
+- Signature entries stay in declaration order (methods-then-fields as the
+  matcher returns), not ref-sorted: deterministic from fixed class bytes,
+  and overload families read naturally.
+
+### Tasks moved
+- T-024: TODO → WIP (`1093bfa`) → DONE.
+
+### Lessons distilled
+- **L-071** — never zip a sorted view against its unordered source (pair in
+  source order via `orderedMemberRefs`, then sort the pairs if needed).
+
+### What works now (and how to verify it yourself)
+```bash
+JAR=testfixtures/build/libs/testfixtures-0.1.0-SNAPSHOT.jar
+./app/build/jdx signature 'dev.jdx.fixtures.Generics#identity(U)' --jars "$JAR" --no-jdk
+# exit 0: `public U identity(U value)`, bytecode provenance, next hint
+./app/build/jdx signature 'dev.jdx.fixtures.CovariantOverrides$Child#copy' --jars "$JAR" --no-jdk --include-synthetic --json
+# exit 0: both overloads, `:return` refs aligned with their signatures
+./app/build/jdx body 'dev.jdx.fixtures.Generics#identity(U)' --jars "$JAR" --no-jdk --with-signature
+# exit 0: `  signature: public U identity(U value)` above the slice
+./gradlew check -x verifyTier1Budget  # green incl. gates (1,181 tests, 0 failures)
+```
+
+### What is broken / half-done
+- Nothing from this task. Pre-existing, untouched: `verifyTier1Budget` red on
+  this machine; sessions 24–28 + 36–42 unpushed before this session's push
+  (push needs owner go-ahead per D-012).
+
+### Open questions / blockers
+- None.
+
+### Next action
+- **T-025** (`jdx doc` incl. inherited javadoc — expand into a detail block
+  when started; T-026…T-028 remain M3 one-liners).
+
+---
+
 ## Session 42 — 2026-09-20 — T-023 `jdx source` over the T-021 seam done
 **Agent/Author:** Muse Spark 1.3 Free · **Commits:** `e01141b` (claim) + closing commit (this session)
 

@@ -157,6 +157,18 @@ class BodyCommandsServiceTest {
     }
 
     @Test
+    fun `with-signature prepends the resolved header`() {
+        val run = run(
+            listOf("body") + fixtureArgs(
+                "dev.jdx.fixtures.Generics#identity(java.lang.Object)",
+                "--with-signature",
+            ),
+        )
+        run.exit shouldBe 0
+        run.output shouldContain "  signature: public U identity(U value)"
+    }
+
+    @Test
     fun `querying the marker fixture never loads it (D-017)`() {
         val marker = File(System.getProperty("java.io.tmpdir"), "jdx-fixture-static-init-marker")
         marker.exists() shouldBe false

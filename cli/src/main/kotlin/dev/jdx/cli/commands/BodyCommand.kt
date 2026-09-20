@@ -72,7 +72,7 @@ class BodyCommand(
 
     private val withSignature by option(
         "--with-signature",
-        help = "Include the resolved signature header (not yet implemented, T-024).",
+        help = "Prepend the resolved bytecode signature header to the body.",
     ).flag()
 
     private val jars by option(
@@ -130,7 +130,6 @@ class BodyCommand(
             maxLines = maxLines,
             engine = engine,
             withDoc = withDoc,
-            withSignature = withSignature,
         )
         if (usageError != null) {
             val failure = JdxService.ServiceOutcome.Failure(
@@ -158,6 +157,7 @@ class BodyCommand(
                         contextLines = context,
                         lineNumbers = lineNumbers,
                         maxLines = maxLines,
+                        withSignature = withSignature,
                     ),
                 )
                 ReadCommandSupport.finish(outcome, "body", json, noColor, terminate)
@@ -178,7 +178,6 @@ internal fun validateBodyFlags(
     maxLines: Int,
     engine: String?,
     withDoc: Boolean,
-    withSignature: Boolean,
 ): String? {
     if (context < 0) return "usage error: --context must be >= 0, got $context"
     if (maxLines < 0) return "usage error: --max-lines must be >= 0, got $maxLines"
@@ -188,9 +187,6 @@ internal fun validateBodyFlags(
     }
     if (withDoc) {
         return "usage error: --with-doc is not yet implemented (T-025: javadoc/KDoc rendering)"
-    }
-    if (withSignature) {
-        return "usage error: --with-signature is not yet implemented (T-024: jdx signature)"
     }
     return null
 }

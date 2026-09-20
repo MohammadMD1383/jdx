@@ -189,6 +189,21 @@ class BodyServiceTest {
     }
 
     @Test
+    fun `with-signature prepends the resolved header`() {
+        val plain = JdxService.body("dev.jdx.fixtures.Generics#identity(java.lang.Object)", fixtureRoots())
+        plain.exitCode shouldBe 0
+        textOf(plain) shouldNotContain "  signature:"
+        val dressed = JdxService.body(
+            "dev.jdx.fixtures.Generics#identity(java.lang.Object)",
+            fixtureRoots(),
+            BodyOptions(withSignature = true),
+        )
+        dressed.exitCode shouldBe 0
+        textOf(dressed) shouldContain "  signature: public U identity(U value)"
+        dressed.toJson("body") shouldContain "\"signature\":\"public U identity(U value)\""
+    }
+
+    @Test
     fun `negative context and max-lines are usage errors`() {
         JdxService.body("dev.jdx.fixtures.Generics#identity(java.lang.Object)", fixtureRoots(), BodyOptions(contextLines = -1))
             .exitCode shouldBe 3
