@@ -1183,7 +1183,7 @@ anchored absolutely (a relative glob resolves against the process CWD), and
 redundant `.`/`..` decorations only compose when each is derived from the base
 path — chained decorations land on absent paths (exit 5).*
 
-### T-070 — Make the tier-2 read-command tests hermetic to the machine's workspaces · `TODO`
+### T-070 — Make the tier-2 read-command tests hermetic to the machine's workspaces · `WIP`
 **Depends:** T-066 · **Files:** `cli/src/test/kotlin/.../commands/ReadCommandsServiceTest.kt`, `ReadCommandsGoldenTest.kt`, `SortOrdersGoldenTest.kt`, `ReadCommandDiscoveryTest.kt`
 *(Added in session 35: found while verifying T-066 — same trap as L-038/T-066, tier-2 half.)*
 
