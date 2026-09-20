@@ -1010,6 +1010,34 @@ stored workspace mirror). `check` green shelved; `cli:tier2Test` with ambient
 ### T-020 Sources-jar/dir access and `srcmap` · **T-021** JavaParser integration and Java body extraction · **T-022** `jdx body` · **T-023** `jdx source` · **T-024** `jdx signature` · **T-025** `jdx doc` incl. inherited javadoc · **T-026** `DecompilerEngine` interface + Vineflower (isolated lazy classloader, on-disk cache) · **T-027** `javap` engine · **T-028** `SOURCES_VERSION_MISMATCH` detection
 *(Expand into detail blocks when M3 starts.)*
 
+### T-021 — JavaParser integration and Java body extraction · `WIP` (session 40)
+**Depends:** T-071 · **Files:** `sources/src/main/kotlin/dev/jdx/sources/JavaBodies.kt`
+*(First parsing slice of M3: library-level extraction over the T-071 `SourceRoot`
+seam. No CLI surface — `jdx body`/`source` wire this up in T-022/T-023. Kotlin
+`.kt` bodies stay in T-039; decompilation stays in T-026/T-027.)*
+
+Parse `.java` source text with JavaParser and extract verbatim member bodies
+with 1-based line ranges: `findJavaBodies(root, MemberSymbolRef)` navigates
+`$`-nesting to the declaring type, matches methods/ctors/fields, and slices
+the original text via the AST `Range` (ground-truth bytes, never
+pretty-printed). Structure stays bytecode-authoritative (D-009): overload
+matching is arity-first with source-simple-name narrowing; an under-specified
+ref returns every overload (the exit-2 set T-022 will render).
+
+**Acceptance**
+- [ ] `findJavaBodies(root, ref)` returns a sealed value — `Found(bodies)`,
+      `NoSource`, `NotJava` (`.kt` only — T-039), `MemberNotFound`, `ParseError`
+      — never throws on agent-reachable input (malformed source, hostile names)
+- [ ] `<init>` matches constructors; fields match by variable name; bodies are
+      verbatim slices with 1-based `[startLine, endLine]`, deterministic
+- [ ] Tier-1: pure examples over inline sources + 1,000-case properties
+      (hostile-input never-throws, slice-is-subslice law, parse-twice
+      determinism); tier-2: real reads from the fixture `-sources.jar`
+      (`Generics#identity`, `Nesting$Inner#outer`, a bridge-absent-from-sources
+      case, a field, a ctor) + a crafted truncated-source fault (value, no throw)
+- [ ] `sources` still does not depend on `index`; `core` stays dependency-free;
+      `:sources:check` green incl. the 85 % line gate
+
 # M4 — Graph
 ### T-029 Reference-edge extraction · **T-030** `jdx usages` · **T-031** project source-dir usages · **T-032** `jdx hierarchy` / `implementors` · **T-033** `jdx callers` / `calls --depth` · **T-034** `jdx samples` with exemplariness ranking
 
