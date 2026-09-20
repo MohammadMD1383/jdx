@@ -4,6 +4,74 @@ Newest first. Each entry follows the template at the bottom of `docs/PROGRESS.md
 
 ---
 
+## Session 39 — 2026-09-20 — T-071 `sources` SourceRoot (first M3 slice) done
+**Agent/Author:** Muse Spark 1.3 Free · **Commits:** `4b08c7a` (claim) + closing commit (this session)
+
+### Goal
+Implement T-071, the first expanded M3 slice (of one-liner T-020): open a
+`-sources.jar`, a source directory, or `src.zip` uniformly and map
+`binaryName → source file` — the seam `body`/`source`/`doc` (T-021…) will read
+through. No parsing, no CLI surface.
+
+### What I did
+- `sources/src/main/kotlin/dev/jdx/sources/SourceRoot.kt` (new): sealed
+  `SourceRoot` (`displayName`, `sourcePaths()` sorted `.java`/`.kt`-only,
+  `openSource`, `findSource` with `.java`-first candidates), pure
+  `sourceCandidatesFor` (`$`-nesting → outer file, blank → empty, never throws),
+  `openSourceRoot` jar/dir dispatch, `SourceReadException`, `JarSourceRoot`
+  (normalised→raw entry map built once) and `DirSourceRoot` (walk +
+  `startsWith` containment). Entry-name hardening twins `ZipSafety` locally —
+  `:sources` must not depend on `:index` and `core` stays dependency-free —
+  with the mirror-mutual rule in the KDoc.
+- Tests: tier-1 `SourcePathMappingTest` (4 examples + 2 thousand-case
+  properties: nesting-collapse/`java`-first law, hostile-input never-throws);
+  tier-2 `SourceRootTest` (crafted hostile jar — traversal/absolute/`.class`
+  entries unlisted and unopenable; crafted dir; dispatch; real fixture
+  `-sources.jar`: `Nesting$Inner → Nesting.java`, `KotlinShapes.kt` listed).
+  `sources/build.gradle.kts` gained kotest-property (catalog version, T-001
+  rule) + the `jdx.fixturesDir`/dependsOn wiring.
+- One real bug caught by the new tests: `DirSourceRoot.openSource` initially
+  served any regular file under the dir (jar side only served listed sources).
+  Fixed to servable = listed source kinds; the tier-2 test pins the parity.
+- Verified: `:sources:test` + `:sources:tier2Test` green;
+  `:sources:check --rerun-tasks` green incl. the 85 % JaCoCo line gate;
+  full `test`+`tier2Test` 973 tests, 0 failures, 0 errors. Full `check` red
+  only on `verifyTier1Budget` — pre-existing machine variance (sessions
+  34/37/38; slowest suites `JdkLayoutTest`/`DoctorEnvironmentTest`, none from
+  this task; `:sources` tier-1 contributes 2.0 s).
+
+### Decisions made
+- None new (no genuine ambiguity; layout follows the T-007 artifact precedent).
+
+### Tasks moved
+- T-071: TODO → WIP (`4b08c7a`) → DONE.
+
+### Lessons distilled
+- None new (no toolchain or spec gotcha; the extension-parity fix is pinned by
+  the test itself).
+
+### What works now (and how to verify it yourself)
+```bash
+./gradlew :sources:check -x verifyTier1Budget --rerun-tasks  # green incl. coverage gate
+./gradlew :sources:test -x verifyTier1Budget --rerun-tasks   # 6 tier-1 tests
+./gradlew :sources:tier2Test --rerun-tasks                   # 4 tier-2 tests
+```
+
+### What is broken / half-done
+- Nothing from this task. Pre-existing, untouched: `verifyTier1Budget` red on
+  this machine (see above); sessions 24–28 + 36–39 unpushed (push needs owner
+  go-ahead per D-012).
+
+### Open questions / blockers
+- None.
+
+### Next action
+- **T-021** (JavaParser integration and Java body extraction over the T-071
+  seam) — needs expanding into a detail block when started; T-022…T-028 remain
+  M3 one-liners.
+
+---
+
 ## Session 38 — 2026-09-20 — T-070 tier-2 read-command hermeticity done
 **Agent/Author:** Muse Spark 1.3 Free · **Commits:** `610a919` (claim) + closing commit (this session)
 

@@ -51,10 +51,10 @@ be fiction.
 | **M6** | Serving: daemon, MCP, HTTP, `batch` | TODO |
 | **M7** | Polish: token budgets, AppCDS, mutation gates, docs, install | TODO |
 
-**T-001 through T-019, T-053 through T-070 are `DONE`.** M0's test spine is
+**T-001 through T-019, T-053 through T-071 are `DONE`.** M0's test spine is
 complete; T-057…T-060 unblock as their milestones land. M1 (read path) is complete;
 M2 hardening is complete (T-070 closed the tier-2 half of T-066).
-**T-071 (first expanded M3 slice: sources-jar/dir access) is `WIP`.**
+**M3 has started: T-071 (`sources` `SourceRoot` access, first slice of T-020) is DONE.**
 
 ---
 
@@ -1224,7 +1224,7 @@ tier-1 test added here, 0 test failures.*
 
 ---
 
-### T-071 — `sources`: sources-jar/dir access (`SourceRoot`) · `WIP` (session 39)
+### T-071 — `sources`: sources-jar/dir access (`SourceRoot`) · `DONE` (session 39)
 **Depends:** — · **Files:** `sources/src/main/kotlin/dev/jdx/sources/SourceRoot.kt`
 *(First expanded slice of the M3 one-liner T-020. Parsing/AST work stays in T-021;
 decompilation stays in T-026/T-027; no CLI surface yet — this task only opens
@@ -1247,6 +1247,27 @@ before any JavaParser/Kotlin-PSI parsing happens.
       determinism) + a real read from the fixture `-sources.jar`
 - [ ] `sources` must not depend on `index` (entry-name hardening lives here,
       documented why — the T-007 `ZipSafety` twin); `core` stays dependency-free
+
+*Implementation notes (session 39): `sources/.../SourceRoot.kt` — sealed
+`SourceRoot` (`displayName`, sorted `.java`/`.kt`-only `sourcePaths`,
+`openSource`, `findSource` with `.java`-first candidates from the pure
+`sourceCandidatesFor`; linear scan, `srcmap` indexing deferred per PROPOSAL
+§10.4) + `JarSourceRoot` (normalised→raw entry map built once, so `openSource`
+cannot be smuggled a raw `../`) + `DirSourceRoot` (walk + `startsWith` containment
+check) + `openSourceRoot` dispatch + `SourceReadException`. `DirSourceRoot`
+initially served any regular file under the dir; a failing tier-2 test pinned
+the parity fix (only listed source kinds are servable). Entry-name hardening
+twins `ZipSafety` locally with the no-`index`-dependency rationale in the KDoc.
+Tests: 6 tier-1 (`SourcePathMappingTest`: 4 examples + 2 thousand-case
+properties — nesting-collapse/`java`-first law, hostile-input never-throws) +
+4 tier-2 (`SourceRootTest`: crafted hostile jar/dir, dispatch, real fixture
+`-sources.jar` read incl. `Nesting$Inner → Nesting.java`). `sources/build.gradle.kts`
+gained kotest-property + the `jdx.fixturesDir`/dependsOn wiring both suites need.
+Standing bar: `test`+`tier2Test` 973 tests 0 failures; `:sources:check` green
+incl. the 85 % line gate. Full `check` red only on `verifyTier1Budget`
+(pre-existing machine variance per sessions 34/37/38 — slowest suites are
+`JdkLayoutTest`/`DoctorEnvironmentTest`, none from this task; `:sources` tier-1
+contributes 2.0 s). Next slice: T-021 (JavaParser body extraction over this seam).*
 
 ---
 

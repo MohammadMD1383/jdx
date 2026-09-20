@@ -1,3 +1,5 @@
+import org.gradle.api.tasks.testing.Test
+
 plugins {
     alias(libs.plugins.pitest)
 }
@@ -5,6 +7,21 @@ plugins {
 dependencies {
     implementation(project(":core"))
     implementation(libs.javaparser.core)
+    testImplementation(libs.kotest.property)
+}
+
+// Fixture `-sources.jar` reads (T-071 tier-2 suite). Depend on the jars so a clean
+// checkout cannot run against stale ones, and hand the directory in as a system
+// property so tests never hard-code an absolute path (same pattern as
+// `core/build.gradle.kts` and `index/build.gradle.kts`, T-006).
+listOf("test", "tier2Test").forEach { taskName ->
+    tasks.named<Test>(taskName) {
+        dependsOn(":testfixtures:jar", ":testfixtures:sourcesJar")
+        systemProperty(
+            "jdx.fixturesDir",
+            project(":testfixtures").layout.buildDirectory.dir("libs").get().asFile.absolutePath,
+        )
+    }
 }
 
 // Mutation testing (T-060, D-021): measured and reported, not gated. This module is a
