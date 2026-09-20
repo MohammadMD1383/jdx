@@ -1168,6 +1168,44 @@ context 1 --line-numbers`, member-ref → exit 3. Lessons L-068 (phantom
 trailing line), L-069 (seam-reuse degradations), L-070 (whole-output
 shouldNotContain); decision D-036.*
 
+### T-024 — `jdx signature` over bytecode · `WIP`
+**Depends:** T-011 (read-command patterns), T-015/T-016 (roots) · **Files:** `core/.../render/Signature.kt`, `index/.../service/JdxService.kt` (`signature`), `cli/.../commands/SignatureCommand.kt`
+*(Third CLI slice of M3: member signatures from bytecode alone — the "parameter
+info" popup (PROPOSAL.md §7.1). No sources needed (works sources-less by
+design), no decompilation (T-026/T-027), no Kotlin `@Metadata` views (T-035…
+T-037), no javadoc (T-025). Structure stays bytecode-authoritative (D-009):
+the declaring type resolves with the T-011 machinery, then matching members
+render through the T-010 `SignatureLines`.)*
+
+Wire pure-bytecode signature rendering to the CLI: `JdxService.signature(
+rawRef, roots, opts)` resolves the declaring type with the T-011 machinery
+(exact/short-name matching, `g:a:v` scope, `DUPLICATE_FQN`), matches members
+by name/arity/simple-name narrowing (the `executeBody` matcher), and renders
+one signature line per overload with real parameter names, generics, throws
+and defaults.
+
+**Acceptance**
+- [ ] `jdx signature '<member-ref>'` returns one signature line per matching
+      overload plus provenance (artifact, `BYTECODE`/`JRT`) — e.g.
+      `dev.jdx.fixtures.Generics#identity` from the fixture binary jar
+- [ ] Under-specified refs list every overload exit 0 (a signature *can* show
+      many — unlike `body`); unknown type/member exit 1 with did-you-mean;
+      type refs exit 3 naming `show`/`members`; invalid refs exit 3
+- [ ] Bridge/synthetic hidden by default, shown with `--include-synthetic`;
+      `<clinit>` exits 3; no roots exit 4; never throws, never a stack trace
+- [ ] Flags: `--include-synthetic`, `--limit N` work; `--jars`/`-w`/
+      `--no-jdk`/`--coord`/`--repo`/`--fetch`/`--json`/`--no-color` shared
+      with the read commands
+- [ ] Text+JSON parity (D-007), deterministic bytes, `--limit` truncation
+      with `shown`/`total`/`hint`, `next:` hint line
+- [ ] Tests: core tier-1 examples + 1,000-case properties (determinism,
+      text⊆JSON, truncation law); index tier-2 service tests over fixture jars
+      (found/multi-overload/not-found/no-roots/determinism) + text+JSON
+      goldens; cli tier-1 flag validation (hermetic) + tier-2 in-process tests
+      (hermetic, exits/text⊆JSON/determinism); tiers 1+2 green
+- [ ] `--help` text, Appendix B signature flags verified, `TASKS.md` status,
+      `PROGRESS.md` entry
+
 ### T-021 — JavaParser integration and Java body extraction · `DONE` (session 40)
 **Depends:** T-071 · **Files:** `sources/src/main/kotlin/dev/jdx/sources/JavaBodies.kt`
 *(First parsing slice of M3: library-level extraction over the T-071 `SourceRoot`
