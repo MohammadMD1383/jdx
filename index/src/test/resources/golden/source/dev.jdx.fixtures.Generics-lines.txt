@@ -1,0 +1,6 @@
+dev.jdx.fixtures.Generics
+  source: fixture-sources.jar · dev/jdx/fixtures/Generics.java:22-24
+22 |     public U identity(U value) {
+23 |         return value;
+24 |     }
+next: jdx show dev.jdx.fixtures.Generics

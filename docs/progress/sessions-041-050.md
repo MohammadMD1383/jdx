@@ -4,6 +4,114 @@ Newest first. Each entry follows the template at the bottom of `docs/PROGRESS.md
 
 ---
 
+## Session 42 — 2026-09-20 — T-023 `jdx source` over the T-021 seam done
+**Agent/Author:** Muse Spark 1.3 Free · **Commits:** `e01141b` (claim) + closing commit (this session)
+
+### Goal
+Implement T-023, the second M3 CLI slice: wire the T-021 seam to `jdx
+source` — whole source files / slices from paired Java sources only. No
+decompilation (T-026/T-027), no Kotlin bodies (T-039), no doc/signature
+enrichment (T-025/T-024), no `SOURCES_VERSION_MISMATCH` formalism (T-028 —
+best-effort message only), no `--src`/`--sources` flags (T-031).
+
+### What I did
+- `core/.../render/Source.kt` (new): `SourceBlock` result model (canonical
+  type-ref header, `source:` line, verbatim lines, truncation footer,
+  warnings, `next: jdx show` hint; text+JSON parity like `BodyBlock`) + pure
+  `sliceSourceLines` + `buildSourceBlock` + `DEFAULT_SOURCE_MAX_LINES = 200`.
+- `index`: `JdxService.source(rawRef, roots, SourceOptions)` — type
+  resolution with the T-011 machinery (exact/short-name, `g:a:v` scope,
+  `DUPLICATE_FQN`), bytecode-authoritative (D-009). Whole files and `--lines`
+  windows served verbatim without parsing via the shared `readSourceLines`
+  helper; `--around` locates the member through T-021 with bytecode-first
+  ambiguity plus the erased→generic-spelling retry, mirroring `executeBody`.
+  New `ServiceOutcome.Source` (+ the two `CorpusSoakTest` exhaustive-`when`
+  branches).
+- `cli`: thin `SourceCommand` (registered in `JdxCli`; `--lines`/`--around`/
+  `--context`/`--line-numbers`/`--max-lines` live, `--engine` exits 3 naming
+  T-026/T-027) + `parseLinesWindow` + `SourceQuery` seam in
+  `ReadCommandSupport`.
+- Tests: core `SourceBlockTest` (12 examples) + `SourceBlockPropertyTest` (4
+  thousand-case properties) + `parseLinesWindow` examples; index
+  `SourceServiceTest` (22 tier-2) + `SourceGoldenTest` (8 files over 3
+  fixture types incl. a lines+numbers variant — diff read before accepting);
+  cli `SourceCommandTest` (10 tier-1, hermetic) +
+  `SourceCommandsServiceTest` (8 tier-2, hermetic, incl. D-017).
+- Real bugs caught by the tests (all fixed, all pinned): (1) serving a
+  newline-terminated file via `split('\n')` reported a phantom 39th line —
+  fixed with the shared `readSourceLines` trailing-line drop (L-068);
+  (2) `.kt`-only roots were served raw as a Java answer (exit 0) because
+  `findSource` — unlike `findJavaBodies` — does not filter them — fixed with
+  an explicit T-039 degradation (L-069); (3) the D-017 test's
+  `shouldNotContain "Exception"` failed on correct output because
+  `StaticInitMarker.java` catches `Exception` in its own text — dropped in
+  favour of exit-0 + absent-marker proof (L-070).
+- Verified: `:core:test`, `:index:test+tier2Test`, `:cli:test+tier2Test`
+  green (1,129 tests, 0 failures/errors across all result XML); full
+  `./gradlew check -x verifyTier1Budget` green incl. JaCoCo gates;
+  `./gradlew soak` green (2m 20s). Full `check` red only on
+  `verifyTier1Budget` (64.6 s vs 30 s — pre-existing machine variance;
+  slowest are `JavaBodiesTest`/`DoctorEnvironmentTest`, none from this task).
+  Live proof via `app/build/jdx` (see below).
+- Two self-inflicted edit wounds, both repaired byte-identically before
+  committing (verified with `git diff`): an `edit` whose `newString`
+  truncated the T-022 implementation notes, and an `edit` that deleted the
+  `BodyQuery` typealias instead of appending after it. Lesson: never reuse a
+  large block as edit context — anchor on the smallest unique string, and
+  `git diff` immediately after every docs edit.
+
+### Decisions made
+- D-036 (`jdx source` output semantics: type-scoped with `--around` entry,
+  verbatim-no-parse files/windows, `--lines` clamping/beyond-EOF, trailing-
+  line drop, body-matching presentation, bytecode-first `--around`
+  ambiguity) in `docs/decisions/D-026-050.md`.
+
+### Tasks moved
+- T-023: TODO → WIP (`e01141b`) → DONE.
+
+### Lessons distilled
+- **L-068** — `split('\n')` invents a phantom last line on
+  newline-terminated files (one shared file→lines helper).
+- **L-069** — reusing a seam below the old caller's level must re-check
+  every degradation branch (the `.kt` bypass).
+- **L-070** — whole-output `shouldNotContain` fails on words the file
+  legitimately contains (D-017 proof is exit + absent marker).
+
+### What works now (and how to verify it yourself)
+```bash
+JAR=testfixtures/build/libs/testfixtures-0.1.0-SNAPSHOT.jar
+./app/build/jdx source 'dev.jdx.fixtures.Generics' --jars "$JAR" --no-jdk
+# exit 0: whole file, `-sources.jar` provenance, 1-38
+./app/build/jdx source 'dev.jdx.fixtures.Generics' --jars "$JAR" --no-jdk --lines 22:24
+# exit 0: identity window only
+./app/build/jdx source 'dev.jdx.fixtures.Generics' --jars "$JAR" --no-jdk \
+  --around 'dev.jdx.fixtures.Generics#identity(java.lang.Object)' --context 1 --line-numbers
+# exit 0: member slice with numbers
+./app/build/jdx source 'dev.jdx.fixtures.Generics#identity(Object)' --jars "$JAR" --no-jdk
+# exit 3 naming --around
+./gradlew :core:test --tests "dev.jdx.core.render.SourceBlock*" \
+  :index:tier2Test --tests "dev.jdx.index.service.SourceServiceTest" \
+  --tests "dev.jdx.index.render.SourceGoldenTest" :cli:test \
+  --tests "dev.jdx.cli.commands.SourceCommandTest" :cli:tier2Test \
+  --tests "dev.jdx.cli.commands.SourceCommandsServiceTest" -x verifyTier1Budget
+./gradlew check -x verifyTier1Budget  # green incl. gates
+./gradlew soak                        # green (2m 20s)
+```
+
+### What is broken / half-done
+- Nothing from this task. Pre-existing, untouched: `verifyTier1Budget` red on
+  this machine; sessions 24–28 + 36–42 unpushed (push needs owner go-ahead
+  per D-012).
+
+### Open questions / blockers
+- None.
+
+### Next action
+- **T-024** (`jdx signature` — expand into a detail block when started;
+  T-025…T-028 remain M3 one-liners).
+
+---
+
 ## Session 41 — 2026-09-20 — T-022 `jdx body` over the T-021 seam done
 **Agent/Author:** Muse Spark 1.3 Free · **Commits:** `4339da4` (claim) + closing commit (this session)
 

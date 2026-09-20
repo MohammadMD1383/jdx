@@ -56,7 +56,7 @@ complete; T-057…T-060 unblock as their milestones land. M1 (read path) is comp
 M2 hardening is complete (T-070 closed the tier-2 half of T-066).
 **M3 has started: T-071 (`sources` `SourceRoot` access, first slice of T-020) is DONE;
 T-021 (JavaParser body extraction over that seam) is DONE; T-022 (`jdx body`
-over that seam) is DONE.**
+over that seam) is DONE; T-023 (`jdx source` over that seam) is DONE.**
 
 ---
 
@@ -1089,7 +1089,7 @@ with `-sources.jar` provenance; under-specified `Child#copy` → exit 2.
 Lessons L-065 (Generic-vs-NotFound), L-066 (stale test XML), L-067 (ambient
 workspace misses); decision D-035.*
 
-### T-023 — `jdx source` over the T-021 seam · `WIP` (session 42)
+### T-023 — `jdx source` over the T-021 seam · `DONE` (session 42)
 **Depends:** T-021, T-022 (body patterns), T-011 (read-command patterns), T-015/T-016 (roots) · **Files:** `core/.../render/Source.kt`, `index/.../service/JdxService.kt` (`source`), `cli/.../commands/SourceCommand.kt`
 *(Second CLI slice of M3: whole source files / slices from paired Java sources
 only, wired to `jdx source`. No decompilation (T-026/T-027), no Kotlin bodies
@@ -1130,6 +1130,43 @@ verbatim text with provenance.
       in-process tests (hermetic, exits/text⊆JSON/determinism); tiers 1+2 green
 - [ ] `--help` text, Appendix B source flags verified, `TASKS.md` status,
       `PROGRESS.md` entry
+
+*Implementation notes (session 42): `core/.../render/Source.kt` — `SourceBlock`
+(result model mirroring `BodyBlock`: canonical type-ref header, `source:`
+line, verbatim lines, truncation footer, warnings, `next: jdx show` hint;
+text+JSON parity) + pure `sliceSourceLines` (context expansion clamped to
+the file, `--max-lines` cap with `shown`/`total`/`--max-lines N` hint) +
+`buildSourceBlock` + `DEFAULT_SOURCE_MAX_LINES = 200`. `index`:
+`JdxService.source(rawRef, roots, SourceOptions)` — type resolution with the
+T-011 machinery (exact/short-name, `g:a:v` scope, `DUPLICATE_FQN`),
+bytecode-authoritative (D-009); whole files and `--lines` served verbatim
+without parsing via the shared `readSourceLines` (drops the phantom trailing
+line, L-068; `internal` so the golden suite pins identical lines); `--around`
+locates the member through T-021 with bytecode-first ambiguity plus the
+erased→generic-spelling retry, mirroring `executeBody`; `.kt` paths degrade
+to T-039 explicitly since `findSource` (unlike `findJavaBodies`) does not
+filter them (L-069). Provenance names the sources file with the logical
+range. New `ServiceOutcome.Source` (plus the two `CorpusSoakTest` branches).
+`cli`: thin `SourceCommand` (registered in `JdxCli`; `--lines`/`--around`/
+`--context`/`--line-numbers`/`--max-lines` live, `--engine` exits 3 naming
+T-026/T-027) + `parseLinesWindow` + `SourceQuery` seam. Tests: core
+`SourceBlockTest` (12 examples) + `SourceBlockPropertyTest` (4 thousand-case
+properties) + 2 `parseLinesWindow` examples; index `SourceServiceTest` (22
+tier-2: whole/nested/`--lines`/clamp/beyond/`--around` incl. erased spelling/
+context/numbers/truncation/ambiguity/did-you-mean/member-ref/usage/no-
+sources-`.kt`-stale/no-roots/D-017/determinism/JSON/JDK-honesty) +
+`SourceGoldenTest` (8 files over 3 fixture types incl. a lines+numbers
+variant); cli `SourceCommandTest` (10 tier-1, hermetic) +
+`SourceCommandsServiceTest` (8 tier-2, hermetic, incl. D-017). Standing bar:
+`test`+`tier2Test` 1,129 tests 0 failures; `check -x verifyTier1Budget` green
+incl. JaCoCo gates; `soak` green solo (2m 20s); full `check` red only on
+`verifyTier1Budget` (64.6 s vs 30 s — pre-existing machine variance, slowest
+are `JavaBodiesTest`/`DoctorEnvironmentTest`, none from this task). Live
+proof: `app/build/jdx source 'dev.jdx.fixtures.Generics' --jars …` → exit 0
+whole file with `-sources.jar` provenance; `--lines 22:24`, `--around … --
+context 1 --line-numbers`, member-ref → exit 3. Lessons L-068 (phantom
+trailing line), L-069 (seam-reuse degradations), L-070 (whole-output
+shouldNotContain); decision D-036.*
 
 ### T-021 — JavaParser integration and Java body extraction · `DONE` (session 40)
 **Depends:** T-071 · **Files:** `sources/src/main/kotlin/dev/jdx/sources/JavaBodies.kt`

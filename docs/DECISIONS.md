@@ -64,3 +64,4 @@ log.
 | D-033 | Member `--sort` order semantics (T-062) | proposed-by-implementer | `D-026-050.md` |
 | D-034 | Configurable Maven repositories, `--repo` semantics (T-069; supersedes D-032 §6) | proposed-by-implementer | `D-026-050.md` |
 | D-035 | `jdx body` output semantics (T-022) | proposed-by-implementer | `D-026-050.md` |
+| D-036 | `jdx source` output semantics (T-023) | proposed-by-implementer | `D-026-050.md` |

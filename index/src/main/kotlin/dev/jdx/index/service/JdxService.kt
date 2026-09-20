@@ -22,7 +22,10 @@ import dev.jdx.core.ref.SymbolRefPrinter
 import dev.jdx.core.render.BodyBlock
 import dev.jdx.core.render.ClassCard
 import dev.jdx.core.render.DEFAULT_BODY_MAX_LINES
+import dev.jdx.core.render.DEFAULT_SOURCE_MAX_LINES
+import dev.jdx.core.render.SourceBlock
 import dev.jdx.core.render.buildBodyBlock
+import dev.jdx.core.render.buildSourceBlock
 import dev.jdx.core.render.DEFAULT_MEMBER_LIMIT
 import dev.jdx.core.render.DEFAULT_SEARCH_LIMIT
 import dev.jdx.core.render.DEFAULT_TREE_DEPTH
@@ -198,6 +201,13 @@ public object JdxService {
             override fun toJson(command: String): String = block.toJson(command)
         }
 
+        /** A source file or slice (`source`) — exit 0. */
+        public data class Source(val block: SourceBlock) : ServiceOutcome {
+            override val exitCode: Int = 0
+            override fun renderText(color: Boolean): String = block.renderText(color)
+            override fun toJson(command: String): String = block.toJson(command)
+        }
+
         /** A machine-legible failure — exit 1..6, never a guess, never a trace. */
         public data class Failure(public val error: ErrorResult) : ServiceOutcome {
             override val exitCode: Int = error.exitCode
@@ -331,6 +341,150 @@ public object JdxService {
         }
         return try {
             executeBody(memberRef, rawRef, scopedRoots, options, candidateScope)
+        } catch (e: ArtifactReadException) {
+            failure(5, rawRef, e.message ?: "artifact read error")
+        } catch (e: Exception) {
+            failure(6, rawRef, "internal error: ${e.javaClass.simpleName}: ${e.message ?: "no detail"}")
+        }
+    }
+
+    /** Presentation options for `source` (PROPOSAL.md §7.1). */
+    public data class SourceOptions(
+        /**
+         * The `--lines A:B` window (1-based inclusive). Mutually exclusive
+         * with [aroundRef]; `null` serves the context window around the
+         * `--around` member, or the whole file when that is also null.
+         */
+        public val lines: Pair<Int, Int>? = null,
+        /**
+         * The raw `--around <member-ref>` text centering the slice. Parsed
+         * here (a member of the queried type, short form allowed); `--context`
+         * expands its range each side.
+         */
+        public val aroundRef: String? = null,
+        /** Surrounding source lines shown each side of the `--around` member (`--context N`). */
+        public val contextLines: Int = 0,
+        /** Prefix each shown line with its 1-based number (`--line-numbers`). */
+        public val lineNumbers: Boolean = false,
+        /** Maximum shown lines; the rest become a truncation footer (`--max-lines N`). */
+        public val maxLines: Int = DEFAULT_SOURCE_MAX_LINES,
+    )
+
+    /**
+     * Answers `source <type>`: the type's verbatim source file or slice (T-023).
+     *
+     * Structure is bytecode-authoritative (D-009): the type resolves with the
+     * same machinery as [show] *before* sources are read, and only then is the
+     * winning root's paired sources served. Whole files and `--lines` windows
+     * are served verbatim without parsing; only `--around` parses (via the
+     * T-021 seam) to locate the member. No decompilation yet (T-026/T-027):
+     * a type without paired sources is exit 1 naming that task.
+     */
+    public fun source(rawRef: String, roots: RootsSpec, options: SourceOptions = SourceOptions()): ServiceOutcome {
+        if (options.contextLines < 0) {
+            return failure(3, rawRef, "usage error: --context must be >= 0, got ${options.contextLines}")
+        }
+        if (options.maxLines < 0) {
+            return failure(3, rawRef, "usage error: --max-lines must be >= 0, got ${options.maxLines}")
+        }
+        val window = options.lines
+        if (window != null && (window.first < 1 || window.second < window.first)) {
+            return failure(
+                3,
+                rawRef,
+                "usage error: --lines must be A:B with 1 <= A <= B, got '${window.first}:${window.second}'",
+            )
+        }
+        if (window != null && options.aroundRef != null) {
+            return failure(3, rawRef, "usage error: --lines and --around are mutually exclusive")
+        }
+        if (window != null && options.contextLines != 0) {
+            return failure(3, rawRef, "usage error: --context needs --around (a --lines window is exact)")
+        }
+        val around = options.aroundRef
+        if (around != null) {
+            when (val parsed = SymbolRefParser.parse(around)) {
+                is SymbolRefParseResult.Failure ->
+                    return failure(
+                        3,
+                        rawRef,
+                        "usage error: invalid --around reference '$around': " +
+                            "${parsed.message} at column ${parsed.position}",
+                    )
+                is SymbolRefParseResult.Ok -> {
+                    if (parsed.ref !is MemberSymbolRef) {
+                        return failure(3, rawRef, "usage error: --around takes a member reference, got '$around'")
+                    }
+                }
+            }
+        }
+        val parsed = SymbolRefParser.parse(rawRef)
+        if (parsed is SymbolRefParseResult.Failure) {
+            return failure(
+                3,
+                rawRef,
+                "usage error: invalid reference '$rawRef': ${parsed.message} at column ${parsed.position}",
+            )
+        }
+        val ref = (parsed as SymbolRefParseResult.Ok).ref
+        if (ref is MemberSymbolRef) {
+            return failure(
+                3,
+                rawRef,
+                "usage error: source takes a type reference like 'com.example.Foo', " +
+                    "got member '$rawRef' (member bodies: jdx body; center on one: --around '$rawRef')",
+            )
+        }
+        if (ref is PackageSymbolRef || ref is ModuleSymbolRef) {
+            return failure(3, rawRef, "usage error: source takes a type, got '$rawRef'")
+        }
+        val typeRef = ref as TypeSymbolRef
+        val typeName = typeRef.type as? TypeName.ClassType
+            ?: return failure(3, rawRef, "usage error: source takes a class, got '$rawRef'")
+        if (roots.jarSpecs.isEmpty() && !roots.includeJdk && typeRef.coordinate == null) {
+            return failure(
+                4,
+                rawRef,
+                "no workspace: no --jars given, no workspace selected (-w <name>, " +
+                    "JDX_WORKSPACE, jdx ws use) and --no-jdk set " +
+                    "(pass --jars <path>, select a workspace, or drop --no-jdk)",
+            )
+        }
+        // A `g:a:v/` prefix scopes the query to one artifact (T-019): its jar
+        // reads first (shadowing order), and candidates match inside it only —
+        // while supertypes still resolve from the full workspace behind it.
+        var scopedRoots = roots
+        var candidateScope: Set<String>? = null
+        val coordinate = typeRef.coordinate
+        if (coordinate != null) {
+            val coordText = "${coordinate.group}:${coordinate.artifact}:${coordinate.version}"
+            val outcome = try {
+                roots.mavenResolve(coordText, roots.allowFetch)
+            } catch (e: Exception) {
+                return failure(
+                    6,
+                    rawRef,
+                    "internal error: coordinate resolution failed: ${e.message ?: e.javaClass.simpleName}",
+                )
+            }
+            val artifact = when (outcome) {
+                is MavenResolver.Outcome.Resolved -> outcome.artifact
+                is MavenResolver.Outcome.Unresolved ->
+                    return failure(5, rawRef, "artifact read error: ${outcome.message}")
+            }
+            val binarySpec = artifact.binaryJar.toString()
+            val scope = try {
+                ArtifactLoader.open(artifact.binaryJar).use { root -> root.classEntryPaths().map(::entryToBinary).toSet() }
+            } catch (e: ArtifactReadException) {
+                return failure(5, rawRef, e.message ?: "artifact read error")
+            } catch (e: Exception) {
+                return failure(6, rawRef, "internal error: ${e.javaClass.simpleName}: ${e.message ?: "no detail"}")
+            }
+            scopedRoots = roots.copy(jarSpecs = listOf(binarySpec) + roots.jarSpecs)
+            candidateScope = scope
+        }
+        return try {
+            executeSource(typeName, rawRef, scopedRoots, options, candidateScope)
         } catch (e: ArtifactReadException) {
             failure(5, rawRef, e.message ?: "artifact read error")
         } catch (e: Exception) {
@@ -1653,6 +1807,332 @@ public object JdxService {
         is dev.jdx.index.artifact.JarArtifact -> root.openSources()
         is dev.jdx.index.artifact.JrtArtifact -> root.openSources()
         else -> null
+    }
+
+    /**
+     * Reads one source file as display lines: split on newlines with `\r`
+     * stripped, dropping a single trailing empty line when the file ends with
+     * a newline — otherwise every newline-terminated file gains a phantom
+     * extra line (a 38-line file would report `1-39`). Returns `null` when the
+     * entry cannot be read. Member ranges from the T-021 seam never address
+     * the dropped line (no declaration covers it), so `--around` shares this
+     * numbering safely. Internal (not private) so the golden suite serves the
+     * byte-identical lines the service would.
+     */
+    internal fun readSourceLines(
+        sources: dev.jdx.sources.SourceRoot,
+        path: String,
+    ): List<String>? = try {
+        val lines = sources.openSource(path).use {
+            it.readBytes().toString(Charsets.UTF_8).split('\n')
+                .map { line -> line.removeSuffix("\r") }
+        }
+        if (lines.size > 1 && lines.last().isEmpty()) lines.dropLast(1) else lines
+    } catch (e: Exception) {
+        null
+    }
+
+    /**
+     * Serves `source <type>`: resolves the type from bytecode (D-009), then
+     * serves the winning root's paired sources — whole file, `--lines`
+     * window, or `--around` member slice — as one verbatim [SourceBlock].
+     */
+    private fun executeSource(
+        typeName: TypeName.ClassType,
+        rawRef: String,
+        roots: RootsSpec,
+        options: SourceOptions,
+        candidateScope: Set<String>? = null,
+    ): ServiceOutcome {
+        val opened = openRoots(roots)
+        try {
+            val binariesByRoot = opened.map { it.root.classEntryPaths().map(::entryToBinary).toSet() }
+            val providers = mutableMapOf<String, MutableList<Int>>()
+            binariesByRoot.forEachIndexed { index, binaries ->
+                for (binary in binaries) providers.getOrPut(binary) { mutableListOf() }.add(index)
+            }
+            val allBinaries = providers.keys
+
+            val candidates = matchCandidates(typeName, candidateScope ?: allBinaries)
+            if (candidates.isEmpty()) {
+                val suggestions = suggestSimilar(typeName.simpleName, allBinaries)
+                return ServiceOutcome.Failure(ErrorResult.notFound(rawRef, suggestions))
+            }
+            if (candidates.size > 1) {
+                return ServiceOutcome.Failure(ErrorResult.ambiguous(rawRef, candidates))
+            }
+            val binary = candidates.single()
+            val winner = providers.getValue(binary).first()
+
+            val warnings = mutableListOf<Warning>()
+            warnings.addAll(roots.extraWarnings)
+            for (open in opened) warnings.addAll(open.root.warnings)
+            val extraProviders = providers.getValue(binary).drop(1)
+            if (extraProviders.isNotEmpty()) {
+                val names = listOf(winner).plus(extraProviders).map { rootLabel(opened[it], binary) }
+                warnings.add(
+                    Warning(
+                        code = WarningCode.DUPLICATE_FQN,
+                        message = "$binary is provided by ${names.joinToString(", ")}; " +
+                            "showing ${names.first()} (classpath order)",
+                        subject = binary,
+                    ),
+                )
+            }
+
+            val workspace = Workspace(opened, providers, warnings)
+            val target = workspace.load(binary)
+            if (target == null) {
+                return failure(
+                    5,
+                    rawRef,
+                    "artifact read error: $binary in ${rootLabel(opened[winner], binary)} cannot be parsed",
+                )
+            }
+
+            val label = rootLabel(opened[winner], binary)
+            val sources = openSourcesFor(opened[winner])
+                ?: return ServiceOutcome.Failure(
+                    // No paired sources is routine (most jars ship without one):
+                    // say what exists and what comes next (T-026).
+                    ErrorResult.notFound(
+                        rawRef,
+                        detail = "no sources for $binary in " +
+                            "${rootLabel(opened[winner], binary)} " +
+                            "(decompilation not yet implemented, T-026)",
+                    ),
+                )
+            try {
+                return sourceOutcome(binary, rawRef, label, target, sources, options, warnings)
+            } finally {
+                runCatching { sources.close() }
+            }
+        } finally {
+            opened.forEach { it.root.close() }
+        }
+    }
+
+    /**
+     * Reads the source file behind [binary] and slices the requested window.
+     * Whole files and `--lines` windows are verbatim text (no parse); only
+     * `--around` parses via the T-021 seam to locate the member.
+     */
+    private fun sourceOutcome(
+        binary: String,
+        rawRef: String,
+        label: String,
+        target: ClassInfo,
+        sources: dev.jdx.sources.SourceRoot,
+        options: SourceOptions,
+        warnings: List<Warning>,
+    ): ServiceOutcome {
+        val aroundRaw = options.aroundRef
+        if (aroundRaw != null) {
+            return aroundOutcome(binary, rawRef, aroundRaw, label, target, sources, options, warnings)
+        }
+        val path = sources.findSource(binary)
+            ?: return noSourceFileOutcome(binary, rawRef, label, sources)
+        if (path.endsWith(".kt")) {
+            // Kotlin sources need the PSI integration (T-039): served whole,
+            // a `.kt` file would be verbatim text, but facade/class mapping
+            // makes raw serving potentially misleading — degrade like `body`.
+            return ServiceOutcome.Failure(
+                ErrorResult.notFound(
+                    rawRef,
+                    detail = "$binary only ships Kotlin sources here " +
+                        "(Kotlin bodies: T-039)",
+                ),
+            )
+        }
+        val fileLines = readSourceLines(sources, path)
+            ?: return failure(5, rawRef, "source read error: cannot read $path")
+        val window = options.lines
+        val (startLine, endLine) = if (window != null) {
+            if (window.first > fileLines.size) {
+                return ServiceOutcome.Failure(
+                    ErrorResult.notFound(
+                        rawRef,
+                        detail = "--lines ${window.first}:${window.second} is beyond $path " +
+                            "(${fileLines.size} lines)",
+                    ),
+                )
+            }
+            window.first to minOf(window.second, fileLines.size)
+        } else {
+            1 to fileLines.size.coerceAtLeast(1)
+        }
+        return ServiceOutcome.Source(
+            buildSourceBlock(
+                canonicalRef = binary,
+                declaringType = binary,
+                file = path,
+                fileLines = fileLines,
+                startLine = startLine,
+                endLine = endLine,
+                provenance = listOf(
+                    Provenance(
+                        artifact = sources.displayName,
+                        origin = Origin.SOURCES,
+                        file = path,
+                        lineRange = startLine..endLine,
+                    ),
+                ),
+                warnings = warnings.sortedBy { it.code },
+                contextLines = 0,
+                lineNumbers = options.lineNumbers,
+                maxLines = options.maxLines,
+            ),
+        )
+    }
+
+    /**
+     * Maps a missing source file to its honest degradation: `.kt`-only roots
+     * name T-039, absent files name the decompiler (T-026) or a possible
+     * version mismatch (T-028) depending on whether any candidate exists.
+     */
+    private fun noSourceFileOutcome(
+        binary: String,
+        rawRef: String,
+        label: String,
+        sources: dev.jdx.sources.SourceRoot,
+    ): ServiceOutcome {
+        val available = try {
+            sources.sourcePaths().toSet()
+        } catch (e: Exception) {
+            return failure(5, rawRef, "source read error: cannot list $label: ${e.message}")
+        }
+        val ktOnly = dev.jdx.sources.sourceCandidatesFor(binary)
+            .filter { it.endsWith(".kt") }.any { it in available }
+        if (ktOnly) {
+            return ServiceOutcome.Failure(
+                ErrorResult.notFound(
+                    rawRef,
+                    detail = "$binary only ships Kotlin sources here " +
+                        "(Kotlin bodies: T-039)",
+                ),
+            )
+        }
+        return ServiceOutcome.Failure(
+            ErrorResult.notFound(
+                rawRef,
+                detail = "$binary has no source counterpart in $label " +
+                    "(possible SOURCES_VERSION_MISMATCH, T-028)",
+            ),
+        )
+    }
+
+    /**
+     * Serves `--around <member-ref>`: locates the member through the T-021
+     * seam and slices its range expanded by `--context`. Overload ambiguity
+     * is decided from bytecode first (D-009), mirroring [executeBody].
+     */
+    private fun aroundOutcome(
+        binary: String,
+        rawRef: String,
+        aroundRaw: String,
+        label: String,
+        target: ClassInfo,
+        sources: dev.jdx.sources.SourceRoot,
+        options: SourceOptions,
+        warnings: List<Warning>,
+    ): ServiceOutcome {
+        val parsed = SymbolRefParser.parse(aroundRaw)
+        val aroundRef = (parsed as? SymbolRefParseResult.Ok)?.ref as? MemberSymbolRef
+            ?: return failure(3, rawRef, "usage error: invalid --around reference '$aroundRaw'")
+        val effectiveRef = aroundRef.copy(declaringType = target.name)
+        // Overload ambiguity is structural (D-009): decided from bytecode
+        // before any source is read, so a stale sources jar cannot mislead.
+        val bytecodeMatches = matchBytecodeMembers(target, effectiveRef)
+        if (bytecodeMatches.isEmpty()) {
+            if (effectiveRef.name == "<clinit>") {
+                return failure(3, rawRef, "usage error: static initialisers have no source to center on: '$aroundRaw'")
+            }
+            return ServiceOutcome.Failure(
+                ErrorResult.notFound(aroundRaw, suggestSimilarMember(target, effectiveRef.name)),
+            )
+        }
+        val specified = effectiveRef.parameterTypes != null
+        val matchRefs = canonicalMemberRefs(target, bytecodeMatches)
+        if (!specified && bytecodeMatches.size > 1) {
+            return ServiceOutcome.Failure(ErrorResult.ambiguous(aroundRaw, matchRefs))
+        }
+        if (specified && bytecodeMatches.size > 1 && effectiveRef.returnType == null) {
+            return ServiceOutcome.Failure(ErrorResult.ambiguous(aroundRaw, matchRefs))
+        }
+        // Source lookup spellings: the query as written, plus — for generic
+        // members queried in erased form (`identity(java.lang.Object)` for
+        // `U identity(U)`) — the generic signature's own spellings (`U`),
+        // which is what the source text actually says. Bytecode stays the
+        // authority (the match above already proved the member); these are
+        // just the keys the T-021 narrowing understands.
+        val singleMatch = bytecodeMatches.singleOrNull()
+        val lookupRefs = listOf(effectiveRef) +
+            (singleMatch?.let { genericSpelledRef(target, it) }?.takeIf { it != effectiveRef }?.let(::listOf).orEmpty())
+        var memberNotFound = false
+        for (lookupRef in lookupRefs) {
+            when (val found = dev.jdx.sources.findJavaBodies(sources, lookupRef)) {
+                is dev.jdx.sources.JavaBodyResult.Found -> {
+                    if (!specified && found.bodies.size > 1) {
+                        return ServiceOutcome.Failure(ErrorResult.ambiguous(aroundRaw, matchRefs))
+                    }
+                    val body = found.bodies.singleOrNull()
+                        ?: return ServiceOutcome.Failure(ErrorResult.ambiguous(aroundRaw, matchRefs))
+                    val fileLines = readSourceLines(sources, body.file)
+                        ?: return failure(5, rawRef, "source read error: cannot read ${body.file}")
+                    return ServiceOutcome.Source(
+                        buildSourceBlock(
+                            canonicalRef = binary,
+                            declaringType = binary,
+                            file = body.file,
+                            fileLines = fileLines,
+                            startLine = body.startLine,
+                            endLine = body.endLine,
+                            provenance = listOf(
+                                Provenance(
+                                    artifact = sources.displayName,
+                                    origin = Origin.SOURCES,
+                                    file = body.file,
+                                    lineRange = body.startLine..body.endLine,
+                                ),
+                            ),
+                            warnings = warnings.sortedBy { it.code },
+                            contextLines = options.contextLines,
+                            lineNumbers = options.lineNumbers,
+                            maxLines = options.maxLines,
+                        ),
+                    )
+                }
+                is dev.jdx.sources.JavaBodyResult.MemberNotFound -> {
+                    memberNotFound = true
+                }
+                is dev.jdx.sources.JavaBodyResult.NoSource ->
+                    return ServiceOutcome.Failure(
+                        ErrorResult.notFound(
+                            rawRef,
+                            detail = "no sources for $binary in $label " +
+                                "(decompilation not yet implemented, T-026)",
+                        ),
+                    )
+                is dev.jdx.sources.JavaBodyResult.NotJava ->
+                    return ServiceOutcome.Failure(
+                        ErrorResult.notFound(
+                            rawRef,
+                            detail = "$binary only ships Kotlin sources here " +
+                                "(Kotlin bodies: T-039)",
+                        ),
+                    )
+                is dev.jdx.sources.JavaBodyResult.ParseError ->
+                    return failure(5, rawRef, found.message)
+            }
+        }
+        check(memberNotFound) { "lookup spellings exhausted without a terminal result" }
+        return ServiceOutcome.Failure(
+            ErrorResult.notFound(
+                aroundRaw,
+                detail = "$aroundRaw has no source counterpart in $label " +
+                    "(possible SOURCES_VERSION_MISMATCH, T-028)",
+            ),
+        )
     }
 
     /**

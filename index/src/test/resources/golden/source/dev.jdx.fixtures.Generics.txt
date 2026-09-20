@@ -1,0 +1,41 @@
+dev.jdx.fixtures.Generics
+  source: fixture-sources.jar · dev/jdx/fixtures/Generics.java:1-38
+package dev.jdx.fixtures;
+
+import java.util.List;
+
+/**
+ * Bounded, wildcard and recursive generics: the generic-signature shapes (JVMS §4.7.9.1) that
+ * break naive descriptor-only readers.
+ */
+@ExpectedMembers({
+    "public dev.jdx.fixtures.Generics()",
+    "public <V extends T> V bounded(V)",
+    "public void wildcard(java.util.List<? extends T>, java.util.List<? super U>)",
+    "public U identity(U)",
+})
+public class Generics<T extends Number & Comparable<T>, U> {
+    public <V extends T> V bounded(V input) {
+        return input;
+    }
+
+    public void wildcard(List<? extends T> producers, List<? super U> consumers) { }
+
+    public U identity(U value) {
+        return value;
+    }
+
+    /** Recursive (F-bounded) type variable, as in {@code Enum<E extends Enum<E>>}. */
+    @ExpectedMembers({
+        "public dev.jdx.fixtures.Generics$Recursive()",
+        "public int compareTo(E)",
+        "public int compareTo(java.lang.Object)",
+    })
+    public static class Recursive<E extends Recursive<E>> implements Comparable<E> {
+        @Override
+        public int compareTo(E other) {
+            return 0;
+        }
+    }
+}
+next: jdx show dev.jdx.fixtures.Generics

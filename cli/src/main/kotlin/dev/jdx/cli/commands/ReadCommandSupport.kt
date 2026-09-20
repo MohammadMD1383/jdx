@@ -452,6 +452,19 @@ internal fun defaultBodyQuery(
     options: JdxService.BodyOptions,
 ): JdxService.ServiceOutcome = JdxService.body(ref, roots, options)
 
+/** Query behind `source`, injectable so command tests run without IO (T-023). */
+internal typealias SourceQuery = (
+    ref: String,
+    roots: JdxService.RootsSpec,
+    options: JdxService.SourceOptions,
+) -> JdxService.ServiceOutcome
+
+internal fun defaultSourceQuery(
+    ref: String,
+    roots: JdxService.RootsSpec,
+    options: JdxService.SourceOptions,
+): JdxService.ServiceOutcome = JdxService.source(ref, roots, options)
+
 /** Query behind `search`, injectable so command tests run without IO (T-017). */
 internal typealias SearchQuery = (
     pattern: String,
