@@ -54,6 +54,7 @@ be fiction.
 **T-001 through T-019, T-053 through T-070 are `DONE`.** M0's test spine is
 complete; T-057…T-060 unblock as their milestones land. M1 (read path) is complete;
 M2 hardening is complete (T-070 closed the tier-2 half of T-066).
+**T-071 (first expanded M3 slice: sources-jar/dir access) is `WIP`.**
 
 ---
 
@@ -1220,6 +1221,32 @@ with `JDX_WORKSPACE=fx` forced; `test`+`tier2Test` all modules 951 tests 0 failu
 note: `verifyTier1Budget` red at 40.3 s vs 30 s — same pre-existing machine variance as
 sessions 34/37 (slowest: `DoctorEnvironmentTest`, `MemberListingPropertyTest`), no new
 tier-1 test added here, 0 test failures.*
+
+---
+
+### T-071 — `sources`: sources-jar/dir access (`SourceRoot`) · `WIP` (session 39)
+**Depends:** — · **Files:** `sources/src/main/kotlin/dev/jdx/sources/SourceRoot.kt`
+*(First expanded slice of the M3 one-liner T-020. Parsing/AST work stays in T-021;
+decompilation stays in T-026/T-027; no CLI surface yet — this task only opens
+sources and maps `binaryName → source file`, which every later M3 task reads through.)*
+
+Open a `-sources.jar`, a source directory, or `src.zip` uniformly and answer
+"which source file holds this class" — the seam `body`/`source`/`doc` will query
+before any JavaParser/Kotlin-PSI parsing happens.
+
+**Acceptance**
+- [ ] `SourceRoot` interface: `displayName`, `sourcePaths()` (normalised
+      `com/foo/Bar.java` slash paths, sorted, deterministic), `openSource(path)`
+      stream, `findSource(binaryName)` mapping (`$`-nested → outer file;
+      tries `.java` then `.kt`), `Closeable`
+- [ ] `openSourceRoot(path)` dispatch: jar/zip file → jar root, directory → dir root
+- [ ] Zip-slip entries (`../`, absolute) are never listed nor openable;
+      `.java`/`.kt`-only listing (no `.class` leakage from mixed jars)
+- [ ] Tier-1: pure mapping examples + a 1,000-case property (never-throws,
+      candidate-shape law); tier-2: crafted jar/dir tests (traversal, nesting,
+      determinism) + a real read from the fixture `-sources.jar`
+- [ ] `sources` must not depend on `index` (entry-name hardening lives here,
+      documented why — the T-007 `ZipSafety` twin); `core` stays dependency-free
 
 ---
 
