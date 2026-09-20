@@ -4,6 +4,66 @@ Newest first. Each entry follows the template at the bottom of `docs/PROGRESS.md
 
 ---
 
+## Session 38 — 2026-09-20 — T-070 tier-2 read-command hermeticity done
+**Agent/Author:** Muse Spark 1.3 Free · **Commits:** `610a919` (claim) + closing commit (this session)
+
+### Goal
+Implement T-070, the only open TODO: stop the ambient `~/.config/jdx`
+active-workspace (e.g. `fx`) from re-rooting the tier-2 read-command tests.
+Test-only task — no production behaviour change, no golden content change.
+
+### What I did
+- Reproduced first: `:cli:tier2Test --tests "...ReadCommandsServiceTest"` with
+  ambient `fx` present → 15/18 red (`exit 5 / no artifacts match:
+  testfixtures/...` — the `fx` relative glob resolves against the test worker
+  CWD and fails to expand).
+- Four files, T-066 / `SearchCommandsServiceTest` precedent exactly:
+  `ReadCommandsServiceTest` (`JdxTestCli`: `noEnv` inside the object, fresh
+  `InMemoryWorkspaceStore()` in all three constructions), `ReadCommandsGoldenTest`
+  (all three runners), `SortOrdersGoldenTest` (`runMembers`), and the
+  `ReadCommandDiscoveryTest` end-to-end (isolated store + null env — the ambient
+  active workspace had selected a named workspace, which suppresses discovery by
+  design).
+- Verified with ambient `fx` in place: full `:cli:tier2Test --rerun-tasks`
+  green; `JDX_WORKSPACE=fx` forced run of the service + discovery suites green;
+  all modules `test`+`tier2Test` 951 tests, 0 failures, 0 errors; `git status`
+  shows only the 4 test files (goldens byte-identical).
+- Standing-bar note: `verifyTier1Budget` red (40.3 s vs 30 s) — the same
+  pre-existing machine variance recorded in sessions 34/37 (slowest suites
+  `DoctorEnvironmentTest`, `MemberListingPropertyTest`), not a regression: this
+  task adds no tier-1 test and every test passes.
+
+### Decisions made
+- None (mechanical precedent-following; no genuine ambiguity).
+
+### Tasks moved
+- T-070: TODO → WIP (`610a919`) → DONE.
+
+### Lessons distilled
+- None new (the trap is L-038; the fix reuses the T-066 pattern verbatim).
+
+### What works now (and how to verify it yourself)
+```bash
+cat ~/.config/jdx/active-workspace  # fx stays in place — nothing needs shelving
+./gradlew :cli:tier2Test --rerun-tasks -x verifyTier1Budget  # green, ambient fx present
+JDX_WORKSPACE=fx ./gradlew :cli:tier2Test --tests "dev.jdx.cli.commands.ReadCommandsServiceTest" --rerun-tasks -x verifyTier1Budget  # green
+git status --short  # only the 4 cli test files; no golden, no production change
+```
+
+### What is broken / half-done
+- Nothing from this task. Pre-existing, untouched: `verifyTier1Budget`
+  machine variance (see above); sessions 24–28 + 36–38 unpushed (push needs
+  owner go-ahead per D-012).
+
+### Open questions / blockers
+- None.
+
+### Next action
+- **No open TODO remains** (T-001…T-070 all DONE). Next: owner picks the next
+  milestone to expand (M3 bodies: T-020…T-028 are one-liners).
+
+---
+
 ## Session 36 — 2026-09-19 — T-068 dedupe identical resolved roots (WIP completion)
 **Agent/Author:** Buffy (Codebuff/GLM) · **Commits:** `6053a38` (prior claim) + closing commit (this session)
 

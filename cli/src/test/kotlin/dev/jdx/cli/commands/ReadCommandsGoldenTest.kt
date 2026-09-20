@@ -1,6 +1,7 @@
 package dev.jdx.cli.commands
 
 import com.github.ajalt.clikt.core.parse
+import dev.jdx.index.workspace.InMemoryWorkspaceStore
 import dev.jdx.testsupport.fixtures.FixtureJars
 import dev.jdx.testsupport.golden.GoldenFiles
 import java.io.ByteArrayOutputStream
@@ -32,6 +33,10 @@ class ReadCommandsGoldenTest {
     // here — it is covered structurally in ReadCommandDiscoveryTest.
     private val noDiscovery: ProjectDiscoveryFn = { _, _, _, _ -> null }
 
+    // Hermetic roots (T-070, the T-066 trap in tier 2): the contributor's ambient
+    // `~/.config/jdx/active-workspace` (e.g. `fx`) must not re-root golden capture.
+    private val noEnv: (String) -> String? = { null }
+
     @Test
     fun `text and json goldens cover every fixture class for show members and outline`() {
         val jar = FixtureJars.binaryJar()
@@ -61,17 +66,17 @@ class ReadCommandsGoldenTest {
 
     private fun runShow(binary: String, roots: List<String>, json: Boolean): String {
         val args = listOf(binary) + roots + (if (json) listOf("--json") else emptyList())
-        return execute { ShowCommand(terminate = noExit, discover = noDiscovery).parse(args) }
+        return execute { ShowCommand(terminate = noExit, store = InMemoryWorkspaceStore(), getenv = noEnv, discover = noDiscovery).parse(args) }
     }
 
     private fun runMembers(binary: String, roots: List<String>, json: Boolean): String {
         val args = listOf(binary) + roots + (if (json) listOf("--json") else emptyList())
-        return execute { MembersCommand(terminate = noExit, discover = noDiscovery).parse(args) }
+        return execute { MembersCommand(terminate = noExit, store = InMemoryWorkspaceStore(), getenv = noEnv, discover = noDiscovery).parse(args) }
     }
 
     private fun runOutline(binary: String, roots: List<String>, json: Boolean): String {
         val args = listOf(binary) + roots + (if (json) listOf("--json") else emptyList())
-        return execute { OutlineCommand(terminate = noExit, discover = noDiscovery).parse(args) }
+        return execute { OutlineCommand(terminate = noExit, store = InMemoryWorkspaceStore(), getenv = noEnv, discover = noDiscovery).parse(args) }
     }
 
     private fun execute(block: () -> Unit): String {

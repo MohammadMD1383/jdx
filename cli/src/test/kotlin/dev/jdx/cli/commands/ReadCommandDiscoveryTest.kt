@@ -109,6 +109,8 @@ class ReadCommandDiscoveryTest {
                 MembersCommand(
                     query = ::defaultMemberQuery,
                     terminate = { exit = it; throw TestExit(it) },
+                    store = InMemoryWorkspaceStore(),
+                    getenv = { null },
                     discover = discovered,
                 ).parse(listOf(binary, "--no-jdk"))
             } catch (e: TestExit) {

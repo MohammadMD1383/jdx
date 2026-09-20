@@ -51,9 +51,9 @@ be fiction.
 | **M6** | Serving: daemon, MCP, HTTP, `batch` | TODO |
 | **M7** | Polish: token budgets, AppCDS, mutation gates, docs, install | TODO |
 
-**T-001 through T-019, T-053 through T-069 are `DONE`.** M0's test spine is
+**T-001 through T-019, T-053 through T-070 are `DONE`.** M0's test spine is
 complete; T-057…T-060 unblock as their milestones land. M1 (read path) is complete;
-M2 hardening continues at T-070 (the tier-2 half of T-066).
+M2 hardening is complete (T-070 closed the tier-2 half of T-066).
 
 ---
 
@@ -1183,7 +1183,7 @@ anchored absolutely (a relative glob resolves against the process CWD), and
 redundant `.`/`..` decorations only compose when each is derived from the base
 path — chained decorations land on absent paths (exit 5).*
 
-### T-070 — Make the tier-2 read-command tests hermetic to the machine's workspaces · `WIP`
+### T-070 — Make the tier-2 read-command tests hermetic to the machine's workspaces · `DONE` (session 38)
 **Depends:** T-066 · **Files:** `cli/src/test/kotlin/.../commands/ReadCommandsServiceTest.kt`, `ReadCommandsGoldenTest.kt`, `SortOrdersGoldenTest.kt`, `ReadCommandDiscoveryTest.kt`
 *(Added in session 35: found while verifying T-066 — same trap as L-038/T-066, tier-2 half.)*
 
@@ -1205,6 +1205,21 @@ regression).
       `~/.config/jdx` (prove by running with the ambient workspace in place)
 - [ ] No production behaviour change and no golden-file content change
       (test-only task; goldens must rewrite byte-identically)
+
+*Implementation notes (session 38): test-only, following the T-066 /
+`SearchCommandsServiceTest` precedent exactly — no new pattern. `ReadCommandsServiceTest`
+(`JdxTestCli` object: `noEnv` lives inside the object beside `noDiscovery`, fresh
+`InMemoryWorkspaceStore()` per construction), both golden suites (`noEnv` field +
+isolated store in every `runShow`/`runMembers`/`runOutline`), and the
+`ReadCommandDiscoveryTest` end-to-end (isolated store + `{ null }` env — the ambient
+`fx` active workspace had selected a named workspace there, which suppresses discovery
+by design, so the test failed before the query ran). Reproduced first: 15/18 red with
+ambient `fx`. After: full `:cli:tier2Test --rerun-tasks` green with `fx` present and
+with `JDX_WORKSPACE=fx` forced; `test`+`tier2Test` all modules 951 tests 0 failures;
+`git status` shows only the 4 test files (no production, no golden bytes). Standing-bar
+note: `verifyTier1Budget` red at 40.3 s vs 30 s — same pre-existing machine variance as
+sessions 34/37 (slowest: `DoctorEnvironmentTest`, `MemberListingPropertyTest`), no new
+tier-1 test added here, 0 test failures.*
 
 ---
 

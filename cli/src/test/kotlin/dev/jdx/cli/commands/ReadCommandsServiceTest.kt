@@ -13,6 +13,7 @@ import kotlinx.serialization.json.Json
 import kotlinx.serialization.json.jsonArray
 import kotlinx.serialization.json.jsonObject
 import kotlinx.serialization.json.jsonPrimitive
+import dev.jdx.index.workspace.InMemoryWorkspaceStore
 import org.junit.jupiter.api.Tag
 import org.junit.jupiter.api.Test
 import org.junit.jupiter.api.fail
@@ -66,24 +67,34 @@ class ReadCommandsServiceTest {
      */
     private object JdxTestCli {
         private val noDiscovery: ProjectDiscoveryFn = { _, _, _, _ -> null }
+        private val noEnv: (String) -> String? = { null }
 
         fun parse(args: List<String>) {
             val head = args.firstOrNull()
             val rest = args.drop(1)
+            // An isolated store and empty environment: the contributor's ambient
+            // `active-workspace` (e.g. `fx`) must not re-root these assertions
+            // (the T-066 trap: real-home defaults turn hermetic tests red).
             when (head) {
                 "show" -> ShowCommand(
                     query = ::defaultShowQuery,
                     terminate = { throw TestExit(it) },
+                    store = InMemoryWorkspaceStore(),
+                    getenv = noEnv,
                     discover = noDiscovery,
                 ).parse(rest)
                 "outline" -> OutlineCommand(
                     query = ::defaultMemberQuery,
                     terminate = { throw TestExit(it) },
+                    store = InMemoryWorkspaceStore(),
+                    getenv = noEnv,
                     discover = noDiscovery,
                 ).parse(rest)
                 else -> MembersCommand(
                     query = ::defaultMemberQuery,
                     terminate = { throw TestExit(it) },
+                    store = InMemoryWorkspaceStore(),
+                    getenv = noEnv,
                     discover = noDiscovery,
                 ).parse(if (head == "members") rest else args)
             }
