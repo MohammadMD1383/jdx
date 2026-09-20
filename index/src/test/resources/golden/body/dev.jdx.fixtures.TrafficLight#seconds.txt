@@ -1,0 +1,6 @@
+dev.jdx.fixtures.TrafficLight#seconds()
+  source: fixture-sources.jar · dev/jdx/fixtures/TrafficLight.java:43-45
+    public int seconds() {
+        return seconds;
+    }
+next: jdx show dev.jdx.fixtures.TrafficLight

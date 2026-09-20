@@ -407,6 +407,7 @@ private fun validateEnvelope(json: String, command: String, exitCode: Int): Stri
 private fun warningCodesOf(outcome: ServiceOutcome): List<WarningCode> = when (outcome) {
     is ServiceOutcome.MemberList -> outcome.listing.warnings.map { it.code }
     is ServiceOutcome.Card -> outcome.card.warnings.map { it.code }
+    is ServiceOutcome.Body -> outcome.block.warnings.map { it.code }
     is ServiceOutcome.SearchList -> outcome.listing.warnings.map { it.code }
     is ServiceOutcome.LsList -> outcome.listing.warnings.map { it.code }
     is ServiceOutcome.TreeList -> outcome.listing.warnings.map { it.code }
@@ -434,6 +435,13 @@ private fun entitiesOf(outcome: ServiceOutcome): List<String> = when (outcome) {
         for (iface in outcome.card.target.interfaces) add(iface.binaryName)
         for (warning in outcome.card.warnings) add(warning.code.name)
         for (provenance in outcome.card.provenance) add(provenance.artifact)
+    }
+    is ServiceOutcome.Body -> buildList {
+        add(outcome.block.canonicalRef)
+        add(outcome.block.file)
+        for (line in outcome.block.lines) add(line)
+        for (warning in outcome.block.warnings) add(warning.code.name)
+        for (provenance in outcome.block.provenance) add(provenance.artifact)
     }
     is ServiceOutcome.SearchList -> buildList {
         for (hit in outcome.listing.hits) {

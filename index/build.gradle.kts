@@ -6,6 +6,7 @@ plugins {
 
 dependencies {
     implementation(project(":core"))
+    implementation(project(":sources"))
     implementation(libs.asm)
     implementation(libs.asm.tree)
     implementation(libs.asm.util)

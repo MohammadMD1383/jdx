@@ -1,0 +1,6 @@
+dev.jdx.fixtures.Nesting$Inner#outer()
+  source: fixture-sources.jar · dev/jdx/fixtures/Nesting.java:29-31
+        public Nesting outer() {
+            return Nesting.this;
+        }
+next: jdx show dev.jdx.fixtures.Nesting$Inner

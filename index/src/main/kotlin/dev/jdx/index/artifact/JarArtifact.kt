@@ -2,6 +2,8 @@ package dev.jdx.index.artifact
 
 import dev.jdx.core.model.Warning
 import dev.jdx.core.model.WarningCode
+import dev.jdx.sources.SourceRoot
+import dev.jdx.sources.openSourceRoot
 import java.io.InputStream
 import java.nio.file.Files
 import java.nio.file.Path
@@ -33,6 +35,19 @@ public class JarArtifact private constructor(
 
     /** The sources pairing for this jar (PROPOSAL.md §5.2). Never null, possibly absent. */
     public val sourcesPair: SourcesPair = SourcesPairing.pair(jarPath, explicitSources)
+
+    /**
+     * Opens the paired sources as a [SourceRoot] (T-022): the external
+     * `-sources.jar` when paired, the binary jar itself when it embeds sources,
+     * `null` when absent. A paired file that vanished or fails to open reads as
+     * `null` — a missing pair is routine (D-009), never an error. The caller
+     * closes the root.
+     */
+    public fun openSources(): SourceRoot? = when (val pair = sourcesPair) {
+        is SourcesPair.External -> runCatching { openSourceRoot(pair.path) }.getOrNull()
+        is SourcesPair.Embedded -> runCatching { openSourceRoot(jarPath) }.getOrNull()
+        is SourcesPair.Absent -> null
+    }
 
     init {
         val names = mutableSetOf<String>()

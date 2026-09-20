@@ -9,6 +9,7 @@ import com.github.ajalt.clikt.parameters.options.versionOption
 import dev.jdx.cli.commands.DoctorCommand
 import dev.jdx.cli.commands.LsCommand
 import dev.jdx.cli.commands.cacheGroup
+import dev.jdx.cli.commands.BodyCommand
 import dev.jdx.cli.commands.MembersCommand
 import dev.jdx.cli.commands.OutlineCommand
 import dev.jdx.cli.commands.ResolveCommand
@@ -86,6 +87,7 @@ fun main(args: Array<String>): Unit =
         ShowCommand(),
         MembersCommand(),
         OutlineCommand(),
+        BodyCommand(),
         SearchCommand(),
         ResolveCommand(),
         LsCommand(),

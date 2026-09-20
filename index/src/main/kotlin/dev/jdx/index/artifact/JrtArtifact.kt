@@ -2,6 +2,8 @@ package dev.jdx.index.artifact
 
 import dev.jdx.core.model.Warning
 import dev.jdx.core.model.WarningCode
+import dev.jdx.sources.SourceRoot
+import dev.jdx.sources.openSourceRoot
 import java.io.InputStream
 import java.net.URI
 import java.nio.file.FileSystems
@@ -38,6 +40,14 @@ public class JrtArtifact private constructor(
     /** `$home/lib/src.zip` when present, `null` when the distribution omits it. */
     public val jdkSources: Path? =
         JdkLayout.findSrcZip(javaHome, envJavaHome)
+
+    /**
+     * Opens `src.zip` as a [SourceRoot] (T-022), or `null` when the distribution
+     * ships none (routine — surfaced as a `doctor` WARN row, never an error
+     * here). The caller closes the root.
+     */
+    public fun openSources(): SourceRoot? =
+        jdkSources?.let { runCatching { openSourceRoot(it) }.getOrNull() }
 
     init {
         val fileSystem = FileSystems.getFileSystem(URI.create("jrt:/"))

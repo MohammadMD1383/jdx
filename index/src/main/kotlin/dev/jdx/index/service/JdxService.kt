@@ -2,7 +2,9 @@ package dev.jdx.index.service
 
 import dev.jdx.core.model.AccessFlag
 import dev.jdx.core.model.ClassInfo
+import dev.jdx.core.model.FieldInfo
 import dev.jdx.core.model.MemberSymbolRef
+import dev.jdx.core.model.MethodInfo
 import dev.jdx.core.model.ModuleSymbolRef
 import dev.jdx.core.model.Origin
 import dev.jdx.core.model.PackageSymbolRef
@@ -12,11 +14,15 @@ import dev.jdx.core.model.TypeSymbolRef
 import dev.jdx.core.model.Visibility
 import dev.jdx.core.model.Warning
 import dev.jdx.core.model.WarningCode
+import dev.jdx.core.model.arrayTypeName
 import dev.jdx.core.model.typeNameFromBinaryName
 import dev.jdx.core.ref.SymbolRefParser
 import dev.jdx.core.ref.SymbolRefParseResult
 import dev.jdx.core.ref.SymbolRefPrinter
+import dev.jdx.core.render.BodyBlock
 import dev.jdx.core.render.ClassCard
+import dev.jdx.core.render.DEFAULT_BODY_MAX_LINES
+import dev.jdx.core.render.buildBodyBlock
 import dev.jdx.core.render.DEFAULT_MEMBER_LIMIT
 import dev.jdx.core.render.DEFAULT_SEARCH_LIMIT
 import dev.jdx.core.render.DEFAULT_TREE_DEPTH
@@ -185,6 +191,13 @@ public object JdxService {
             override fun toJson(command: String): String = listing.toJson(command)
         }
 
+        /** A member body (`body`) — exit 0. */
+        public data class Body(val block: BodyBlock) : ServiceOutcome {
+            override val exitCode: Int = 0
+            override fun renderText(color: Boolean): String = block.renderText(color)
+            override fun toJson(command: String): String = block.toJson(command)
+        }
+
         /** A machine-legible failure — exit 1..6, never a guess, never a trace. */
         public data class Failure(public val error: ErrorResult) : ServiceOutcome {
             override val exitCode: Int = error.exitCode
@@ -226,6 +239,104 @@ public object JdxService {
         maxMembers: Int = DEFAULT_MEMBER_LIMIT,
     ): ServiceOutcome =
         query(rawRef, roots, QueryMode.OUTLINE, filters, maxMembers, declaredOnly = true, includeSynthetic)
+
+    /** Presentation options for `body` (PROPOSAL.md §7.1). */
+    public data class BodyOptions(
+        /** Surrounding source lines shown each side of the member (`--context N`). */
+        public val contextLines: Int = 0,
+        /** Prefix each shown line with its 1-based number (`--line-numbers`). */
+        public val lineNumbers: Boolean = false,
+        /** Maximum shown lines; the rest become a truncation footer (`--max-lines N`). */
+        public val maxLines: Int = DEFAULT_BODY_MAX_LINES,
+    )
+
+    /**
+     * Answers `body <member>`: the member's verbatim source slice (T-022).
+     *
+     * Structure is bytecode-authoritative (D-009): the declaring type resolves
+     * with the same machinery as [show], overload ambiguity is decided from
+     * bytecode *before* sources are read, and only then is the winning root's
+     * paired sources sliced via the T-021 seam. No decompilation yet (T-026/
+     * T-027): a member without paired sources is exit 1 naming that task.
+     */
+    public fun body(rawRef: String, roots: RootsSpec, options: BodyOptions = BodyOptions()): ServiceOutcome {
+        if (options.contextLines < 0) {
+            return failure(3, rawRef, "usage error: --context must be >= 0, got ${options.contextLines}")
+        }
+        if (options.maxLines < 0) {
+            return failure(3, rawRef, "usage error: --max-lines must be >= 0, got ${options.maxLines}")
+        }
+        val parsed = SymbolRefParser.parse(rawRef)
+        if (parsed is SymbolRefParseResult.Failure) {
+            return failure(
+                3,
+                rawRef,
+                "usage error: invalid reference '$rawRef': ${parsed.message} at column ${parsed.position}",
+            )
+        }
+        val ref = (parsed as SymbolRefParseResult.Ok).ref
+        if (ref is TypeSymbolRef) {
+            return failure(
+                3,
+                rawRef,
+                "usage error: body takes a member reference like 'com.example.Foo#bar()', " +
+                    "got type '$rawRef' (whole types: jdx source, T-023)",
+            )
+        }
+        if (ref is PackageSymbolRef || ref is ModuleSymbolRef) {
+            return failure(3, rawRef, "usage error: body takes a member reference, got '$rawRef'")
+        }
+        val memberRef = ref as MemberSymbolRef
+        if (roots.jarSpecs.isEmpty() && !roots.includeJdk && memberRef.coordinate == null) {
+            return failure(
+                4,
+                rawRef,
+                "no workspace: no --jars given, no workspace selected (-w <name>, " +
+                    "JDX_WORKSPACE, jdx ws use) and --no-jdk set " +
+                    "(pass --jars <path>, select a workspace, or drop --no-jdk)",
+            )
+        }
+        // A `g:a:v/` prefix scopes the query to one artifact (T-019): its jar
+        // reads first (shadowing order), and candidates match inside it only —
+        // while supertypes still resolve from the full workspace behind it.
+        var scopedRoots = roots
+        var candidateScope: Set<String>? = null
+        val coordinate = memberRef.coordinate
+        if (coordinate != null) {
+            val coordText = "${coordinate.group}:${coordinate.artifact}:${coordinate.version}"
+            val outcome = try {
+                roots.mavenResolve(coordText, roots.allowFetch)
+            } catch (e: Exception) {
+                return failure(
+                    6,
+                    rawRef,
+                    "internal error: coordinate resolution failed: ${e.message ?: e.javaClass.simpleName}",
+                )
+            }
+            val artifact = when (outcome) {
+                is MavenResolver.Outcome.Resolved -> outcome.artifact
+                is MavenResolver.Outcome.Unresolved ->
+                    return failure(5, rawRef, "artifact read error: ${outcome.message}")
+            }
+            val binarySpec = artifact.binaryJar.toString()
+            val scope = try {
+                ArtifactLoader.open(artifact.binaryJar).use { root -> root.classEntryPaths().map(::entryToBinary).toSet() }
+            } catch (e: ArtifactReadException) {
+                return failure(5, rawRef, e.message ?: "artifact read error")
+            } catch (e: Exception) {
+                return failure(6, rawRef, "internal error: ${e.javaClass.simpleName}: ${e.message ?: "no detail"}")
+            }
+            scopedRoots = roots.copy(jarSpecs = listOf(binarySpec) + roots.jarSpecs)
+            candidateScope = scope
+        }
+        return try {
+            executeBody(memberRef, rawRef, scopedRoots, options, candidateScope)
+        } catch (e: ArtifactReadException) {
+            failure(5, rawRef, e.message ?: "artifact read error")
+        } catch (e: Exception) {
+            failure(6, rawRef, "internal error: ${e.javaClass.simpleName}: ${e.message ?: "no detail"}")
+        }
+    }
 
     // -- query pipeline ---------------------------------------------------------
 
@@ -1368,6 +1479,392 @@ public object JdxService {
         } finally {
             search.close()
         }
+    }
+
+    // -- body execution (T-022) ----------------------------------------------------
+
+    private fun executeBody(
+        memberRef: MemberSymbolRef,
+        rawRef: String,
+        roots: RootsSpec,
+        options: BodyOptions,
+        candidateScope: Set<String>? = null,
+    ): ServiceOutcome {
+        val declaring = memberRef.declaringType as? TypeName.ClassType
+            ?: return failure(3, rawRef, "usage error: body takes a class member, got '$rawRef'")
+        val opened = openRoots(roots)
+        try {
+            val binariesByRoot = opened.map { it.root.classEntryPaths().map(::entryToBinary).toSet() }
+            val providers = mutableMapOf<String, MutableList<Int>>()
+            binariesByRoot.forEachIndexed { index, binaries ->
+                for (binary in binaries) providers.getOrPut(binary) { mutableListOf() }.add(index)
+            }
+            val allBinaries = providers.keys
+
+            val candidates = matchCandidates(declaring, candidateScope ?: allBinaries)
+            if (candidates.isEmpty()) {
+                val suggestions = suggestSimilar(declaring.simpleName, allBinaries)
+                return ServiceOutcome.Failure(ErrorResult.notFound(rawRef, suggestions))
+            }
+            if (candidates.size > 1) {
+                return ServiceOutcome.Failure(ErrorResult.ambiguous(rawRef, candidates))
+            }
+            val binary = candidates.single()
+            val winner = providers.getValue(binary).first()
+
+            val warnings = mutableListOf<Warning>()
+            warnings.addAll(roots.extraWarnings)
+            for (open in opened) warnings.addAll(open.root.warnings)
+            val extraProviders = providers.getValue(binary).drop(1)
+            if (extraProviders.isNotEmpty()) {
+                val names = listOf(winner).plus(extraProviders).map { rootLabel(opened[it], binary) }
+                warnings.add(
+                    Warning(
+                        code = WarningCode.DUPLICATE_FQN,
+                        message = "$binary is provided by ${names.joinToString(", ")}; " +
+                            "showing ${names.first()} (classpath order)",
+                        subject = binary,
+                    ),
+                )
+            }
+
+            val workspace = Workspace(opened, providers, warnings)
+            val target = workspace.load(binary)
+            if (target == null) {
+                return failure(
+                    5,
+                    rawRef,
+                    "artifact read error: $binary in ${rootLabel(opened[winner], binary)} cannot be parsed",
+                )
+            }
+
+            // Overload ambiguity is structural (D-009): decided from bytecode
+            // before any source is read, so a stale sources jar cannot mislead.
+            val bytecodeMatches = matchBytecodeMembers(target, memberRef)
+            if (bytecodeMatches.isEmpty()) {
+                if (memberRef.name == "<clinit>") {
+                    return failure(3, rawRef, "usage error: static initialisers have no body to show: '$rawRef'")
+                }
+                return ServiceOutcome.Failure(
+                    ErrorResult.notFound(rawRef, suggestSimilarMember(target, memberRef.name)),
+                )
+            }
+            val specified = memberRef.parameterTypes != null
+            val matchRefs = canonicalMemberRefs(target, bytecodeMatches)
+            if (!specified && bytecodeMatches.size > 1) {
+                return ServiceOutcome.Failure(ErrorResult.ambiguous(rawRef, matchRefs))
+            }
+            if (specified && bytecodeMatches.size > 1 && memberRef.returnType == null) {
+                return ServiceOutcome.Failure(ErrorResult.ambiguous(rawRef, matchRefs))
+            }
+
+            val effectiveRef = memberRef.copy(declaringType = target.name)
+            // Source lookup spellings: the query as written, plus — for generic
+            // members queried in erased form (`identity(java.lang.Object)` for
+            // `U identity(U)`) — the generic signature's own spellings (`U`),
+            // which is what the source text actually says. Bytecode stays the
+            // authority (the match above already proved the member); these are
+            // just the keys the T-021 narrowing understands.
+            val singleMatch = bytecodeMatches.singleOrNull()
+            val lookupRefs = listOf(effectiveRef) +
+                (singleMatch?.let { genericSpelledRef(target, it) }?.takeIf { it != effectiveRef }?.let(::listOf).orEmpty())
+            val label = rootLabel(opened[winner], binary)
+            val sources = openSourcesFor(opened[winner])
+                ?: return ServiceOutcome.Failure(
+                    // No paired sources is routine (most jars ship without one):
+                    // say what exists and what comes next (T-026).
+                    ErrorResult.notFound(
+                        rawRef,
+                        detail = "no sources for $binary in " +
+                            "${rootLabel(opened[winner], binary)} " +
+                            "(decompilation not yet implemented, T-026)",
+                    ),
+                )
+            try {
+                var memberNotFound = false
+                for (lookupRef in lookupRefs) {
+                    when (val found = dev.jdx.sources.findJavaBodies(sources, lookupRef)) {
+                    is dev.jdx.sources.JavaBodyResult.Found -> {
+                        if (!specified && found.bodies.size > 1) {
+                            return ServiceOutcome.Failure(ErrorResult.ambiguous(rawRef, matchRefs))
+                        }
+                        val body = found.bodies.singleOrNull()
+                            ?: return ServiceOutcome.Failure(ErrorResult.ambiguous(rawRef, matchRefs))
+                        return bodyOutcome(
+                            body = body,
+                            sources = sources,
+                            // Provenance names the file the lines were sliced from
+                            // (PROPOSAL.md §3.5): the sources jar, not the binary —
+                            // shadowing stays in the warnings.
+                            label = sources.displayName,
+                            binary = binary,
+                            canonicalRef = matchRefs.singleOrNull() ?: SymbolRefPrinter.print(
+                                MemberSymbolRef(
+                                    declaringType = target.name,
+                                    name = body.name,
+                                    parameterTypes = memberRef.parameterTypes,
+                                ),
+                            ),
+                            warnings = warnings,
+                            options = options,
+                            rawRef = rawRef,
+                        )
+                    }
+                    is dev.jdx.sources.JavaBodyResult.MemberNotFound -> {
+                        memberNotFound = true
+                    }
+                    is dev.jdx.sources.JavaBodyResult.NoSource ->
+                        return ServiceOutcome.Failure(
+                            ErrorResult.notFound(
+                                rawRef,
+                                detail = "no sources for $binary in $label " +
+                                    "(decompilation not yet implemented, T-026)",
+                            ),
+                        )
+                    is dev.jdx.sources.JavaBodyResult.NotJava ->
+                        return ServiceOutcome.Failure(
+                            ErrorResult.notFound(
+                                rawRef,
+                                detail = "$binary only ships Kotlin sources here " +
+                                    "(Kotlin bodies: T-039)",
+                            ),
+                        )
+                    is dev.jdx.sources.JavaBodyResult.ParseError ->
+                        return failure(5, rawRef, found.message)
+                    }
+                }
+                check(memberNotFound) { "lookup spellings exhausted without a terminal result" }
+                return ServiceOutcome.Failure(
+                    ErrorResult.notFound(
+                        rawRef,
+                        detail = "$rawRef has no source counterpart in $label " +
+                            "(possible SOURCES_VERSION_MISMATCH, T-028)",
+                    ),
+                )
+            } finally {
+                runCatching { sources.close() }
+            }
+        } finally {
+            opened.forEach { it.root.close() }
+        }
+    }
+
+    private fun openSourcesFor(open: OpenRoot): dev.jdx.sources.SourceRoot? = when (val root = open.root) {
+        is dev.jdx.index.artifact.JarArtifact -> root.openSources()
+        is dev.jdx.index.artifact.JrtArtifact -> root.openSources()
+        else -> null
+    }
+
+    /**
+     * The generic signature's spelling of a matched member's parameters (`U` for
+     * `U identity(U)`), or `null` when there is none (non-generic members, fields).
+     * Used as a second source-lookup key when the query came in erased form.
+     */
+    private fun genericSpelledRef(target: ClassInfo, match: BytecodeMember): MemberSymbolRef? {
+        val info = (match as? BytecodeMember.Method)?.info ?: return null
+        val generic = info.genericSignature ?: return null
+        val spelled = generic.parameters.map { sigToTypeName(it) ?: return null }
+        return MemberSymbolRef(declaringType = target.name, name = info.name, parameterTypes = spelled)
+    }
+
+    private fun sigToTypeName(sig: dev.jdx.core.model.TypeSignature): TypeName? = when (sig) {
+        is dev.jdx.core.model.TypeVariableSignature ->
+            TypeName.ClassType("", listOf(sig.name))
+        is dev.jdx.core.model.BaseTypeSignature ->
+            TypeName.PrimitiveType(sig.primitive)
+        is dev.jdx.core.model.ArrayTypeSignature ->
+            sigToTypeName(sig.elementType)?.let { arrayTypeName(it, 1) }
+        is dev.jdx.core.model.ClassTypeSignature ->
+            TypeName.ClassType(sig.packageName, listOf(sig.simpleName) + sig.innerClasses.map { it.simpleName })
+        else -> null
+    }
+
+    /** Renders one sliced [SourceBody] as a [ServiceOutcome.Body], reading its file for context. */
+    private fun bodyOutcome(
+        body: dev.jdx.sources.SourceBody,
+        sources: dev.jdx.sources.SourceRoot,
+        label: String,
+        binary: String,
+        canonicalRef: String,
+        warnings: List<Warning>,
+        options: BodyOptions,
+        rawRef: String,
+    ): ServiceOutcome {
+        val fileLines = try {
+            sources.openSource(body.file).use {
+                it.readBytes().toString(Charsets.UTF_8).split('\n')
+                    .map { line -> line.removeSuffix("\r") }
+            }
+        } catch (e: Exception) {
+            return failure(5, rawRef, "source read error: cannot read ${body.file}: ${e.message}")
+        }
+        return ServiceOutcome.Body(
+            buildBodyBlock(
+                canonicalRef = canonicalRef,
+                declaringType = binary,
+                file = body.file,
+                fileLines = fileLines,
+                startLine = body.startLine,
+                endLine = body.endLine,
+                provenance = listOf(
+                    Provenance(
+                        artifact = label,
+                        origin = Origin.SOURCES,
+                        file = body.file,
+                        lineRange = body.startLine..body.endLine,
+                    ),
+                ),
+                warnings = warnings.sortedBy { it.code },
+                contextLines = options.contextLines,
+                lineNumbers = options.lineNumbers,
+                maxLines = options.maxLines,
+            ),
+        )
+    }
+
+    /** Bytecode members matching [ref] by name, arity and source-simple-name narrowing. */
+    private fun matchBytecodeMembers(
+        target: ClassInfo,
+        ref: MemberSymbolRef,
+    ): List<BytecodeMember> {
+        if (ref.name == "<clinit>") return emptyList()
+        val wanted = ref.parameterTypes
+        if (ref.name == "<init>") {
+            val ctors = target.methods.filter { it.name == "<init>" }
+            if (wanted == null) return ctors.map { BytecodeMember.Method(it) }
+            return ctors.filter { it.descriptor.parameters.size == wanted.size && paramsMatch(it, wanted) }
+                .map { BytecodeMember.Method(it) }
+        }
+        val methods = target.methods.filter { it.name == ref.name && it.name != "<clinit>" }
+        val fields = if (wanted == null && ref.returnType == null) {
+            target.fields.filter { it.name == ref.name }.map { BytecodeMember.Field(it) }
+        } else if (wanted == null) {
+            // A return-qualified ref names a method, never a field.
+            emptyList()
+        } else {
+            emptyList()
+        }
+        val methodCandidates = if (wanted == null) {
+            methods.map { BytecodeMember.Method(it) }
+        } else {
+            methods.filter { it.descriptor.parameters.size == wanted.size && paramsMatch(it, wanted) }
+                .map { BytecodeMember.Method(it) }
+        }
+        val all = methodCandidates + fields
+        val returnType = ref.returnType
+        if (wanted != null && returnType != null && all.size > 1) {
+            val wantKey = bodyTypeKey(returnType)
+            val kept = all.filter {
+                it !is BytecodeMember.Method || bodyTypeKey(it.info.descriptor.returnType) == wantKey ||
+                    it.info.genericSignature?.let { sig -> signatureTypeKey(sig.returnType) == wantKey } == true
+            }
+            if (kept.isNotEmpty()) return kept
+        }
+        return all
+    }
+
+    private sealed interface BytecodeMember {
+        data class Method(val info: MethodInfo) : BytecodeMember
+        data class Field(val info: FieldInfo) : BytecodeMember
+    }
+
+    private fun paramsMatch(method: MethodInfo, wanted: List<TypeName>): Boolean {
+        val generic = method.genericSignature?.parameters
+        return method.descriptor.parameters.zip(wanted).withIndex().all { (index, pair) ->
+            val (have, want) = pair
+            val wantKey = bodyTypeKey(want)
+            if (bodyTypeKey(have) == wantKey) true
+            // Generic methods erase type variables (`U identity(U)` is `(Object)Object`
+            // in the descriptor): the generic signature still names `U` (D-009 —
+            // bytecode stays the authority, both spellings are its own words).
+            else generic != null && index < generic.size && signatureTypeKey(generic[index]) == wantKey
+        }
+    }
+
+    /**
+     * Bare simple name of a generic-signature type, mirroring [bodyTypeKey]:
+     * type variables keep their name, arrays collapse to their element.
+     */
+    private fun signatureTypeKey(sig: dev.jdx.core.model.TypeSignature): String = when (sig) {
+        is dev.jdx.core.model.TypeVariableSignature -> sig.name
+        is dev.jdx.core.model.BaseTypeSignature -> sig.primitive.keyword
+        is dev.jdx.core.model.ArrayTypeSignature -> signatureTypeKey(sig.elementType)
+        is dev.jdx.core.model.ClassTypeSignature -> sig.simpleName
+        else -> "void"
+    }
+
+    /**
+     * Compares one side of a bytecode-vs-ref type comparison by bare simple name,
+     * mirroring the T-021 source key: `java.lang.Object` and `Object` share a key,
+     * and varargs/arrays collapse to their element (`String...` matches `String[]`).
+     */
+    private fun bodyTypeKey(type: TypeName): String = when (type) {
+        is TypeName.ArrayType -> bodyTypeKey(type.elementType)
+        is TypeName.PrimitiveType -> type.simpleName
+        is TypeName.ClassType -> type.simpleName
+    }
+
+    /**
+     * Canonical refs for bytecode matches: `:return` is suffixed only when sibling
+     * rows share name and erased parameters (bridge/covariant overloads,
+     * PROPOSAL.md §6) — the same rule [buildMemberListing] uses.
+     */
+    private fun canonicalMemberRefs(target: ClassInfo, matches: List<BytecodeMember>): List<String> {
+        val methods = matches.filterIsInstance<BytecodeMember.Method>()
+        val siblingCounts = methods.groupingBy {
+            it.info.name to it.info.descriptor.parameters.joinToString("") { parameter -> parameter.descriptor }
+        }.eachCount()
+        return matches.map { match ->
+            when (match) {
+                is BytecodeMember.Method -> {
+                    val base = SymbolRefPrinter.print(
+                        MemberSymbolRef(
+                            declaringType = target.name,
+                            name = match.info.name,
+                            parameterTypes = match.info.descriptor.parameters,
+                        ),
+                    )
+                    val key = match.info.name to
+                        match.info.descriptor.parameters.joinToString("") { parameter -> parameter.descriptor }
+                    if ((siblingCounts[key] ?: 0) > 1 && match.info.name != "<init>") {
+                        base + ":" + dev.jdx.core.render.SignatureLines.renderTypeName(
+                            match.info.descriptor.returnType,
+                        )
+                    } else {
+                        base
+                    }
+                }
+                is BytecodeMember.Field ->
+                    SymbolRefPrinter.print(MemberSymbolRef(target.name, match.info.name))
+            }
+        }.sorted()
+    }
+
+    /** Did-you-mean refs for a missed member: name-near members of the same type. */
+    private fun suggestSimilarMember(target: ClassInfo, missed: String, cap: Int = 5): List<String> {
+        val names = (target.methods.map { it.name } + target.fields.map { it.name })
+            .filter { it != "<clinit>" }.distinct()
+        val near = names.filter { levenshtein(it, missed) <= 2 }.sorted()
+            .ifEmpty { return emptyList() }
+        val refs = mutableListOf<String>()
+        for (name in near) {
+            for (method in target.methods.filter { it.name == name }) {
+                refs.add(
+                    SymbolRefPrinter.print(
+                        MemberSymbolRef(
+                            declaringType = target.name,
+                            name = method.name,
+                            parameterTypes = method.descriptor.parameters,
+                        ),
+                    ),
+                )
+            }
+            for (field in target.fields.filter { it.name == name }) {
+                refs.add(SymbolRefPrinter.print(MemberSymbolRef(target.name, field.name)))
+            }
+            if (refs.size >= cap) break
+        }
+        return refs.take(cap)
     }
 
     // -- paths ------------------------------------------------------------------

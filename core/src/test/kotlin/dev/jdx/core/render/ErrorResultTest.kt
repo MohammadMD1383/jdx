@@ -32,6 +32,33 @@ class ErrorResultTest {
     }
 
     @Test
+    fun `not found detail renders as a second text line and joins the json message`() {
+        val result = ErrorResult.notFound(query = "com.example.Nope", detail = "no sources here (T-026)")
+        result.renderText() shouldBe """
+            not found: com.example.Nope
+            no sources here (T-026)
+        """.trimIndent()
+        val json = result.toJson(command = "body")
+        json shouldContain "\"message\":\"not found: com.example.Nope no sources here (T-026)\""
+        json shouldContain "\"candidates\":[]"
+    }
+
+    @Test
+    fun `not found detail precedes suggestions`() {
+        val result = ErrorResult.notFound(
+            query = "com.example.Nope",
+            suggestions = listOf("com.example.Known"),
+            detail = "extra context",
+        )
+        result.renderText() shouldBe """
+            not found: com.example.Nope
+            extra context
+            did you mean:
+              com.example.Known
+        """.trimIndent()
+    }
+
+    @Test
     fun `ambiguous text lists every candidate with a retry hint`() {
         ErrorResult.ambiguous(
             query = "Gson#toJson",

@@ -1,0 +1,8 @@
+dev.jdx.fixtures.PersonRecord#<init>
+  source: fixture-sources.jar · dev/jdx/fixtures/PersonRecord.java:15-19
+    public PersonRecord {
+        if (age < 0) {
+            throw new IllegalArgumentException("age");
+        }
+    }
+next: jdx show dev.jdx.fixtures.PersonRecord

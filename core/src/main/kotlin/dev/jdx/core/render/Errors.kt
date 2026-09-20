@@ -28,12 +28,19 @@ public sealed interface ErrorResult {
     public data class NotFound(
         override val query: String,
         public val suggestions: List<String> = emptyList(),
+        /**
+         * A second text line saying *why* nothing was found (e.g. which
+         * fallback is missing and which task will add it). Kept out of
+         * [candidates] — it is prose, not a copy-pasteable ref.
+         */
+        public val detail: String? = null,
     ) : ErrorResult {
         override val exitCode: Int = 1
         override val candidates: List<String> get() = suggestions
 
         override fun renderText(): String = buildString {
             append("not found: ").append(query)
+            if (detail != null) append("\n").append(detail)
             if (suggestions.isNotEmpty()) {
                 append("\ndid you mean:")
                 for (suggestion in suggestions) append("\n  ").append(suggestion)
@@ -84,8 +91,11 @@ public sealed interface ErrorResult {
 
     public companion object {
         /** Valid query, no results (exit 1). */
-        public fun notFound(query: String, suggestions: List<String> = emptyList()): ErrorResult =
-            NotFound(query, suggestions)
+        public fun notFound(
+            query: String,
+            suggestions: List<String> = emptyList(),
+            detail: String? = null,
+        ): ErrorResult = NotFound(query, suggestions, detail)
 
         /** Under-specified reference (exit 2). */
         public fun ambiguous(query: String, candidates: List<String>): ErrorResult =
@@ -102,7 +112,8 @@ private fun toErrorJson(command: String, result: ErrorResult): String {
         is ErrorResult.Ambiguous ->
             "ambiguous: ${result.candidates.size} candidates for ${result.query}"
         is ErrorResult.Generic -> result.message
-        else -> "not found: ${result.query}"
+        is ErrorResult.NotFound ->
+            "not found: ${result.query}" + (result.detail?.let { " $it" } ?: "")
     }
     val errorJson = "{\"code\":" + result.exitCode + ",\"message\":" + JsonEscape.quote(message) + "}"
     return envelopeJson(

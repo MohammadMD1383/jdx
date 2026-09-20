@@ -439,6 +439,19 @@ internal fun defaultMemberQuery(
 internal fun defaultShowQuery(ref: String, roots: JdxService.RootsSpec): JdxService.ServiceOutcome =
     JdxService.show(ref, roots)
 
+/** Query behind `body`, injectable so command tests run without IO (T-022). */
+internal typealias BodyQuery = (
+    ref: String,
+    roots: JdxService.RootsSpec,
+    options: JdxService.BodyOptions,
+) -> JdxService.ServiceOutcome
+
+internal fun defaultBodyQuery(
+    ref: String,
+    roots: JdxService.RootsSpec,
+    options: JdxService.BodyOptions,
+): JdxService.ServiceOutcome = JdxService.body(ref, roots, options)
+
 /** Query behind `search`, injectable so command tests run without IO (T-017). */
 internal typealias SearchQuery = (
     pattern: String,

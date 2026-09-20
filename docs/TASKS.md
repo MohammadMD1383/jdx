@@ -55,7 +55,8 @@ be fiction.
 complete; T-057…T-060 unblock as their milestones land. M1 (read path) is complete;
 M2 hardening is complete (T-070 closed the tier-2 half of T-066).
 **M3 has started: T-071 (`sources` `SourceRoot` access, first slice of T-020) is DONE;
-T-021 (JavaParser body extraction over that seam) is DONE.**
+T-021 (JavaParser body extraction over that seam) is DONE; T-022 (`jdx body`
+over that seam) is DONE.**
 
 ---
 
@@ -1011,7 +1012,7 @@ stored workspace mirror). `check` green shelved; `cli:tier2Test` with ambient
 ### T-020 Sources-jar/dir access and `srcmap` · **T-021** JavaParser integration and Java body extraction · **T-022** `jdx body` · **T-023** `jdx source` · **T-024** `jdx signature` · **T-025** `jdx doc` incl. inherited javadoc · **T-026** `DecompilerEngine` interface + Vineflower (isolated lazy classloader, on-disk cache) · **T-027** `javap` engine · **T-028** `SOURCES_VERSION_MISMATCH` detection
 *(Expand into detail blocks when M3 starts.)*
 
-### T-022 — `jdx body` over the T-021 seam · `WIP` (session 41)
+### T-022 — `jdx body` over the T-021 seam · `DONE` (session 41)
 **Depends:** T-021, T-011 (read-command patterns), T-015/T-016 (roots) · **Files:** `core/.../render/Body.kt`, `index/.../service/JdxService.kt` (`body`), `index/.../artifact/*` (sources accessors), `cli/.../commands/BodyCommand.kt`
 *(First CLI slice of M3: member bodies from paired Java sources only, wired to
 `jdx body`. No decompilation (T-026/T-027), no Kotlin bodies (T-039), no
@@ -1050,6 +1051,43 @@ ambiguity from bytecode, then slices the winning root's paired sources
       (hermetic, exits/text⊆JSON/determinism); tiers 1+2 green
 - [ ] `--help` text, Appendix B body flags verified, `TASKS.md` status,
       `PROGRESS.md` entry
+
+*Implementation notes (session 41): `core/.../render/Body.kt` — `BodyBlock`
+(result model mirroring `MemberListing`/`ClassCard`: canonical-ref header,
+`source:` line, verbatim lines, truncation footer, warnings, `next: jdx show`
+hint; text+JSON parity) + pure `sliceBodyLines` (context expansion clamped to
+the file, `--max-lines` cap with `shown`/`total`/`--max-lines N` hint) +
+`buildBodyBlock` + `DEFAULT_BODY_MAX_LINES = 200`. `ErrorResult.NotFound`
+gained an optional `detail` (second text line + appended JSON message;
+candidates untouched) because `Generic` rejects exits 1/2 by construction
+(L-065). `index`: new `:sources` dependency (D-035 §6) with
+`JarArtifact.openSources()` (external/embedded/none) and
+`JrtArtifact.openSources()` (`src.zip`); `JdxService.body` resolves the
+declaring type with the T-011 machinery (exact/short-name, `g:a:v` scope,
+`DUPLICATE_FQN`), decides overload ambiguity from bytecode (name + arity +
+simple-name narrowing with generic-signature fallback for erased type
+variables, `:return` suffix exactly like listings), then slices the winning
+root's paired sources — retrying erased queries with the generic signature's
+spellings (`identity(Object)` finds `U identity(U)`). Provenance names the
+sources file (D-035 §3). `cli`: thin `BodyCommand` (registered in `JdxCli`;
+`--context`/`--line-numbers`/`--max-lines` live, `--engine`/`--with-doc`/
+`--with-signature` exit 3 naming T-026/T-027/T-025/T-024) + `BodyQuery` seam.
+Tests: core `BodyBlockTest` (12 examples) + `BodyBlockPropertyTest` (4
+thousand-case properties: determinism, text⊆JSON, truncation law, no-escapes)
++ 2 `NotFound`-detail examples; index `BodyServiceTest` (19 tier-2: found incl.
+erased/type-variable spellings, nested/field/ctor/bridge/Kotlin/crafted-`.kt`
+/crafted-sourceless faults, ambiguity, usage/type-ref/no-roots exits,
+determinism, JSON envelope, JDK-honesty, D-017) + `BodyGoldenTest` (10 files
+over 4 fixture members incl. a context+numbers variant); cli `BodyCommandTest`
+(8 tier-1, hermetic) + `BodyCommandsServiceTest` (8 tier-2, hermetic, incl.
+D-017). Drive-by: `CorpusSoakTest`'s two exhaustive `when`s gained the
+`Body` branch. Standing bar: `test`+`tier2Test` green in all touched modules;
+`soak` green solo; `check` red only on `verifyTier1Budget` (pre-existing
+machine variance). Live proof: `app/build/jdx body
+'dev.jdx.fixtures.Generics#identity(U)' --jars …` → exit 0 verbatim slice
+with `-sources.jar` provenance; under-specified `Child#copy` → exit 2.
+Lessons L-065 (Generic-vs-NotFound), L-066 (stale test XML), L-067 (ambient
+workspace misses); decision D-035.*
 
 ### T-021 — JavaParser integration and Java body extraction · `DONE` (session 40)
 **Depends:** T-071 · **Files:** `sources/src/main/kotlin/dev/jdx/sources/JavaBodies.kt`
