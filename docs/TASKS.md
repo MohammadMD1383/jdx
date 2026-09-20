@@ -1089,6 +1089,48 @@ with `-sources.jar` provenance; under-specified `Child#copy` → exit 2.
 Lessons L-065 (Generic-vs-NotFound), L-066 (stale test XML), L-067 (ambient
 workspace misses); decision D-035.*
 
+### T-023 — `jdx source` over the T-021 seam · `WIP` (session 42)
+**Depends:** T-021, T-022 (body patterns), T-011 (read-command patterns), T-015/T-016 (roots) · **Files:** `core/.../render/Source.kt`, `index/.../service/JdxService.kt` (`source`), `cli/.../commands/SourceCommand.kt`
+*(Second CLI slice of M3: whole source files / slices from paired Java sources
+only, wired to `jdx source`. No decompilation (T-026/T-027), no Kotlin bodies
+(T-039), no doc/signature enrichment (T-025/T-024), no `SOURCES_VERSION_MISMATCH`
+formalism (T-028 — best-effort message only), no `--src`/`--sources` flags
+(T-031). Structure stays bytecode-authoritative (D-009): the type resolves from
+bytecode before sources are read.)*
+
+Wire the T-021 `loadJavaUnit`/`findJavaBodies` seam to the CLI:
+`JdxService.source(rawRef, roots, opts)` resolves the type with the T-011
+machinery (exact/short-name matching, `g:a:v` scope, `DUPLICATE_FQN`), then
+serves the winning root's paired sources (sibling `-sources.jar`,
+Gradle/`~/.m2` cache layouts, embedded sources, `src.zip` for the JDK) as
+verbatim text with provenance.
+
+**Acceptance**
+- [ ] `jdx source '<type-ref>'` returns the verbatim source file with 1-based
+      lines plus provenance (artifact, `SOURCES`, file, lines) — e.g.
+      `dev.jdx.fixtures.Generics` from the fixture `-sources.jar`
+- [ ] Under-specified short names with >1 bytecode candidate exit 2 with
+      canonical candidates; unknown type exits 1 with did-you-mean; member
+      refs exit 3 naming `--around` (T-023's member entry point); invalid refs
+      exit 3
+- [ ] No paired sources / `.kt`-only / source-missing-type degrade honestly
+      as exit 1 naming T-026/T-039/T-028; unreadable sources exit 5; no roots
+      exit 4; never throws, never a stack trace
+- [ ] Flags: `--lines A:B`, `--around <member-ref>` with `--context N`,
+      `--line-numbers`, `--max-lines N` work; `--lines` and `--around` are
+      mutually exclusive (exit 3); `--engine` exits 3 naming T-026/T-027;
+      `--jars`/`-w`/`--no-jdk`/`--coord`/`--repo`/`--fetch`/`--json`/
+      `--no-color` shared with the read commands
+- [ ] Text+JSON parity (D-007), deterministic bytes, `--max-lines` truncation
+      with `shown`/`total`/`hint`, `next:` hint line
+- [ ] Tests: core tier-1 examples + 1,000-case properties (determinism,
+      text⊆JSON, truncation law); index tier-2 service tests over fixture jars
+      (found/--lines/--around/ambiguous/not-found/no-sources/determinism) +
+      text+JSON goldens; cli tier-1 flag validation (hermetic) + tier-2
+      in-process tests (hermetic, exits/text⊆JSON/determinism); tiers 1+2 green
+- [ ] `--help` text, Appendix B source flags verified, `TASKS.md` status,
+      `PROGRESS.md` entry
+
 ### T-021 — JavaParser integration and Java body extraction · `DONE` (session 40)
 **Depends:** T-071 · **Files:** `sources/src/main/kotlin/dev/jdx/sources/JavaBodies.kt`
 *(First parsing slice of M3: library-level extraction over the T-071 `SourceRoot`
