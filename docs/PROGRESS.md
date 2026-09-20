@@ -14,14 +14,14 @@ or delete a past entry — if one turned out to be wrong, say so in a *new* entr
 
 | | |
 |---|---|
-| **Last updated** | 2026-09-20 (session 39) |
+| **Last updated** | 2026-09-20 (session 40) |
 | **Repository** | <https://github.com/MohammadMD1383/jdx> (public, Apache-2.0) |
 | **Phase** | Design complete; **M0 done (test spine complete), M1 done (read path), M2 hardening done, M3 started** |
-| **Active milestone** | M1 — Read path **complete** (T-062 sort orders, T-063 helper dedupe, T-064 indexer 3,000/s gap DONE); M2 index hardening **complete** (T-065 `$$` names DONE, T-066 test hermeticity DONE, T-068 identical-root dedupe DONE, T-069 `--repo` DONE, T-070 tier-2 hermeticity DONE); **M3 bodies started (T-071 `sources` `SourceRoot` DONE — first slice of T-020)** |
-| **Next task** | **T-021** (JavaParser integration and Java body extraction over the T-071 seam — expand into a detail block when started; T-022…T-028 remain M3 one-liners). |
+| **Active milestone** | M1 — Read path **complete** (T-062 sort orders, T-063 helper dedupe, T-064 indexer 3,000/s gap DONE); M2 index hardening **complete** (T-065 `$$` names DONE, T-066 test hermeticity DONE, T-068 identical-root dedupe DONE, T-069 `--repo` DONE, T-070 tier-2 hermeticity DONE); **M3 bodies started (T-071 `sources` `SourceRoot` DONE — first slice of T-020; T-021 JavaParser body extraction DONE)** |
+| **Next task** | **T-022** (`jdx body` wiring the T-021 seam to the CLI — expand into a detail block when started; T-023…T-028 remain M3 one-liners). |
 | **Task count** | 71 tasks defined (T-001…T-071; M0–M2 in full detail, M3 started — T-071 DONE, T-020…T-028 as one-liners) — **all DONE** |
 | **Build status** | **Green.** `./gradlew build` passes. Runnable `jdx`: `./gradlew :app:installDist` → `app/build/jdx` (fat jar + POSIX launcher, JDK-21 gate, ~180 ms cold start); `install.sh` symlinks it into `~/.local/bin`. Commands so far: `--version`, `version [--json]`, `doctor [--json]`, **`show`, `members`, `outline` (all flags, text+JSON, exits 0–4, `-w` workspaces, `--coord`/`--fetch`, `g:a:v/`-scoped refs)**, **`search`, `resolve`, `ls`, `tree` (glob/regex/camel-hump/fuzzy, text+JSON, exits 0/1/3/4/5/6, `-w` workspaces, `--coord`/`--fetch`; identical resolved roots dedupe before opening — T-068)**, **`ws create\|list\|info\|remove\|use\|add` (text+JSON, exits 0/1/3/4/6; `create`/`info` carry `coords`)**, **`cache info\|gc\|clear` (`CacheService` in `index`, thin group in `cli`, exits 0/3/4/6, `--cache-dir`, `--dry-run` on `gc`)**. Maven (T-019): `index/.../maven/` resolves `g:a:v` fetch-cache → Gradle → `~/.m2` → Central (only with `--fetch`, SHA-1 fail-closed, `-sources.jar` alongside into `~/.cache/jdx/m2`). JDK root: zero-config `show`/`members` on `java.*` via `jrt:/`, module-as-artifact (`java.base`), `src.zip` paired from `java.home`/`$JAVA_HOME` (T-012). Workspaces (T-015): TOML in `~/.config/jdx/workspaces/` (now with optional `coords`), §13 resolution (`-w` > `JDX_WORKSPACE` > `ws use`, explicit `--jars`/`--coord` merge first), first-provider-wins shadowing with `DUPLICATE_FQN`. Auto-discovery (T-016): Gradle/Maven projects contribute `build/classes`/`target/classes` + referenced cache jars when no workspace is selected (cached in `~/.cache/jdx/auto/`, `PROJECT_DISCOVERY_FALLBACK` when coordinates are unknown). Build: zero Gradle deprecations and configuration cache stores + reuses (T-067 closed). |
-| **Test status** | **All green, no shelving needed** (`test`+`tier2Test` green — 973 tests, 0 failures — incl. all four JaCoCo line gates and `:sources:check` with its 85 % gate on the new T-071 code; session 38 closed T-070, so `:cli:tier2Test` passes with the ambient `fx` workspace in place and with `JDX_WORKSPACE=fx` forced); `./gradlew mutationTest` tier 4 green — `core` 91 % mutation vs the build-failing 80 gate, `index` 70 % measured/reported, `sources`/`decompile` 0 mutants (T-071's arrival gives `sources` real code — mutation-measured from here on); `./gradlew soak` green except the known `JavapCorpusSoakTest` reds, now closed as T-065 degradation-skips). T-060 added: build wiring (`mutationTest` entry point, per-module `pitest` blocks, line gates on `test`+`tier2Test` exec) + ~1,230 lines of killer tests across 14 `core` test files (each names its mutant) + 2 production cleanups (dead `advance()`, redundant `isTarget` param). **Caveat (sessions 34/38/39):** `verifyTier1Budget` is red on this machine (pre-existing machine variance in environment-sensitive suites — `JdkLayoutTest`, `DoctorEnvironmentTest` — not a test failure: 0 failures/errors in every run; `:sources` tier-1 contributes only 2.0 s). |
+| **Test status** | **All green, no shelving needed** (`test`+`tier2Test` green — 1,009 tests, 0 failures — incl. all four JaCoCo line gates and `:sources:check` with its 85 % gate on the T-021 code (`JavaBodies.kt` 91 % line); session 38 closed T-070, so `:cli:tier2Test` passes with the ambient `fx` workspace in place and with `JDX_WORKSPACE=fx` forced); `./gradlew mutationTest` tier 4 green — `core` 91 % mutation vs the build-failing 80 gate, `index` 70 % measured/reported, `sources`/`decompile` 0 mutants (T-071's arrival gives `sources` real code — mutation-measured from here on); `./gradlew soak` green except the known `JavapCorpusSoakTest` reds, now closed as T-065 degradation-skips). T-060 added: build wiring (`mutationTest` entry point, per-module `pitest` blocks, line gates on `test`+`tier2Test` exec) + ~1,230 lines of killer tests across 14 `core` test files (each names its mutant) + 2 production cleanups (dead `advance()`, redundant `isTarget` param). **Caveat (sessions 34/38/39):** `verifyTier1Budget` is red on this machine (pre-existing machine variance in environment-sensitive suites — `JdkLayoutTest`, `DoctorEnvironmentTest` — not a test failure: 0 failures/errors in every run; `:sources` tier-1 contributes only 2.0 s). |
 | **Docs** | Append-only logs sharded (D-023): sessions → `docs/progress/` (`sessions-031-040.md` open at 36), decisions → `docs/decisions/` (shard 2 open — D-033 sort orders), lessons → `docs/lessons/` (`L-051-075.md` open at L-061). Every hard-won lesson goes to `docs/LESSONS.md` (D-024). |
 | **Blocked on** | Nothing. Sessions 24–28 unpushed (incl. T-017, T-018, T-067, T-057, T-058, T-019); **push still needs owner go-ahead per session (D-012)**. |
 
@@ -143,6 +143,19 @@ suite, and real-JVM end-to-end tests.
      rationale). Proven by 6 tier-1 tests (examples + 2 thousand-case
      properties) + 4 tier-2 tests (crafted hostile jar/dir + real fixture
      `-sources.jar` read). No parsing yet — JavaParser body extraction is T-021.
+
+  15. **Java body extraction** (`sources/.../JavaBodies.kt`, T-021, session 40):
+      `findJavaBodies(root, MemberSymbolRef)` yields sealed `Found`/`NoSource`/
+      `NotJava`/`MemberNotFound`/`ParseError` (values, never throws) plus
+      `listJavaMembers` for the T-028 mismatch pairing. Dollar-nesting walk,
+      `<init>` to ctors plus compact record ctors, arity gate plus
+      source-simple-name narrowing plus return-type disambiguation, verbatim
+      AST-range slices with 1-based lines (BLEEDING_EDGE grammar so records
+      parse). New `MemorySourceRoot` (in-memory seam; T-026 feeds decompiled
+      text through it). Proven by 24 tier-1 tests (19 examples plus 2
+      thousand-case properties) plus 12 tier-2 tests (fixture-jar pins,
+      truncated-source and deflate-corrupt faults). No CLI surface yet:
+      that is T-022.
 
  9. **The persistent index seam** (`index/.../store/`, T-013, session 18):
     `IndexStore` (hash-keyed artifacts, per-artifact `replaceClasses`, `ClassHit`
@@ -290,7 +303,7 @@ when it holds 10 sessions, create the next (`sessions-011-020.md`) and update th
 | `docs/progress/sessions-001-010.md` | 1–10 | full |
 | `docs/progress/sessions-011-020.md` | 11–20 | full |
 | `docs/progress/sessions-021-030.md` | 21–30 | full |
-| `docs/progress/sessions-031-040.md` | 31–37 | open |
+| `docs/progress/sessions-031-040.md` | 31–40 | full |
 
 ---
 

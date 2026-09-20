@@ -54,7 +54,8 @@ be fiction.
 **T-001 through T-019, T-053 through T-071 are `DONE`.** M0's test spine is
 complete; T-057…T-060 unblock as their milestones land. M1 (read path) is complete;
 M2 hardening is complete (T-070 closed the tier-2 half of T-066).
-**M3 has started: T-071 (`sources` `SourceRoot` access, first slice of T-020) is DONE.**
+**M3 has started: T-071 (`sources` `SourceRoot` access, first slice of T-020) is DONE;
+T-021 (JavaParser body extraction over that seam) is DONE.**
 
 ---
 
@@ -1010,7 +1011,7 @@ stored workspace mirror). `check` green shelved; `cli:tier2Test` with ambient
 ### T-020 Sources-jar/dir access and `srcmap` · **T-021** JavaParser integration and Java body extraction · **T-022** `jdx body` · **T-023** `jdx source` · **T-024** `jdx signature` · **T-025** `jdx doc` incl. inherited javadoc · **T-026** `DecompilerEngine` interface + Vineflower (isolated lazy classloader, on-disk cache) · **T-027** `javap` engine · **T-028** `SOURCES_VERSION_MISMATCH` detection
 *(Expand into detail blocks when M3 starts.)*
 
-### T-021 — JavaParser integration and Java body extraction · `WIP` (session 40)
+### T-021 — JavaParser integration and Java body extraction · `DONE` (session 40)
 **Depends:** T-071 · **Files:** `sources/src/main/kotlin/dev/jdx/sources/JavaBodies.kt`
 *(First parsing slice of M3: library-level extraction over the T-071 `SourceRoot`
 seam. No CLI surface — `jdx body`/`source` wire this up in T-022/T-023. Kotlin
@@ -1025,18 +1026,45 @@ matching is arity-first with source-simple-name narrowing; an under-specified
 ref returns every overload (the exit-2 set T-022 will render).
 
 **Acceptance**
-- [ ] `findJavaBodies(root, ref)` returns a sealed value — `Found(bodies)`,
+- [x] `findJavaBodies(root, ref)` returns a sealed value — `Found(bodies)`,
       `NoSource`, `NotJava` (`.kt` only — T-039), `MemberNotFound`, `ParseError`
       — never throws on agent-reachable input (malformed source, hostile names)
-- [ ] `<init>` matches constructors; fields match by variable name; bodies are
+- [x] `<init>` matches constructors; fields match by variable name; bodies are
       verbatim slices with 1-based `[startLine, endLine]`, deterministic
-- [ ] Tier-1: pure examples over inline sources + 1,000-case properties
+- [x] Tier-1: pure examples over inline sources + 1,000-case properties
       (hostile-input never-throws, slice-is-subslice law, parse-twice
       determinism); tier-2: real reads from the fixture `-sources.jar`
       (`Generics#identity`, `Nesting$Inner#outer`, a bridge-absent-from-sources
       case, a field, a ctor) + a crafted truncated-source fault (value, no throw)
-- [ ] `sources` still does not depend on `index`; `core` stays dependency-free;
+- [x] `sources` still does not depend on `index`; `core` stays dependency-free;
       `:sources:check` green incl. the 85 % line gate
+
+*Implementation notes (session 40): `sources/.../JavaBodies.kt` —
+`findJavaBodies` + `listJavaMembers` (declared-members listing for the T-028
+`SOURCES_VERSION_MISMATCH` pairing) over the shared `loadJavaUnit` seam
+(`findSource` → read → instance-parser parse; per-call `JavaParser` so no
+global `StaticJavaParser` state is touched). Matching: `$` walk (anonymous/
+local classes unreachable by construction), name match (`<init>` → ctors +
+compact record ctors; `<clinit>` never), arity gate (`passesArity` — compact
+ctors pass, fields/enum entries never match a parameterised ref), source-
+simple-name narrowing (FQ matches simple, `...`/`[]` share a key), return-type
+narrowing for same-erasure pairs, total disagreement → `MemberNotFound`
+(field-vs-method same-name is `Found` both — D-016, pinned on the
+`TrafficLight#seconds` fixture). Slicing is verbatim sub-slices of the parsed
+lines; `ParserConfiguration.BLEEDING_EDGE` so records/sealed parse instead of
+failing (caught by the first test run). New `MemorySourceRoot` in `SourceRoot.kt`
+(in-memory seam; T-026 will feed decompiled text through it) — needed because
+test source sets compile as separate Kotlin modules and cannot implement the
+sealed `SourceRoot`. Tests: 24 tier-1 (`JavaBodiesTest`: 19 examples + 2
+thousand-case properties) + 12 tier-2 (`JavaBodiesSourcesTest`: fixture-jar
+pins incl. implicit-ctor/synthetic-field absence, varargs-array match, enum +
+compact-ctor shapes, dir root, determinism, truncated-source and
+deflate-corrupt faults). Standing bar: `test`+`tier2Test` 1,009 tests 0
+failures; `soak` green solo (3m 51s); `check` red only on `verifyTier1Budget`
+(41.3s vs 30s — pre-existing machine variance: 40.3s in session 38, 31.4s
+stashed-clean; this suite costs ~5.3s standalone, inside the noise).
+`JavaBodies.kt` 91% line coverage. Lessons L-063 (no CRC check on ZipFile
+reads), L-064 (no concurrent Gradle builds in one checkout).*
 
 # M4 — Graph
 ### T-029 Reference-edge extraction · **T-030** `jdx usages` · **T-031** project source-dir usages · **T-032** `jdx hierarchy` / `implementors` · **T-033** `jdx callers` / `calls --depth` · **T-034** `jdx samples` with exemplariness ranking

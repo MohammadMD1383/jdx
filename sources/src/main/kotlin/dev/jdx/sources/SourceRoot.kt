@@ -169,6 +169,37 @@ public class JarSourceRoot(private val jar: Path) : SourceRoot {
 }
 
 /**
+ * In-memory sources: a fixed `normalised path → text` map behind the
+ * [SourceRoot] seam. Only `.java`/`.kt` keys under safe relative names are
+ * listed or servable — the same parity rule the jar and dir roots enforce.
+ *
+ * Beyond tests, this is where text that never lived on disk enters the
+ * pipeline: T-026 feeds decompiled output through the same JavaParser seam
+ * without a temp file.
+ */
+public class MemorySourceRoot(files: Map<String, String>) : SourceRoot {
+
+    override val displayName: String = "<memory>"
+
+    private val entries: Map<String, String> = files.mapNotNull { (raw, text) ->
+        val normalised = normalizeSourceEntryName(raw) ?: return@mapNotNull null
+        if (!normalised.endsWith(".java") && !normalised.endsWith(".kt")) return@mapNotNull null
+        normalised to text
+    }.toMap()
+
+    override fun sourcePaths(): List<String> = entries.keys.sorted()
+
+    override fun openSource(path: String): InputStream {
+        val normalised = normalizeSourceEntryName(path)
+            ?: throw SourceReadException("source read error: unsafe source path: $path")
+        return entries[normalised]?.byteInputStream(Charsets.UTF_8)
+            ?: throw SourceReadException("source read error: no such source: $path in $displayName")
+    }
+
+    override fun close(): Unit = Unit
+}
+
+/**
  * A source directory (a Gradle `src/main/java` tree, an unpacked `-sources`
  * jar, `$JAVA_HOME/lib/src.zip` extracted) walked on demand.
  */

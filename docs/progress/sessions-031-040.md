@@ -4,6 +4,78 @@ Newest first. Each entry follows the template at the bottom of `docs/PROGRESS.md
 
 ---
 
+## Session 40 — 2026-09-20 — T-021 JavaParser body extraction done
+**Agent/Author:** Muse Spark 1.3 Free · **Commits:** `10af0fe` (claim) + closing commit (this session)
+
+### Goal
+Implement T-021, the first M3 parsing slice: JavaParser integration and Java
+body extraction over the T-071 `SourceRoot` seam. Library level only — no CLI
+surface (`jdx body`/`source` are T-022/T-023); Kotlin bodies stay in T-039,
+decompilation in T-026/T-027.
+
+### What I did
+- `sources/.../JavaBodies.kt` (new): `findJavaBodies(root, MemberSymbolRef)`
+  → sealed `Found`/`NoSource`/`NotJava`/`MemberNotFound`/`ParseError`
+  (values, never throws) + `listJavaMembers` (declared-members listing for
+  the T-028 mismatch pairing) over the shared `loadJavaUnit` seam. Matching:
+  `$`-nesting walk, name match (`<init>` → ctors + compact record ctors,
+  `<clinit>` never), arity gate (`passesArity`), source-simple-name narrowing
+  (FQ matches simple, `...`/`[]` share a key), return-type disambiguation for
+  same-erasure pairs; verbatim AST-`Range` slices with 1-based lines.
+  Per-call instance parser (no `StaticJavaParser` global state);
+  `BLEEDING_EDGE` grammar so records/sealed parse.
+- `sources/.../SourceRoot.kt`: new `MemorySourceRoot` (in-memory seam;
+  T-026 will feed decompiled text through it). Needed because test source
+  sets compile as separate Kotlin modules and cannot implement the sealed
+  `SourceRoot`.
+- Tests: tier-1 `JavaBodiesTest` (19 examples + 2 thousand-case properties:
+  hostile-input never-throws, verbatim-subslice + parse-twice determinism) +
+  tier-2 `JavaBodiesSourcesTest` (12: fixture-jar pins — `Generics#identity`,
+  `Nesting$Inner#outer`, bridge-absent-from-sources `Child#copy`,
+  `TrafficLight` field/enum-ctor, `PersonRecord` compact ctor, varargs-array
+  match, body-less native slice, implicit-ctor/synthetic-field absence,
+  `NotJava` on the `.kt` file, dir root, determinism — plus truncated-source
+  and deflate-corrupt crafted faults).
+- Real bugs caught by the new tests: default JavaParser language level
+  rejects records (fixed with `BLEEDING_EDGE`); a parameterised ref matched a
+  field through the null-arity bypass (fixed with explicit `passesArity`);
+  `seconds` field-vs-method same-name returns both (D-016, kept + pinned).
+- Verified: `:sources:check` green incl. 85 % gate (`JavaBodies.kt` 91 %
+  line); full `test`+`tier2Test` 1,009 tests 0 failures; `soak` green solo
+  (3m 51s). `check` red only on `verifyTier1Budget` (41.3s vs 30s —
+  pre-existing machine variance: 40.3s session 38, 31.4s stashed-clean; this
+  suite ~5.3s standalone, inside the noise).
+
+### Decisions made
+- None new (no genuine ambiguity; overload/ambiguity semantics follow D-009/D-016).
+
+### Tasks moved
+- T-021: TODO → WIP (`10af0fe`) → DONE.
+
+### Lessons distilled
+- **L-063** — `ZipFile` reads do not verify entry CRCs (corrupt framing, not content, for read-fault tests).
+- **L-064** — never run two Gradle builds in one checkout concurrently (my background `soak --rerun-tasks` raced the foreground `check --rerun-tasks` and failed in ~18 s; solo rerun green).
+
+### What works now (and how to verify it yourself)
+```bash
+./gradlew :sources:check -x verifyTier1Budget --rerun-tasks  # green incl. coverage gate
+./gradlew :sources:test -x verifyTier1Budget --rerun-tasks   # 24 tier-1 tests
+./gradlew :sources:tier2Test --rerun-tasks                   # 12 tier-2 tests
+./gradlew soak                                               # green (3m 51s solo)
+```
+
+### What is broken / half-done
+- Nothing from this task. Pre-existing, untouched: `verifyTier1Budget` red on
+  this machine (see above); sessions 24–28 + 36–40 unpushed (push needs owner
+  go-ahead per D-012).
+
+### Open questions / blockers
+- None.
+
+### Next action
+- **T-022** (`jdx body` CLI wiring over this seam) — needs expanding into a
+  detail block when started; T-023…T-028 remain M3 one-liners.
+
 ## Session 39 — 2026-09-20 — T-071 `sources` SourceRoot (first M3 slice) done
 **Agent/Author:** Muse Spark 1.3 Free · **Commits:** `4b08c7a` (claim) + closing commit (this session)
 
