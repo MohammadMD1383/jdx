@@ -1012,6 +1012,62 @@ stored workspace mirror). `check` green shelved; `cli:tier2Test` with ambient
 ### T-020 Sources-jar/dir access and `srcmap` · **T-021** JavaParser integration and Java body extraction · **T-022** `jdx body` · **T-023** `jdx source` · **T-024** `jdx signature` · **T-025** `jdx doc` incl. inherited javadoc · **T-026** `DecompilerEngine` interface + Vineflower (isolated lazy classloader, on-disk cache) · **T-027** `javap` engine · **T-028** `SOURCES_VERSION_MISMATCH` detection
 *(Expand into detail blocks when M3 starts.)*
 
+### T-025 — `jdx doc` over the T-021 seam · `WIP` (session 44)
+**Depends:** T-021, T-022 (body patterns), T-011 (read-command patterns), T-015/T-016 (roots) · **Files:** `sources/.../JavaDocs.kt`, `core/.../render/Doc.kt`, `index/.../service/JdxService.kt` (`doc`), `cli/.../commands/DocCommand.kt`
+*(Fourth CLI slice of M3: javadoc rendering from paired Java sources only, wired to
+`jdx doc`. No decompilation (T-026/T-027), no Kotlin KDoc (T-039), no
+`SOURCES_VERSION_MISMATCH` formalism (T-028 — best-effort message only), no
+`--with-doc` enrichment of `body`/`members`/`outline` (filed as T-072).
+Structure stays bytecode-authoritative (D-009): the type resolves from
+bytecode before sources are read, overload ambiguity is decided from bytecode.)*
+
+Wire the T-021 `loadJavaUnit` seam to the CLI: `JdxService.doc(rawRef,
+roots, opts)` resolves the type or member with the T-011 machinery (exact/
+short-name matching, `g:a:v` scope, `DUPLICATE_FQN`), then renders the
+winning root's paired-sources javadoc (sibling `-sources.jar`,
+Gradle/`~/.m2` cache layouts, embedded sources, `src.zip` for the JDK) as
+plain text with provenance. Undocumented members fall back to the nearest
+documenting supertype (IntelliJ quick-doc semantics), labelled as such.
+
+**Acceptance**
+- [ ] `jdx doc '<symbol>'` returns the rendered plain-text javadoc with
+      provenance (artifact, `SOURCES`, file, lines) for types and members —
+      e.g. `dev.jdx.fixtures.Generics` from the fixture `-sources.jar`
+- [ ] Under-specified member refs with >1 bytecode overload exit 2 with
+      canonical candidates; unknown type/member exit 1 with did-you-mean;
+      `<clinit>` exits 3; invalid refs exit 3
+- [ ] No paired sources / `.kt`-only / undocumented-here-and-up-the-chain
+      degrade honestly as exit 1 naming T-026/T-039/T-028; unreadable sources
+      exit 5; no roots exit 4; never throws, never a stack trace
+- [ ] Flags: `--inherited` (default on, accepted for explicitness) /
+      `--no-inherited` (mutually exclusive, exit 3), `--raw` (verbatim
+      comment, no HTML/inline-tag rendering), `--max-lines N` work;
+      `--jars`/`-w`/`--no-jdk`/`--coord`/`--repo`/`--fetch`/`--json`/
+      `--no-color` shared with the read commands
+- [ ] Text+JSON parity (D-007), deterministic bytes, `--max-lines`
+      truncation with `shown`/`total`/`hint`, `next:` hint line
+- [ ] Tests: core tier-1 examples + 1,000-case properties (determinism,
+      text⊆JSON, truncation law); sources tier-1 extraction examples +
+      properties (never-throws, slice law); index tier-2 service tests over
+      fixture + crafted jars (found/inherited/not-found/no-sources/
+      determinism) + text+JSON goldens; cli tier-1 flag validation
+      (hermetic) + tier-2 in-process tests (hermetic,
+      exits/text⊆JSON/determinism); tiers 1+2 green
+- [ ] `--help` text, Appendix B doc flags verified, `TASKS.md` status,
+      `PROGRESS.md` entry
+
+### T-072 — Wire `--with-doc` into `body`/`members`/`outline` over the T-025 seam · `TODO`
+**Depends:** T-025 · **Files:** `cli/.../commands/BodyCommand.kt`, `ReadCommands.kt`, `ReadCommandSupport.kt`, `core/.../render/*`, `index/.../service/JdxService.kt`
+*(Split out of T-025 in session 44: per-row/per-body javadoc enrichment is a
+different scale from one-shot `jdx doc` — `members`/`outline` need the first
+sentence per row across a listing, `body` a doc block beside the slice.)*
+
+Reuse the T-025 extraction + rendering: `members`/`outline --with-doc`
+(first javadoc sentence per member) and `body --with-doc` (member doc).
+Repoint the parked exit-3 messages (currently naming T-025 in
+`BodyCommand.validateBodyFlags` and `ReadCommandSupport.validateMemberFlags`,
+pinned by `BodyCommandTest` + `ReadCommandsTest`) at this task when started.
+
 ### T-022 — `jdx body` over the T-021 seam · `DONE` (session 41)
 **Depends:** T-021, T-011 (read-command patterns), T-015/T-016 (roots) · **Files:** `core/.../render/Body.kt`, `index/.../service/JdxService.kt` (`body`), `index/.../artifact/*` (sources accessors), `cli/.../commands/BodyCommand.kt`
 *(First CLI slice of M3: member bodies from paired Java sources only, wired to
