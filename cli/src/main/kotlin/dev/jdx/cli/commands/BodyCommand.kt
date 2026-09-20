@@ -63,9 +63,9 @@ class BodyCommand(
 
     private val engine by option(
         "--engine",
-        help = "Decompiler engine: vineflower forces reconstruction even when sources are " +
-            "paired (default serves sources, falling back to vineflower); javap is not " +
-            "yet implemented (T-027).",
+        help = "Disassembly engine: vineflower forces reconstruction even when sources are " +
+            "paired (default serves sources, falling back to vineflower); javap shows " +
+            "the raw bytecode instead.",
     ).choice("vineflower", "javap", ignoreCase = true)
 
     private val withDoc by option(
@@ -161,10 +161,10 @@ class BodyCommand(
                         lineNumbers = lineNumbers,
                         maxLines = maxLines,
                         withSignature = withSignature,
-                        engine = if (engine.equals("vineflower", ignoreCase = true)) {
-                            DecompilerId.VINEFLOWER
-                        } else {
-                            null
+                        engine = when {
+                            engine.equals("vineflower", ignoreCase = true) -> DecompilerId.VINEFLOWER
+                            engine.equals("javap", ignoreCase = true) -> DecompilerId.JAVAP
+                            else -> null
                         },
                     ),
                 )
@@ -189,9 +189,11 @@ internal fun validateBodyFlags(
 ): String? {
     if (context < 0) return "usage error: --context must be >= 0, got $context"
     if (maxLines < 0) return "usage error: --max-lines must be >= 0, got $maxLines"
-    if (engine != null && !engine.equals("vineflower", ignoreCase = true)) {
-        return "usage error: --engine $engine is not yet implemented " +
-            "(raw bytecode: T-027 javap)"
+    if (engine != null &&
+        !engine.equals("vineflower", ignoreCase = true) &&
+        !engine.equals("javap", ignoreCase = true)
+    ) {
+        return "usage error: --engine $engine is not a known engine (vineflower|javap)"
     }
     if (withDoc) {
         return "usage error: --with-doc is not yet implemented (T-072: javadoc enrichment over the T-025 seam)"

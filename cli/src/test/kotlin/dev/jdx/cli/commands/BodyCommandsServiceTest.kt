@@ -152,13 +152,26 @@ class BodyCommandsServiceTest {
     }
 
     @Test
-    fun `no roots at all exits 4 and deferred flags exit 3`() {
+    fun `no roots at all exits 4`() {
         val bare = run(listOf("body", "dev.jdx.fixtures.Generics#identity(java.lang.Object)", "--no-jdk"))
         bare.exit shouldBe 4
         bare.output shouldContain "no workspace"
-        val engine = run(listOf("body") + fixtureArgs("dev.jdx.fixtures.Generics#identity(java.lang.Object)", "--engine", "javap"))
-        engine.exit shouldBe 3
-        engine.output shouldContain "T-027"
+    }
+
+    @Test
+    fun `forced javap disassembles end to end with a labelled provenance`() {
+        val run = run(
+            listOf("body") + fixtureArgs(
+                "dev.jdx.fixtures.Generics#identity(java.lang.Object)",
+                "--engine", "javap",
+            ),
+        )
+        run.exit shouldBe 0
+        run.output shouldContain "disassembled by javap from testfixtures-"
+        run.output shouldContain "reconstructed"
+        run.output shouldContain "descriptor: (Ljava/lang/Object;)Ljava/lang/Object;"
+        run.output shouldContain "Code:"
+        run.output shouldNotContain "return value;"
     }
 
     @Test

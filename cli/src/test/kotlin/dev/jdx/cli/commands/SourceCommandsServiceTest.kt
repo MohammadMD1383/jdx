@@ -121,7 +121,7 @@ class SourceCommandsServiceTest {
     }
 
     @Test
-    fun `exclusive flags and engine exit 3`() {
+    fun `exclusive flags exit 3`() {
         val exclusive = run(
             listOf("source") + fixtureArgs(
                 "dev.jdx.fixtures.Generics", "--lines", "1:2",
@@ -130,9 +130,16 @@ class SourceCommandsServiceTest {
         )
         exclusive.exit shouldBe 3
         exclusive.output shouldContain "mutually exclusive"
-        val engine = run(listOf("source") + fixtureArgs("dev.jdx.fixtures.Generics", "--engine", "javap"))
-        engine.exit shouldBe 3
-        engine.output shouldContain "T-027"
+    }
+
+    @Test
+    fun `forced javap disassembles end to end with a labelled provenance`() {
+        val run = run(listOf("source") + fixtureArgs("dev.jdx.fixtures.Generics", "--engine", "javap"))
+        run.exit shouldBe 0
+        run.output shouldContain "disassembled by javap from testfixtures-"
+        run.output shouldContain "reconstructed"
+        run.output shouldContain "Compiled from"
+        run.output shouldNotContain "package dev.jdx.fixtures;"
     }
 
     @Test

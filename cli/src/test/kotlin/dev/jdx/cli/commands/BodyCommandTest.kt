@@ -89,13 +89,13 @@ class BodyCommandTest {
     }
 
     @Test
-    fun `vineflower engine reaches the service, javap is rejected naming T-027`() {
+    fun `both engines reach the service`() {
         val forced = run(listOf("com.example.Point#getX()", "--engine", "vineflower"))
         forced.exit shouldBe 0
         forced.options?.engine shouldBe DecompilerId.VINEFLOWER
         val raw = run(listOf("com.example.Point#getX()", "--engine", "javap"))
-        raw.exit shouldBe 3
-        raw.output shouldContain "T-027"
+        raw.exit shouldBe 0
+        raw.options?.engine shouldBe DecompilerId.JAVAP
     }
 
     @Test

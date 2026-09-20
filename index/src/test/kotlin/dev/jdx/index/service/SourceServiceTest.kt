@@ -4,6 +4,8 @@ import dev.jdx.decompile.DecompileCache
 import dev.jdx.decompile.DecompileResult
 import dev.jdx.decompile.DecompilerEngine
 import dev.jdx.decompile.DecompilerId
+import dev.jdx.decompile.JavapDecompiler
+import dev.jdx.decompile.JavapEnvironment
 import dev.jdx.decompile.VineflowerDecompiler
 import dev.jdx.index.service.JdxService.RootsSpec
 import dev.jdx.index.service.JdxService.ServiceOutcome
@@ -18,6 +20,7 @@ import java.nio.file.Path
 import java.util.zip.ZipEntry
 import java.util.zip.ZipFile
 import java.util.zip.ZipOutputStream
+import org.junit.jupiter.api.Assumptions.assumeTrue
 import org.junit.jupiter.api.Tag
 import org.junit.jupiter.api.Test
 import org.junit.jupiter.api.io.TempDir
@@ -338,7 +341,7 @@ class SourceServiceTest {
         )
         outcome.exitCode shouldBe 1
         fake.calls shouldBe 1
-        textOf(outcome) shouldContain "T-027"
+        textOf(outcome) shouldContain "--engine javap"
         textOf(outcome) shouldNotContain "Exception"
     }
 
@@ -451,11 +454,113 @@ class SourceServiceTest {
             textOf(outcome) shouldContain "source: "
         } else {
             outcome.exitCode shouldBe 1
-            textOf(outcome) shouldContain "T-027"
+            textOf(outcome) shouldContain "--engine javap"
         }
         // Trace proxy, scoped: decompiled bodies legitimately name exception
         // types (`NoSuchElementException`, …) — only a trace header is a failure.
         textOf(outcome) shouldNotContain "Exception in thread"
+    }
+
+    // -- forced javap engine (T-027) ---------------------------------------------
+
+    private fun tempJavapEngine(tempDir: Path): JavapDecompiler =
+        JavapDecompiler(DecompileCache(tempDir.resolve("javap-cache")))
+
+    private fun javapPresent(): Boolean =
+        runCatching { JavapEnvironment.system().resolveExecutable() != null }.getOrDefault(false)
+
+    /** A failing javap engine that counts its invocations. */
+    private class FailingJavapDecompiler : DecompilerEngine {
+        override val id: DecompilerId = DecompilerId.JAVAP
+        var calls: Int = 0
+        override fun decompileClass(
+            classBytes: ByteArray,
+            binaryName: String,
+            classpath: List<Path>,
+        ): DecompileResult {
+            calls++
+            return DecompileResult.Failed("boom")
+        }
+    }
+
+    @Test
+    fun `forced javap serves whole disassembly with javap provenance`(@TempDir tempDir: Path) {
+        assumeTrue(javapPresent(), "no javap on this machine")
+        val binary = bareJar(tempDir)
+        val roots = RootsSpec(jarSpecs = listOf(binary.toString()), includeJdk = false)
+        val options = SourceOptions(engine = DecompilerId.JAVAP, javapDecompiler = tempJavapEngine(tempDir))
+        val outcome = JdxService.source("dev.jdx.fixtures.Generics", roots, options)
+        outcome.exitCode shouldBe 0
+        val text = textOf(outcome)
+        text.lines().first() shouldBe "dev.jdx.fixtures.Generics"
+        text shouldContain "disassembled by javap from bare.jar"
+        text shouldContain "reconstructed"
+        text shouldContain "Compiled from"
+        text shouldNotContain "Exception in thread"
+        val json = outcome.toJson("source")
+        json shouldContain "\"origin\":\"decompiled-javap\""
+        json shouldContain "Compiled from"
+    }
+
+    @Test
+    fun `lines window slices the disassembly`(@TempDir tempDir: Path) {
+        assumeTrue(javapPresent(), "no javap on this machine")
+        val binary = bareJar(tempDir)
+        val roots = RootsSpec(jarSpecs = listOf(binary.toString()), includeJdk = false)
+        val options = SourceOptions(
+            lines = 1 to 2,
+            engine = DecompilerId.JAVAP,
+            javapDecompiler = tempJavapEngine(tempDir),
+        )
+        val outcome = JdxService.source("dev.jdx.fixtures.Generics", roots, options)
+        outcome.exitCode shouldBe 0
+        textOf(outcome) shouldContain "Compiled from"
+    }
+
+    @Test
+    fun `around centers on a disassembled member`(@TempDir tempDir: Path) {
+        assumeTrue(javapPresent(), "no javap on this machine")
+        val binary = bareJar(tempDir)
+        val roots = RootsSpec(jarSpecs = listOf(binary.toString()), includeJdk = false)
+        val options = SourceOptions(
+            aroundRef = "dev.jdx.fixtures.Generics#identity(java.lang.Object)",
+            contextLines = 1,
+            lineNumbers = true,
+            engine = DecompilerId.JAVAP,
+            javapDecompiler = tempJavapEngine(tempDir),
+        )
+        val outcome = JdxService.source("dev.jdx.fixtures.Generics", roots, options)
+        outcome.exitCode shouldBe 0
+        textOf(outcome) shouldContain "disassembled by javap"
+        textOf(outcome) shouldContain "descriptor: (Ljava/lang/Object;)Ljava/lang/Object;"
+    }
+
+    @Test
+    fun `a failing javap engine exits 1 naming disassembly`(@TempDir tempDir: Path) {
+        val binary = bareJar(tempDir)
+        val roots = RootsSpec(jarSpecs = listOf(binary.toString()), includeJdk = false)
+        val fake = FailingJavapDecompiler()
+        val outcome = JdxService.source(
+            "dev.jdx.fixtures.Generics",
+            roots,
+            SourceOptions(engine = DecompilerId.JAVAP, javapDecompiler = fake),
+        )
+        outcome.exitCode shouldBe 1
+        fake.calls shouldBe 1
+        textOf(outcome) shouldContain "could not disassemble"
+        textOf(outcome) shouldNotContain "Exception in thread"
+    }
+
+    @Test
+    fun `disassembled sources are deterministic`(@TempDir tempDir: Path) {
+        assumeTrue(javapPresent(), "no javap on this machine")
+        val binary = bareJar(tempDir)
+        val roots = RootsSpec(jarSpecs = listOf(binary.toString()), includeJdk = false)
+        val options = SourceOptions(engine = DecompilerId.JAVAP, javapDecompiler = tempJavapEngine(tempDir))
+        val ref = "dev.jdx.fixtures.Generics"
+        textOf(JdxService.source(ref, roots, options)) shouldBe textOf(JdxService.source(ref, roots, options))
+        JdxService.source(ref, roots, options).toJson("source") shouldBe
+            JdxService.source(ref, roots, options).toJson("source")
     }
 
     private fun writeJar(jar: Path, entries: Map<String, ByteArray>) {

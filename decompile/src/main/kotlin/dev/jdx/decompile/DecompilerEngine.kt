@@ -4,11 +4,12 @@ import java.nio.file.Path
 
 /**
  * Which reconstruction engine produced a decompiled text. Vineflower is the
- * default readable-Java engine (T-026); the `javap` opcode engine lands in
- * T-027 and will extend this enum — never a boolean or a string flag.
+ * default readable-Java engine (T-026); `javap` is the raw-opcode engine
+ * (T-027) — never a boolean or a string flag.
  */
 public enum class DecompilerId(public val flag: String, public val displayName: String) {
     VINEFLOWER("vineflower", "vineflower"),
+    JAVAP("javap", "javap"),
 }
 
 /**

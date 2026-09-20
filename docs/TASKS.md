@@ -58,8 +58,9 @@ M2 hardening is complete (T-070 closed the tier-2 half of T-066).
 T-021 (JavaParser body extraction over that seam) is DONE; T-022 (`jdx body`
 over that seam) is DONE; T-023 (`jdx source` over that seam) is DONE;
 T-024 (`jdx signature` over bytecode) is DONE; T-025 (`jdx doc` incl.
-inherited javadoc) is DONE; T-026 (Vineflower decompiler fallback) is DONE.**
-T-072 (`--with-doc` enrichment) is filed TODO.
+inherited javadoc) is DONE; T-026 (Vineflower decompiler fallback) is DONE;
+T-027 (`javap` engine) is DONE.**
+T-072 (`--with-doc` enrichment) and T-073 (Vineflower→javap auto-fallback) are filed TODO.
 
 ---
 
@@ -1015,7 +1016,7 @@ stored workspace mirror). `check` green shelved; `cli:tier2Test` with ambient
 ### T-020 Sources-jar/dir access and `srcmap` · **T-021** JavaParser integration and Java body extraction · **T-022** `jdx body` · **T-023** `jdx source` · **T-024** `jdx signature` · **T-025** `jdx doc` incl. inherited javadoc · **T-028** `SOURCES_VERSION_MISMATCH` detection
 *(Expand into detail blocks when M3 starts.)*
 
-### T-027 — `javap` engine for `body`/`source` · `WIP`
+### T-027 — `javap` engine for `body`/`source` · `DONE` (session 46)
 **Depends:** T-022/T-023 (body/source patterns), T-026 (`DecompilerEngine` seam + forced-engine plumbing), T-011/T-015/T-016 (roots) · **Files:** `decompile/.../JavapDecompiler.kt`, `JavapOutput.kt`, `DecompilerEngine.kt`, `index/.../service/JdxService.kt`, `cli/.../commands/BodyCommand.kt`, `SourceCommand.kt`
 *(Second and last decompiler slice of M3: the `--engine javap` opcode path
 PROPOSAL.md §11.2 promises ("Show Bytecode" action). Structure stays
@@ -1031,29 +1032,91 @@ renderers with `DECOMPILED_JAVAP` provenance. `--engine javap` forces the
 disassembly path even when sources are paired.
 
 **Acceptance**
-- [ ] `DecompilerId.JAVAP` (`flag "javap"`); `JavapDecompiler : DecompilerEngine`
+- [x] `DecompilerId.JAVAP` (`flag "javap"`); `JavapDecompiler : DecompilerEngine`
       stages the class bytes and runs `javap -c -p -s -classpath <stagedDir> <binary>`
       with a wall-clock timeout — sealed `Decompiled(text, version)` / `Failed(message)`,
       never throws (missing binary, bad bytes, hostile names, timeout, nonzero exit)
-- [ ] Disk cache under `~/.cache/jdx/decompile` keyed by `(sha256(classBytes), javap, version)`
-      where version is the engine's own `javap -version` text; cache hits never spawn a process
-- [ ] `jdx body '<member>' --engine javap` exits 0 with the matched member's disassembly
+- [x] Disk cache under `~/.cache/jdx/decompile` keyed by `(sha256(classBytes), javap, version)`
+      where version is the engine's own `javap -version` text; repeat disassemblies
+      never re-spawn (the version probe costs one spawn per engine instance)
+- [x] `jdx body '<member>' --engine javap` exits 0 with the matched member's disassembly
       section + `DECOMPILED_JAVAP` provenance and the reconstructed label;
       `jdx source '<type>' --engine javap` (whole output, `--lines`, `--around`) likewise
-- [ ] Forced engine skips paired sources; `.kt`-only roots still exit 1 naming T-039;
-      members proven in bytecode but absent from the disassembly name T-028;
+- [x] Forced engine skips paired sources (mirroring forced vineflower);
+      the default ladder still exits 1 naming T-039 for `.kt`-only roots and
+      T-028 for members proven in bytecode but absent from the disassembly;
       unreadable class bytes exit 5; no roots exit 4; never throws, never a stack trace
-- [ ] Text+JSON parity (D-007), deterministic bytes, `--max-lines`/`--context`/
+- [x] Text+JSON parity (D-007), deterministic bytes, `--max-lines`/`--context`/
       `--line-numbers` work over disassembly exactly as over sources
-- [ ] Tests: decompile tier-1 (pure section-splitting examples + never-throws/determinism
+- [x] Tests: decompile tier-1 (pure section-splitting examples + never-throws/determinism
       properties) + tier-2 (real `javap` over fixture bytes: member sections present,
       twice-identical, cache-hit, timeout, hostile faults, missing-binary fault);
       index tier-2 service tests (forced engine, `.kt`/mismatch/determinism/JSON —
       no goldens: TESTING.md §5.3 forbids pinning disassembly text, and it is
       JDK-version-dependent); cli tier-1 flag validation + tier-2 in-process tests;
       tiers 1+2 green
-- [ ] `--help` text, Appendix B engine flags verified, `TASKS.md` status,
+- [x] `--help` text, Appendix B engine flags verified, `TASKS.md` status,
       `PROGRESS.md` entry
+
+*Implementation notes (session 46): `decompile/...` — `DecompilerId.JAVAP`
+(flag `javap`) + `JavapDecompiler` (staged class bytes + `javap -c -p -s
+-classpath <stagedDir> <binary>` with a 30 s wall-clock budget; binary
+resolved `explicit → $JAVA_HOME/bin → java.home/bin → PATH` mirroring
+`doctor`'s check via the injectable `JavapEnvironment`; disk cache
+`~/.cache/jdx/decompile/<sha256>-javap-<javap -version>.java` with the
+version probed once per instance, so repeat disassemblies never re-spawn) +
+`JavapOutput.kt` (pure `splitJavapSections`/`findJavapSection`/
+`javapMemberName`: header-filter-then-blank-split, erased-descriptor match —
+the no-blank-after-class-decl gotcha is L-077) + shared `Staging.kt`
+(`stagedEntryPath`/`stageClassFile`/`deleteStagedDir`, extracted from
+`VineflowerDecompiler` with byte-identical behaviour). `index`:
+`BodyOptions`/`SourceOptions` gain `javapDecompiler` (default production;
+data-class equality keeps the CLI `shouldBe` pins green, L-076) +
+`javapBodyOutcome`/`javapSourceOutcome`/`javapAroundOutcome` (forced engine
+skips sources; member sections pair by erased descriptor, first
+declaration-order match wins for bridge pairs; whole/`--lines` served via
+the shared `fileSourceOutcome`; `AroundMatch.Ready` carries the
+bytecode-first `matches` so `--around` never re-matches) +
+`decompileClassText` branches: Vineflower failures exit 1 naming the
+now-working `--engine javap` hatch (`, T-027` dropped everywhere),
+`javap` failures name only their cause. `cli`: both commands map
+`--engine javap` to `JAVAP` with updated help text. Tests: decompile tier-1
+(`JavapOutputTest`: 5 examples + 2 thousand-case properties — synthesised
+member find law, never-throws/slice/determinism; 0.3 s) + tier-2
+(`JavapDecompilerTest`: real engine over fixture bytes, counting-wrapper
+cache proof, timeout/missing-binary/hostile faults, resolution order);
+index tier-2 (forced/skip-sources/ambiguity/fake-failure/T-028/
+determinism/JSON for both commands); cli tier-1 (both-engines plumbing) +
+tier-2 (end-to-end disassembly incl. the `--engine javap` path over paired
+sources). Standing bar: `test`+`tier2Test` green incl. JaCoCo gates;
+`verifyTier1Budget` red at 65.6 s — pre-existing machine variance
+(slowest: `JavaBodiesTest`, none from this task; new suite costs 0.3 s).
+Live proof: `body`/`source --engine javap` exit 0 with `DECOMPILED_JAVAP`
+provenance; under-specified refs still exit 2 from bytecode. Lesson L-077;
+decision D-039.*
+
+### T-073 — Vineflower→javap auto-fallback on engine failure · `TODO`
+**Depends:** T-027 · **Files:** `index/.../service/JdxService.kt`
+*(Split out of T-027 in session 46: the default ladder (sources → Vineflower)
+degrades automatically, but a Vineflower failure still exits 1 naming the
+`--engine javap` hatch instead of retrying through `javap` — TESTING.md §7
+("decompiler timeout and crash must fall back to `javap`") wants the
+automatic step.)*
+
+When the default-ladder Vineflower reconstruction fails (timeout, crash,
+unparseable output), retry the same query through the T-027 `javap` engine
+before exiting 1 — so the ladder reads sources → vineflower → javap →
+signatures → not found, per PROPOSAL.md §16. Forced `--engine vineflower`
+stays strict (its failure still exits 1 naming the hatch).
+
+**Acceptance**
+- [ ] Default-ladder Vineflower failure disassembles via `javap` and exits 0;
+      only a `javap` failure too exits 1, naming both causes
+- [ ] Forced `--engine vineflower` failure still exits 1 (no silent engine swap)
+- [ ] The `a failing engine exits 1 naming the javap hatch` pins in
+      `BodyServiceTest`/`SourceServiceTest` move to the double-failure shape
+- [ ] Fault-injection tests: Vineflower timeout and crash both degrade to
+      disassembly (TESTING.md §7), never a trace
 
 ### T-026 — `DecompilerEngine` + Vineflower fallback for `body`/`source` · `DONE` (session 45)
 **Depends:** T-021 (MemorySourceRoot + JavaParser slicing seam), T-022/T-023 (body/source patterns), T-011/T-015/T-016 (roots) · **Files:** `decompile/.../DecompilerEngine.kt`, `VineflowerDecompiler.kt`, `DecompileCache.kt`, `core/.../render/Body.kt`, `Source.kt`, `index/.../service/JdxService.kt` (+ `index/build.gradle.kts`), `cli/.../commands/BodyCommand.kt`, `SourceCommand.kt`

@@ -77,22 +77,6 @@ public data class VineflowerDecompiler(
         }
     }
 
-    /**
-     * Maps a binary name to its staged class-file path (`dev/jdx/Foo.class`),
-     * or `null` when the name cannot name a file safely. `$`-nesting,
-     * `$`-runs (JFR `$$` shapes) and inner digits are all safe file names —
-     * only separators, parents and blanks are rejected, so this never throws
-     * and never escapes the staging dir.
-     */
-    internal fun stagedEntryPath(binaryName: String): String? {
-        if (binaryName.isBlank()) return null
-        if ('/' in binaryName || '\\' in binaryName || binaryName.contains("..")) return null
-        if (binaryName.startsWith(".") || binaryName.endsWith(".")) return null
-        val entry = binaryName.replace('.', '/') + ".class"
-        if (entry.split('/').any { it.isEmpty() }) return null
-        return entry
-    }
-
     private sealed interface RunOutcome {
         data class Ok(val text: String) : RunOutcome
         data class Failed(val message: String) : RunOutcome
@@ -108,11 +92,11 @@ public data class VineflowerDecompiler(
             synchronized(runnerLock) {
                 val staged = Files.createTempDirectory("jdx-vineflower-")
                 try {
-                    stageClass(staged, entryPath, classBytes)
+                    stageClassFile(staged, entryPath, classBytes)
                     val libraries = classpath.filter { Files.exists(it) }
                     runner().decompile(staged, libraries)
                 } finally {
-                    runCatching { deleteRecursively(staged) }
+                    deleteStagedDir(staged)
                 }
             }
         }
@@ -142,19 +126,6 @@ public data class VineflowerDecompiler(
         }
     }
 
-    /**
-     * Writes the class bytes into the staging dir at [entryPath]. The path
-     * comes from [stagedEntryPath] (no separators from the caller), and the
-     * normalised result must stay inside the staging dir — belt and braces
-     * against adversarial binary names.
-     */
-    private fun stageClass(staged: Path, entryPath: String, classBytes: ByteArray) {
-        val target = staged.resolve(entryPath).normalize()
-        check(target.startsWith(staged)) { "staging escape for $entryPath" }
-        target.parent?.let { Files.createDirectories(it) }
-        Files.write(target, classBytes)
-    }
-
     private fun runner(): VineflowerRunner {
         cachedRunner?.let { return it }
         synchronized(runnerLock) {
@@ -181,12 +152,6 @@ public data class VineflowerDecompiler(
                 .getDeclaredConstructor().newInstance()
             impl as? VineflowerRunner
         }.getOrNull()
-    }
-
-    private fun deleteRecursively(root: Path) {
-        Files.walk(root).use { walk ->
-            walk.sorted(Comparator.reverseOrder()).forEach { runCatching { Files.deleteIfExists(it) } }
-        }
     }
 
     private companion object {

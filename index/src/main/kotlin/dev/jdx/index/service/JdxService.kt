@@ -67,7 +67,10 @@ import dev.jdx.core.search.SymbolSearch
 import dev.jdx.decompile.DecompileResult
 import dev.jdx.decompile.DecompilerEngine
 import dev.jdx.decompile.DecompilerId
+import dev.jdx.decompile.JavapDecompiler
 import dev.jdx.decompile.VineflowerDecompiler
+import dev.jdx.decompile.findJavapSection
+import dev.jdx.decompile.splitJavapSections
 import dev.jdx.index.artifact.ArtifactKind
 import dev.jdx.index.artifact.ArtifactLoader
 import dev.jdx.index.artifact.ArtifactReadException
@@ -290,17 +293,23 @@ public object JdxService {
         /** Prepend the resolved bytecode signature header (`--with-signature`, T-024). */
         public val withSignature: Boolean = false,
         /**
-         * Forced decompiler (`--engine vineflower`, T-026): sources are skipped
-         * and the class is always reconstructed. `null` is the ladder default —
-         * paired sources first, Vineflower when they are absent.
+         * Forced decompiler (`--engine vineflower|javap`, T-026/T-027): sources
+         * are skipped and the class is always reconstructed. `null` is the
+         * ladder default — paired sources first, Vineflower when they are absent.
          */
         public val engine: DecompilerId? = null,
         /**
-         * The reconstruction engine behind the fallback. Defaults to the
-         * production Vineflower decompiler; tests inject fakes or temp-dir
+         * The reconstruction engine behind the Vineflower fallback. Defaults to
+         * the production Vineflower decompiler; tests inject fakes or temp-dir
          * instances so no test writes to the real cache.
          */
         public val decompiler: DecompilerEngine = VineflowerDecompiler(),
+        /**
+         * The raw-opcode engine behind `--engine javap` (T-027). Defaults to
+         * the production `javap` subprocess wrapper; tests inject fakes or
+         * temp-dir instances so no test writes to the real cache.
+         */
+        public val javapDecompiler: DecompilerEngine = JavapDecompiler(),
     )
 
     /**
@@ -414,17 +423,23 @@ public object JdxService {
         /** Maximum shown lines; the rest become a truncation footer (`--max-lines N`). */
         public val maxLines: Int = DEFAULT_SOURCE_MAX_LINES,
         /**
-         * Forced decompiler (`--engine vineflower`, T-026): sources are skipped
-         * and the class is always reconstructed. `null` is the ladder default —
-         * paired sources first, Vineflower when they are absent.
+         * Forced decompiler (`--engine vineflower|javap`, T-026/T-027): sources
+         * are skipped and the class is always reconstructed. `null` is the
+         * ladder default — paired sources first, Vineflower when they are absent.
          */
         public val engine: DecompilerId? = null,
         /**
-         * The reconstruction engine behind the fallback. Defaults to the
-         * production Vineflower decompiler; tests inject fakes or temp-dir
+         * The reconstruction engine behind the Vineflower fallback. Defaults to
+         * the production Vineflower decompiler; tests inject fakes or temp-dir
          * instances so no test writes to the real cache.
          */
         public val decompiler: DecompilerEngine = VineflowerDecompiler(),
+        /**
+         * The raw-opcode engine behind `--engine javap` (T-027). Defaults to
+         * the production `javap` subprocess wrapper; tests inject fakes or
+         * temp-dir instances so no test writes to the real cache.
+         */
+        public val javapDecompiler: DecompilerEngine = JavapDecompiler(),
     )
 
     /**
@@ -2603,6 +2618,24 @@ public object JdxService {
                     options = options,
                 )
             }
+            // `--engine javap` skips the paired sources entirely (T-027): the
+            // class is always disassembled, even when sources are paired.
+            if (options.engine == DecompilerId.JAVAP) {
+                return javapBodyOutcome(
+                    memberRef = memberRef,
+                    rawRef = rawRef,
+                    binary = binary,
+                    target = target,
+                    bytecodeMatches = bytecodeMatches,
+                    matchRefs = matchRefs,
+                    signatureLine = signatureLine,
+                    opened = opened,
+                    winner = winner,
+                    label = label,
+                    warnings = warnings,
+                    options = options,
+                )
+            }
             val sources = openSourcesFor(opened[winner])
                 // No sources root is routine (most jars ship without one): the
                 // ladder degrades to reconstruction (T-026), not a dead end.
@@ -2717,8 +2750,9 @@ public object JdxService {
     /**
      * Runs [decompiler] over the winning root's class bytes with the other
      * workspace roots as library context (PROPOSAL.md §11.2). Never throws:
-     * engine failures become exit 1 naming the `--engine javap` escape hatch
-     * (T-027), so the agent knows a lesser answer still exists.
+     * Vineflower failures become exit 1 naming the `--engine javap` escape
+     * hatch; `javap` itself is the last rung of the ladder, so its failures
+     * name only their cause.
      */
     private fun decompileClassText(
         opened: List<OpenRoot>,
@@ -2733,11 +2767,18 @@ public object JdxService {
             is DecompileResult.Decompiled -> DecompiledText.Ready(result.text)
             is DecompileResult.Failed -> DecompiledText.Failed(
                 ServiceOutcome.Failure(
-                    ErrorResult.notFound(
-                        rawRef,
-                        detail = "could not decompile $binary with ${decompiler.id.displayName}: " +
-                            "${result.message} (raw bytecode: --engine javap, T-027)",
-                    ),
+                    if (decompiler.id == DecompilerId.JAVAP) {
+                        ErrorResult.notFound(
+                            rawRef,
+                            detail = "could not disassemble $binary with javap: ${result.message}",
+                        )
+                    } else {
+                        ErrorResult.notFound(
+                            rawRef,
+                            detail = "could not decompile $binary with ${decompiler.id.displayName}: " +
+                                "${result.message} (raw bytecode: --engine javap)",
+                        )
+                    },
                 ),
             )
         }
@@ -2833,7 +2874,7 @@ public object JdxService {
                         ErrorResult.notFound(
                             rawRef,
                             detail = "could not parse decompiled text for $binary: ${found.message} " +
-                                "(raw bytecode: --engine javap, T-027)",
+                                "(raw bytecode: --engine javap)",
                         ),
                     )
             }
@@ -2972,7 +3013,7 @@ public object JdxService {
                         ErrorResult.notFound(
                             rawRef,
                             detail = "could not parse decompiled text for $binary: ${found.message} " +
-                                "(raw bytecode: --engine javap, T-027)",
+                                "(raw bytecode: --engine javap)",
                         ),
                     )
             }
@@ -2983,6 +3024,210 @@ public object JdxService {
                 aroundRaw,
                 detail = "$aroundRaw has no decompiled counterpart in $label " +
                     "(possible SOURCES_VERSION_MISMATCH, T-028)",
+            ),
+        )
+    }
+
+    // -- javap engine (T-027) ----------------------------------------------------
+
+    /**
+     * The erased descriptor behind one bytecode match: the key the `javap`
+     * `descriptor:` lines carry, so disassembly sections pair with the same
+     * match the sources path would slice for.
+     */
+    private fun javapDescriptorOf(match: BytecodeMember): String = when (match) {
+        is BytecodeMember.Method -> match.info.descriptor.descriptor
+        is BytecodeMember.Field -> match.info.type.descriptor
+    }
+
+    /**
+     * The member name behind one bytecode match, in `javap` terms: `<init>`
+     * for constructors (printed as the FQN), the plain name otherwise.
+     */
+    private fun javapNameOf(match: BytecodeMember): String = when (match) {
+        is BytecodeMember.Method -> match.info.name
+        is BytecodeMember.Field -> match.info.name
+    }
+
+    /**
+     * Serves `body <member> --engine javap` (T-027): disassembles the winning
+     * class through [BodyOptions.javapDecompiler] and serves the matched
+     * member's section — the IDE's *Show Bytecode* action. Overload ambiguity
+     * was already decided from bytecode (D-009); the erased descriptor pairs
+     * the match with its section, so erased-vs-generic query spellings need
+     * no retry here. Presentation (`--context`, `--line-numbers`,
+     * `--max-lines`, `--with-signature`) is byte-identical in shape to the
+     * sources path — only the provenance differs.
+     */
+    private fun javapBodyOutcome(
+        memberRef: MemberSymbolRef,
+        rawRef: String,
+        binary: String,
+        target: ClassInfo,
+        bytecodeMatches: List<BytecodeMember>,
+        matchRefs: List<String>,
+        signatureLine: String?,
+        opened: List<OpenRoot>,
+        winner: Int,
+        label: String,
+        warnings: List<Warning>,
+        options: BodyOptions,
+    ): ServiceOutcome {
+        val text = when (
+            val disassembled = decompileClassText(opened, winner, binary, rawRef, options.javapDecompiler)
+        ) {
+            is DecompiledText.Failed -> return disassembled.outcome
+            is DecompiledText.Ready -> disassembled.text
+        }
+        val sections = splitJavapSections(text)
+        // Non-empty by construction: `executeBody` returns before this point
+        // when no bytecode member matches. Bridge/covariant pairs share name
+        // and erased parameters but carry distinct descriptors (and returns):
+        // the first declaration-order match wins, mirroring the
+        // `--with-signature` header choice above.
+        val first = bytecodeMatches.first()
+        val section = findJavapSection(sections, javapNameOf(first), javapDescriptorOf(first))
+            ?: return ServiceOutcome.Failure(
+                ErrorResult.notFound(
+                    rawRef,
+                    detail = "$rawRef has no disassembled counterpart in $label " +
+                        "(possible SOURCES_VERSION_MISMATCH, T-028)",
+                ),
+            )
+        val fileLines = splitTextLines(text)
+        return ServiceOutcome.Body(
+            buildBodyBlock(
+                canonicalRef = matchRefs.singleOrNull() ?: SymbolRefPrinter.print(
+                    MemberSymbolRef(
+                        declaringType = target.name,
+                        name = memberRef.name,
+                        parameterTypes = memberRef.parameterTypes,
+                    ),
+                ),
+                declaringType = binary,
+                file = javaPathFor(binary),
+                fileLines = fileLines,
+                startLine = section.startLine,
+                endLine = section.endLine,
+                provenance = listOf(
+                    Provenance(
+                        artifact = label,
+                        origin = Origin.DECOMPILED_JAVAP,
+                        file = javaPathFor(binary),
+                        lineRange = section.startLine..section.endLine,
+                    ),
+                ),
+                warnings = warnings.sortedBy { it.code },
+                contextLines = options.contextLines,
+                lineNumbers = options.lineNumbers,
+                maxLines = options.maxLines,
+                signature = signatureLine,
+            ),
+        )
+    }
+
+    /**
+     * Serves `source <type> --engine javap` (T-027): whole disassembly,
+     * `--lines` window, or `--around` member section. The windowing math is
+     * the shared [fileSourceOutcome]; only the text origin differs.
+     */
+    private fun javapSourceOutcome(
+        rawRef: String,
+        binary: String,
+        label: String,
+        target: ClassInfo,
+        opened: List<OpenRoot>,
+        winner: Int,
+        options: SourceOptions,
+        warnings: List<Warning>,
+    ): ServiceOutcome {
+        val text = when (
+            val disassembled = decompileClassText(opened, winner, binary, rawRef, options.javapDecompiler)
+        ) {
+            is DecompiledText.Failed -> return disassembled.outcome
+            is DecompiledText.Ready -> disassembled.text
+        }
+        val aroundRaw = options.aroundRef
+        if (aroundRaw != null) {
+            val matched = matchAroundMember(target, aroundRaw, rawRef)
+            if (matched is AroundMatch.Failed) return matched.outcome
+            matched as AroundMatch.Ready
+            return javapAroundOutcome(
+                binary = binary,
+                aroundRaw = aroundRaw,
+                label = label,
+                target = target,
+                matched = matched,
+                text = text,
+                options = options,
+                warnings = warnings,
+            )
+        }
+        return fileSourceOutcome(
+            binary = binary,
+            rawRef = rawRef,
+            artifact = label,
+            file = javaPathFor(binary),
+            fileLines = splitTextLines(text),
+            window = options.lines,
+            origin = Origin.DECOMPILED_JAVAP,
+            warnings = warnings,
+            options = options,
+        )
+    }
+
+    /**
+     * Serves `source --around <member-ref> --engine javap` (T-027): the member
+     * is located through its erased descriptor (the same bytecode-first match
+     * [matchAroundMember] decided), and its disassembly section is expanded by
+     * `--context` exactly like the sources path.
+     */
+    private fun javapAroundOutcome(
+        binary: String,
+        aroundRaw: String,
+        label: String,
+        target: ClassInfo,
+        matched: AroundMatch.Ready,
+        text: String,
+        options: SourceOptions,
+        warnings: List<Warning>,
+    ): ServiceOutcome {
+        // `matchAroundMember` already proved exactly one resolvable member
+        // (ambiguity exits 2 there); the first declaration-order match is the
+        // section served, mirroring [javapBodyOutcome].
+        val first = matched.matches.firstOrNull()
+            ?: return ServiceOutcome.Failure(
+                ErrorResult.notFound(aroundRaw, suggestSimilarMember(target, matched.effectiveRef.name)),
+            )
+        val section = findJavapSection(splitJavapSections(text), javapNameOf(first), javapDescriptorOf(first))
+            ?: return ServiceOutcome.Failure(
+                ErrorResult.notFound(
+                    aroundRaw,
+                    detail = "$aroundRaw has no disassembled counterpart in $label " +
+                        "(possible SOURCES_VERSION_MISMATCH, T-028)",
+                ),
+            )
+        val fileLines = splitTextLines(text)
+        return ServiceOutcome.Source(
+            buildSourceBlock(
+                canonicalRef = binary,
+                declaringType = binary,
+                file = javaPathFor(binary),
+                fileLines = fileLines,
+                startLine = section.startLine,
+                endLine = section.endLine,
+                provenance = listOf(
+                    Provenance(
+                        artifact = label,
+                        origin = Origin.DECOMPILED_JAVAP,
+                        file = javaPathFor(binary),
+                        lineRange = section.startLine..section.endLine,
+                    ),
+                ),
+                warnings = warnings.sortedBy { it.code },
+                contextLines = options.contextLines,
+                lineNumbers = options.lineNumbers,
+                maxLines = options.maxLines,
             ),
         )
     }
@@ -3139,6 +3384,11 @@ public object JdxService {
             if (options.engine == DecompilerId.VINEFLOWER) {
                 return decompiledSourceOutcome(rawRef, binary, label, target, opened, winner, options, warnings)
             }
+            // `--engine javap` skips the paired sources entirely (T-027): the
+            // class is always disassembled, even when sources are paired.
+            if (options.engine == DecompilerId.JAVAP) {
+                return javapSourceOutcome(rawRef, binary, label, target, opened, winner, options, warnings)
+            }
             val sources = openSourcesFor(opened[winner])
                 // No sources root is routine (most jars ship without one): the
                 // ladder degrades to reconstruction (T-026), not a dead end.
@@ -3249,6 +3499,8 @@ public object JdxService {
             val lookupRefs: List<MemberSymbolRef>,
             val matchRefs: List<String>,
             val specified: Boolean,
+            /** The bytecode-first matches (D-009) the refs above were built from. */
+            val matches: List<BytecodeMember>,
         ) : AroundMatch
 
         data class Failed(val outcome: ServiceOutcome) : AroundMatch
@@ -3293,7 +3545,7 @@ public object JdxService {
         val singleMatch = bytecodeMatches.singleOrNull()
         val lookupRefs = listOf(effectiveRef) +
             (singleMatch?.let { genericSpelledRef(target, it) }?.takeIf { it != effectiveRef }?.let(::listOf).orEmpty())
-        return AroundMatch.Ready(effectiveRef, lookupRefs, matchRefs, specified)
+        return AroundMatch.Ready(effectiveRef, lookupRefs, matchRefs, specified, bytecodeMatches)
     }
 
     /**

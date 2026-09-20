@@ -4,6 +4,110 @@ Newest first. Each entry follows the template at the bottom of `docs/PROGRESS.md
 
 ---
 
+## Session 46 — 2026-09-20 — T-027 `javap` engine done
+**Agent/Author:** Muse Spark 1.3 Free · **Commits:** `e4c1466` (claim) + closing commit (this session)
+
+### Goal
+Implement T-027, the second and last decompiler slice of M3: `--engine javap`
+for `body`/`source` (PROPOSAL.md §11.2's *Show Bytecode* action), wired through
+the T-026 `DecompilerEngine` seam with `DECOMPILED_JAVAP` provenance.
+
+### What I did
+- Claimed T-027 first: expanded the M3 one-liner into a detail block
+  (`docs/TASKS.md`) and committed the `WIP` (`e4c1466`) before coding.
+- Probed real `javap -c -p -s` output first: members are blank-separated with
+  a `descriptor:` line each, but there is **no** blank line between the class
+  declaration and the first member (L-077); `javap -version` prints to stdout
+  on JDK 26, stderr on older JDKs (merged stream).
+- `decompile/...` (new): `DecompilerId.JAVAP` + `JavapDecompiler` (staged
+  class bytes + `javap -c -p -s -classpath <stagedDir> <binary>`, 30 s budget,
+  binary resolved explicit → `$JAVA_HOME/bin` → `java.home/bin` → `PATH` via
+  the injectable `JavapEnvironment`, disk cache
+  `<sha256>-javap-<javap -version>.java` with the version probed once per
+  instance) + `JavapOutput.kt` (pure `splitJavapSections`/`findJavapSection`/
+  `javapMemberName`: header-filter-then-blank-split, erased-descriptor match)
+  + shared `Staging.kt` (`stagedEntryPath`/`stageClassFile`/`deleteStagedDir`,
+  extracted from `VineflowerDecompiler` byte-identically;
+  `VineflowerStagingTest` now pins the shared function).
+- `index` (`JdxService`): `BodyOptions`/`SourceOptions` gain `javapDecompiler`
+  (default production; data-class equality keeps the CLI `shouldBe` pins
+  green, L-076) + `javapBodyOutcome`/`javapSourceOutcome`/`javapAroundOutcome`
+  (forced engine skips sources; sections pair by erased descriptor, first
+  declaration-order match wins for bridge pairs; whole/`--lines` via the
+  shared `fileSourceOutcome`; `AroundMatch.Ready` carries the bytecode-first
+  `matches` so `--around` never re-matches) + `decompileClassText` branches:
+  Vineflower failures exit 1 naming the now-working `--engine javap` hatch
+  (`, T-027` dropped everywhere), `javap` failures name only their cause.
+  No auto-fallback (filed as T-073); `.kt`-only default path still names
+  T-039; absent-from-disassembly names T-028.
+- `cli`: `body`/`source` map `--engine javap` to `JAVAP` with updated help
+  text; `validateBodyFlags`/`validateSourceFlags` accept both engines.
+- Tests (no goldens: TESTING.md §5.3, plus JDK-version dependence): decompile
+  tier-1 `JavapOutputTest` (5 examples + 2 thousand-case properties —
+  synthesised member-find law, never-throws/slice/determinism; 0.3 s) +
+  tier-2 `JavapDecompilerTest` (real engine over fixture bytes, a
+  counting-wrapper cache proof, timeout/missing-binary/hostile faults,
+  resolution order); index tier-2 (forced, skip-paired-sources,
+  bytecode-first ambiguity, fake-failure, T-028, determinism, JSON — both
+  commands); cli tier-1 (both-engines plumbing) + tier-2 (end-to-end
+  disassembly). Updated the four pins that named T-027 as unimplemented.
+- Verified: `test`+`tier2Test` green incl. JaCoCo gates; `soak` green solo
+  (2m 35s); `verifyTier1Budget` red at 65.6 s — pre-existing machine variance
+  (slowest: `JavaBodiesTest`, none from this task). Live proof via
+  `app/build/jdx` (see below).
+
+### Decisions made
+- D-039 (`javap` engine semantics: forced-only + T-073 filed, descriptor
+  match, header-filter splitting, `doctor`-mirroring resolution, versioned
+  cache, shared windowing, no goldens) in `docs/decisions/D-026-050.md`.
+
+### Tasks moved
+- T-027: TODO → WIP (`e4c1466`) → DONE. Filed T-073 (Vineflower→javap
+  auto-fallback, TESTING.md §7). T-028/T-072 stay TODO.
+
+### Lessons distilled
+- **L-077** — `javap` prints no blank line between the class header and the
+  first member (filter header lines before blank-splitting); `javap -version`
+  goes to stdout on JDK 26, stderr elsewhere (read merged).
+
+### What works now (and how to verify it yourself)
+```bash
+./gradlew :decompile:test :decompile:tier2Test -x verifyTier1Budget  # engine + parser
+./gradlew :index:tier2Test --tests "dev.jdx.index.service.BodyServiceTest" \
+  --tests "dev.jdx.index.service.SourceServiceTest" -x verifyTier1Budget
+./gradlew :cli:test :cli:tier2Test -x verifyTier1Budget
+./gradlew check -x verifyTier1Budget  # green incl. gates
+./gradlew soak -x verifyTier1Budget   # green (2m 35s solo)
+JAR=testfixtures/build/libs/testfixtures-0.1.0-SNAPSHOT.jar
+./app/build/jdx body 'dev.jdx.fixtures.Generics#identity(java.lang.Object)' --jars "$JAR" --no-jdk --engine javap
+# exit 0: member section with `disassembled by javap from testfixtures-… ⚠ reconstructed`
+./app/build/jdx source 'dev.jdx.fixtures.Generics' --jars "$JAR" --no-jdk --engine javap --lines 1:8
+# exit 0: whole disassembly window with truncation footer
+./app/build/jdx source 'dev.jdx.fixtures.Generics' --jars "$JAR" --no-jdk --engine javap --around 'dev.jdx.fixtures.Generics#identity(java.lang.Object)' --context 1 --line-numbers
+# exit 0: member section expanded by context
+./app/build/jdx body 'dev.jdx.fixtures.TrafficLight#seconds' --jars "$JAR" --no-jdk --engine javap
+# exit 2: field/method ambiguity still decided from bytecode
+```
+Note: run the `jdx` proofs from the repo dir — from elsewhere the ambient
+`fx` workspace (relative glob, T-066 trap) can exit 5 before the explicit
+`--jars` root is read.
+
+### What is broken / half-done
+- Nothing from this task. Pre-existing, untouched: `verifyTier1Budget` red on
+  this machine (machine variance, 0 test failures); `doc` has no decompiled
+  path by design; soak runs no body/source queries so corpus disassembly is
+  unexercised in tier 3. Deliberately not done here: Vineflower→javap
+  auto-fallback (T-073).
+
+### Open questions / blockers
+- None.
+
+### Next action
+- **T-028** (`SOURCES_VERSION_MISMATCH` detection — the last M3 one-liner
+  before M4; T-072 `--with-doc` and T-073 auto-fallback filed TODO).
+
+---
+
 ## Session 45 — 2026-09-20 — T-026 Vineflower decompiler fallback done
 **Agent/Author:** Muse Spark 1.3 Free · **Commits:** `d3cbe04` (claim) + closing commit (this session)
 

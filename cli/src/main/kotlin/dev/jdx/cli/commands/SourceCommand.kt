@@ -75,9 +75,9 @@ class SourceCommand(
 
     private val engine by option(
         "--engine",
-        help = "Decompiler engine: vineflower forces reconstruction even when sources are " +
-            "paired (default serves sources, falling back to vineflower); javap is not " +
-            "yet implemented (T-027).",
+        help = "Disassembly engine: vineflower forces reconstruction even when sources are " +
+            "paired (default serves sources, falling back to vineflower); javap shows " +
+            "the raw bytecode instead.",
     ).choice("vineflower", "javap", ignoreCase = true)
 
     private val jars by option(
@@ -166,10 +166,10 @@ class SourceCommand(
                         contextLines = context,
                         lineNumbers = lineNumbers,
                         maxLines = maxLines,
-                        engine = if (engine.equals("vineflower", ignoreCase = true)) {
-                            DecompilerId.VINEFLOWER
-                        } else {
-                            null
+                        engine = when {
+                            engine.equals("vineflower", ignoreCase = true) -> DecompilerId.VINEFLOWER
+                            engine.equals("javap", ignoreCase = true) -> DecompilerId.JAVAP
+                            else -> null
                         },
                     ),
                 )
@@ -218,9 +218,11 @@ internal fun validateSourceFlags(
     if (lines == null && around == null && context != 0) {
         return "usage error: --context needs --around (a whole file has no center)"
     }
-    if (engine != null && !engine.equals("vineflower", ignoreCase = true)) {
-        return "usage error: --engine $engine is not yet implemented " +
-            "(raw bytecode: T-027 javap)"
+    if (engine != null &&
+        !engine.equals("vineflower", ignoreCase = true) &&
+        !engine.equals("javap", ignoreCase = true)
+    ) {
+        return "usage error: --engine $engine is not a known engine (vineflower|javap)"
     }
     return null
 }
