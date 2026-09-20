@@ -95,7 +95,7 @@ class MembersCommand(
 
     private val withDoc by option(
         "--with-doc",
-        help = "Include the first javadoc sentence per member (not yet implemented, T-025).",
+        help = "Include the first javadoc sentence per member (not yet implemented, T-072).",
     ).flag()
 
     private val sort by option(
@@ -270,7 +270,7 @@ class OutlineCommand(
 
     private val withDoc by option(
         "--with-doc",
-        help = "Include the first javadoc sentence per member (not yet implemented, T-025).",
+        help = "Include the first javadoc sentence per member (not yet implemented, T-072).",
     ).flag()
 
     private val sort by option(

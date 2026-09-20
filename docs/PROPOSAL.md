@@ -1114,7 +1114,7 @@ body      --engine vineflower|javap --with-doc --with-signature --context N
           --line-numbers --max-lines
 source    --lines A:B --around <ref> --context N
 signature <member> [--include-synthetic --limit]
-doc       --inherited/--no-inherited --raw
+doc       --inherited/--no-inherited --raw --max-lines
 search    --kind --regex --fuzzy --in --package --limit
 resolve   <name> [--limit]
 ls        [package-glob] [--limit]

@@ -410,6 +410,7 @@ private fun warningCodesOf(outcome: ServiceOutcome): List<WarningCode> = when (o
     is ServiceOutcome.Body -> outcome.block.warnings.map { it.code }
     is ServiceOutcome.Source -> outcome.block.warnings.map { it.code }
     is ServiceOutcome.SignatureList -> outcome.block.warnings.map { it.code }
+    is ServiceOutcome.Doc -> outcome.block.warnings.map { it.code }
     is ServiceOutcome.SearchList -> outcome.listing.warnings.map { it.code }
     is ServiceOutcome.LsList -> outcome.listing.warnings.map { it.code }
     is ServiceOutcome.TreeList -> outcome.listing.warnings.map { it.code }
@@ -458,6 +459,13 @@ private fun entitiesOf(outcome: ServiceOutcome): List<String> = when (outcome) {
             add(entry.canonicalRef)
             add(entry.signature)
         }
+        for (warning in outcome.block.warnings) add(warning.code.name)
+        for (provenance in outcome.block.provenance) add(provenance.artifact)
+    }
+    is ServiceOutcome.Doc -> buildList {
+        add(outcome.block.canonicalRef)
+        add(outcome.block.file)
+        for (line in outcome.block.lines) add(line)
         for (warning in outcome.block.warnings) add(warning.code.name)
         for (provenance in outcome.block.provenance) add(provenance.artifact)
     }

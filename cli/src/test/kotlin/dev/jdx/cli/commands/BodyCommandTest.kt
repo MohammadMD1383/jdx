@@ -98,10 +98,10 @@ class BodyCommandTest {
     }
 
     @Test
-    fun `with-doc is rejected naming T-025`() {
+    fun `with-doc is rejected naming T-072`() {
         val run = run(listOf("com.example.Point#getX()", "--with-doc"))
         run.exit shouldBe 3
-        run.output shouldContain "T-025"
+        run.output shouldContain "T-072"
     }
 
     @Test

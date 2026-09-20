@@ -9,6 +9,7 @@ import org.objectweb.asm.tree.FieldNode
 import org.objectweb.asm.tree.InsnNode
 import org.objectweb.asm.tree.LabelNode
 import org.objectweb.asm.tree.LocalVariableNode
+import org.objectweb.asm.tree.MethodInsnNode
 import org.objectweb.asm.tree.MethodNode
 import org.objectweb.asm.tree.VarInsnNode
 
@@ -94,6 +95,15 @@ internal class MethodBuilder(private val node: MethodNode) {
             if (variable == null) node.instructions.add(InsnNode(opcode))
             else node.instructions.add(VarInsnNode(opcode, variable))
         }
+    }
+
+    /**
+     * Emits a method invocation (e.g. the `super()` call in a crafted
+     * constructor): the only operand-bearing instruction crafted classes need
+     * (T-025 doc corpus builds a valid `<init>` with it).
+     */
+    fun invoke(opcode: Int, owner: String, name: String, descriptor: String): Unit {
+        node.instructions.add(MethodInsnNode(opcode, owner, name, descriptor, false))
     }
 
     /** Attaches a `LocalVariableTable` spanning the emitted code. */

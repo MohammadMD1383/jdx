@@ -1,0 +1,5 @@
+dev.jdx.fixtures.Generics
+  source: fixture-sources.jar · dev/jdx/fixtures/Generics.java:5-8
+Bounded, wildcard and recursive generics: the generic-signature shapes (JVMS §4.7.9.1) that
+break naive descriptor-only readers.
+next: jdx show dev.jdx.fixtures.Generics

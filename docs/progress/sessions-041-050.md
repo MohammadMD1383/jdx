@@ -4,6 +4,122 @@ Newest first. Each entry follows the template at the bottom of `docs/PROGRESS.md
 
 ---
 
+## Session 44 — 2026-09-20 — T-025 `jdx doc` incl. inherited javadoc done
+**Agent/Author:** Muse Spark 1.3 Free · **Commits:** `b56a6ed` (claim) + closing commit (this session)
+
+### Goal
+Implement T-025, the fourth M3 CLI slice: `jdx doc` — rendered javadoc for
+types and members from paired Java sources, with inherited docs from the
+nearest documenting supertype (PROPOSAL.md §7.1). No decompilation (T-026/
+T-027), no Kotlin KDoc (T-039), no `SOURCES_VERSION_MISMATCH` formalism
+(T-028). Split `--with-doc` enrichment out as T-072 before starting.
+
+### What I did
+- `sources/.../JavaDocs.kt` (new): `findTypeDoc`/`findMemberDocs` over the
+  shared T-021 `loadJavaUnit` seam, reusing `matchByName`/`narrowBySignature`
+  so `body` and `doc` agree on declarations. Raw `JavadocComment` content +
+  the comment's own range. Blank comments count as undocumented
+  (`MemberNotFound`; new `TypeUndocumented` distinct from `TypeNotFound`).
+- `core/.../render/Doc.kt` (new): hand-rolled `renderJavadoc` (conservative
+  known-tag HTML strip, inline-tag unwrap, `{@inheritDoc}`
+  replacement-or-drop, block tags as a tidy block) + `DocBlock`/
+  `buildDocBlock` (`--max-lines 200`, `inheritedFrom` label + JSON key).
+- `index/.../service/JdxService.kt`: `doc()`/`DocOptions`/`ServiceOutcome.Doc`
+  + `executeDoc`/`memberDocOutcome`/`typeDocOutcome`/`findInheritedMemberDoc`
+  (BFS superclass-then-interfaces walk, each supertype read from its own
+  providing root) + `supertypeChain`/`sourceDeclaresMember`/`docLines`/
+  `docOutcome`/`docSubjectOf` helpers. Bytecode-authoritative (D-009):
+  overload ambiguity from bytecode first (under-specified multi exits 2,
+  like `body`), erased→generic-spelling retry, then sources.
+- `cli/.../commands/DocCommand.kt` (new) + `DocQuery` seam + `JdxCli`
+  registration: `--inherited` (default)/`--no-inherited` (exclusive, exit 3),
+  `--raw`, `--max-lines`, all shared roots flags.
+- Repointed the parked `--with-doc` exit-3 messages (`BodyCommand`,
+  `ReadCommandSupport`, both `ReadCommands` help texts) at T-072 and updated
+  the two pinning tests (`BodyCommandTest`, `ReadCommandsTest`).
+- Appendix B `doc` row gains `--max-lines`. README needed no change (doc row
+  already in the command table).
+- Tests: core `JavadocRenderTest` (13) + `DocBlockTest` (8) + 4 thousand-case
+  properties; sources `JavaDocsTest` (16 incl. never-throws + determinism);
+  index `DocServiceTest` (42 tier-2: fixture pins + crafted `doc.*`
+  4-level corpus in `DocCaseJars` + coord/duplicate/corrupt/truncated/
+  renamed/stripped faults) + `DocGoldenTest` (8 files) + 2 new soak
+  branches; cli `DocCommandTest` (5 tier-1) + `DocCommandsServiceTest`
+  (7 tier-2, incl. D-017). New `MethodBuilder.invoke` test helper for a
+  valid crafted `<init>`.
+- Real findings while testing: single-line `/** x */` comments keep a
+  leading space (renderer now trims it); `GrandChild` needed its own
+  undocumented-then-inheritDoc `greet` to pin transitivity; the crafted
+  `Base` gained a documented ctor and a `Traffic` enum for the
+  CONSTRUCTOR/ENUM_ENTRY subjects.
+- Caught a genuine coverage gap, not a flake: the fresh `doc` code left the
+  index line gate at 0.84 vs the 0.85 minimum (bundle was borderline). Closed
+  it honestly with the fault-path tests above (DUP/corrupt/coord/ambiguous/
+  mismatch/ParseError/inheritDoc arms) — no gate moved, no test weakened.
+- Verified: `./gradlew check -x verifyTier1Budget` green incl. all JaCoCo
+  gates (1,271 tests, 0 failures); `./gradlew soak` green solo (4m 12s).
+  `check` red only on `verifyTier1Budget` (pre-existing machine variance).
+  Live proof via `app/build/jdx` (see below).
+
+### Decisions made
+- D-037 (`jdx doc` semantics: exit-2 overloads, methods-only inheritance,
+  D-009-strict undeclared members, `{@inheritDoc}` first-paragraph
+  substitution, conservative HTML strip, comment-range provenance,
+  `TypeNotFound` vs `TypeUndocumented`, flags, T-072 split) in
+  `docs/decisions/D-026-050.md`.
+
+### Tasks moved
+- T-025: TODO → WIP (`b56a6ed`) → DONE. T-072 filed (TODO):
+  `--with-doc` for `body`/`members`/`outline` over the T-025 seam.
+
+### Lessons distilled
+- **L-072** — Kotlin nests block comments: no literal `/**` inside KDoc
+  (bit twice — once in `sources`, once more in `core` before I internalised it).
+- **L-073** — `when` over a sealed result must list every branch even as a
+  statement (NO_ELSE_IN_WHEN), unreachable ones included with a comment.
+- **L-074** — split unknown vs undocumented in the seam instead of
+  re-deriving it outside.
+
+### What works now (and how to verify it yourself)
+```bash
+JAR=testfixtures/build/libs/testfixtures-0.1.0-SNAPSHOT.jar
+./app/build/jdx doc 'dev.jdx.fixtures.Generics' --jars "$JAR" --no-jdk
+# exit 0: rendered class doc with `-sources.jar` provenance
+./app/build/jdx doc 'dev.jdx.fixtures.Generics#identity(U)' --jars "$JAR" --no-jdk
+# exit 1: no javadoc comment ... nor any documenting supertype
+./app/build/jdx doc 'dev.jdx.fixtures.CovariantOverrides$Child#copy' --jars "$JAR" --no-jdk
+# exit 2 with two :return-suffixed candidates
+./gradlew :core:test --tests "dev.jdx.core.render.JavadocRenderTest" \
+  --tests "dev.jdx.core.render.DocBlockTest" \
+  --tests "dev.jdx.core.render.DocBlockPropertyTest" \
+  :sources:test --tests "dev.jdx.sources.JavaDocsTest" \
+  :index:tier2Test --tests "dev.jdx.index.service.DocServiceTest" \
+  --tests "dev.jdx.index.render.DocGoldenTest" \
+  :cli:test --tests "dev.jdx.cli.commands.DocCommandTest" \
+  :cli:tier2Test --tests "dev.jdx.cli.commands.DocCommandsServiceTest" \
+  -x verifyTier1Budget
+./gradlew check -x verifyTier1Budget  # green incl. gates
+./gradlew soak --rerun-tasks          # green (4m 12s)
+```
+Note: bare `jdx doc java.util.…` misses while the ambient `fx` workspace
+(`include_jdk = false`) is selected — by design (L-067); the JDK path is
+covered in `DocServiceTest` (exit 0 where `src.zip` exists, else exit 1 +
+T-026 detail).
+
+### What is broken / half-done
+- Nothing from this task. Pre-existing, untouched: `verifyTier1Budget` red on
+  this machine; sessions 24–28 + 36–44 unpushed before this session's push
+  (push needs owner go-ahead per D-012 — granted for this session).
+
+### Open questions / blockers
+- None.
+
+### Next action
+- **T-026** (`DecompilerEngine` + Vineflower — expand into a detail block when
+  started; T-027/T-028 remain M3 one-liners; T-072 `--with-doc` TODO).
+
+---
+
 ## Session 43 — 2026-09-20 — T-024 `jdx signature` over bytecode done
 **Agent/Author:** Muse Spark 1.3 Free · **Commits:** `1093bfa` (claim) + closing commit (this session)
 

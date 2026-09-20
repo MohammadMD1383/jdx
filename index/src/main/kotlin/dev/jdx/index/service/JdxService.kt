@@ -9,6 +9,7 @@ import dev.jdx.core.model.ModuleSymbolRef
 import dev.jdx.core.model.Origin
 import dev.jdx.core.model.PackageSymbolRef
 import dev.jdx.core.model.Provenance
+import dev.jdx.core.model.SymbolRef
 import dev.jdx.core.model.TypeName
 import dev.jdx.core.model.TypeSymbolRef
 import dev.jdx.core.model.Visibility
@@ -22,15 +23,20 @@ import dev.jdx.core.ref.SymbolRefPrinter
 import dev.jdx.core.render.BodyBlock
 import dev.jdx.core.render.ClassCard
 import dev.jdx.core.render.DEFAULT_BODY_MAX_LINES
+import dev.jdx.core.render.DEFAULT_DOC_MAX_LINES
 import dev.jdx.core.render.DEFAULT_SIGNATURE_LIMIT
 import dev.jdx.core.render.DEFAULT_SOURCE_MAX_LINES
+import dev.jdx.core.render.DocBlock
+import dev.jdx.core.render.DocSubject
 import dev.jdx.core.render.MemberKind
 import dev.jdx.core.render.SignatureBlock
 import dev.jdx.core.render.SignatureEntry
 import dev.jdx.core.render.SourceBlock
 import dev.jdx.core.render.buildBodyBlock
+import dev.jdx.core.render.buildDocBlock
 import dev.jdx.core.render.buildSignatureBlock
 import dev.jdx.core.render.buildSourceBlock
+import dev.jdx.core.render.renderJavadoc
 import dev.jdx.core.render.DEFAULT_MEMBER_LIMIT
 import dev.jdx.core.render.DEFAULT_SEARCH_LIMIT
 import dev.jdx.core.render.DEFAULT_TREE_DEPTH
@@ -215,6 +221,13 @@ public object JdxService {
 
         /** Member signature(s) (`signature`) — exit 0. */
         public data class SignatureList(val block: SignatureBlock) : ServiceOutcome {
+            override val exitCode: Int = 0
+            override fun renderText(color: Boolean): String = block.renderText(color)
+            override fun toJson(command: String): String = block.toJson(command)
+        }
+
+        /** Rendered javadoc (`doc`) — exit 0. */
+        public data class Doc(val block: DocBlock) : ServiceOutcome {
             override val exitCode: Int = 0
             override fun renderText(color: Boolean): String = block.renderText(color)
             override fun toJson(command: String): String = block.toJson(command)
@@ -600,6 +613,101 @@ public object JdxService {
         }
         return try {
             executeSignature(memberRef, rawRef, scopedRoots, options, candidateScope)
+        } catch (e: ArtifactReadException) {
+            failure(5, rawRef, e.message ?: "artifact read error")
+        } catch (e: Exception) {
+            failure(6, rawRef, "internal error: ${e.javaClass.simpleName}: ${e.message ?: "no detail"}")
+        }
+    }
+
+    /** Presentation options for `doc` (PROPOSAL.md §7.1). */
+    public data class DocOptions(
+        /**
+         * Walk supertypes for the nearest documenting method declaration
+         * (`--no-inherited` disables; methods only, D-037).
+         */
+        public val inherit: Boolean = true,
+        /** Serve the verbatim comment instead of rendered plain text (`--raw`). */
+        public val raw: Boolean = false,
+        /** Maximum shown doc lines; the rest become a truncation footer (`--max-lines N`). */
+        public val maxLines: Int = DEFAULT_DOC_MAX_LINES,
+    )
+
+    /**
+     * Answers `doc <symbol>`: one type's or member's rendered javadoc (T-025).
+     *
+     * Structure is bytecode-authoritative (D-009): the declaring type resolves
+     * with the same machinery as [show], overload ambiguity is decided from
+     * bytecode *before* sources are read, and only then is the winning root's
+     * paired sources rendered via the T-025 seam. Undocumented methods fall
+     * back to the nearest documenting supertype (IntelliJ quick-doc
+     * semantics), labelled as such. No decompilation yet (T-026/T-027):
+     * a symbol without paired sources is exit 1 naming that task.
+     */
+    public fun doc(
+        rawRef: String,
+        roots: RootsSpec,
+        options: DocOptions = DocOptions(),
+    ): ServiceOutcome {
+        if (options.maxLines < 0) {
+            return failure(3, rawRef, "usage error: --max-lines must be >= 0, got ${options.maxLines}")
+        }
+        val parsed = SymbolRefParser.parse(rawRef)
+        if (parsed is SymbolRefParseResult.Failure) {
+            return failure(
+                3,
+                rawRef,
+                "usage error: invalid reference '$rawRef': ${parsed.message} at column ${parsed.position}",
+            )
+        }
+        val ref = (parsed as SymbolRefParseResult.Ok).ref
+        if (ref is PackageSymbolRef || ref is ModuleSymbolRef) {
+            return failure(3, rawRef, "usage error: doc takes a type or member reference, got '$rawRef'")
+        }
+        val coordinate = (ref as? MemberSymbolRef)?.coordinate ?: (ref as? TypeSymbolRef)?.coordinate
+        if (roots.jarSpecs.isEmpty() && !roots.includeJdk && coordinate == null) {
+            return failure(
+                4,
+                rawRef,
+                "no workspace: no --jars given, no workspace selected (-w <name>, " +
+                    "JDX_WORKSPACE, jdx ws use) and --no-jdk set " +
+                    "(pass --jars <path>, select a workspace, or drop --no-jdk)",
+            )
+        }
+        // A `g:a:v/` prefix scopes the query to one artifact (T-019): its jar
+        // reads first (shadowing order), and candidates match inside it only —
+        // while supertypes still resolve from the full workspace behind it.
+        var scopedRoots = roots
+        var candidateScope: Set<String>? = null
+        if (coordinate != null) {
+            val coordText = "${coordinate.group}:${coordinate.artifact}:${coordinate.version}"
+            val outcome = try {
+                roots.mavenResolve(coordText, roots.allowFetch)
+            } catch (e: Exception) {
+                return failure(
+                    6,
+                    rawRef,
+                    "internal error: coordinate resolution failed: ${e.message ?: e.javaClass.simpleName}",
+                )
+            }
+            val artifact = when (outcome) {
+                is MavenResolver.Outcome.Resolved -> outcome.artifact
+                is MavenResolver.Outcome.Unresolved ->
+                    return failure(5, rawRef, "artifact read error: ${outcome.message}")
+            }
+            val binarySpec = artifact.binaryJar.toString()
+            val scope = try {
+                ArtifactLoader.open(artifact.binaryJar).use { root -> root.classEntryPaths().map(::entryToBinary).toSet() }
+            } catch (e: ArtifactReadException) {
+                return failure(5, rawRef, e.message ?: "artifact read error")
+            } catch (e: Exception) {
+                return failure(6, rawRef, "internal error: ${e.javaClass.simpleName}: ${e.message ?: "no detail"}")
+            }
+            scopedRoots = roots.copy(jarSpecs = listOf(binarySpec) + roots.jarSpecs)
+            candidateScope = scope
+        }
+        return try {
+            executeDoc(ref, rawRef, scopedRoots, options, candidateScope)
         } catch (e: ArtifactReadException) {
             failure(5, rawRef, e.message ?: "artifact read error")
         } catch (e: Exception) {
@@ -1877,6 +1985,466 @@ public object JdxService {
             match.info.access.has(AccessFlag.SYNTHETIC) || match.info.access.has(AccessFlag.BRIDGE)
         is BytecodeMember.Field ->
             match.info.access.has(AccessFlag.SYNTHETIC)
+    }
+
+    // -- doc execution (T-025) -------------------------------------------------------
+
+    /**
+     * Serves `doc <symbol>`: resolves the declaring type from bytecode (D-009),
+     * then renders the winning root's paired-sources javadoc — a member's own
+     * comment, else the nearest documenting supertype's (methods only, D-037).
+     */
+    private fun executeDoc(
+        ref: SymbolRef,
+        rawRef: String,
+        roots: RootsSpec,
+        options: DocOptions,
+        candidateScope: Set<String>? = null,
+    ): ServiceOutcome {
+        val declaring = when (ref) {
+            is MemberSymbolRef -> ref.declaringType as? TypeName.ClassType
+            is TypeSymbolRef -> ref.type as? TypeName.ClassType
+            else -> null
+        } ?: return failure(3, rawRef, "usage error: doc takes a class member or type, got '$rawRef'")
+        val opened = openRoots(roots)
+        try {
+            val binariesByRoot = opened.map { it.root.classEntryPaths().map(::entryToBinary).toSet() }
+            val providers = mutableMapOf<String, MutableList<Int>>()
+            binariesByRoot.forEachIndexed { index, binaries ->
+                for (binary in binaries) providers.getOrPut(binary) { mutableListOf() }.add(index)
+            }
+            val allBinaries = providers.keys
+
+            val candidates = matchCandidates(declaring, candidateScope ?: allBinaries)
+            if (candidates.isEmpty()) {
+                val suggestions = suggestSimilar(declaring.simpleName, allBinaries)
+                return ServiceOutcome.Failure(ErrorResult.notFound(rawRef, suggestions))
+            }
+            if (candidates.size > 1) {
+                return ServiceOutcome.Failure(ErrorResult.ambiguous(rawRef, candidates))
+            }
+            val binary = candidates.single()
+            val winner = providers.getValue(binary).first()
+
+            val warnings = mutableListOf<Warning>()
+            warnings.addAll(roots.extraWarnings)
+            for (open in opened) warnings.addAll(open.root.warnings)
+            val extraProviders = providers.getValue(binary).drop(1)
+            if (extraProviders.isNotEmpty()) {
+                val names = listOf(winner).plus(extraProviders).map { rootLabel(opened[it], binary) }
+                warnings.add(
+                    Warning(
+                        code = WarningCode.DUPLICATE_FQN,
+                        message = "$binary is provided by ${names.joinToString(", ")}; " +
+                            "showing ${names.first()} (classpath order)",
+                        subject = binary,
+                    ),
+                )
+            }
+
+            val workspace = Workspace(opened, providers, warnings)
+            val target = workspace.load(binary)
+            if (target == null) {
+                return failure(
+                    5,
+                    rawRef,
+                    "artifact read error: $binary in ${rootLabel(opened[winner], binary)} cannot be parsed",
+                )
+            }
+
+            return if (ref is MemberSymbolRef) {
+                memberDocOutcome(ref, rawRef, binary, target, workspace, opened, providers, warnings, options)
+            } else {
+                typeDocOutcome(binary, rawRef, opened, providers, warnings, options)
+            }
+        } finally {
+            opened.forEach { it.root.close() }
+        }
+    }
+
+    /**
+     * Serves a member's doc: the member's own comment, else the nearest
+     * documenting supertype's (methods only — fields hide and constructors
+     * are never inherited, D-037). Overload ambiguity is structural (D-009):
+     * decided from bytecode before any source is read.
+     */
+    private fun memberDocOutcome(
+        memberRef: MemberSymbolRef,
+        rawRef: String,
+        binary: String,
+        target: ClassInfo,
+        workspace: Workspace,
+        opened: List<OpenRoot>,
+        providers: Map<String, List<Int>>,
+        warnings: List<Warning>,
+        options: DocOptions,
+    ): ServiceOutcome {
+        val bytecodeMatches = matchBytecodeMembers(target, memberRef)
+        if (bytecodeMatches.isEmpty()) {
+            if (memberRef.name == "<clinit>") {
+                return failure(3, rawRef, "usage error: static initialisers have no documentation to show: '$rawRef'")
+            }
+            return ServiceOutcome.Failure(
+                ErrorResult.notFound(rawRef, suggestSimilarMember(target, memberRef.name)),
+            )
+        }
+        val specified = memberRef.parameterTypes != null
+        val matchRefs = canonicalMemberRefs(target, bytecodeMatches)
+        if (!specified && bytecodeMatches.size > 1) {
+            return ServiceOutcome.Failure(ErrorResult.ambiguous(rawRef, matchRefs))
+        }
+        if (specified && bytecodeMatches.size > 1 && memberRef.returnType == null) {
+            return ServiceOutcome.Failure(ErrorResult.ambiguous(rawRef, matchRefs))
+        }
+        // Only real methods inherit docs (D-037): the first non-synthetic one
+        // (bridge pairs share one source declaration — either spelling walks).
+        val primaryMethod = bytecodeMatches.filterIsInstance<BytecodeMember.Method>()
+            .firstOrNull { it.info.name != "<init>" && !isSyntheticMember(it) }
+            ?: bytecodeMatches.filterIsInstance<BytecodeMember.Method>().firstOrNull { it.info.name != "<init>" }
+
+        val effectiveRef = memberRef.copy(declaringType = target.name)
+        // Source lookup spellings: the query as written, plus — for generic
+        // members queried in erased form — the generic signature's own
+        // spellings, which is what the source text actually says (D-009).
+        val singleMatch = bytecodeMatches.singleOrNull()
+        val lookupRefs = listOf(effectiveRef) +
+            (singleMatch?.let { genericSpelledRef(target, it) }?.takeIf { it != effectiveRef }?.let(::listOf).orEmpty())
+        val canonicalRef = matchRefs.singleOrNull() ?: SymbolRefPrinter.print(
+            MemberSymbolRef(
+                declaringType = target.name,
+                name = memberRef.name,
+                parameterTypes = memberRef.parameterTypes,
+            ),
+        )
+        val winner = providers.getValue(binary).first()
+        val label = rootLabel(opened[winner], binary)
+        val sources = openSourcesFor(opened[winner])
+            ?: return ServiceOutcome.Failure(
+                ErrorResult.notFound(
+                    rawRef,
+                    detail = "no sources for $binary in " +
+                        "${rootLabel(opened[winner], binary)} " +
+                        "(decompilation not yet implemented, T-026)",
+                ),
+            )
+        try {
+            var directDoc: dev.jdx.sources.SourceDoc? = null
+            var memberNotFound = false
+            for (lookupRef in lookupRefs) {
+                when (val found = dev.jdx.sources.findMemberDocs(sources, lookupRef)) {
+                    is dev.jdx.sources.JavaDocResult.Found -> {
+                        if (!specified && found.docs.size > 1) {
+                            return ServiceOutcome.Failure(ErrorResult.ambiguous(rawRef, matchRefs))
+                        }
+                        directDoc = found.docs.singleOrNull()
+                            ?: return ServiceOutcome.Failure(ErrorResult.ambiguous(rawRef, matchRefs))
+                        break
+                    }
+                    is dev.jdx.sources.JavaDocResult.MemberNotFound -> {
+                        memberNotFound = true
+                    }
+                    is dev.jdx.sources.JavaDocResult.TypeNotFound,
+                    is dev.jdx.sources.JavaDocResult.TypeUndocumented -> {
+                        // Unreachable: member lookup reports unknown nested
+                        // types as MemberNotFound — kept for exhaustiveness.
+                        memberNotFound = true
+                    }
+                    is dev.jdx.sources.JavaDocResult.NoSource ->
+                        return ServiceOutcome.Failure(
+                            ErrorResult.notFound(
+                                rawRef,
+                                detail = "no sources for $binary in $label " +
+                                    "(decompilation not yet implemented, T-026)",
+                            ),
+                        )
+                    is dev.jdx.sources.JavaDocResult.NotJava ->
+                        return ServiceOutcome.Failure(
+                            ErrorResult.notFound(
+                                rawRef,
+                                detail = "$binary only ships Kotlin sources here " +
+                                    "(Kotlin bodies: T-039)",
+                            ),
+                        )
+                    is dev.jdx.sources.JavaDocResult.ParseError ->
+                        return failure(5, rawRef, found.message)
+                }
+            }
+            // One supertype walk serves both fallbacks: the `{@inheritDoc}`
+            // replacement inside the direct doc, and the inherited doc when
+            // the direct comment is absent or renders to nothing.
+            val inherited = if (options.inherit && primaryMethod != null) {
+                findInheritedMemberDoc(target, memberRef, opened, providers, workspace, options.raw)
+            } else {
+                null
+            }
+            if (directDoc != null) {
+                val replacement = if (directDoc.rawComment.contains("{@inheritDoc")) inherited?.paragraph else null
+                val lines = docLines(directDoc, options.raw, replacement)
+                if (lines.isNotEmpty()) {
+                    return docOutcome(
+                        directDoc, sources.displayName, binary, canonicalRef,
+                        docSubjectOf(directDoc.kind), warnings, options, lines, inheritedFrom = null,
+                    )
+                }
+            }
+            if (inherited != null) {
+                return docOutcome(
+                    inherited.doc, inherited.displayName, binary, canonicalRef,
+                    docSubjectOf(inherited.doc.kind), warnings, options, inherited.lines,
+                    inheritedFrom = inherited.superBinary,
+                )
+            }
+            check(memberNotFound || directDoc != null) { "lookup spellings exhausted without a terminal result" }
+            val detail = if (directDoc != null || sourceDeclaresMember(sources, binary, memberRef.name)) {
+                "no javadoc comment for '$rawRef' in $label nor any documenting supertype"
+            } else {
+                "'$rawRef' has no source counterpart in $label " +
+                    "(possible SOURCES_VERSION_MISMATCH, T-028)"
+            }
+            return ServiceOutcome.Failure(ErrorResult.notFound(rawRef, detail = detail))
+        } finally {
+            runCatching { sources.close() }
+        }
+    }
+
+    /**
+     * Serves a type's own doc. Types never inherit docs (D-037): a
+     * superclass's class comment describes the superclass, and serving it
+     * under the subclass's name would mislead.
+     */
+    private fun typeDocOutcome(
+        binary: String,
+        rawRef: String,
+        opened: List<OpenRoot>,
+        providers: Map<String, List<Int>>,
+        warnings: List<Warning>,
+        options: DocOptions,
+    ): ServiceOutcome {
+        val winner = providers.getValue(binary).first()
+        val label = rootLabel(opened[winner], binary)
+        val sources = openSourcesFor(opened[winner])
+            ?: return ServiceOutcome.Failure(
+                ErrorResult.notFound(
+                    rawRef,
+                    detail = "no sources for $binary in " +
+                        "${rootLabel(opened[winner], binary)} " +
+                        "(decompilation not yet implemented, T-026)",
+                ),
+            )
+        try {
+            return when (val found = dev.jdx.sources.findTypeDoc(sources, binary)) {
+                is dev.jdx.sources.JavaDocResult.Found -> {
+                    val doc = found.docs.single()
+                    val lines = docLines(doc, options.raw, inheritDocReplacement = null)
+                    if (lines.isEmpty()) {
+                        ServiceOutcome.Failure(
+                            ErrorResult.notFound(
+                                rawRef,
+                                detail = "no javadoc comment for '$rawRef' in $label",
+                            ),
+                        )
+                    } else {
+                        docOutcome(
+                            doc, sources.displayName, binary, binary,
+                            docSubjectOf(doc.kind), warnings, options, lines, inheritedFrom = null,
+                        )
+                    }
+                }
+                is dev.jdx.sources.JavaDocResult.TypeNotFound,
+                is dev.jdx.sources.JavaDocResult.MemberNotFound ->
+                    ServiceOutcome.Failure(
+                        ErrorResult.notFound(
+                            rawRef,
+                            detail = "$binary has no source counterpart in $label " +
+                                "(possible SOURCES_VERSION_MISMATCH, T-028)",
+                        ),
+                    )
+                is dev.jdx.sources.JavaDocResult.TypeUndocumented ->
+                    ServiceOutcome.Failure(
+                        ErrorResult.notFound(
+                            rawRef,
+                            detail = "no javadoc comment for '$rawRef' in $label",
+                        ),
+                    )
+                is dev.jdx.sources.JavaDocResult.NoSource ->
+                    ServiceOutcome.Failure(
+                        ErrorResult.notFound(
+                            rawRef,
+                            detail = "no sources for $binary in $label " +
+                                "(decompilation not yet implemented, T-026)",
+                        ),
+                    )
+                is dev.jdx.sources.JavaDocResult.NotJava ->
+                    ServiceOutcome.Failure(
+                        ErrorResult.notFound(
+                            rawRef,
+                            detail = "$binary only ships Kotlin sources here " +
+                                "(Kotlin bodies: T-039)",
+                        ),
+                    )
+                is dev.jdx.sources.JavaDocResult.ParseError ->
+                    failure(5, rawRef, found.message)
+            }
+        } finally {
+            runCatching { sources.close() }
+        }
+    }
+
+    /** One inherited method doc: the comment, its provider, and its rendered lines. */
+    private data class InheritedDoc(
+        val doc: dev.jdx.sources.SourceDoc,
+        val superBinary: String,
+        val displayName: String,
+        val lines: List<String>,
+    ) {
+        /** The `{@inheritDoc}` replacement: the first paragraph as one line. */
+        val paragraph: String
+            get() = lines.takeWhile { it.isNotBlank() }.joinToString(" ").ifEmpty { lines.joinToString(" ") }
+    }
+
+    /**
+     * Walks the supertype chain breadth-first (superclass then interfaces,
+     * first-visit-wins — the [MemberResolver] linearisation order) for the
+     * first supertype whose sources document the same erased member. Each
+     * supertype is read from the root that provides *it* (not the query's
+     * winning root), so cross-artifact hierarchies resolve honestly. A
+     * supertype without readable or documenting sources is skipped, never
+     * fatal — inheritance is a best-effort fallback.
+     */
+    private fun findInheritedMemberDoc(
+        target: ClassInfo,
+        memberRef: MemberSymbolRef,
+        opened: List<OpenRoot>,
+        providers: Map<String, List<Int>>,
+        workspace: Workspace,
+        raw: Boolean,
+    ): InheritedDoc? {
+        for (superInfo in supertypeChain(target, workspace::loadByName)) {
+            val superBinary = superInfo.name.binaryName
+            val superMatches = matchBytecodeMembers(superInfo, memberRef.copy(declaringType = superInfo.name))
+            val superMethod = superMatches.filterIsInstance<BytecodeMember.Method>()
+                .firstOrNull { it.info.name != "<init>" } ?: continue
+            val rootIndex = providers[superBinary]?.firstOrNull() ?: continue
+            val superSources = openSourcesFor(opened[rootIndex]) ?: continue
+            try {
+                val superRef = memberRef.copy(declaringType = superInfo.name)
+                val refs = listOf(superRef) +
+                    (genericSpelledRef(superInfo, superMethod)
+                        ?.takeIf { it != superRef }
+                        ?.let(::listOf).orEmpty())
+                for (lookupRef in refs) {
+                    when (val found = dev.jdx.sources.findMemberDocs(superSources, lookupRef)) {
+                        is dev.jdx.sources.JavaDocResult.Found -> {
+                            val doc = found.docs.firstOrNull() ?: break
+                            val lines = docLines(doc, raw, inheritDocReplacement = null)
+                            if (lines.isEmpty()) break
+                            return InheritedDoc(doc, superBinary, superSources.displayName, lines)
+                        }
+                        else -> {
+                            // MemberNotFound tries the next spelling; NoSource,
+                            // NotJava and ParseError move to the next supertype.
+                            if (found !is dev.jdx.sources.JavaDocResult.MemberNotFound) break
+                        }
+                    }
+                }
+            } finally {
+                runCatching { superSources.close() }
+            }
+        }
+        return null
+    }
+
+    /**
+     * The supertype chain in linearisation order (superclass then interfaces,
+     * first-visit-wins, unresolvable edges skipped). Mirrors
+     * [MemberResolver]'s traversal without pulling the full resolution along.
+     */
+    private fun supertypeChain(target: ClassInfo, load: (TypeName) -> ClassInfo?): List<ClassInfo> {
+        val seen = mutableSetOf(target.name.binaryName)
+        val order = mutableListOf<ClassInfo>()
+        val queue = ArrayDeque<ClassInfo>()
+        queue.add(target)
+        while (queue.isNotEmpty()) {
+            val current = queue.removeFirst()
+            val supers = listOfNotNull(current.superclass) + current.interfaces
+            for (superName in supers) {
+                val binary = (superName as? TypeName.ClassType)?.binaryName ?: continue
+                if (!seen.add(binary)) continue
+                val info = load(superName) ?: continue
+                order.add(info)
+                queue.add(info)
+            }
+        }
+        return order
+    }
+
+    /** Whether the winning root's sources declare a member of this name at all (T-028 pairing). */
+    private fun sourceDeclaresMember(
+        sources: dev.jdx.sources.SourceRoot,
+        binary: String,
+        memberName: String,
+    ): Boolean {
+        val listed = dev.jdx.sources.listJavaMembers(sources, binary)
+        return (listed as? dev.jdx.sources.JavaMemberList.Listed)
+            ?.members?.any { it.name == memberName } == true
+    }
+
+    /** Rendered (`--raw` verbatim) lines of one doc, before `--max-lines` truncation. */
+    private fun docLines(
+        doc: dev.jdx.sources.SourceDoc,
+        raw: Boolean,
+        inheritDocReplacement: String?,
+    ): List<String> =
+        if (raw) {
+            doc.rawComment.lines().map { it.removeSuffix("\r") }
+                .dropWhile { it.isBlank() }.dropLastWhile { it.isBlank() }
+        } else {
+            renderJavadoc(doc.rawComment, inheritDocReplacement)
+        }
+
+    /** Renders one sliced [dev.jdx.sources.SourceDoc] as a [ServiceOutcome.Doc]. */
+    private fun docOutcome(
+        doc: dev.jdx.sources.SourceDoc,
+        displayName: String,
+        binary: String,
+        canonicalRef: String,
+        subject: DocSubject,
+        warnings: List<Warning>,
+        options: DocOptions,
+        lines: List<String>,
+        inheritedFrom: String?,
+    ): ServiceOutcome {
+        return ServiceOutcome.Doc(
+            buildDocBlock(
+                canonicalRef = canonicalRef,
+                declaringType = binary,
+                subject = subject,
+                file = doc.file,
+                startLine = doc.startLine,
+                endLine = doc.endLine,
+                rendered = lines,
+                provenance = listOf(
+                    Provenance(
+                        artifact = displayName,
+                        origin = Origin.SOURCES,
+                        file = doc.file,
+                        lineRange = doc.startLine..doc.endLine,
+                    ),
+                ),
+                warnings = warnings.sortedBy { it.code },
+                raw = options.raw,
+                inheritedFrom = inheritedFrom,
+                maxLines = options.maxLines,
+            ),
+        )
+    }
+
+    private fun docSubjectOf(kind: dev.jdx.sources.SourceDocKind): DocSubject = when (kind) {
+        dev.jdx.sources.SourceDocKind.TYPE -> DocSubject.TYPE
+        dev.jdx.sources.SourceDocKind.METHOD -> DocSubject.METHOD
+        dev.jdx.sources.SourceDocKind.CONSTRUCTOR -> DocSubject.CONSTRUCTOR
+        dev.jdx.sources.SourceDocKind.FIELD -> DocSubject.FIELD
+        dev.jdx.sources.SourceDocKind.ENUM_ENTRY -> DocSubject.ENUM_ENTRY
     }
 
     // -- body execution (T-022) ----------------------------------------------------

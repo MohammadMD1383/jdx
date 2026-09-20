@@ -320,7 +320,7 @@ class ReadCommandsTest {
     }
 
     @Test
-    fun `members --with-doc names T-025 and exits 3`() {
+    fun `members --with-doc names T-072 and exits 3`() {
         val output = captureStdout {
             val thrown = try {
                 MembersCommand(
@@ -336,7 +336,7 @@ class ReadCommandsTest {
             }
             (thrown?.code) shouldBe 3
         }
-        output shouldContain "T-025"
+        output shouldContain "T-072"
     }
 
     @Test

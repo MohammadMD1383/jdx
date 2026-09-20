@@ -56,7 +56,9 @@ complete; T-057…T-060 unblock as their milestones land. M1 (read path) is comp
 M2 hardening is complete (T-070 closed the tier-2 half of T-066).
 **M3 has started: T-071 (`sources` `SourceRoot` access, first slice of T-020) is DONE;
 T-021 (JavaParser body extraction over that seam) is DONE; T-022 (`jdx body`
-over that seam) is DONE; T-023 (`jdx source` over that seam) is DONE.**
+over that seam) is DONE; T-023 (`jdx source` over that seam) is DONE;
+T-024 (`jdx signature` over bytecode) is DONE; T-025 (`jdx doc` incl.
+inherited javadoc) is DONE.** T-072 (`--with-doc` enrichment) is filed TODO.
 
 ---
 
@@ -1012,7 +1014,7 @@ stored workspace mirror). `check` green shelved; `cli:tier2Test` with ambient
 ### T-020 Sources-jar/dir access and `srcmap` · **T-021** JavaParser integration and Java body extraction · **T-022** `jdx body` · **T-023** `jdx source` · **T-024** `jdx signature` · **T-025** `jdx doc` incl. inherited javadoc · **T-026** `DecompilerEngine` interface + Vineflower (isolated lazy classloader, on-disk cache) · **T-027** `javap` engine · **T-028** `SOURCES_VERSION_MISMATCH` detection
 *(Expand into detail blocks when M3 starts.)*
 
-### T-025 — `jdx doc` over the T-021 seam · `WIP` (session 44)
+### T-025 — `jdx doc` over the T-021 seam · `DONE` (session 44)
 **Depends:** T-021, T-022 (body patterns), T-011 (read-command patterns), T-015/T-016 (roots) · **Files:** `sources/.../JavaDocs.kt`, `core/.../render/Doc.kt`, `index/.../service/JdxService.kt` (`doc`), `cli/.../commands/DocCommand.kt`
 *(Fourth CLI slice of M3: javadoc rendering from paired Java sources only, wired to
 `jdx doc`. No decompilation (T-026/T-027), no Kotlin KDoc (T-039), no
@@ -1055,6 +1057,40 @@ documenting supertype (IntelliJ quick-doc semantics), labelled as such.
       exits/text⊆JSON/determinism); tiers 1+2 green
 - [ ] `--help` text, Appendix B doc flags verified, `TASKS.md` status,
       `PROGRESS.md` entry
+
+*Implementation notes (session 44): `sources/.../JavaDocs.kt` —
+`findTypeDoc`/`findMemberDocs` over the shared `loadJavaUnit` seam (reusing
+the T-021 `matchByName`/`narrowBySignature`, so `body` and `doc` agree on
+which declaration a ref names), returning raw `JavadocComment` content with
+the comment's own range; blank comments count as undocumented
+(`MemberNotFound`, new `TypeUndocumented` distinct from `TypeNotFound`,
+L-074). `core/.../render/Doc.kt` — hand-rolled `renderJavadoc` (conservative
+known-tag HTML strip so `List<String>` survives, inline-tag unwrap,
+`{@inheritDoc}` replacement-or-drop, block tags as a tidy block) +
+`DocBlock`/`buildDocBlock` (`--max-lines 200`, `inheritedFrom` label + JSON
+key, `next: jdx show`). `index`: `JdxService.doc`/`DocOptions`
+(`inherit = true`, `raw`, `maxLines`) — type resolution with the T-011
+machinery, bytecode-first ambiguity (under-specified multi-overload exits 2,
+like `body`), erased→generic-spelling retry, then direct doc; methods fall
+back through a BFS supertype walk (each supertype read from its own
+providing root) while types/fields/ctors never inherit (D-037); unknown
+members stay D-009-strict (must exist in the declaring type's bytecode).
+`cli`: thin `DocCommand` (`--inherited` default/`--no-inherited` exclusive,
+`--raw`, `--max-lines`) + `DocQuery` seam, registered in `JdxCli`.
+`--with-doc` enrichment stays parked, repointed at the split task T-072
+(`BodyCommand`/`ReadCommandSupport` messages + both pinning tests).
+Tests: core `JavadocRenderTest` (13) + `DocBlockTest` (8) + 4 thousand-case
+properties; sources `JavaDocsTest` (16 incl. 2 properties); index
+`DocServiceTest` (42 tier-2: fixture pins + crafted 4-level corpus in
+`DocCaseJars` + fault/degradation/coord/duplicate/corrupt paths) +
+`DocGoldenTest` (8 files) + 2 soak branches; cli `DocCommandTest` (5 tier-1)
++ `DocCommandsServiceTest` (7 tier-2, incl. D-017). Standing bar: `check`
+green incl. the 85 % index line gate (new fault tests closed a real 0.84
+gap from the fresh `doc` code), `soak` green solo (4m 12s). Live proof:
+`app/build/jdx doc 'dev.jdx.fixtures.Generics'` → exit 0 rendered class
+doc; `#identity(U)` → exit 1 no-doc; `Child#copy` → exit 2. Lessons
+L-072 (nested KDoc), L-073 (exhaustive `when`), L-074 (unknown vs
+undocumented); decision D-037.*
 
 ### T-072 — Wire `--with-doc` into `body`/`members`/`outline` over the T-025 seam · `TODO`
 **Depends:** T-025 · **Files:** `cli/.../commands/BodyCommand.kt`, `ReadCommands.kt`, `ReadCommandSupport.kt`, `core/.../render/*`, `index/.../service/JdxService.kt`

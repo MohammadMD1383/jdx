@@ -361,7 +361,7 @@ internal object ReadCommandSupport {
             }
         }
         if (withDoc) {
-            return "usage error: --with-doc is not yet implemented (T-025: javadoc/KDoc rendering)"
+            return "usage error: --with-doc is not yet implemented (T-072: javadoc enrichment over the T-025 seam)"
         }
         if (sortOf(sort) == dev.jdx.core.render.MemberSort.KIND && sort.lowercase() != "kind") {
             return "usage error: invalid --sort '$sort' (expected kind|name|declaring)"
@@ -477,6 +477,19 @@ internal fun defaultSignatureQuery(
     roots: JdxService.RootsSpec,
     options: JdxService.SignatureOptions,
 ): JdxService.ServiceOutcome = JdxService.signature(ref, roots, options)
+
+/** Query behind `doc`, injectable so command tests run without IO (T-025). */
+internal typealias DocQuery = (
+    ref: String,
+    roots: JdxService.RootsSpec,
+    options: JdxService.DocOptions,
+) -> JdxService.ServiceOutcome
+
+internal fun defaultDocQuery(
+    ref: String,
+    roots: JdxService.RootsSpec,
+    options: JdxService.DocOptions,
+): JdxService.ServiceOutcome = JdxService.doc(ref, roots, options)
 
 /** Query behind `search`, injectable so command tests run without IO (T-017). */
 internal typealias SearchQuery = (

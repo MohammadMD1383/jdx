@@ -1,0 +1,6 @@
+doc.Base#greet(java.lang.String)
+  source: case-sources.jar · doc/Base.java:7-12
+Greets warmly.
+Uses Widget and one-arg greet.
+2 of 5 lines shown (--max-lines 5 to see more)
+next: jdx show doc.Base
