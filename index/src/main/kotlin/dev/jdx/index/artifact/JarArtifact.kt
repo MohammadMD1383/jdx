@@ -31,6 +31,9 @@ public class JarArtifact private constructor(
 
     override val kind: ArtifactKind = ArtifactKind.BINARY_JAR
 
+    /** The jar file itself, for the decompiler's library context (T-026). */
+    override val libraryPath: Path = jarPath
+
     override val warnings: List<Warning>
 
     /** The sources pairing for this jar (PROPOSAL.md §5.2). Never null, possibly absent. */

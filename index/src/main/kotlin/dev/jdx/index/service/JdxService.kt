@@ -64,6 +64,10 @@ import dev.jdx.core.resolve.MemberResolutionOptions
 import dev.jdx.core.resolve.MemberResolver
 import dev.jdx.core.resolve.ResolvedMembers
 import dev.jdx.core.search.SymbolSearch
+import dev.jdx.decompile.DecompileResult
+import dev.jdx.decompile.DecompilerEngine
+import dev.jdx.decompile.DecompilerId
+import dev.jdx.decompile.VineflowerDecompiler
 import dev.jdx.index.artifact.ArtifactKind
 import dev.jdx.index.artifact.ArtifactLoader
 import dev.jdx.index.artifact.ArtifactReadException
@@ -285,16 +289,30 @@ public object JdxService {
         public val maxLines: Int = DEFAULT_BODY_MAX_LINES,
         /** Prepend the resolved bytecode signature header (`--with-signature`, T-024). */
         public val withSignature: Boolean = false,
+        /**
+         * Forced decompiler (`--engine vineflower`, T-026): sources are skipped
+         * and the class is always reconstructed. `null` is the ladder default —
+         * paired sources first, Vineflower when they are absent.
+         */
+        public val engine: DecompilerId? = null,
+        /**
+         * The reconstruction engine behind the fallback. Defaults to the
+         * production Vineflower decompiler; tests inject fakes or temp-dir
+         * instances so no test writes to the real cache.
+         */
+        public val decompiler: DecompilerEngine = VineflowerDecompiler(),
     )
 
     /**
-     * Answers `body <member>`: the member's verbatim source slice (T-022).
+     * Answers `body <member>`: the member's verbatim source slice (T-022),
+     * reconstructed by Vineflower when no paired sources exist (T-026).
      *
      * Structure is bytecode-authoritative (D-009): the declaring type resolves
      * with the same machinery as [show], overload ambiguity is decided from
-     * bytecode *before* sources are read, and only then is the winning root's
-     * paired sources sliced via the T-021 seam. No decompilation yet (T-026/
-     * T-027): a member without paired sources is exit 1 naming that task.
+     * bytecode *before* sources are read or the decompiler runs, and only
+     * then is the winning root's paired sources sliced via the T-021 seam —
+     * or, without sources, its bytes decompiled through the T-026 seam.
+     * `--engine vineflower` forces the reconstructed path.
      */
     public fun body(rawRef: String, roots: RootsSpec, options: BodyOptions = BodyOptions()): ServiceOutcome {
         if (options.contextLines < 0) {
@@ -395,17 +413,32 @@ public object JdxService {
         public val lineNumbers: Boolean = false,
         /** Maximum shown lines; the rest become a truncation footer (`--max-lines N`). */
         public val maxLines: Int = DEFAULT_SOURCE_MAX_LINES,
+        /**
+         * Forced decompiler (`--engine vineflower`, T-026): sources are skipped
+         * and the class is always reconstructed. `null` is the ladder default —
+         * paired sources first, Vineflower when they are absent.
+         */
+        public val engine: DecompilerId? = null,
+        /**
+         * The reconstruction engine behind the fallback. Defaults to the
+         * production Vineflower decompiler; tests inject fakes or temp-dir
+         * instances so no test writes to the real cache.
+         */
+        public val decompiler: DecompilerEngine = VineflowerDecompiler(),
     )
 
     /**
-     * Answers `source <type>`: the type's verbatim source file or slice (T-023).
+     * Answers `source <type>`: the type's verbatim source file or slice
+     * (T-023), reconstructed by Vineflower when no paired sources exist
+     * (T-026).
      *
      * Structure is bytecode-authoritative (D-009): the type resolves with the
      * same machinery as [show] *before* sources are read, and only then is the
-     * winning root's paired sources served. Whole files and `--lines` windows
+     * winning root's paired sources served — or, without sources, its bytes
+     * decompiled through the T-026 seam. Whole files and `--lines` windows
      * are served verbatim without parsing; only `--around` parses (via the
-     * T-021 seam) to locate the member. No decompilation yet (T-026/T-027):
-     * a type without paired sources is exit 1 naming that task.
+     * T-021 seam) to locate the member. `--engine vineflower` forces the
+     * reconstructed path.
      */
     public fun source(rawRef: String, roots: RootsSpec, options: SourceOptions = SourceOptions()): ServiceOutcome {
         if (options.contextLines < 0) {
@@ -2551,16 +2584,42 @@ public object JdxService {
             val lookupRefs = listOf(effectiveRef) +
                 (singleMatch?.let { genericSpelledRef(target, it) }?.takeIf { it != effectiveRef }?.let(::listOf).orEmpty())
             val label = rootLabel(opened[winner], binary)
+            // `--engine vineflower` skips the paired sources entirely (T-026):
+            // the class is always reconstructed, even when sources are paired.
+            if (options.engine == DecompilerId.VINEFLOWER) {
+                return decompiledBodyOutcome(
+                    memberRef = memberRef,
+                    rawRef = rawRef,
+                    binary = binary,
+                    target = target,
+                    lookupRefs = lookupRefs,
+                    matchRefs = matchRefs,
+                    specified = specified,
+                    signatureLine = signatureLine,
+                    opened = opened,
+                    winner = winner,
+                    label = label,
+                    warnings = warnings,
+                    options = options,
+                )
+            }
             val sources = openSourcesFor(opened[winner])
-                ?: return ServiceOutcome.Failure(
-                    // No paired sources is routine (most jars ship without one):
-                    // say what exists and what comes next (T-026).
-                    ErrorResult.notFound(
-                        rawRef,
-                        detail = "no sources for $binary in " +
-                            "${rootLabel(opened[winner], binary)} " +
-                            "(decompilation not yet implemented, T-026)",
-                    ),
+                // No sources root is routine (most jars ship without one): the
+                // ladder degrades to reconstruction (T-026), not a dead end.
+                ?: return decompiledBodyOutcome(
+                    memberRef = memberRef,
+                    rawRef = rawRef,
+                    binary = binary,
+                    target = target,
+                    lookupRefs = lookupRefs,
+                    matchRefs = matchRefs,
+                    specified = specified,
+                    signatureLine = signatureLine,
+                    opened = opened,
+                    winner = winner,
+                    label = label,
+                    warnings = warnings,
+                    options = options,
                 )
             try {
                 var memberNotFound = false
@@ -2597,11 +2656,15 @@ public object JdxService {
                         memberNotFound = true
                     }
                     is dev.jdx.sources.JavaBodyResult.NoSource ->
+                        // The sources root exists but holds no file for this
+                        // class: a stale or mismatched sources jar (T-028),
+                        // not a missing one — reconstruction is only the
+                        // fallback when no sources root exists at all.
                         return ServiceOutcome.Failure(
                             ErrorResult.notFound(
                                 rawRef,
-                                detail = "no sources for $binary in $label " +
-                                    "(decompilation not yet implemented, T-026)",
+                                detail = "$binary has no source counterpart in $label " +
+                                    "(possible SOURCES_VERSION_MISMATCH, T-028)",
                             ),
                         )
                     is dev.jdx.sources.JavaBodyResult.NotJava ->
@@ -2638,6 +2701,347 @@ public object JdxService {
         else -> null
     }
 
+    // -- decompilation fallback (T-026) --------------------------------------------
+
+    /**
+     * One decompiled class behind the ladder: `Ready` carries the
+     * reconstructed text, `Failed` the exit-1 answer. Unreadable class bytes
+     * throw [ArtifactReadException] instead (exit 5 at the `body`/`source`
+     * entry points) — an unreadable artifact is not an engine failure.
+     */
+    private sealed interface DecompiledText {
+        data class Ready(val text: String) : DecompiledText
+        data class Failed(val outcome: ServiceOutcome.Failure) : DecompiledText
+    }
+
+    /**
+     * Runs [decompiler] over the winning root's class bytes with the other
+     * workspace roots as library context (PROPOSAL.md §11.2). Never throws:
+     * engine failures become exit 1 naming the `--engine javap` escape hatch
+     * (T-027), so the agent knows a lesser answer still exists.
+     */
+    private fun decompileClassText(
+        opened: List<OpenRoot>,
+        winner: Int,
+        binary: String,
+        rawRef: String,
+        decompiler: DecompilerEngine,
+    ): DecompiledText {
+        val bytes = opened[winner].root.openClass(entryForBinary(binary)).use { it.readBytes() }
+        val libraries = opened.mapNotNull { it.root.libraryPath }
+        return when (val result = decompiler.decompileClass(bytes, binary, libraries)) {
+            is DecompileResult.Decompiled -> DecompiledText.Ready(result.text)
+            is DecompileResult.Failed -> DecompiledText.Failed(
+                ServiceOutcome.Failure(
+                    ErrorResult.notFound(
+                        rawRef,
+                        detail = "could not decompile $binary with ${decompiler.id.displayName}: " +
+                            "${result.message} (raw bytecode: --engine javap, T-027)",
+                    ),
+                ),
+            )
+        }
+    }
+
+    /** The `.java` path decompiled text is keyed under: the outer class file. */
+    private fun javaPathFor(binary: String): String =
+        binary.substringBefore('$').replace('.', '/') + ".java"
+
+    /**
+     * Serves `body <member>` from reconstructed text (T-026): decompiles the
+     * winning class, feeds the text through [dev.jdx.sources.MemorySourceRoot]
+     * into the T-021 seam, and slices exactly like the sources path — so the
+     * answer differs only in provenance. Mirrors the sources loop above; the
+     * two degrade differently (a root with sources answers from ground truth,
+     * a root without answers here), which is why they are two loops and not
+     * one parametrised one.
+     */
+    private fun decompiledBodyOutcome(
+        memberRef: MemberSymbolRef,
+        rawRef: String,
+        binary: String,
+        target: ClassInfo,
+        lookupRefs: List<MemberSymbolRef>,
+        matchRefs: List<String>,
+        specified: Boolean,
+        signatureLine: String?,
+        opened: List<OpenRoot>,
+        winner: Int,
+        label: String,
+        warnings: List<Warning>,
+        options: BodyOptions,
+    ): ServiceOutcome {
+        val text = when (
+            val decompiled = decompileClassText(opened, winner, binary, rawRef, options.decompiler)
+        ) {
+            is DecompiledText.Failed -> return decompiled.outcome
+            is DecompiledText.Ready -> decompiled.text
+        }
+        val decompiledRoot = dev.jdx.sources.MemorySourceRoot(mapOf(javaPathFor(binary) to text))
+        var memberNotFound = false
+        for (lookupRef in lookupRefs) {
+            when (val found = dev.jdx.sources.findJavaBodies(decompiledRoot, lookupRef)) {
+                is dev.jdx.sources.JavaBodyResult.Found -> {
+                    if (!specified && found.bodies.size > 1) {
+                        return ServiceOutcome.Failure(ErrorResult.ambiguous(rawRef, matchRefs))
+                    }
+                    val body = found.bodies.singleOrNull()
+                        ?: return ServiceOutcome.Failure(ErrorResult.ambiguous(rawRef, matchRefs))
+                    val fileLines = text.split('\n').map { it.removeSuffix("\r") }
+                    return ServiceOutcome.Body(
+                        buildBodyBlock(
+                            canonicalRef = matchRefs.singleOrNull() ?: SymbolRefPrinter.print(
+                                MemberSymbolRef(
+                                    declaringType = target.name,
+                                    name = body.name,
+                                    parameterTypes = memberRef.parameterTypes,
+                                ),
+                            ),
+                            declaringType = binary,
+                            file = body.file,
+                            fileLines = fileLines,
+                            startLine = body.startLine,
+                            endLine = body.endLine,
+                            provenance = listOf(
+                                Provenance(
+                                    artifact = label,
+                                    origin = Origin.DECOMPILED_VINEFLOWER,
+                                    file = body.file,
+                                    lineRange = body.startLine..body.endLine,
+                                ),
+                            ),
+                            warnings = warnings.sortedBy { it.code },
+                            contextLines = options.contextLines,
+                            lineNumbers = options.lineNumbers,
+                            maxLines = options.maxLines,
+                            signature = signatureLine,
+                        ),
+                    )
+                }
+                is dev.jdx.sources.JavaBodyResult.MemberNotFound -> {
+                    memberNotFound = true
+                }
+                is dev.jdx.sources.JavaBodyResult.NoSource,
+                is dev.jdx.sources.JavaBodyResult.NotJava,
+                -> {
+                    // Unreachable: the root holds exactly the decompiled file —
+                    // kept for exhaustiveness (L-073).
+                    memberNotFound = true
+                }
+                is dev.jdx.sources.JavaBodyResult.ParseError ->
+                    return ServiceOutcome.Failure(
+                        ErrorResult.notFound(
+                            rawRef,
+                            detail = "could not parse decompiled text for $binary: ${found.message} " +
+                                "(raw bytecode: --engine javap, T-027)",
+                        ),
+                    )
+            }
+        }
+        check(memberNotFound) { "lookup spellings exhausted without a terminal result" }
+        return ServiceOutcome.Failure(
+            ErrorResult.notFound(
+                rawRef,
+                detail = "$rawRef has no decompiled counterpart in $label " +
+                    "(possible SOURCES_VERSION_MISMATCH, T-028)",
+            ),
+        )
+    }
+
+    /**
+     * Serves `source <type>` from reconstructed text (T-026): whole file,
+     * `--lines` window, or `--around` member slice. The windowing math is
+     * shared with the sources path ([fileSourceOutcome]); only the text
+     * origin differs.
+     */
+    private fun decompiledSourceOutcome(
+        rawRef: String,
+        binary: String,
+        label: String,
+        target: ClassInfo,
+        opened: List<OpenRoot>,
+        winner: Int,
+        options: SourceOptions,
+        warnings: List<Warning>,
+    ): ServiceOutcome {
+        val text = when (
+            val decompiled = decompileClassText(opened, winner, binary, rawRef, options.decompiler)
+        ) {
+            is DecompiledText.Failed -> return decompiled.outcome
+            is DecompiledText.Ready -> decompiled.text
+        }
+        val aroundRaw = options.aroundRef
+        if (aroundRaw != null) {
+            val matched = matchAroundMember(target, aroundRaw, rawRef)
+            if (matched is AroundMatch.Failed) return matched.outcome
+            matched as AroundMatch.Ready
+            return decompiledAroundOutcome(
+                binary = binary,
+                rawRef = rawRef,
+                aroundRaw = aroundRaw,
+                label = label,
+                target = target,
+                effectiveRef = matched.effectiveRef,
+                lookupRefs = matched.lookupRefs,
+                matchRefs = matched.matchRefs,
+                specified = matched.specified,
+                text = text,
+                options = options,
+                warnings = warnings,
+            )
+        }
+        return fileSourceOutcome(
+            binary = binary,
+            rawRef = rawRef,
+            artifact = label,
+            file = javaPathFor(binary),
+            fileLines = splitTextLines(text),
+            window = options.lines,
+            origin = Origin.DECOMPILED_VINEFLOWER,
+            warnings = warnings,
+            options = options,
+        )
+    }
+
+    /**
+     * Serves `--around <member-ref>` from reconstructed text (T-026): the
+     * member is located through the T-021 seam over the decompiled file, with
+     * overload ambiguity decided from bytecode first (D-009) exactly like the
+     * sources path ([aroundOutcome]).
+     */
+    private fun decompiledAroundOutcome(
+        binary: String,
+        rawRef: String,
+        aroundRaw: String,
+        label: String,
+        target: ClassInfo,
+        effectiveRef: MemberSymbolRef,
+        lookupRefs: List<MemberSymbolRef>,
+        matchRefs: List<String>,
+        specified: Boolean,
+        text: String,
+        options: SourceOptions,
+        warnings: List<Warning>,
+    ): ServiceOutcome {
+        val decompiledRoot = dev.jdx.sources.MemorySourceRoot(mapOf(javaPathFor(binary) to text))
+        var memberNotFound = false
+        for (lookupRef in lookupRefs) {
+            when (val found = dev.jdx.sources.findJavaBodies(decompiledRoot, lookupRef)) {
+                is dev.jdx.sources.JavaBodyResult.Found -> {
+                    if (!specified && found.bodies.size > 1) {
+                        return ServiceOutcome.Failure(ErrorResult.ambiguous(aroundRaw, matchRefs))
+                    }
+                    val body = found.bodies.singleOrNull()
+                        ?: return ServiceOutcome.Failure(ErrorResult.ambiguous(aroundRaw, matchRefs))
+                    val fileLines = splitTextLines(text)
+                    return ServiceOutcome.Source(
+                        buildSourceBlock(
+                            canonicalRef = binary,
+                            declaringType = binary,
+                            file = body.file,
+                            fileLines = fileLines,
+                            startLine = body.startLine,
+                            endLine = body.endLine,
+                            provenance = listOf(
+                                Provenance(
+                                    artifact = label,
+                                    origin = Origin.DECOMPILED_VINEFLOWER,
+                                    file = body.file,
+                                    lineRange = body.startLine..body.endLine,
+                                ),
+                            ),
+                            warnings = warnings.sortedBy { it.code },
+                            contextLines = options.contextLines,
+                            lineNumbers = options.lineNumbers,
+                            maxLines = options.maxLines,
+                        ),
+                    )
+                }
+                is dev.jdx.sources.JavaBodyResult.MemberNotFound -> {
+                    memberNotFound = true
+                }
+                is dev.jdx.sources.JavaBodyResult.NoSource,
+                is dev.jdx.sources.JavaBodyResult.NotJava,
+                -> {
+                    // Unreachable: the root holds exactly the decompiled file —
+                    // kept for exhaustiveness (L-073).
+                    memberNotFound = true
+                }
+                is dev.jdx.sources.JavaBodyResult.ParseError ->
+                    return ServiceOutcome.Failure(
+                        ErrorResult.notFound(
+                            rawRef,
+                            detail = "could not parse decompiled text for $binary: ${found.message} " +
+                                "(raw bytecode: --engine javap, T-027)",
+                        ),
+                    )
+            }
+        }
+        check(memberNotFound) { "lookup spellings exhausted without a terminal result" }
+        return ServiceOutcome.Failure(
+            ErrorResult.notFound(
+                aroundRaw,
+                detail = "$aroundRaw has no decompiled counterpart in $label " +
+                    "(possible SOURCES_VERSION_MISMATCH, T-028)",
+            ),
+        )
+    }
+
+    /**
+     * Serves a whole file or `--lines` window from already-read lines —
+     * shared by the sources path ([sourceOutcome], via [readSourceLines]) and
+     * the decompiled path (via [splitTextLines]), so window clamping and
+     * beyond-EOF honesty cannot drift between origins.
+     */
+    private fun fileSourceOutcome(
+        binary: String,
+        rawRef: String,
+        artifact: String,
+        file: String,
+        fileLines: List<String>,
+        window: Pair<Int, Int>?,
+        origin: Origin,
+        warnings: List<Warning>,
+        options: SourceOptions,
+    ): ServiceOutcome {
+        val (startLine, endLine) = if (window != null) {
+            if (window.first > fileLines.size) {
+                return ServiceOutcome.Failure(
+                    ErrorResult.notFound(
+                        rawRef,
+                        detail = "--lines ${window.first}:${window.second} is beyond $file " +
+                            "(${fileLines.size} lines)",
+                    ),
+                )
+            }
+            window.first to minOf(window.second, fileLines.size)
+        } else {
+            1 to fileLines.size.coerceAtLeast(1)
+        }
+        return ServiceOutcome.Source(
+            buildSourceBlock(
+                canonicalRef = binary,
+                declaringType = binary,
+                file = file,
+                fileLines = fileLines,
+                startLine = startLine,
+                endLine = endLine,
+                provenance = listOf(
+                    Provenance(
+                        artifact = artifact,
+                        origin = origin,
+                        file = file,
+                        lineRange = startLine..endLine,
+                    ),
+                ),
+                warnings = warnings.sortedBy { it.code },
+                contextLines = 0,
+                lineNumbers = options.lineNumbers,
+                maxLines = options.maxLines,
+            ),
+        )
+    }
+
     /**
      * Reads one source file as display lines: split on newlines with `\r`
      * stripped, dropping a single trailing empty line when the file ends with
@@ -2652,13 +3056,23 @@ public object JdxService {
         sources: dev.jdx.sources.SourceRoot,
         path: String,
     ): List<String>? = try {
-        val lines = sources.openSource(path).use {
-            it.readBytes().toString(Charsets.UTF_8).split('\n')
-                .map { line -> line.removeSuffix("\r") }
-        }
-        if (lines.size > 1 && lines.last().isEmpty()) lines.dropLast(1) else lines
+        splitTextLines(
+            sources.openSource(path).use { it.readBytes().toString(Charsets.UTF_8) },
+        )
     } catch (e: Exception) {
         null
+    }
+
+    /**
+     * Splits source text into display lines: newlines with `\r` stripped,
+     * dropping a single trailing empty line when the text ends with a newline
+     * — otherwise every newline-terminated file gains a phantom extra line.
+     * Shared by the sources path ([readSourceLines]) and the decompiled path,
+     * so both number lines identically.
+     */
+    internal fun splitTextLines(text: String): List<String> {
+        val lines = text.split('\n').map { line -> line.removeSuffix("\r") }
+        return if (lines.size > 1 && lines.last().isEmpty()) lines.dropLast(1) else lines
     }
 
     /**
@@ -2720,17 +3134,15 @@ public object JdxService {
             }
 
             val label = rootLabel(opened[winner], binary)
+            // `--engine vineflower` skips the paired sources entirely (T-026):
+            // the class is always reconstructed, even when sources are paired.
+            if (options.engine == DecompilerId.VINEFLOWER) {
+                return decompiledSourceOutcome(rawRef, binary, label, target, opened, winner, options, warnings)
+            }
             val sources = openSourcesFor(opened[winner])
-                ?: return ServiceOutcome.Failure(
-                    // No paired sources is routine (most jars ship without one):
-                    // say what exists and what comes next (T-026).
-                    ErrorResult.notFound(
-                        rawRef,
-                        detail = "no sources for $binary in " +
-                            "${rootLabel(opened[winner], binary)} " +
-                            "(decompilation not yet implemented, T-026)",
-                    ),
-                )
+                // No sources root is routine (most jars ship without one): the
+                // ladder degrades to reconstruction (T-026), not a dead end.
+                ?: return decompiledSourceOutcome(rawRef, binary, label, target, opened, winner, options, warnings)
             try {
                 return sourceOutcome(binary, rawRef, label, target, sources, options, warnings)
             } finally {
@@ -2775,49 +3187,24 @@ public object JdxService {
         }
         val fileLines = readSourceLines(sources, path)
             ?: return failure(5, rawRef, "source read error: cannot read $path")
-        val window = options.lines
-        val (startLine, endLine) = if (window != null) {
-            if (window.first > fileLines.size) {
-                return ServiceOutcome.Failure(
-                    ErrorResult.notFound(
-                        rawRef,
-                        detail = "--lines ${window.first}:${window.second} is beyond $path " +
-                            "(${fileLines.size} lines)",
-                    ),
-                )
-            }
-            window.first to minOf(window.second, fileLines.size)
-        } else {
-            1 to fileLines.size.coerceAtLeast(1)
-        }
-        return ServiceOutcome.Source(
-            buildSourceBlock(
-                canonicalRef = binary,
-                declaringType = binary,
-                file = path,
-                fileLines = fileLines,
-                startLine = startLine,
-                endLine = endLine,
-                provenance = listOf(
-                    Provenance(
-                        artifact = sources.displayName,
-                        origin = Origin.SOURCES,
-                        file = path,
-                        lineRange = startLine..endLine,
-                    ),
-                ),
-                warnings = warnings.sortedBy { it.code },
-                contextLines = 0,
-                lineNumbers = options.lineNumbers,
-                maxLines = options.maxLines,
-            ),
+        return fileSourceOutcome(
+            binary = binary,
+            rawRef = rawRef,
+            artifact = sources.displayName,
+            file = path,
+            fileLines = fileLines,
+            window = options.lines,
+            origin = Origin.SOURCES,
+            warnings = warnings,
+            options = options,
         )
     }
 
     /**
      * Maps a missing source file to its honest degradation: `.kt`-only roots
-     * name T-039, absent files name the decompiler (T-026) or a possible
-     * version mismatch (T-028) depending on whether any candidate exists.
+     * name T-039; a root that holds no file at all for the class names a
+     * possible version mismatch (T-028) — reconstruction is only the fallback
+     * when no sources root exists at all.
      */
     private fun noSourceFileOutcome(
         binary: String,
@@ -2851,6 +3238,65 @@ public object JdxService {
     }
 
     /**
+     * Matches an `--around` member against bytecode (D-009) with the
+     * erased→generic-spelling retry keys: shared by the sources path
+     * ([aroundOutcome]) and the decompiled path, so ambiguity and did-you-mean
+     * cannot drift between origins.
+     */
+    private sealed interface AroundMatch {
+        data class Ready(
+            val effectiveRef: MemberSymbolRef,
+            val lookupRefs: List<MemberSymbolRef>,
+            val matchRefs: List<String>,
+            val specified: Boolean,
+        ) : AroundMatch
+
+        data class Failed(val outcome: ServiceOutcome) : AroundMatch
+    }
+
+    private fun matchAroundMember(target: ClassInfo, aroundRaw: String, rawRef: String): AroundMatch {
+        val parsed = SymbolRefParser.parse(aroundRaw)
+        val aroundRef = (parsed as? SymbolRefParseResult.Ok)?.ref as? MemberSymbolRef
+            ?: return AroundMatch.Failed(
+                failure(3, rawRef, "usage error: invalid --around reference '$aroundRaw'"),
+            )
+        val effectiveRef = aroundRef.copy(declaringType = target.name)
+        // Overload ambiguity is structural (D-009): decided from bytecode
+        // before any source is read, so a stale sources jar cannot mislead.
+        val bytecodeMatches = matchBytecodeMembers(target, effectiveRef)
+        if (bytecodeMatches.isEmpty()) {
+            if (effectiveRef.name == "<clinit>") {
+                return AroundMatch.Failed(
+                    failure(3, rawRef, "usage error: static initialisers have no source to center on: '$aroundRaw'"),
+                )
+            }
+            return AroundMatch.Failed(
+                ServiceOutcome.Failure(
+                    ErrorResult.notFound(aroundRaw, suggestSimilarMember(target, effectiveRef.name)),
+                ),
+            )
+        }
+        val specified = effectiveRef.parameterTypes != null
+        val matchRefs = canonicalMemberRefs(target, bytecodeMatches)
+        if (!specified && bytecodeMatches.size > 1) {
+            return AroundMatch.Failed(ServiceOutcome.Failure(ErrorResult.ambiguous(aroundRaw, matchRefs)))
+        }
+        if (specified && bytecodeMatches.size > 1 && effectiveRef.returnType == null) {
+            return AroundMatch.Failed(ServiceOutcome.Failure(ErrorResult.ambiguous(aroundRaw, matchRefs)))
+        }
+        // Source lookup spellings: the query as written, plus — for generic
+        // members queried in erased form (`identity(java.lang.Object)` for
+        // `U identity(U)`) — the generic signature's own spellings (`U`),
+        // which is what the source text actually says. Bytecode stays the
+        // authority (the match above already proved the member); these are
+        // just the keys the T-021 narrowing understands.
+        val singleMatch = bytecodeMatches.singleOrNull()
+        val lookupRefs = listOf(effectiveRef) +
+            (singleMatch?.let { genericSpelledRef(target, it) }?.takeIf { it != effectiveRef }?.let(::listOf).orEmpty())
+        return AroundMatch.Ready(effectiveRef, lookupRefs, matchRefs, specified)
+    }
+
+    /**
      * Serves `--around <member-ref>`: locates the member through the T-021
      * seam and slices its range expanded by `--context`. Overload ambiguity
      * is decided from bytecode first (D-009), mirroring [executeBody].
@@ -2865,38 +3311,10 @@ public object JdxService {
         options: SourceOptions,
         warnings: List<Warning>,
     ): ServiceOutcome {
-        val parsed = SymbolRefParser.parse(aroundRaw)
-        val aroundRef = (parsed as? SymbolRefParseResult.Ok)?.ref as? MemberSymbolRef
-            ?: return failure(3, rawRef, "usage error: invalid --around reference '$aroundRaw'")
-        val effectiveRef = aroundRef.copy(declaringType = target.name)
-        // Overload ambiguity is structural (D-009): decided from bytecode
-        // before any source is read, so a stale sources jar cannot mislead.
-        val bytecodeMatches = matchBytecodeMembers(target, effectiveRef)
-        if (bytecodeMatches.isEmpty()) {
-            if (effectiveRef.name == "<clinit>") {
-                return failure(3, rawRef, "usage error: static initialisers have no source to center on: '$aroundRaw'")
-            }
-            return ServiceOutcome.Failure(
-                ErrorResult.notFound(aroundRaw, suggestSimilarMember(target, effectiveRef.name)),
-            )
-        }
-        val specified = effectiveRef.parameterTypes != null
-        val matchRefs = canonicalMemberRefs(target, bytecodeMatches)
-        if (!specified && bytecodeMatches.size > 1) {
-            return ServiceOutcome.Failure(ErrorResult.ambiguous(aroundRaw, matchRefs))
-        }
-        if (specified && bytecodeMatches.size > 1 && effectiveRef.returnType == null) {
-            return ServiceOutcome.Failure(ErrorResult.ambiguous(aroundRaw, matchRefs))
-        }
-        // Source lookup spellings: the query as written, plus — for generic
-        // members queried in erased form (`identity(java.lang.Object)` for
-        // `U identity(U)`) — the generic signature's own spellings (`U`),
-        // which is what the source text actually says. Bytecode stays the
-        // authority (the match above already proved the member); these are
-        // just the keys the T-021 narrowing understands.
-        val singleMatch = bytecodeMatches.singleOrNull()
-        val lookupRefs = listOf(effectiveRef) +
-            (singleMatch?.let { genericSpelledRef(target, it) }?.takeIf { it != effectiveRef }?.let(::listOf).orEmpty())
+        val matched = matchAroundMember(target, aroundRaw, rawRef)
+        if (matched is AroundMatch.Failed) return matched.outcome
+        matched as AroundMatch.Ready
+        val (effectiveRef, lookupRefs, matchRefs, specified) = matched
         var memberNotFound = false
         for (lookupRef in lookupRefs) {
             when (val found = dev.jdx.sources.findJavaBodies(sources, lookupRef)) {
@@ -2935,11 +3353,14 @@ public object JdxService {
                     memberNotFound = true
                 }
                 is dev.jdx.sources.JavaBodyResult.NoSource ->
+                    // The sources root exists but holds no file for this
+                    // class: a stale or mismatched sources jar (T-028), not
+                    // a missing one — mirrors [noSourceFileOutcome].
                     return ServiceOutcome.Failure(
                         ErrorResult.notFound(
                             rawRef,
-                            detail = "no sources for $binary in $label " +
-                                "(decompilation not yet implemented, T-026)",
+                            detail = "$binary has no source counterpart in $label " +
+                                "(possible SOURCES_VERSION_MISMATCH, T-028)",
                         ),
                     )
                 is dev.jdx.sources.JavaBodyResult.NotJava ->

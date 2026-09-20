@@ -66,3 +66,4 @@ log.
 | D-035 | `jdx body` output semantics (T-022) | proposed-by-implementer | `D-026-050.md` |
 | D-036 | `jdx source` output semantics (T-023) | proposed-by-implementer | `D-026-050.md` |
 | D-037 | `jdx doc` output semantics (T-025) | proposed-by-implementer | `D-026-050.md` |
+| D-038 | Vineflower decompilation semantics (T-026) | proposed-by-implementer | `D-026-050.md` |

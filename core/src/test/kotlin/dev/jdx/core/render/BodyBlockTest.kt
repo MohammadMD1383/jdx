@@ -62,6 +62,25 @@ class BodyBlockTest {
     }
 
     @Test
+    fun `decompiled provenance is labelled as reconstructed, never as ground truth`() {
+        val decompiled = blockOf().copy(
+            provenance = listOf(
+                Provenance(
+                    artifact = "app.jar",
+                    origin = Origin.DECOMPILED_VINEFLOWER,
+                    file = "com/example/Point.java",
+                    lineRange = 6..8,
+                ),
+            ),
+        )
+        val text = decompiled.renderText()
+        text shouldContain "source: decompiled by vineflower from app.jar · com/example/Point.java:6-8"
+        text shouldContain "reconstructed"
+        // The binary jar alone must never read as a sources answer.
+        text shouldNotContain "source: app.jar ·"
+    }
+
+    @Test
     fun `body text is verbatim without indentation`() {
         val text = blockOf().renderText()
         text shouldContain "    public int getX() {"

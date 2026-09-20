@@ -8,12 +8,17 @@ import io.kotest.matchers.string.shouldNotContain
 import java.io.ByteArrayOutputStream
 import java.io.File
 import java.io.PrintStream
+import java.nio.file.Path
+import java.util.zip.ZipEntry
+import java.util.zip.ZipFile
+import java.util.zip.ZipOutputStream
 import kotlinx.serialization.json.Json
 import kotlinx.serialization.json.jsonObject
 import kotlinx.serialization.json.jsonPrimitive
 import org.junit.jupiter.api.Tag
 import org.junit.jupiter.api.Test
 import org.junit.jupiter.api.fail
+import org.junit.jupiter.api.io.TempDir
 
 /**
  * Behaviour of `source` against real artifacts (T-023, tier 2): the fixture corpus
@@ -128,6 +133,29 @@ class SourceCommandsServiceTest {
         val engine = run(listOf("source") + fixtureArgs("dev.jdx.fixtures.Generics", "--engine", "javap"))
         engine.exit shouldBe 3
         engine.output shouldContain "T-027"
+    }
+
+    @Test
+    fun `sourceless jar reconstructs end to end with a labelled provenance`(@TempDir tempDir: Path) {
+        // The one path unit tests cannot cover: the production default engine
+        // with the system cache. The entry is content-addressed under jdx's
+        // own `~/.cache/jdx/decompile` — regenerable and harmless.
+        val bare = tempDir.resolve("bare.jar").toFile()
+        ZipFile(fixtureJar()).use { zip ->
+            ZipOutputStream(bare.outputStream()).use { out ->
+                val name = "dev/jdx/fixtures/Generics.class"
+                out.putNextEntry(ZipEntry(name))
+                zip.getInputStream(zip.getEntry(name)).copyTo(out)
+                out.closeEntry()
+            }
+        }
+        val run = run(
+            listOf("source", "--jars", bare.absolutePath, "--no-jdk", "dev.jdx.fixtures.Generics"),
+        )
+        run.exit shouldBe 0
+        run.output shouldContain "decompiled by vineflower from bare.jar"
+        run.output shouldContain "reconstructed"
+        run.output shouldContain "class Generics"
     }
 
     @Test

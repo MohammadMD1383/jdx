@@ -37,7 +37,7 @@ public data class BodyBlock(
     /** Text layout per PROPOSAL.md §8.1: ref header, source line, verbatim body, next hint. */
     public fun renderText(color: Boolean = false): String {
         val out = mutableListOf(canonicalRef)
-        out.add("  source: ${provenance.firstOrNull()?.artifact ?: "?"} · $file:$startLine-$endLine")
+        out.add("  " + renderSourceLine(provenance.firstOrNull(), file, startLine, endLine))
         signature?.let { out.add("  signature: $it") }
         lines.forEachIndexed { index, line ->
             out.add(if (lineNumbers) "${displayStartLine + index} | $line" else line)

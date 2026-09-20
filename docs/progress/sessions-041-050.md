@@ -4,6 +4,118 @@ Newest first. Each entry follows the template at the bottom of `docs/PROGRESS.md
 
 ---
 
+## Session 45 — 2026-09-20 — T-026 Vineflower decompiler fallback done
+**Agent/Author:** Muse Spark 1.3 Free · **Commits:** `d3cbe04` (claim) + closing commit (this session)
+
+### Goal
+Implement T-026, the first decompiler slice of M3: a `DecompilerEngine`
+interface in `decompile` with a Vineflower implementation (single-class,
+workspace jars as library context, on-disk cache, wall-clock timeout, lazy
+isolated loading), falling back to it from `JdxService.body`/`source` when no
+paired sources exist. `--engine vineflower` forces the path; `--engine javap`
+stays parked on T-027.
+
+### What I did
+- Probed the Vineflower 1.12.0 builder API first with a throwaway
+  `javac`/`java` program (L-075): directory inputs report via
+  `saveClassFile` (not `saveClassEntry`); single classes enter via a staged
+  temp dir + `DirectoryContextSource` (`SingleFileContextSource` is
+  package-private); result keys are slash-joined qualified names.
+- `decompile/...` (new): `DecompilerEngine` (sealed
+  `Decompiled`/`Failed`, never throws) + `VineflowerDecompiler` (cache
+  `~/.cache/jdx/decompile/<sha256>-vineflower-<version>.java`, 30 s
+  daemon-worker timeout with abandon-on-expiry, child-first isolated runner
+  with in-process fallback, serialised calls, `VINEFLOWER_VERSION` pinned
+  against the engine) + `VineflowerRunnerImpl` (staged temp dir, workspace
+  jars as `libraries`) + `DecompileCache` (atomic writes, hostile-label
+  sanitising). Cache and engine are data classes (L-076).
+- `core/.../render/SourceLine.kt` (new): shared `renderSourceLine`
+  (`decompiled by vineflower from … ⚠ reconstructed`, README contract),
+  wired into `Body` and `Source` text (test-first: wrote the failing tests,
+  watched them fail, then implemented).
+- `index`: new `:decompile` edge + `ArtifactRoot.libraryPath` (jar/dir
+  paths; `jrt:/` none) + `BodyOptions`/`SourceOptions` (`engine:`
+  forced-or-auto, `decompiler:` injectable defaulting to production) +
+  `decompileClassText`/`decompiledBodyOutcome`/`decompiledSourceOutcome`/
+  `decompiledAroundOutcome`/`fileSourceOutcome` (shared windowing) +
+  `matchAroundMember` (one bytecode-matching path for both origins) +
+  `splitTextLines` (one numbering for both origins). Mid-task correction:
+  first routed present-root-but-fileless to decompile, then reverted — the
+  T-023 `stale sources` test pins that shape as T-028 mismatch, and rightly
+  so (D-038 §1).
+- `cli`: `--engine vineflower` live on `body` and `source` (help text
+  updated); `javap` still exit 3 naming T-027.
+- `docs/PROPOSAL.md` Appendix B: `source` row gains the missing
+  `--line-numbers --max-lines --engine vineflower|javap` (pre-existing gap
+  from T-023, fixed while verifying engine flags).
+- Tests: decompile tier-1 (key/staging/version pins + 2 properties) + tier-2
+  (real engine over fixture bytes incl. T-021 slice reuse, cache-hit,
+  zero-timeout, hostile faults); index tier-2 (fallback/forced/fake-failure/
+  scripted-mismatch/determinism/JSON — deliberately no goldens per TESTING
+  §5.3); cli tier-1 (flag plumbing incl. options equality) + tier-2
+  (end-to-end incl. the system-cache path). Rewrote the two `unpaired binary`
+  tests from degrade-pins to fallback-pins; narrowed the JDK-honesty
+  `shouldNotContain "Exception"` to `"Exception in thread"` (L-070: the
+  decompiled `ArrayList` legitimately names exception types).
+- Verified: `check -x verifyTier1Budget` green incl. JaCoCo gates; `soak`
+  green solo (2m 38s; it runs no body/source queries, so decompile is
+  unexercised there). Live proof via `app/build/jdx` (see below).
+
+### Decisions made
+- D-038 (Vineflower decompilation semantics: no-root fallback rule, `.kt`
+  stays T-039, engine failure is exit 1 naming T-027, binary-naming
+  provenance + reconstructed label, lazy child-first loading, cache layout,
+  no decompiled goldens) in `docs/decisions/D-026-050.md`.
+
+### Tasks moved
+- T-026: TODO → WIP (`d3cbe04`) → DONE. T-027/T-028 stay M3 one-liners;
+  T-072 stays TODO.
+
+### Lessons distilled
+- **L-075** — probe a new third-party API with a throwaway program before
+  building on it (Vineflower's `saveClassFile` vs `saveClassEntry`,
+  package-private single-file source).
+- **L-076** — options/config holders compared in tests need value equality:
+  default to `data class`.
+
+### What works now (and how to verify it yourself)
+```bash
+./gradlew :decompile:test :decompile:tier2Test -x verifyTier1Budget  # engine + seam reuse
+./gradlew :index:tier2Test --tests "dev.jdx.index.service.BodyServiceTest" \
+  --tests "dev.jdx.index.service.SourceServiceTest" -x verifyTier1Budget
+./gradlew :cli:test :cli:tier2Test -x verifyTier1Budget
+./gradlew check -x verifyTier1Budget  # green incl. gates
+./gradlew soak --rerun-tasks          # green (2m 38s)
+JAR=testfixtures/build/libs/testfixtures-0.1.0-SNAPSHOT.jar
+unzip -p "$JAR" dev/jdx/fixtures/Generics.class > /tmp/opencode/Generics.class
+mkdir -p /tmp/opencode/barejar/dev/jdx/fixtures && cp /tmp/opencode/Generics.class /tmp/opencode/barejar/dev/jdx/fixtures/
+cd /tmp/opencode/barejar && jar cf /tmp/opencode/bare.jar dev && cd ~/projects/java-source-cli
+./app/build/jdx body 'dev.jdx.fixtures.Generics#identity(java.lang.Object)' --jars /tmp/opencode/bare.jar --no-jdk
+# exit 0: decompiled slice with `decompiled by vineflower from bare.jar … ⚠ reconstructed`
+./app/build/jdx source 'dev.jdx.fixtures.Generics' --jars /tmp/opencode/bare.jar --no-jdk --max-lines 8
+# exit 0: decompiled file with truncation footer
+./app/build/jdx body 'dev.jdx.fixtures.Generics#identity(java.lang.Object)' --jars /tmp/opencode/bare.jar --no-jdk --engine javap
+# exit 3 naming T-027
+```
+Note: run the `jdx` proofs from the repo dir — from elsewhere the ambient
+`fx` workspace (relative glob, T-066 trap) can exit 5 before the explicit
+`--jars` root is read.
+
+### What is broken / half-done
+- Nothing from this task. Pre-existing, untouched: `verifyTier1Budget` red on
+  this machine (machine variance, 0 test failures); `doc` has no decompiled
+  path by design (decompiled text carries no javadoc); soak runs no
+  body/source queries so corpus decompilation is unexercised in tier 3.
+
+### Open questions / blockers
+- None.
+
+### Next action
+- **T-027** (`javap` engine: `--engine javap` for `body`/`source` + the
+  decompiler fault-injection cases deferred from T-057).
+
+---
+
 ## Session 44 — 2026-09-20 — T-025 `jdx doc` incl. inherited javadoc done
 **Agent/Author:** Muse Spark 1.3 Free · **Commits:** `b56a6ed` (claim) + closing commit (this session)
 

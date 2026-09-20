@@ -58,7 +58,8 @@ M2 hardening is complete (T-070 closed the tier-2 half of T-066).
 T-021 (JavaParser body extraction over that seam) is DONE; T-022 (`jdx body`
 over that seam) is DONE; T-023 (`jdx source` over that seam) is DONE;
 T-024 (`jdx signature` over bytecode) is DONE; T-025 (`jdx doc` incl.
-inherited javadoc) is DONE.** T-072 (`--with-doc` enrichment) is filed TODO.
+inherited javadoc) is DONE; T-026 (Vineflower decompiler fallback) is DONE.**
+T-072 (`--with-doc` enrichment) is filed TODO.
 
 ---
 
@@ -1011,8 +1012,83 @@ stored workspace mirror). `check` green shelved; `cli:tier2Test` with ambient
 ---
 
 # M3 — Bodies
-### T-020 Sources-jar/dir access and `srcmap` · **T-021** JavaParser integration and Java body extraction · **T-022** `jdx body` · **T-023** `jdx source` · **T-024** `jdx signature` · **T-025** `jdx doc` incl. inherited javadoc · **T-026** `DecompilerEngine` interface + Vineflower (isolated lazy classloader, on-disk cache) · `WIP` (session 45) · **T-027** `javap` engine · **T-028** `SOURCES_VERSION_MISMATCH` detection
+### T-020 Sources-jar/dir access and `srcmap` · **T-021** JavaParser integration and Java body extraction · **T-022** `jdx body` · **T-023** `jdx source` · **T-024** `jdx signature` · **T-025** `jdx doc` incl. inherited javadoc · **T-027** `javap` engine · **T-028** `SOURCES_VERSION_MISMATCH` detection
 *(Expand into detail blocks when M3 starts.)*
+
+### T-026 — `DecompilerEngine` + Vineflower fallback for `body`/`source` · `DONE` (session 45)
+**Depends:** T-021 (MemorySourceRoot + JavaParser slicing seam), T-022/T-023 (body/source patterns), T-011/T-015/T-016 (roots) · **Files:** `decompile/.../DecompilerEngine.kt`, `VineflowerDecompiler.kt`, `DecompileCache.kt`, `core/.../render/Body.kt`, `Source.kt`, `index/.../service/JdxService.kt` (+ `index/build.gradle.kts`), `cli/.../commands/BodyCommand.kt`, `SourceCommand.kt`
+*(First decompiler slice of M3: Vineflower only. `--engine javap` stays parked on
+T-027; Kotlin `.kt`-only roots still degrade to T-039; source-missing-member
+still names T-028; `doc` gets no decompiled path — decompiled text carries no
+javadoc. Structure stays bytecode-authoritative (D-009): overload ambiguity is
+decided from bytecode before any decompilation runs.)*
+
+Wire PROPOSAL.md §11.2: a `DecompilerEngine` interface in `decompile` with a
+Vineflower implementation (single-class, workspace jars as library context,
+on-disk cache, wall-clock timeout, lazy isolated loading), and fall back to it
+from `JdxService.body`/`source` when no paired sources exist. `--engine
+vineflower` forces the decompiled path even when sources are paired.
+
+**Acceptance**
+- [x] `DecompilerEngine` interface: `decompileClass(classBytes, binaryName,
+      classpath)` returns a sealed `Decompiled(text, engineVersion)` /
+      `Failed(message)` — never throws on agent-reachable input (corrupt
+      bytes, hostile names, timeout)
+- [x] `VineflowerDecompiler`: disk cache under `~/.cache/jdx/decompile` keyed
+      by `(sha256(classBytes), engine, engineVersion)`; cache hits never touch
+      Vineflower classes; wall-clock timeout degrades to `Failed`, not a hang
+- [x] `jdx body '<member>'` on a sources-less jar exits 0 with the sliced
+      member + `DECOMPILED_VINEFLOWER` provenance and the reconstructed label;
+      `jdx source '<type>'` (whole file, `--lines`, `--around`) likewise
+- [x] `--engine vineflower` forces decompilation (sources ignored);
+      `--engine javap` (and any other value) exits 3 naming T-027
+- [x] `.kt`-only roots still exit 1 naming T-039; members proven in bytecode
+      but absent from decompiled text name T-028; unreadable class bytes exit
+      5; no roots exit 4; never throws, never a stack trace
+- [x] Text+JSON parity (D-007), deterministic bytes, `--max-lines`/`--context`/
+      `--line-numbers` work over decompiled text exactly as over sources
+- [x] Tests: decompile tier-1 (hostile-input never-throws + determinism
+      properties) + tier-2 (real Vineflower over fixture bytes: member names
+      present, twice-identical, cache-hit, decompiled text slices through the
+      T-021 seam); index tier-2 service tests (fallback, forced engine,
+      fake-engine failure/timeout paths, determinism, text⊆JSON — no goldens:
+      TESTING.md §5.3 forbids pinning decompiler text); cli tier-1 flag
+      validation + tier-2 in-process tests; tiers 1+2 green
+- [x] `--help` text, Appendix B engine flags verified, `TASKS.md` status,
+      `PROGRESS.md` entry
+
+*Implementation notes (session 45): `decompile/...` — `DecompilerEngine`
+(sealed `Decompiled`/`Failed`, never throws) + `VineflowerDecompiler` (disk
+cache `~/.cache/jdx/decompile/<sha256>-vineflower-<version>.java`, 30 s
+daemon-worker timeout with abandon-on-expiry, child-first isolated runner
+with in-process fallback, serialised calls, `VINEFLOWER_VERSION` pinned
+against the engine) + `VineflowerRunnerImpl` (staged temp dir +
+`DirectoryContextSource`, workspace jars as `libraries`, `saveClassFile`
+capture — the two probe-learned API shapes, L-075) + `DecompileCache`
+(atomic writes, hostile-label sanitising, data-class value equality, L-076).
+`core/.../render/SourceLine.kt` — shared `renderSourceLine` (`decompiled by
+vineflower from … ⚠ reconstructed`, README contract) wired into `Body` and
+`Source` text. `index`: new `:decompile` edge + `ArtifactRoot.libraryPath`
+(jar/dir paths; `jrt:/` none) + `BodyOptions`/`SourceOptions` (`engine:`
+forced-or-auto, `decompiler:` injectable defaulting to production) +
+`decompileClassText`/`decompiledBodyOutcome`/`decompiledSourceOutcome`/
+`decompiledAroundOutcome`/`fileSourceOutcome` (shared windowing) +
+`matchAroundMember` (one bytecode-matching path for both origins) +
+`splitTextLines` (one numbering for both origins). Auto-fallback fires only
+with no sources root; present-but-fileless roots stay T-028 (the T-023 stale
+pin stands — D-038 §1); `.kt`-only stays T-039; engine failure is exit 1
+naming T-027. `cli`: `--engine vineflower` live on both commands, `javap`
+still exit 3 naming T-027. Tests: decompile tier-1 (key/staging/version pins
++ properties) + tier-2 (real engine over fixture bytes, T-021 slice reuse,
+cache-hit, timeout, hostile faults); index tier-2 (fallback/forced/
+fake-failure/scripted-mismatch/determinism/JSON — no goldens per TESTING
+§5.3); cli tier-1 (flag plumbing incl. options equality) + tier-2
+(end-to-end incl. the system-cache path). Standing bar: `check
+-x verifyTier1Budget` green incl. gates; `soak` green solo (2m 38s; it runs
+no body/source queries, so decompile is unexercised there). Live proof:
+bare-jar `body`/`source` exit 0 reconstructed; `ArrayList` decompiles from
+the JDK (727 lines — this machine has no `src.zip`). Lessons L-075 (probe
+first), L-076 (data-class options); decision D-038.*
 
 ### T-025 — `jdx doc` over the T-021 seam · `DONE` (session 44)
 **Depends:** T-021, T-022 (body patterns), T-011 (read-command patterns), T-015/T-016 (roots) · **Files:** `sources/.../JavaDocs.kt`, `core/.../render/Doc.kt`, `index/.../service/JdxService.kt` (`doc`), `cli/.../commands/DocCommand.kt`

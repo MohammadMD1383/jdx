@@ -3,6 +3,7 @@ package dev.jdx.index.artifact
 import dev.jdx.core.model.Warning
 import java.io.Closeable
 import java.io.InputStream
+import java.nio.file.Path
 
 /**
  * One place compiled code can be read from: a jar, a class directory, or the JDK itself.
@@ -47,4 +48,12 @@ public interface ArtifactRoot : Closeable {
      * or the JDK release for `jrt:/`. The index cache key (PROPOSAL.md §10.2).
      */
     public fun stableId(): String
+
+    /**
+     * This root as a library path for the decompiler's type context (T-026):
+     * the jar file, the class directory, or `null` when the root has no
+     * filesystem path (`jrt:/` — the JDK ships no jar to point at).
+     */
+    public val libraryPath: Path?
+        get() = null
 }

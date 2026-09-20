@@ -23,6 +23,9 @@ public class DirArtifact private constructor(
 
     override val kind: ArtifactKind = ArtifactKind.CLASS_DIR
 
+    /** The class directory itself, for the decompiler's library context (T-026). */
+    override val libraryPath: Path = dir
+
     override val warnings: List<Warning> = emptyList()
 
     init {

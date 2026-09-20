@@ -4,6 +4,7 @@ import com.github.ajalt.clikt.core.parse
 import dev.jdx.core.model.Origin
 import dev.jdx.core.model.Provenance
 import dev.jdx.core.render.buildSourceBlock
+import dev.jdx.decompile.DecompilerId
 import dev.jdx.index.service.JdxService
 import dev.jdx.index.workspace.InMemoryWorkspaceStore
 import io.kotest.matchers.shouldBe
@@ -126,13 +127,13 @@ class SourceCommandTest {
     }
 
     @Test
-    fun `engine is rejected naming the decompiler tasks`() {
-        for (engine in listOf("vineflower", "javap")) {
-            val run = run(listOf("com.example.Point", "--engine", engine))
-            run.exit shouldBe 3
-            run.output shouldContain "T-026"
-            run.output shouldContain "T-027"
-        }
+    fun `vineflower engine reaches the service, javap is rejected naming T-027`() {
+        val forced = run(listOf("com.example.Point", "--engine", "vineflower"))
+        forced.exit shouldBe 0
+        forced.options?.engine shouldBe DecompilerId.VINEFLOWER
+        val raw = run(listOf("com.example.Point", "--engine", "javap"))
+        raw.exit shouldBe 3
+        raw.output shouldContain "T-027"
     }
 
     @Test

@@ -12,6 +12,7 @@ import com.github.ajalt.clikt.parameters.types.int
 import dev.jdx.cli.effectiveJson
 import dev.jdx.cli.effectiveWorkspace
 import dev.jdx.core.render.ErrorResult
+import dev.jdx.decompile.DecompilerId
 import dev.jdx.index.service.JdxService
 import dev.jdx.index.workspace.FileWorkspaceStore
 import dev.jdx.index.workspace.WorkspaceStore
@@ -22,9 +23,9 @@ import kotlin.system.exitProcess
  * for the member's verbatim source slice, renders it, and maps the outcome to an exit
  * code (D-015).
  *
- * Bodies come from the paired `-sources.jar` (ground truth, T-021/T-022). Without
- * paired sources the answer names the decompiler tasks (T-026/T-027) instead of
- * guessing. A bare `Type#name` with several overloads exits 2 with every candidate
+ * Bodies come from the paired `-sources.jar` (ground truth, T-021/T-022), or —
+ * without paired sources — from the Vineflower reconstruction (T-026), always
+ * labelled as such. A bare `Type#name` with several overloads exits 2 with every candidate
  * as a copy-pasteable canonical ref (D-016).
  */
 class BodyCommand(
@@ -62,7 +63,9 @@ class BodyCommand(
 
     private val engine by option(
         "--engine",
-        help = "Decompiler engine: vineflower or javap (not yet implemented, T-026/T-027).",
+        help = "Decompiler engine: vineflower forces reconstruction even when sources are " +
+            "paired (default serves sources, falling back to vineflower); javap is not " +
+            "yet implemented (T-027).",
     ).choice("vineflower", "javap", ignoreCase = true)
 
     private val withDoc by option(
@@ -158,6 +161,11 @@ class BodyCommand(
                         lineNumbers = lineNumbers,
                         maxLines = maxLines,
                         withSignature = withSignature,
+                        engine = if (engine.equals("vineflower", ignoreCase = true)) {
+                            DecompilerId.VINEFLOWER
+                        } else {
+                            null
+                        },
                     ),
                 )
                 ReadCommandSupport.finish(outcome, "body", json, noColor, terminate)
@@ -181,9 +189,9 @@ internal fun validateBodyFlags(
 ): String? {
     if (context < 0) return "usage error: --context must be >= 0, got $context"
     if (maxLines < 0) return "usage error: --max-lines must be >= 0, got $maxLines"
-    if (engine != null) {
+    if (engine != null && !engine.equals("vineflower", ignoreCase = true)) {
         return "usage error: --engine $engine is not yet implemented " +
-            "(decompilation: T-026 Vineflower, T-027 javap)"
+            "(raw bytecode: T-027 javap)"
     }
     if (withDoc) {
         return "usage error: --with-doc is not yet implemented (T-072: javadoc enrichment over the T-025 seam)"

@@ -1,5 +1,10 @@
 package dev.jdx.index.service
 
+import dev.jdx.decompile.DecompileCache
+import dev.jdx.decompile.DecompileResult
+import dev.jdx.decompile.DecompilerEngine
+import dev.jdx.decompile.DecompilerId
+import dev.jdx.decompile.VineflowerDecompiler
 import dev.jdx.index.service.JdxService.BodyOptions
 import dev.jdx.index.service.JdxService.RootsSpec
 import dev.jdx.index.service.JdxService.ServiceOutcome
@@ -31,6 +36,46 @@ class BodyServiceTest {
         RootsSpec(jarSpecs = listOf(FixtureJars.binaryJar().absolutePath), includeJdk = false)
 
     private fun textOf(outcome: ServiceOutcome): String = outcome.renderText(false)
+
+    /** A failing reconstruction engine that counts its invocations. */
+    private class FailingDecompiler : DecompilerEngine {
+        override val id: DecompilerId = DecompilerId.VINEFLOWER
+        var calls: Int = 0
+        override fun decompileClass(
+            classBytes: ByteArray,
+            binaryName: String,
+            classpath: List<Path>,
+        ): DecompileResult {
+            calls++
+            return DecompileResult.Failed("boom")
+        }
+    }
+
+    /** A scripted reconstruction engine returning fixed text. */
+    private class ScriptedDecompiler(val text: String) : DecompilerEngine {
+        override val id: DecompilerId = DecompilerId.VINEFLOWER
+        var calls: Int = 0
+        override fun decompileClass(
+            classBytes: ByteArray,
+            binaryName: String,
+            classpath: List<Path>,
+        ): DecompileResult {
+            calls++
+            return DecompileResult.Decompiled(text, "test")
+        }
+    }
+
+    private fun tempEngine(tempDir: Path): VineflowerDecompiler =
+        VineflowerDecompiler(DecompileCache(tempDir.resolve("decompile-cache")))
+
+    private fun bareJar(tempDir: Path, name: String = "bare.jar"): Path {
+        val binary = tempDir.resolve(name)
+        val classBytes = ZipFile(FixtureJars.binaryJar()).use { zip ->
+            zip.getInputStream(zip.getEntry("dev/jdx/fixtures/Generics.class")).readBytes()
+        }
+        writeJar(binary, mapOf("dev/jdx/fixtures/Generics.class" to classBytes))
+        return binary
+    }
 
     // -- found -----------------------------------------------------------------
 
@@ -157,18 +202,92 @@ class BodyServiceTest {
     }
 
     @Test
-    fun `unpaired binary degrades naming T-026`(@TempDir tempDir: Path) {
-        // Most jars ship without sources: routine exit 1, never a trace.
-        val binary = tempDir.resolve("bare.jar")
-        val classBytes = ZipFile(FixtureJars.binaryJar()).use { zip ->
-            zip.getInputStream(zip.getEntry("dev/jdx/fixtures/Generics.class")).readBytes()
-        }
-        writeJar(binary, mapOf("dev/jdx/fixtures/Generics.class" to classBytes))
+    fun `unpaired binary falls back to vineflower with a reconstructed label`(@TempDir tempDir: Path) {
+        // Most jars ship without sources: the ladder reconstructs (T-026) instead
+        // of stopping. The temp-dir engine keeps the real user cache untouched.
+        val binary = bareJar(tempDir)
         val roots = RootsSpec(jarSpecs = listOf(binary.toString()), includeJdk = false)
-        val outcome = JdxService.body("dev.jdx.fixtures.Generics#identity(java.lang.Object)", roots)
+        val options = BodyOptions(decompiler = tempEngine(tempDir))
+        val outcome = JdxService.body("dev.jdx.fixtures.Generics#identity(java.lang.Object)", roots, options)
+        outcome.exitCode shouldBe 0
+        val text = textOf(outcome)
+        text shouldContain "return value;"
+        text shouldContain "decompiled by vineflower from bare.jar"
+        text shouldContain "reconstructed"
+        text shouldNotContain "-sources.jar"
+        val json = outcome.toJson("body")
+        json shouldContain "\"origin\":\"decompiled-vineflower\""
+        json shouldContain "return value;"
+    }
+
+    @Test
+    fun `forced vineflower ignores paired sources`(@TempDir tempDir: Path) {
+        val options = BodyOptions(engine = DecompilerId.VINEFLOWER, decompiler = tempEngine(tempDir))
+        val outcome = JdxService.body(
+            "dev.jdx.fixtures.Generics#identity(java.lang.Object)",
+            fixtureRoots(),
+            options,
+        )
+        outcome.exitCode shouldBe 0
+        textOf(outcome) shouldContain "decompiled by vineflower"
+        textOf(outcome) shouldContain "reconstructed"
+        textOf(outcome) shouldNotContain "-sources.jar"
+    }
+
+    @Test
+    fun `paired sources never touch the decompiler`() {
+        val fake = ScriptedDecompiler("unused")
+        val outcome = JdxService.body(
+            "dev.jdx.fixtures.Generics#identity(java.lang.Object)",
+            fixtureRoots(),
+            BodyOptions(decompiler = fake),
+        )
+        outcome.exitCode shouldBe 0
+        textOf(outcome) shouldContain "-sources.jar"
+        fake.calls shouldBe 0
+    }
+
+    @Test
+    fun `a failing engine exits 1 naming the javap hatch`(@TempDir tempDir: Path) {
+        val binary = bareJar(tempDir)
+        val roots = RootsSpec(jarSpecs = listOf(binary.toString()), includeJdk = false)
+        val fake = FailingDecompiler()
+        val outcome = JdxService.body(
+            "dev.jdx.fixtures.Generics#identity(java.lang.Object)",
+            roots,
+            BodyOptions(decompiler = fake),
+        )
         outcome.exitCode shouldBe 1
-        textOf(outcome) shouldContain "T-026"
+        fake.calls shouldBe 1
+        textOf(outcome) shouldContain "T-027"
         textOf(outcome) shouldNotContain "Exception"
+    }
+
+    @Test
+    fun `a member missing from reconstructed text names T-028`(@TempDir tempDir: Path) {
+        val binary = bareJar(tempDir)
+        val roots = RootsSpec(jarSpecs = listOf(binary.toString()), includeJdk = false)
+        val scripted = ScriptedDecompiler(
+            "package dev.jdx.fixtures;\npublic class Generics {\n    public void unrelated() {}\n}\n",
+        )
+        val outcome = JdxService.body(
+            "dev.jdx.fixtures.Generics#identity(java.lang.Object)",
+            roots,
+            BodyOptions(decompiler = scripted),
+        )
+        outcome.exitCode shouldBe 1
+        textOf(outcome) shouldContain "T-028"
+    }
+
+    @Test
+    fun `decompiled bodies are deterministic`(@TempDir tempDir: Path) {
+        val binary = bareJar(tempDir)
+        val roots = RootsSpec(jarSpecs = listOf(binary.toString()), includeJdk = false)
+        val options = BodyOptions(decompiler = tempEngine(tempDir))
+        val ref = "dev.jdx.fixtures.Generics#identity(java.lang.Object)"
+        textOf(JdxService.body(ref, roots, options)) shouldBe textOf(JdxService.body(ref, roots, options))
+        JdxService.body(ref, roots, options).toJson("body") shouldBe
+            JdxService.body(ref, roots, options).toJson("body")
     }
 
     private fun writeJar(jar: Path, entries: Map<String, ByteArray>) {
@@ -251,19 +370,22 @@ class BodyServiceTest {
     }
 
     @Test
-    fun `jdk member without src zip or with sources answers honestly`() {
+    fun `jdk member without src zip or with sources answers honestly`(@TempDir tempDir: Path) {
         // The JDK ships src.zip on this machine: ArrayList#get answers from sources.
-        // Wherever src.zip is absent this is exit 1 naming T-026 — both honest.
+        // Wherever src.zip is absent it reconstructs (T-026) — both honest.
         val outcome = JdxService.body(
             "java.util.ArrayList#get(int)",
             RootsSpec(jarSpecs = emptyList(), includeJdk = true),
+            BodyOptions(decompiler = tempEngine(tempDir)),
         )
         if (outcome.exitCode == 0) {
             textOf(outcome) shouldContain "source: "
         } else {
             outcome.exitCode shouldBe 1
-            textOf(outcome) shouldContain "T-026"
+            textOf(outcome) shouldContain "T-027"
         }
-        textOf(outcome) shouldNotContain "Exception"
+        // Trace proxy, scoped: decompiled bodies legitimately name exception
+        // types (`NoSuchElementException`, …) — only a trace header is a failure.
+        textOf(outcome) shouldNotContain "Exception in thread"
     }
 }
