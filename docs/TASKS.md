@@ -1012,8 +1012,48 @@ stored workspace mirror). `check` green shelved; `cli:tier2Test` with ambient
 ---
 
 # M3 — Bodies
-### T-020 Sources-jar/dir access and `srcmap` · **T-021** JavaParser integration and Java body extraction · **T-022** `jdx body` · **T-023** `jdx source` · **T-024** `jdx signature` · **T-025** `jdx doc` incl. inherited javadoc · **T-027** `javap` engine · **T-028** `SOURCES_VERSION_MISMATCH` detection
+### T-020 Sources-jar/dir access and `srcmap` · **T-021** JavaParser integration and Java body extraction · **T-022** `jdx body` · **T-023** `jdx source` · **T-024** `jdx signature` · **T-025** `jdx doc` incl. inherited javadoc · **T-028** `SOURCES_VERSION_MISMATCH` detection
 *(Expand into detail blocks when M3 starts.)*
+
+### T-027 — `javap` engine for `body`/`source` · `WIP`
+**Depends:** T-022/T-023 (body/source patterns), T-026 (`DecompilerEngine` seam + forced-engine plumbing), T-011/T-015/T-016 (roots) · **Files:** `decompile/.../JavapDecompiler.kt`, `JavapOutput.kt`, `DecompilerEngine.kt`, `index/.../service/JdxService.kt`, `cli/.../commands/BodyCommand.kt`, `SourceCommand.kt`
+*(Second and last decompiler slice of M3: the `--engine javap` opcode path
+PROPOSAL.md §11.2 promises ("Show Bytecode" action). Structure stays
+bytecode-authoritative (D-009): overload ambiguity is decided from bytecode
+before `javap` runs. No auto-fallback: a Vineflower failure stays exit 1
+naming the now-working hatch (filed as T-073); Kotlin `.kt`-only roots still
+degrade to T-039; source-missing-member still names T-028.)*
+
+Shell out to the system `javap` (resolved `JAVA_HOME` → `java.home` →
+`PATH`, mirroring `doctor`'s check) with `javap -c -p -s` over the winning
+class's staged bytes, and serve the disassembly through the `body`/`source`
+renderers with `DECOMPILED_JAVAP` provenance. `--engine javap` forces the
+disassembly path even when sources are paired.
+
+**Acceptance**
+- [ ] `DecompilerId.JAVAP` (`flag "javap"`); `JavapDecompiler : DecompilerEngine`
+      stages the class bytes and runs `javap -c -p -s -classpath <stagedDir> <binary>`
+      with a wall-clock timeout — sealed `Decompiled(text, version)` / `Failed(message)`,
+      never throws (missing binary, bad bytes, hostile names, timeout, nonzero exit)
+- [ ] Disk cache under `~/.cache/jdx/decompile` keyed by `(sha256(classBytes), javap, version)`
+      where version is the engine's own `javap -version` text; cache hits never spawn a process
+- [ ] `jdx body '<member>' --engine javap` exits 0 with the matched member's disassembly
+      section + `DECOMPILED_JAVAP` provenance and the reconstructed label;
+      `jdx source '<type>' --engine javap` (whole output, `--lines`, `--around`) likewise
+- [ ] Forced engine skips paired sources; `.kt`-only roots still exit 1 naming T-039;
+      members proven in bytecode but absent from the disassembly name T-028;
+      unreadable class bytes exit 5; no roots exit 4; never throws, never a stack trace
+- [ ] Text+JSON parity (D-007), deterministic bytes, `--max-lines`/`--context`/
+      `--line-numbers` work over disassembly exactly as over sources
+- [ ] Tests: decompile tier-1 (pure section-splitting examples + never-throws/determinism
+      properties) + tier-2 (real `javap` over fixture bytes: member sections present,
+      twice-identical, cache-hit, timeout, hostile faults, missing-binary fault);
+      index tier-2 service tests (forced engine, `.kt`/mismatch/determinism/JSON —
+      no goldens: TESTING.md §5.3 forbids pinning disassembly text, and it is
+      JDK-version-dependent); cli tier-1 flag validation + tier-2 in-process tests;
+      tiers 1+2 green
+- [ ] `--help` text, Appendix B engine flags verified, `TASKS.md` status,
+      `PROGRESS.md` entry
 
 ### T-026 — `DecompilerEngine` + Vineflower fallback for `body`/`source` · `DONE` (session 45)
 **Depends:** T-021 (MemorySourceRoot + JavaParser slicing seam), T-022/T-023 (body/source patterns), T-011/T-015/T-016 (roots) · **Files:** `decompile/.../DecompilerEngine.kt`, `VineflowerDecompiler.kt`, `DecompileCache.kt`, `core/.../render/Body.kt`, `Source.kt`, `index/.../service/JdxService.kt` (+ `index/build.gradle.kts`), `cli/.../commands/BodyCommand.kt`, `SourceCommand.kt`
