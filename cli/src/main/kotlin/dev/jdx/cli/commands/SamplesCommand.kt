@@ -7,7 +7,6 @@ import com.github.ajalt.clikt.parameters.options.default
 import com.github.ajalt.clikt.parameters.options.flag
 import com.github.ajalt.clikt.parameters.options.multiple
 import com.github.ajalt.clikt.parameters.options.option
-import com.github.ajalt.clikt.parameters.types.choice
 import com.github.ajalt.clikt.parameters.types.int
 import dev.jdx.cli.effectiveJson
 import dev.jdx.cli.effectiveWorkspace
@@ -18,79 +17,62 @@ import dev.jdx.index.workspace.WorkspaceStore
 import kotlin.system.exitProcess
 
 /**
- * `jdx usages <symbol>`. A thin adapter (D-004): parses the §7.3 flags, asks
- * [JdxService] for the referencing methods, renders them, and maps the
+ * `jdx samples <symbol>`. A thin adapter (D-004): parses the §7.3 flags, asks
+ * [JdxService] for the ranked usage examples, renders them, and maps the
  * outcome to an exit code (D-015).
  *
- * Find Usages across the workspace's bytecode roots plus project source dirs
- * (T-030/T-031): one row per referencing method (bytecode) or mentioning line
- * (source dirs, ref kind), grouped by artifact. Type refs match every edge to the
- * type; member refs match by name (overload-blind) unless the ref carries a
- * parameter list. Exits 1 when the symbol is unknown or has no usages.
+ * Real call sites as usage examples (T-034): incoming `METHOD_CALL` edges
+ * ranked by exemplariness (non-test before test, non-generated before
+ * generated, fuller overloads first), each with the caller's enclosing-method
+ * source when its paired sources exist — snippet-less otherwise. Type refs
+ * match calls to any member; member refs are overload-blind unless the ref
+ * carries a parameter list. Exits 1 when the symbol is unknown or unsampled,
+ * 2 on an ambiguous short name.
  */
-class UsagesCommand(
-    private val query: UsagesQuery = ::defaultUsagesQuery,
+class SamplesCommand(
+    private val query: SamplesQuery = ::defaultSamplesQuery,
     private val terminate: (Int) -> Nothing = ::exitProcess,
     private val store: WorkspaceStore = FileWorkspaceStore.system(),
     private val getenv: (String) -> String? = { name -> System.getenv(name) },
     private val discover: ProjectDiscoveryFn? = null,
-) : CoreCliktCommand(name = "usages") {
+) : CoreCliktCommand(name = "samples") {
     override fun help(context: Context): String =
-        "Find usages of a type or member across the workspace's bytecode roots plus " +
-            "project source dirs: one row per referencing method (bytecode) or mentioning " +
-            "line (source dirs, ref kind). " +
-            "--kind narrows to call|read|write|ref (default: all); source-dir hits are " +
-            "textual mentions (ref only), so call|read|write show bytecode edges alone. " +
-            "impl|override land with hierarchy (jdx hierarchy, jdx implementors), " +
-            "new|throw|annotation with graph enrichment (T-075). " +
-            "--in/--exclude filter by artifact label (jar file, JDK module or source-dir name). " +
-            "--src adds a source dir root (repeatable; stored via jdx ws create --src). " +
-            "Exits 1 when the symbol is unknown or unused, 2 on an ambiguous short name."
+        "Show real call sites as usage examples, ranked by exemplariness " +
+            "(non-test before test, non-generated before generated, fuller overloads first): " +
+            "one row per calling method with its enclosing-method source when paired sources " +
+            "exist, snippet-less otherwise. --limit caps the ranked rows (default 3); " +
+            "--prefer-sources ranks callers from sources-paired artifacts first; " +
+            "--in/--exclude filter rows by artifact label (jar file, JDK module " +
+            "or class-dir name). Type refs match calls to any member; field refs exit 3 " +
+            "(examples need a call site: jdx usages shows reads and writes). " +
+            "Exits 1 when the symbol is unknown or unsampled, 2 on an ambiguous short name."
 
-    private val ref by argument(help = "Type or member reference to find usages of (full or short form).")
+    private val ref by argument(help = "Type or member reference to show usage examples of (full or short form).")
 
-    private val kind by option(
-        "--kind",
-        help = "Edge kind: call, read, write, ref or all (default all). " +
-            "impl|override land with hierarchy (jdx hierarchy, jdx implementors); " +
-            "new|throw|annotation (T-075) are rejected for now.",
-    ).choice(
-        "all", "call", "read", "write", "ref",
-        "impl", "override", "new", "throw", "annotation",
-        ignoreCase = true,
-    ).default("all")
+    private val limit by option(
+        "--limit",
+        help = "Maximum examples shown (default 3); the rest become a truncation footer.",
+    ).int().default(3)
 
     private val inArtifact by option(
         "--in",
-        help = "Only artifacts whose label matches this glob (jar file name, JDK module or source-dir name).",
+        help = "Only examples whose artifact label matches this glob (jar file name, JDK module or class-dir name).",
     )
 
     private val exclude by option(
         "--exclude",
-        help = "Skip artifacts whose label matches this glob.",
+        help = "Skip examples whose artifact label matches this glob.",
     )
 
-    private val limit by option(
-        "--limit",
-        help = "Maximum usages shown (default 50); the rest become a truncation footer.",
-    ).int().default(50)
-
-    private val context by option(
-        "--context",
-        help = "Source lines around each call site (not supported: source-rendered call sites live in jdx samples).",
-    ).int().default(0)
+    private val preferSources by option(
+        "--prefer-sources",
+        help = "Rank examples from sources-paired artifacts (rendered with snippets) ahead of snippet-less ones.",
+    ).flag()
 
     private val jars by option(
         "--jars",
         help = "Binary roots: jar files, class directories or globs (repeatable). " +
             "Merge in front of the selected workspace's roots.",
-    ).multiple()
-
-    private val srcs by option(
-        "--src",
-        help = "Source-dir roots: directories of .java/.kt files scanned textually for " +
-            "whole-word mentions (ref kind, from <relpath>:<line>). Merge in front of " +
-            "the selected workspace's stored srcs.",
     ).multiple()
 
     private val workspace by option(
@@ -141,7 +123,7 @@ class UsagesCommand(
             val failure = JdxService.ServiceOutcome.Failure(
                 ErrorResult.generic(ref, exitCode = 3, message = "usage error: --limit must be >= 0, got $limit"),
             )
-            ReadCommandSupport.finish(failure, "usages", json, noColor, terminate)
+            ReadCommandSupport.finish(failure, "samples", json, noColor, terminate)
             return
         }
         when (val resolved = ReadCommandSupport.resolveRoots(
@@ -154,38 +136,22 @@ class UsagesCommand(
             coords = coord,
             allowFetch = fetch,
             repos = repo,
-            srcs = srcs,
         )) {
             is ReadCommandSupport.RootsOrFailure.Ready -> {
                 val outcome = query(
                     ref,
                     resolved.roots,
-                    JdxService.UsageOptions(
-                        kind = usageKindOf(kind.lowercase()),
+                    JdxService.SampleOptions(
+                        limit = limit,
                         inArtifact = inArtifact,
                         exclude = exclude,
-                        limit = limit,
-                        contextLines = context,
+                        preferSources = preferSources,
                     ),
                 )
-                ReadCommandSupport.finish(outcome, "usages", json, noColor, terminate)
+                ReadCommandSupport.finish(outcome, "samples", json, noColor, terminate)
             }
             is ReadCommandSupport.RootsOrFailure.Failed ->
-                ReadCommandSupport.finish(resolved.outcome, "usages", json, noColor, terminate)
+                ReadCommandSupport.finish(resolved.outcome, "samples", json, noColor, terminate)
         }
     }
-}
-
-/** Maps `--kind` to the service filter; Clikt's `choice()` guarantees the input range. */
-internal fun usageKindOf(kind: String): JdxService.UsageKindFilter = when (kind) {
-    "call" -> JdxService.UsageKindFilter.CALL
-    "read" -> JdxService.UsageKindFilter.READ
-    "write" -> JdxService.UsageKindFilter.WRITE
-    "ref" -> JdxService.UsageKindFilter.REF
-    "impl" -> JdxService.UsageKindFilter.IMPL
-    "override" -> JdxService.UsageKindFilter.OVERRIDE
-    "new" -> JdxService.UsageKindFilter.NEW
-    "throw" -> JdxService.UsageKindFilter.THROW
-    "annotation" -> JdxService.UsageKindFilter.ANNOTATION
-    else -> JdxService.UsageKindFilter.ALL
 }

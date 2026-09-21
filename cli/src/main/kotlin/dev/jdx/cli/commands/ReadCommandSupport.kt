@@ -534,7 +534,18 @@ internal fun defaultCallGraphQuery(
     dev.jdx.core.render.CallDirection.CALLERS -> JdxService.callers(ref, roots, options)
     dev.jdx.core.render.CallDirection.CALLS -> JdxService.calls(ref, roots, options)
 }
-/** Query behind `search`, injectable so command tests run without IO (T-017). */
+/** Query behind `samples`, injectable so command tests run without IO (T-034). */
+internal typealias SamplesQuery = (
+    ref: String,
+    roots: JdxService.RootsSpec,
+    options: JdxService.SampleOptions,
+) -> JdxService.ServiceOutcome
+
+internal fun defaultSamplesQuery(
+    ref: String,
+    roots: JdxService.RootsSpec,
+    options: JdxService.SampleOptions,
+): JdxService.ServiceOutcome = JdxService.samples(ref, roots, options)
 internal typealias SearchQuery = (
     pattern: String,
     roots: JdxService.RootsSpec,
