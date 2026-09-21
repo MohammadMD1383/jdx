@@ -1137,7 +1137,7 @@ Live proof: `body`/`source --engine javap` exit 0 with `DECOMPILED_JAVAP`
 provenance; under-specified refs still exit 2 from bytecode. Lesson L-077;
 decision D-039.*
 
-### T-073 — Vineflower→javap auto-fallback on engine failure · `TODO`
+### T-073 — Vineflower→javap auto-fallback on engine failure · `WIP`
 **Depends:** T-027 · **Files:** `index/.../service/JdxService.kt`
 *(Split out of T-027 in session 46: the default ladder (sources → Vineflower)
 degrades automatically, but a Vineflower failure still exits 1 naming the
