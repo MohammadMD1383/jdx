@@ -25,8 +25,13 @@ import dev.jdx.core.ref.SymbolRefParser
 import dev.jdx.core.ref.SymbolRefParseResult
 import dev.jdx.core.ref.SymbolRefPrinter
 import dev.jdx.core.render.BodyBlock
+import dev.jdx.core.render.CallDirection
+import dev.jdx.core.render.CallListing
+import dev.jdx.core.render.CallNode
 import dev.jdx.core.render.ClassCard
 import dev.jdx.core.render.DEFAULT_BODY_MAX_LINES
+import dev.jdx.core.render.DEFAULT_CALLS_DEPTH
+import dev.jdx.core.render.DEFAULT_CALLS_LIMIT
 import dev.jdx.core.render.DEFAULT_DOC_MAX_LINES
 import dev.jdx.core.render.DEFAULT_HIERARCHY_LIMIT
 import dev.jdx.core.render.DEFAULT_SIGNATURE_LIMIT
@@ -38,6 +43,7 @@ import dev.jdx.core.render.SignatureBlock
 import dev.jdx.core.render.SignatureEntry
 import dev.jdx.core.render.SourceBlock
 import dev.jdx.core.render.buildBodyBlock
+import dev.jdx.core.render.buildCallListing
 import dev.jdx.core.render.buildDocBlock
 import dev.jdx.core.render.buildSignatureBlock
 import dev.jdx.core.render.buildSourceBlock
@@ -247,6 +253,13 @@ public object JdxService {
 
         /** A type-hierarchy listing (`hierarchy`, `implementors`) — exit 0. */
         public data class Hierarchy(public val listing: HierarchyListing) : ServiceOutcome {
+            override val exitCode: Int = 0
+            override fun renderText(color: Boolean): String = listing.renderText(color)
+            override fun toJson(command: String): String = listing.toJson(command)
+        }
+
+        /** A call-hierarchy tree (`callers`, `calls`) — exit 0. */
+        public data class CallGraph(public val listing: CallListing) : ServiceOutcome {
             override val exitCode: Int = 0
             override fun renderText(color: Boolean): String = listing.renderText(color)
             override fun toJson(command: String): String = listing.toJson(command)
@@ -2734,6 +2747,498 @@ public object JdxService {
             }
         }
         return SubtypeMatch.Absent
+    }
+
+    // -- callers/calls (T-033) --------------------------------------------------------
+
+    /**
+     * Options for `callers`/`calls`: how deep the transitive walk goes and how
+     * much to show. [depth] counts displayed levels (1 = direct callers/callees
+     * only); [inArtifact] and [exclude] scope rows by artifact label (jar file
+     * names, class-dir names, JDK module names) with the D-031 glob-or-substring
+     * match, mirroring `usages`/`hierarchy`; [externalOnly] (`calls` only,
+     * Appendix B) prunes callees in the query target's own artifact.
+     */
+    public data class CallOptions(
+        public val depth: Int = DEFAULT_CALLS_DEPTH,
+        public val inArtifact: String? = null,
+        public val exclude: String? = null,
+        public val limit: Int = DEFAULT_CALLS_LIMIT,
+        public val externalOnly: Boolean = false,
+    )
+
+    /**
+     * Answers `callers <method>`: every method calling it, transitively to
+     * [CallOptions.depth].
+     *
+     * Live-roots scan (D-043 precedent): every class's `METHOD_CALL` edges are
+     * extracted once with the T-029 [ReferenceExtractor], then the tree is
+     * walked in memory — no persistent index read yet (indexed acceleration
+     * lands with the daemon/`jdx index` work). Structure is
+     * bytecode-authoritative (D-009): the target resolves with the T-011
+     * machinery before any scan, so a typo reports did-you-mean instead of an
+     * empty answer. Matching is exact name+descriptor at every level — no
+     * virtual-dispatch resolution in v1 — and overload-blind at the root
+     * unless the ref carries a parameter list (the usages rule, D-042 §5).
+     */
+    public fun callers(
+        rawRef: String,
+        roots: RootsSpec,
+        options: CallOptions = CallOptions(),
+    ): ServiceOutcome =
+        callGraph(rawRef, roots, options, CallDirection.CALLERS)
+
+    /**
+     * Answers `calls <method>`: every method it calls, transitively to
+     * [CallOptions.depth]. Same live-roots machinery as [callers]; `--depth`
+     * walks the callee tree instead of the caller tree.
+     */
+    public fun calls(
+        rawRef: String,
+        roots: RootsSpec,
+        options: CallOptions = CallOptions(),
+    ): ServiceOutcome =
+        callGraph(rawRef, roots, options, CallDirection.CALLS)
+
+    private fun callGraph(
+        rawRef: String,
+        roots: RootsSpec,
+        options: CallOptions,
+        direction: CallDirection,
+    ): ServiceOutcome {
+        if (options.limit < 0) {
+            return failure(3, rawRef, "usage error: --limit must be >= 0, got ${options.limit}")
+        }
+        if (options.depth < 1) {
+            return failure(3, rawRef, "usage error: --depth must be >= 1, got ${options.depth}")
+        }
+        if (options.externalOnly && direction == CallDirection.CALLERS) {
+            return failure(3, rawRef, "usage error: --external-only is a calls flag (callers has no artifact to be external to)")
+        }
+        val parsed = SymbolRefParser.parse(rawRef)
+        if (parsed is SymbolRefParseResult.Failure) {
+            return failure(
+                3,
+                rawRef,
+                "usage error: invalid reference '$rawRef': ${parsed.message} at column ${parsed.position}",
+            )
+        }
+        val ref = (parsed as SymbolRefParseResult.Ok).ref
+        if (ref is TypeSymbolRef) {
+            return failure(
+                3,
+                rawRef,
+                "usage error: ${direction.flag} takes a member reference like " +
+                    "'com.example.Foo#bar()', got type '$rawRef'",
+            )
+        }
+        if (ref is PackageSymbolRef || ref is ModuleSymbolRef) {
+            return failure(3, rawRef, "usage error: ${direction.flag} takes a member reference, got '$rawRef'")
+        }
+        val memberRef = ref as MemberSymbolRef
+        if (memberRef.name == "<clinit>" && direction == CallDirection.CALLERS) {
+            return failure(3, rawRef, "usage error: static initialisers are never called: '$rawRef'")
+        }
+        val coordinate = memberRef.coordinate
+        if (roots.jarSpecs.isEmpty() && !roots.includeJdk && coordinate == null) {
+            return failure(
+                4,
+                rawRef,
+                "no workspace: no --jars given, no workspace selected (-w <name>, " +
+                    "JDX_WORKSPACE, jdx ws use) and --no-jdk set " +
+                    "(pass --jars <path>, select a workspace, or drop --no-jdk)",
+            )
+        }
+        // A `g:a:v/` prefix scopes the query to one artifact (T-019): its jar
+        // reads first (shadowing order), and candidates match inside it only —
+        // while the edge scan still covers the full workspace behind it.
+        var scopedRoots = roots
+        var candidateScope: Set<String>? = null
+        if (coordinate != null) {
+            val coordText = "${coordinate.group}:${coordinate.artifact}:${coordinate.version}"
+            val outcome = try {
+                roots.mavenResolve(coordText, roots.allowFetch)
+            } catch (e: Exception) {
+                return failure(
+                    6,
+                    rawRef,
+                    "internal error: coordinate resolution failed: ${e.message ?: e.javaClass.simpleName}",
+                )
+            }
+            val artifact = when (outcome) {
+                is MavenResolver.Outcome.Resolved -> outcome.artifact
+                is MavenResolver.Outcome.Unresolved ->
+                    return failure(5, rawRef, "artifact read error: ${outcome.message}")
+            }
+            val binarySpec = artifact.binaryJar.toString()
+            val scope = try {
+                ArtifactLoader.open(artifact.binaryJar).use { root -> root.classEntryPaths().map(::entryToBinary).toSet() }
+            } catch (e: ArtifactReadException) {
+                return failure(5, rawRef, e.message ?: "artifact read error")
+            } catch (e: Exception) {
+                return failure(6, rawRef, "internal error: ${e.javaClass.simpleName}: ${e.message ?: "no detail"}")
+            }
+            scopedRoots = roots.copy(jarSpecs = listOf(binarySpec) + roots.jarSpecs)
+            candidateScope = scope
+        }
+        return try {
+            executeCallGraph(memberRef, rawRef, scopedRoots, options, direction, candidateScope)
+        } catch (e: ArtifactReadException) {
+            failure(5, rawRef, e.message ?: "artifact read error")
+        } catch (e: Exception) {
+            failure(6, rawRef, "internal error: ${e.javaClass.simpleName}: ${e.message ?: "no detail"}")
+        }
+    }
+
+    /**
+     * Serves `callers`/`calls`: resolves the target method from bytecode
+     * (D-009), scans every class in every open root once for `METHOD_CALL`
+     * edges, and walks the tree in memory to [CallOptions.depth]. Unreadable
+     * classes warn once each ([WarningCode.CORRUPT_CLASS]) and are skipped —
+     * one bad entry never aborts the scan (D-017).
+     */
+    private fun executeCallGraph(
+        ref: MemberSymbolRef,
+        rawRef: String,
+        roots: RootsSpec,
+        options: CallOptions,
+        direction: CallDirection,
+        candidateScope: Set<String>? = null,
+    ): ServiceOutcome {
+        val declaring = ref.declaringType as? TypeName.ClassType
+            ?: return failure(3, rawRef, "usage error: ${direction.flag} takes a class member, got '$rawRef'")
+        val opened = openRoots(roots)
+        try {
+            val binariesByRoot = opened.map { it.root.classEntryPaths().map(::entryToBinary).toSet() }
+            val providers = mutableMapOf<String, MutableList<Int>>()
+            binariesByRoot.forEachIndexed { index, binaries ->
+                for (binary in binaries) providers.getOrPut(binary) { mutableListOf() }.add(index)
+            }
+            val allBinaries = providers.keys
+
+            val candidates = matchCandidates(declaring, candidateScope ?: allBinaries)
+            if (candidates.isEmpty()) {
+                val suggestions = suggestSimilar(declaring.simpleName, allBinaries)
+                return ServiceOutcome.Failure(ErrorResult.notFound(rawRef, suggestions))
+            }
+            if (candidates.size > 1) {
+                return ServiceOutcome.Failure(ErrorResult.ambiguous(rawRef, candidates))
+            }
+            val binary = candidates.single()
+            val winner = providers.getValue(binary).first()
+
+            val warnings = mutableListOf<Warning>()
+            warnings.addAll(roots.extraWarnings)
+            for (open in opened) warnings.addAll(open.root.warnings)
+            val extraProviders = providers.getValue(binary).drop(1)
+            if (extraProviders.isNotEmpty()) {
+                val names = listOf(winner).plus(extraProviders).map { rootLabel(opened[it], binary) }
+                warnings.add(
+                    Warning(
+                        code = WarningCode.DUPLICATE_FQN,
+                        message = "$binary is provided by ${names.joinToString(", ")}; " +
+                            "showing ${names.first()} (classpath order)",
+                        subject = binary,
+                    ),
+                )
+            }
+
+            val workspace = Workspace(opened, providers, warnings)
+            val target = workspace.load(binary)
+            if (target == null) {
+                return failure(
+                    5,
+                    rawRef,
+                    "artifact read error: $binary in ${rootLabel(opened[winner], binary)} cannot be parsed",
+                )
+            }
+
+            // The target method set is structural (D-009): a method proven
+            // absent from bytecode reports did-you-mean instead of an empty
+            // tree, and a field reports the usages redirect instead of one —
+            // fields have no call hierarchy. `<clinit>` reaches here only via
+            // `calls` (callers rejects it up front): it matches no
+            // `matchBytecodeMembers` row by design, so it is read off the
+            // class directly — static initialisers do call out.
+            val bytecodeMethods = matchBytecodeMembers(target, ref).filterIsInstance<BytecodeMember.Method>()
+            val rootMethods = if (bytecodeMethods.isNotEmpty()) {
+                bytecodeMethods.map { it.info }
+            } else if (ref.name == "<clinit>") {
+                target.methods.filter { it.name == "<clinit>" }
+            } else if (matchBytecodeMembers(target, ref).isEmpty()) {
+                return ServiceOutcome.Failure(
+                    ErrorResult.notFound(rawRef, suggestSimilarMember(target, ref.name)),
+                )
+            } else {
+                return failure(
+                    3,
+                    rawRef,
+                    "usage error: fields have no call hierarchy: '$rawRef' " +
+                        "(find reads and writes: jdx usages '$rawRef')",
+                )
+            }
+            if (rootMethods.isEmpty()) {
+                return ServiceOutcome.Failure(
+                    ErrorResult.notFound(rawRef, suggestSimilarMember(target, ref.name)),
+                )
+            }
+            // Overload-blind at the root unless the ref carries parameters —
+            // the usages rule (D-042 §5). Tree nodes below the root are always
+            // descriptor-specific, so sibling overloads render as distinct rows.
+            val rootDescriptors = if (ref.parameterTypes != null) {
+                rootMethods.map { it.descriptor.descriptor }.toSet()
+            } else {
+                null
+            }
+            val canonicalTarget = SymbolRefPrinter.print(MemberSymbolRef(target.name, ref.name))
+
+            val targetArtifact = rootLabel(opened[winner], binary)
+            val scanned = scanCallEdges(opened, warnings)
+            val tree = if (direction == CallDirection.CALLERS) {
+                expandCallers(
+                    owner = binary,
+                    name = ref.name,
+                    descriptors = rootDescriptors,
+                    scanned = scanned,
+                    options = options,
+                    targetArtifact = targetArtifact,
+                    path = emptySet(),
+                    remaining = options.depth,
+                )
+            } else {
+                expandCallees(
+                    seeds = rootMethods.map { ExactMethod(binary, ref.name, it.descriptor.descriptor) },
+                    scanned = scanned,
+                    providers = providers,
+                    opened = opened,
+                    options = options,
+                    targetArtifact = targetArtifact,
+                    path = rootMethods.map {
+                        CallNodeKey(binary, ref.name, it.descriptor.descriptor, targetArtifact)
+                    }.toSet(),
+                    remaining = options.depth,
+                )
+            }
+
+            if (tree.isEmpty()) {
+                val noun = if (direction == CallDirection.CALLERS) "callers" else "calls"
+                val preposition = if (direction == CallDirection.CALLERS) "of" else "from"
+                return ServiceOutcome.Failure(
+                    ErrorResult.notFound(
+                        rawRef,
+                        emptyList(),
+                        detail = "no $noun $preposition '$canonicalTarget' in the workspace",
+                    ),
+                )
+            }
+            val provenance = listOf(
+                Provenance(
+                    artifact = targetArtifact,
+                    origin = if (opened[winner].root.kind == ArtifactKind.JRT) Origin.JRT else Origin.BYTECODE,
+                ),
+            )
+            val listing = buildCallListing(
+                query = rawRef,
+                targetRef = canonicalTarget,
+                direction = direction,
+                roots = tree,
+                limit = options.limit,
+                warnings = warnings.sortedBy { it.code },
+                provenance = provenance,
+            )
+            return ServiceOutcome.CallGraph(listing)
+        } finally {
+            opened.forEach { it.root.close() }
+        }
+    }
+
+    /** One `METHOD_CALL` edge plus the artifact label of the class holding it. */
+    private data class ScannedCall(val edge: ReferenceEdge, val label: String)
+
+    /** An exact method: the tree's expansion unit below the (possibly blind) root. */
+    private data class ExactMethod(val owner: String, val name: String, val descriptor: String)
+
+    /**
+     * Identity of one displayed tree row: the exact method plus the artifact
+     * row it came from — one FQN provided by two roots renders as two rows
+     * (mirroring `usages`), and cycle detection treats them as distinct.
+     */
+    private data class CallNodeKey(
+        val owner: String,
+        val name: String,
+        val descriptor: String,
+        val label: String?,
+    )
+
+    /**
+     * Extracts every `METHOD_CALL` edge in the workspace once: both tree
+     * directions walk this list in memory instead of re-reading class bytes
+     * per level. Unreadable classes warn once each and contribute nothing.
+     */
+    private fun scanCallEdges(opened: List<OpenRoot>, warnings: MutableList<Warning>): List<ScannedCall> {
+        val scanned = mutableListOf<ScannedCall>()
+        val reported = mutableSetOf<String>()
+        for (open in opened) {
+            for (entry in open.root.classEntryPaths()) {
+                val fromBinary = entryToBinary(entry)
+                val label = rootLabel(open, fromBinary)
+                val bytes = try {
+                    open.root.openClass(entry).use { it.readBytes() }
+                } catch (e: Exception) {
+                    if (reported.add(fromBinary)) {
+                        warnings.add(
+                            Warning(
+                                code = WarningCode.CORRUPT_CLASS,
+                                message = "cannot read $fromBinary from ${open.root.displayName}: " +
+                                    "${e.message ?: e.javaClass.simpleName}",
+                                subject = fromBinary,
+                            ),
+                        )
+                    }
+                    continue
+                }
+                for (edge in ReferenceExtractor.extract(bytes)) {
+                    if (edge.kind != ReferenceKind.METHOD_CALL) continue
+                    scanned.add(ScannedCall(edge, label))
+                }
+            }
+        }
+        return scanned
+    }
+
+    /**
+     * Whether a tree row survives the display filters: artifact labels scope
+     * by `--in`/`--exclude`, and `calls --external-only` prunes callees in the
+     * query target's own artifact. Rows with no known provider (edges naming
+     * classes outside the workspace) always show — there is nothing to match.
+     */
+    private fun keepCallNode(label: String?, options: CallOptions, targetArtifact: String): Boolean {
+        if (label == null) return true
+        if (options.externalOnly && label == targetArtifact) return false
+        if (!matchesArtifactFilter(options.inArtifact, label)) return false
+        if (options.exclude != null && matchesArtifactFilter(options.exclude, label)) return false
+        return true
+    }
+
+    private fun callerLabel(providers: Map<String, List<Int>>, opened: List<OpenRoot>, binary: String): String? =
+        providers[binary]?.firstOrNull()?.let { rootLabel(opened[it], binary) }
+
+    /**
+     * One `callers` level: distinct callers of (`owner`, `name`,
+     * `descriptors`) — `descriptors == null` is the overload-blind root,
+     * deeper levels pass the exact singleton — sorted by label then ref,
+     * pruned by the display filters, cycle-marked against [path], expanded
+     * while [remaining] allows.
+     */
+    private fun expandCallers(
+        owner: String,
+        name: String,
+        descriptors: Set<String>?,
+        scanned: List<ScannedCall>,
+        options: CallOptions,
+        targetArtifact: String,
+        path: Set<CallNodeKey>,
+        remaining: Int,
+    ): List<CallNode> {
+        val seeds = scanned
+            .filter { call ->
+                call.edge.toOwner == owner && call.edge.toMember == name &&
+                    (descriptors == null || call.edge.toDescriptor in descriptors)
+            }
+            .map { call ->
+                val descriptor = call.edge.toDescriptor
+                if (descriptor == null) return@map null
+                Triple(call.edge.fromClass, call.edge.fromMember, call.edge.fromDescriptor) to call.label
+            }
+            .filterNotNull()
+            .distinct()
+            .filter { (_, label) -> keepCallNode(label, options, targetArtifact) }
+            .sortedWith(compareBy({ it.second }, { it.first.first }, { it.first.second }, { it.first.third }))
+        return seeds.map { (from, label) ->
+            val key = CallNodeKey(from.first, from.second, from.third, label)
+            val ref = canonicalFromRef(from.first, from.second, from.third)
+            if (key in path) {
+                CallNode(ref = ref, artifact = label, cycle = true)
+            } else {
+                CallNode(
+                    ref = ref,
+                    artifact = label,
+                    children = if (remaining > 1) {
+                        expandCallers(
+                            owner = from.first,
+                            name = from.second,
+                            descriptors = setOf(from.third),
+                            scanned = scanned,
+                            options = options,
+                            targetArtifact = targetArtifact,
+                            path = path + key,
+                            remaining = remaining - 1,
+                        )
+                    } else {
+                        emptyList()
+                    },
+                )
+            }
+        }
+    }
+
+    /**
+     * One `calls` level: the union of [seeds]' outgoing edges, grouped by
+     * exact callee so two overloads called from one method render as distinct
+     * rows. Same sorting, pruning, cycle and depth rules as [expandCallers].
+     */
+    private fun expandCallees(
+        seeds: List<ExactMethod>,
+        scanned: List<ScannedCall>,
+        providers: Map<String, List<Int>>,
+        opened: List<OpenRoot>,
+        options: CallOptions,
+        targetArtifact: String,
+        path: Set<CallNodeKey>,
+        remaining: Int,
+    ): List<CallNode> {
+        val seedSet = seeds.toSet()
+        val groups = scanned
+            .filter { call ->
+                ExactMethod(call.edge.fromClass, call.edge.fromMember, call.edge.fromDescriptor) in seedSet
+            }
+            .groupBy { call ->
+                Triple(call.edge.toOwner, call.edge.toMember, call.edge.toDescriptor)
+            }
+        val ordered = groups.entries
+            .mapNotNull { (to, calls) ->
+                val member = to.second ?: return@mapNotNull null
+                val descriptor = to.third ?: return@mapNotNull null
+                val label = callerLabel(providers, opened, to.first)
+                if (!keepCallNode(label, options, targetArtifact)) return@mapNotNull null
+                Triple(ExactMethod(to.first, member, descriptor), label, edgeTargetRef(calls.first().edge))
+            }
+            .sortedWith(compareBy({ it.second ?: "" }, { it.third }))
+        return ordered.map { (callee, label, ref) ->
+            val key = CallNodeKey(callee.owner, callee.name, callee.descriptor, label)
+            if (key in path) {
+                CallNode(ref = ref, artifact = label, cycle = true)
+            } else {
+                CallNode(
+                    ref = ref,
+                    artifact = label,
+                    children = if (remaining > 1) {
+                        expandCallees(
+                            seeds = listOf(callee),
+                            scanned = scanned,
+                            providers = providers,
+                            opened = opened,
+                            options = options,
+                            targetArtifact = targetArtifact,
+                            path = path + key,
+                            remaining = remaining - 1,
+                        )
+                    } else {
+                        emptyList()
+                    },
+                )
+            }
+        }
     }
 
     // -- signature execution (T-024) -----------------------------------------------
