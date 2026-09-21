@@ -4,6 +4,45 @@ Newest first. Each entry follows the template at the bottom of `docs/PROGRESS.md
 
 ---
 
+## Session 49 — 2026-09-21 — T-073 Vineflower→javap auto-fallback done (parallel-worktree orchestration)
+**Agent/Author:** Muse Spark 1.3 Free (orchestrator + 1 subagent) · **Commits:** `573933a` (claim) + `15e0a7d` (feat) + `d1052aa` (close) + integrator PROGRESS commit
+
+### Goal
+Pick up at most 4 parallel tasks, run them in worktrees via subagents, merge + push, clean up.
+
+### What I did
+- Surveyed `docs/TASKS.md`: only 1 independent TODO qualifies — **T-073** (Vineflower→javap auto-fallback). M4–M7 are coarse (need expansion per board rules) so no further parallel tasks could be claimed honestly. Ran 1 subagent instead of 4.
+- Created worktree `/tmp/opencode/jdx-T073` on branch `task/T-073-autofallback` from `main@b4b66d8`.
+- Subagent implemented T-073: `JdxService` default ladder retries Vineflower exit-1 failures through javap (`defaultBodyOutcome`/`defaultSourceOutcome`, `combinedEngineDetail` naming both causes on double failure); forced `--engine vineflower` stays strict. Moved Body/Source failing-engine pins to double-failure shape; added tier-2 `DecompilerFallbackFaultTest` (Vineflower timeout/crash/unparseable → exit 0 disassembly; double-failure matrix → exit 1 naming both; no-trace laws).
+- Verified: `:index:tier2Test` targeted suites green post-merge (26 s); subagent reported `check -x verifyTier1Budget` green (2m17s) + `soak` green (4m15s).
+- Merged `task/T-073-autofallback` fast-forward into `main`, updated CURRENT STATE + this entry, pushed, removed worktree.
+
+### Decisions made
+- None (no new D-nnn; D-009/D-007/D-038 semantics unchanged).
+
+### Tasks moved
+- T-073: TODO → WIP (`573933a`) → DONE (`d1052aa`).
+
+### Lessons distilled
+- None.
+
+### What works now (and how to verify it yourself)
+```bash
+git log --oneline -4  # d1052aa close, 15e0a7d feat, 573933a claim on top of b4b66d8
+./gradlew :index:tier2Test --tests "dev.jdx.index.fault.DecompilerFallbackFaultTest" --tests "dev.jdx.index.service.BodyServiceTest" --tests "dev.jdx.index.service.SourceServiceTest"
+```
+
+### What is broken / half-done
+- Nothing from this task. Pre-existing: `verifyTier1Budget` red machine variance (excluded, 0 test failures).
+
+### Open questions / blockers
+- None.
+
+### Next action
+- **M4 T-029** (reference-edge extraction — expand into a detail block when started; T-030…T-034 remain coarse one-liners).
+
+---
+
 ## Session 48 — 2026-09-21 — T-072 `--with-doc` enrichment done
 **Agent/Author:** Muse Spark 1.3 Free · **Commits:** `6ad71ca` (claim) + closing commit (this session)
 
