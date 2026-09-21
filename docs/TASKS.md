@@ -60,8 +60,8 @@ over that seam) is DONE; T-023 (`jdx source` over that seam) is DONE;
 T-024 (`jdx signature` over bytecode) is DONE; T-025 (`jdx doc` incl.
 inherited javadoc) is DONE; T-026 (Vineflower decompiler fallback) is DONE;
 T-027 (`javap` engine) is DONE; T-028 (`SOURCES_VERSION_MISMATCH`
-detection) is DONE.**
-T-072 (`--with-doc` enrichment) and T-073 (Vineflower→javap auto-fallback) are filed TODO.
+detection) is DONE; T-072 (`--with-doc` enrichment) is DONE.**
+T-073 (Vineflower→javap auto-fallback) is filed TODO.
 
 ---
 
@@ -1313,7 +1313,7 @@ doc; `#identity(U)` → exit 1 no-doc; `Child#copy` → exit 2. Lessons
 L-072 (nested KDoc), L-073 (exhaustive `when`), L-074 (unknown vs
 undocumented); decision D-037.*
 
-### T-072 — Wire `--with-doc` into `body`/`members`/`outline` over the T-025 seam · `WIP`
+### T-072 — Wire `--with-doc` into `body`/`members`/`outline` over the T-025 seam · `DONE` (session 48)
 **Depends:** T-025 · **Files:** `cli/.../commands/BodyCommand.kt`, `ReadCommands.kt`, `ReadCommandSupport.kt`, `core/.../render/*`, `index/.../service/JdxService.kt`
 *(Split out of T-025 in session 44: per-row/per-body javadoc enrichment is a
 different scale from one-shot `jdx doc` — `members`/`outline` need the first
@@ -1324,6 +1324,31 @@ Reuse the T-025 extraction + rendering: `members`/`outline --with-doc`
 Repoint the parked exit-3 messages (currently naming T-025 in
 `BodyCommand.validateBodyFlags` and `ReadCommandSupport.validateMemberFlags`,
 pinned by `BodyCommandTest` + `ReadCommandsTest`) at this task when started.
+
+*Implementation notes (session 48): `core` — `firstDocSentence` (pure, total:
+first paragraph joined, cut after the first `.`/`!`/`?` followed by space/EOS)
++ `MemberRow.doc` (optional; text suffix ` — doc`, JSON `doc` key, `null`
+defaults keep pre-flag goldens byte-identical) + `BodyBlock.doc` (optional
+rendered lines; text `  doc:` block between `signature:` and the slice, JSON
+`doc` key). `index` — `MemberFilters.withDoc` / `BodyOptions.withDoc`
+(default `false`, so CLI `shouldBe` pins hold by value equality) +
+`withDocLines` (direct doc else inherited for real methods, D-037, with the
+`{@inheritDoc}` paragraph substitution, erased→generic-spelling retry) +
+`withDocSentence`/`enrichListingWithDocs` (per shown row from its declaring
+type's paired sources, per-binary `SourceRoot` cache, best-effort: missing
+docs read as no suffix, enrichment never throws) + body doc computed from
+paired sources even on forced/decompiled engines (the doc is ground truth
+while the slice may be reconstructed; sources-less stays silent). `cli` —
+parked exit-3 checks removed (flags now flow into filters/options), help
+texts updated; the two pinning tests now assert the flag reaches the service.
+Tests: core `WithDocTest` (7 examples + 1 thousand-case never-throws/
+determinism property) + index tier-2 `WithDocServiceTest` (7 over the
+`buildDocCaseJars` corpus: direct/inherited/field-hides/outline-equals-
+members/body-block/flag-off-silence/determinism+text⊆JSON). `check
+-x verifyTier1Budget` green incl. gates; goldens byte-identical (no `git
+status` golden diff). Live proof: crafted `doc.Base` jar — `members
+--with-doc` suffixes `— Greets warmly.`, `body --with-doc` prints the `doc:`
+block in text+JSON. Lesson L-080; decision D-041.*
 
 ### T-022 — `jdx body` over the T-021 seam · `DONE` (session 41)
 **Depends:** T-021, T-011 (read-command patterns), T-015/T-016 (roots) · **Files:** `core/.../render/Body.kt`, `index/.../service/JdxService.kt` (`body`), `index/.../artifact/*` (sources accessors), `cli/.../commands/BodyCommand.kt`

@@ -159,6 +159,12 @@ public object JdxService {
          * arity stays stable across front-ends (D-004).
          */
         public val sort: MemberSort = MemberSort.KIND,
+        /**
+         * First javadoc sentence per row (`--with-doc`, T-072): looked up from
+         * the declaring type's paired sources (direct, else inherited for
+         * methods like `doc`); missing docs read as no suffix, never a failure.
+         */
+        public val withDoc: Boolean = false,
     ) {
         public companion object {
             /** The §7.1 default: `public` + `protected` only. */
@@ -292,6 +298,14 @@ public object JdxService {
         public val maxLines: Int = DEFAULT_BODY_MAX_LINES,
         /** Prepend the resolved bytecode signature header (`--with-signature`, T-024). */
         public val withSignature: Boolean = false,
+        /**
+         * Member doc beside the slice (`--with-doc`, T-072): rendered
+         * plain-text lines from the paired sources (direct, else inherited
+         * for methods like `doc`); missing docs read as no block, never a
+         * failure. Works over forced engines too — docs come from sources,
+         * the body from the engine.
+         */
+        public val withDoc: Boolean = false,
         /**
          * Forced decompiler (`--engine vineflower|javap`, T-026/T-027): sources
          * are skipped and the class is always reconstructed. `null` is the
@@ -980,7 +994,12 @@ public object JdxService {
             )
             // Resolver warnings (UNRESOLVED_SUPERTYPE) join the artifact ones.
             val merged = listing.copy(warnings = (sortedWarnings + listing.warnings).sortedBy { it.code })
-            return ServiceOutcome.MemberList(merged)
+            val enriched = if (filters.withDoc) {
+                enrichListingWithDocs(merged, opened, providers, workspace)
+            } else {
+                merged
+            }
+            return ServiceOutcome.MemberList(enriched)
         } finally {
             opened.forEach { it.root.close() }
         }
@@ -2516,6 +2535,146 @@ public object JdxService {
         dev.jdx.sources.SourceDocKind.ENUM_ENTRY -> DocSubject.ENUM_ENTRY
     }
 
+    /**
+     * Rendered member doc lines for `--with-doc` (T-072): the member's own
+     * comment, else the nearest documenting supertype's (methods only, like
+     * `doc` — D-037). `lookupRefs` are the bytecode-authoritative spellings
+     * (query plus generic-signature retry); `primaryForInherit` gates the
+     * inherited walk to real methods. Returns `null` when undocumented or
+     * without sources — enrichment is best-effort, never a failure. Never
+     * throws on agent-reachable input.
+     */
+    private fun withDocLines(
+        target: ClassInfo,
+        effectiveRef: MemberSymbolRef,
+        lookupRefs: List<MemberSymbolRef>,
+        bytecodeMatches: List<BytecodeMember>,
+        opened: List<OpenRoot>,
+        providers: Map<String, List<Int>>,
+        workspace: Workspace,
+        sourceCache: MutableMap<Int, dev.jdx.sources.SourceRoot?>,
+    ): List<String>? {
+        return try {
+            val binary = target.name.binaryName
+            val rootIndex = providers[binary]?.firstOrNull() ?: return null
+            val sources = sourceCache.getOrPut(rootIndex) { openSourcesFor(opened[rootIndex]) }
+                ?: return null
+            var directDoc: dev.jdx.sources.SourceDoc? = null
+            for (lookupRef in lookupRefs) {
+                when (val found = dev.jdx.sources.findMemberDocs(sources, lookupRef)) {
+                    is dev.jdx.sources.JavaDocResult.Found -> {
+                        directDoc = found.docs.firstOrNull() ?: return null
+                        break
+                    }
+                    else -> {
+                        // MemberNotFound tries the next spelling; NoSource,
+                        // NotJava and ParseError fall through to the inherited
+                        // walk (which skips unreadable supertypes anyway).
+                        if (found !is dev.jdx.sources.JavaDocResult.MemberNotFound) break
+                    }
+                }
+            }
+            val primaryMethod = bytecodeMatches.filterIsInstance<BytecodeMember.Method>()
+                .firstOrNull { it.info.name != "<init>" && !isSyntheticMember(it) }
+                ?: bytecodeMatches.filterIsInstance<BytecodeMember.Method>().firstOrNull { it.info.name != "<init>" }
+            val inherited = if (primaryMethod != null) {
+                try {
+                    findInheritedMemberDoc(target, effectiveRef, opened, providers, workspace, raw = false)
+                } catch (e: Exception) {
+                    null
+                }
+            } else {
+                null
+            }
+            if (directDoc != null) {
+                val replacement = if (directDoc.rawComment.contains("{@inheritDoc")) inherited?.paragraph else null
+                val lines = docLines(directDoc, raw = false, inheritDocReplacement = replacement)
+                if (lines.isNotEmpty()) return lines
+            }
+            inherited?.lines
+        } catch (e: Exception) {
+            null
+        }
+    }
+
+    /**
+     * First javadoc sentence for one shown listing row (T-072): parses the
+     * row's canonical ref and reuses [withDocLines], then cuts to the first
+     * sentence. Returns `null` when undocumented — the row renders unchanged.
+     * Never throws: an unparseable ref simply has no doc.
+     */
+    private fun withDocSentence(
+        canonicalRef: String,
+        opened: List<OpenRoot>,
+        providers: Map<String, List<Int>>,
+        workspace: Workspace,
+        sourceCache: MutableMap<Int, dev.jdx.sources.SourceRoot?>,
+    ): String? {
+        return try {
+            val parsed = SymbolRefParser.parse(canonicalRef)
+            val ref = (parsed as? SymbolRefParseResult.Ok)?.ref as? MemberSymbolRef ?: return null
+            val declaring = ref.declaringType as? TypeName.ClassType ?: return null
+            val declaringInfo = workspace.load(declaring.binaryName) ?: return null
+            // The `:return` suffix (bridge disambiguation) still parses as a
+            // return-qualified ref, which `matchBytecodeMembers` narrows —
+            // so bridges resolve to their shared source declaration.
+            val matches = matchBytecodeMembers(declaringInfo, ref)
+            if (matches.isEmpty()) return null
+            val effectiveRef = ref.copy(declaringType = declaringInfo.name)
+            val singleMatch = matches.singleOrNull()
+            val lookupRefs = listOf(effectiveRef) +
+                (singleMatch?.let { genericSpelledRef(declaringInfo, it) }
+                    ?.takeIf { it != effectiveRef }?.let(::listOf).orEmpty())
+            val lines = withDocLines(
+                declaringInfo, effectiveRef, lookupRefs, matches,
+                opened, providers, workspace, sourceCache,
+            ) ?: return null
+            dev.jdx.core.render.firstDocSentence(lines)
+        } catch (e: Exception) {
+            null
+        }
+    }
+
+    /**
+     * Copies [listing] with each shown row's first javadoc sentence filled in
+     * (T-072). Docs come from each row's declaring type's paired sources, so
+     * cross-artifact hierarchies resolve honestly; rows without docs keep a
+     * `null` suffix and render byte-identically to the flag-off path. Cached
+     * sources close before returning; enrichment never throws — a failure
+     * here returns the unenriched listing rather than failing the query.
+     */
+    private fun enrichListingWithDocs(
+        listing: MemberListing,
+        opened: List<OpenRoot>,
+        providers: Map<String, List<Int>>,
+        workspace: Workspace,
+    ): MemberListing {
+        val sourceCache = mutableMapOf<Int, dev.jdx.sources.SourceRoot?>()
+        try {
+            val groups = listing.groups.map { group ->
+                group.copy(
+                    rows = group.rows.map { row ->
+                        if (row.doc != null) {
+                            row
+                        } else {
+                            val sentence = try {
+                                withDocSentence(row.canonicalRef, opened, providers, workspace, sourceCache)
+                            } catch (e: Exception) {
+                                null
+                            }
+                            if (sentence == null) row else row.copy(doc = sentence)
+                        }
+                    },
+                )
+            }
+            return listing.copy(groups = groups)
+        } catch (e: Exception) {
+            return listing
+        } finally {
+            sourceCache.values.forEach { runCatching { it?.close() } }
+        }
+    }
+
     // -- body execution (T-022) ----------------------------------------------------
 
     private fun executeBody(
@@ -2620,6 +2779,24 @@ public object JdxService {
             val lookupRefs = listOf(effectiveRef) +
                 (singleMatch?.let { genericSpelledRef(target, it) }?.takeIf { it != effectiveRef }?.let(::listOf).orEmpty())
             val label = rootLabel(opened[winner], binary)
+            // `--with-doc` (T-072): docs come from the paired sources even
+            // when the body itself is reconstructed — the doc block is
+            // ground truth while the slice may be a reconstruction.
+            val bodyDoc: List<String>? = if (options.withDoc) {
+                val docCache = mutableMapOf<Int, dev.jdx.sources.SourceRoot?>()
+                try {
+                    withDocLines(
+                        target, effectiveRef, lookupRefs, bytecodeMatches,
+                        opened, providers, workspace, docCache,
+                    )
+                } catch (e: Exception) {
+                    null
+                } finally {
+                    docCache.values.forEach { runCatching { it?.close() } }
+                }
+            } else {
+                null
+            }
             // `--engine vineflower` skips the paired sources entirely (T-026):
             // the class is always reconstructed, even when sources are paired.
             if (options.engine == DecompilerId.VINEFLOWER) {
@@ -2632,6 +2809,7 @@ public object JdxService {
                     matchRefs = matchRefs,
                     specified = specified,
                     signatureLine = signatureLine,
+                    doc = bodyDoc,
                     opened = opened,
                     winner = winner,
                     label = label,
@@ -2650,6 +2828,7 @@ public object JdxService {
                     bytecodeMatches = bytecodeMatches,
                     matchRefs = matchRefs,
                     signatureLine = signatureLine,
+                    doc = bodyDoc,
                     opened = opened,
                     winner = winner,
                     label = label,
@@ -2669,6 +2848,7 @@ public object JdxService {
                     matchRefs = matchRefs,
                     specified = specified,
                     signatureLine = signatureLine,
+                    doc = bodyDoc,
                     opened = opened,
                     winner = winner,
                     label = label,
@@ -2705,6 +2885,7 @@ public object JdxService {
                             options = options,
                             rawRef = rawRef,
                             signature = signatureLine,
+                            doc = bodyDoc,
                         )
                     }
                     is dev.jdx.sources.JavaBodyResult.MemberNotFound -> {
@@ -2828,6 +3009,7 @@ public object JdxService {
         matchRefs: List<String>,
         specified: Boolean,
         signatureLine: String?,
+        doc: List<String>? = null,
         opened: List<OpenRoot>,
         winner: Int,
         label: String,
@@ -2878,6 +3060,7 @@ public object JdxService {
                             lineNumbers = options.lineNumbers,
                             maxLines = options.maxLines,
                             signature = signatureLine,
+                            doc = doc,
                         ),
                     )
                 }
@@ -3089,6 +3272,7 @@ public object JdxService {
         bytecodeMatches: List<BytecodeMember>,
         matchRefs: List<String>,
         signatureLine: String?,
+        doc: List<String>? = null,
         opened: List<OpenRoot>,
         winner: Int,
         label: String,
@@ -3144,6 +3328,7 @@ public object JdxService {
                 lineNumbers = options.lineNumbers,
                 maxLines = options.maxLines,
                 signature = signatureLine,
+                doc = doc,
             ),
         )
     }
@@ -3696,6 +3881,7 @@ public object JdxService {
         options: BodyOptions,
         rawRef: String,
         signature: String? = null,
+        doc: List<String>? = null,
     ): ServiceOutcome {
         val fileLines = try {
             sources.openSource(body.file).use {
@@ -3726,6 +3912,7 @@ public object JdxService {
                 lineNumbers = options.lineNumbers,
                 maxLines = options.maxLines,
                 signature = signature,
+                doc = doc,
             ),
         )
     }

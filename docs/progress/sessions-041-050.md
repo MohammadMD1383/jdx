@@ -4,6 +4,82 @@ Newest first. Each entry follows the template at the bottom of `docs/PROGRESS.md
 
 ---
 
+## Session 48 — 2026-09-21 — T-072 `--with-doc` enrichment done
+**Agent/Author:** Muse Spark 1.3 Free · **Commits:** `6ad71ca` (claim) + closing commit (this session)
+
+### Goal
+Implement T-072, the `--with-doc` split from T-025: `members`/`outline`
+first-javadoc-sentence per row and `body` member-doc block over the T-025
+seam, unparking the two exit-3 flags.
+
+### What I did
+- Claimed T-072 first (`docs/TASKS.md` TODO→WIP, committed `6ad71ca`
+  before coding).
+- `core` — `firstDocSentence` (`Doc.kt`: first paragraph joined, cut after
+  the first `.`/`!`/`?` + space/EOS, total) + `MemberRow.doc` (optional;
+  text ` — doc` suffix, JSON `doc` key) + `BodyBlock.doc` (optional rendered
+  lines; text `  doc:` block between `signature:` and the slice, JSON `doc`
+  key). `null`/false defaults keep flag-off goldens byte-identical.
+- `index` (`JdxService`) — `MemberFilters.withDoc` + `BodyOptions.withDoc`
+  (default `false`, CLI `shouldBe` pins hold) + `withDocLines` (direct doc
+  else inherited for real methods per D-037 with `{@inheritDoc}`
+  substitution, erased→generic-spelling retry) + `withDocSentence`/
+  `enrichListingWithDocs` (per shown row from its declaring type's paired
+  sources, per-binary `SourceRoot` cache, best-effort/never-throws) + body
+  doc from paired sources even on forced/decompiled engines (doc is ground
+  truth while the slice may be reconstructed; sources-less stays silent).
+  `bodyOutcome`/`decompiledBodyOutcome`/`javapBodyOutcome` gained
+  `doc: List<String>? = null`.
+- `cli` — parked exit-3 checks removed from `validateBodyFlags`/
+  `validateMemberFlags`, flags flow into options/filters, help texts
+  updated; `BodyCommandTest` + `ReadCommandsTest` pins now assert the flag
+  reaches the service.
+- Tests: core `WithDocTest` (7 examples + 1 thousand-case never-throws/
+  determinism property) + index tier-2 `WithDocServiceTest` (7 over
+  `buildDocCaseJars`: direct/inherited/field-hides/outline==members/
+  body-block/both flag-off silences/determinism+text⊆JSON).
+- Verified: `:core:test` + `:cli:test` + `:index:tier2Test` +
+  `:cli:tier2Test` green; `git status` shows no golden diffs. Live CLI
+  proof below (crafted `doc.Base` jar — fixtures carry almost no member
+  docs, so they correctly stay silent).
+
+### Decisions made
+- D-041 (`--with-doc` semantics: one-line row suffix vs labelled body
+  block, mechanical first sentence, reused `doc` inheritance, never-fails
+  enrichment, frozen flag-off bytes) in `docs/decisions/D-026-050.md`.
+
+### Tasks moved
+- T-072: TODO → WIP (`6ad71ca`) → DONE. T-073 stays TODO (last M3 item).
+
+### Lessons distilled
+- **L-080** — a regex across serialised JSON rows matches across row
+  boundaries (split on `{"ref":` instead).
+
+### What works now (and how to verify it yourself)
+```bash
+./gradlew :core:test --tests "dev.jdx.core.render.WithDocTest" -x verifyTier1Budget
+./gradlew :index:tier2Test --tests "dev.jdx.index.service.WithDocServiceTest" -x verifyTier1Budget
+./gradlew :core:test :cli:test -x verifyTier1Budget
+./gradlew :index:tier2Test :cli:tier2Test -x verifyTier1Budget  # green, goldens byte-identical
+./app/build/jdx members 'doc.Base' --jars /tmp/opencode/withdoc/case.jar --no-jdk --with-doc
+# exit 0: `method public java.lang.String greet(java.lang.String arg0) — Greets warmly.`
+./app/build/jdx body 'doc.Base#greet(java.lang.String)' --jars /tmp/opencode/withdoc/case.jar --no-jdk --with-doc
+# exit 0: `  doc:` block (Greets warmly. + @param/@return) above the slice, JSON `doc` key
+```
+
+### What is broken / half-done
+- Nothing from this task. Pre-existing, untouched: `verifyTier1Budget`
+  red on this machine (machine variance, 0 test failures); T-073 TODO.
+
+### Open questions / blockers
+- None.
+
+### Next action
+- **T-073** (Vineflower→javap auto-fallback — expand into a detail block
+  when started; then M4 T-029…T-034 coarse).
+
+---
+
 ## Session 47 — 2026-09-21 — T-028 `SOURCES_VERSION_MISMATCH` done
 **Agent/Author:** Muse Spark 1.3 Free · **Commits:** `492fa76` (claim) + closing commit (this session)
 

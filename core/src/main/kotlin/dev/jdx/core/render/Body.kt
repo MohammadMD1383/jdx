@@ -18,7 +18,9 @@ public const val DEFAULT_BODY_MAX_LINES: Int = 200
  * `--line-numbers` each shown line is prefixed `NNN | ` in text; JSON always carries
  * the bare `text` plus the numeric ranges, so text⊆JSON (D-007) holds either way.
  * [signature] is the `--with-signature` header (T-024): the resolved bytecode
- * signature line, or `null` when the flag is off.
+ * signature line, or `null` when the flag is off. [doc] is the `--with-doc`
+ * member doc (T-072): rendered plain-text lines, or `null` when the flag is
+ * off or no doc exists — so pre-flag goldens stay byte-identical.
  */
 public data class BodyBlock(
     public val canonicalRef: String,
@@ -33,12 +35,17 @@ public data class BodyBlock(
     public val warnings: List<Warning>,
     public val provenance: List<Provenance>,
     public val signature: String? = null,
+    public val doc: List<String>? = null,
 ) {
     /** Text layout per PROPOSAL.md §8.1: ref header, source line, verbatim body, next hint. */
     public fun renderText(color: Boolean = false): String {
         val out = mutableListOf(canonicalRef)
         out.add("  " + renderSourceLine(provenance.firstOrNull(), file, startLine, endLine))
         signature?.let { out.add("  signature: $it") }
+        if (doc != null) {
+            out.add("  doc:")
+            doc.forEach { out.add("    $it") }
+        }
         lines.forEachIndexed { index, line ->
             out.add(if (lineNumbers) "${displayStartLine + index} | $line" else line)
         }
@@ -56,6 +63,7 @@ public data class BodyBlock(
             append(",\"declaring\":").append(JsonEscape.quote(declaringType))
             append(",\"file\":").append(JsonEscape.quote(file))
             signature?.let { append(",\"signature\":").append(JsonEscape.quote(it)) }
+            if (doc != null) append(",\"doc\":").append(JsonEscape.quote(doc.joinToString("\n")))
             append(",\"lines\":[").append(startLine).append(",").append(endLine).append("]")
             append(",\"displayLines\":[").append(displayStartLine).append(",")
                 .append(displayStartLine + lines.size - 1).append("]")
@@ -124,6 +132,7 @@ public fun buildBodyBlock(
     lineNumbers: Boolean = false,
     maxLines: Int = Int.MAX_VALUE,
     signature: String? = null,
+    doc: List<String>? = null,
 ): BodyBlock {
     val (displayStart, shown, truncation) = sliceBodyLines(fileLines, startLine, endLine, contextLines, maxLines)
     return BodyBlock(
@@ -139,5 +148,6 @@ public fun buildBodyBlock(
         warnings = warnings,
         provenance = provenance,
         signature = signature,
+        doc = doc,
     )
 }

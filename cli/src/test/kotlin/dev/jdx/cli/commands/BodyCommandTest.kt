@@ -99,10 +99,10 @@ class BodyCommandTest {
     }
 
     @Test
-    fun `with-doc is rejected naming T-072`() {
+    fun `with-doc reaches the service`() {
         val run = run(listOf("com.example.Point#getX()", "--with-doc"))
-        run.exit shouldBe 3
-        run.output shouldContain "T-072"
+        run.exit shouldBe 0
+        run.options shouldBe JdxService.BodyOptions(withDoc = true)
     }
 
     @Test

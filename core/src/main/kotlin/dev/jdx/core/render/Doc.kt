@@ -290,3 +290,35 @@ public fun buildDocBlock(
         provenance = provenance,
     )
 }
+
+/**
+ * First javadoc sentence of one rendered comment (T-072, PROPOSAL.md §7.1).
+ *
+ * [rendered] is the `renderJavadoc` plain-text lines the `sources` seam hands
+ * over. The first paragraph (up to the first blank line) is joined with
+ * spaces, then cut after the first sentence-ending `.`/`!`/`?` (the
+ * terminator is kept; a trailing closer like `)`/`]`/`"`/`'` stays with the
+ * sentence). Returns `null` for blank input; never throws on hostile input.
+ *
+ * Pure and total: `members`/`outline --with-doc` call this per row, so it
+ * must stay cheap and deterministic.
+ */
+public fun firstDocSentence(rendered: List<String>): String? {
+    val paragraph = rendered.takeWhile { it.isNotBlank() }.joinToString(" ").trim()
+    if (paragraph.isBlank()) return null
+    var end = -1
+    var index = 0
+    while (index < paragraph.length) {
+        val char = paragraph[index]
+        if (char == '.' || char == '!' || char == '?') {
+            val next = if (index + 1 < paragraph.length) paragraph[index + 1] else '\u0000'
+            if (next == '\u0000' || next.isWhitespace()) {
+                end = index
+                break
+            }
+        }
+        index++
+    }
+    val sentence = if (end == -1) paragraph else paragraph.substring(0, end + 1)
+    return sentence.trim().ifEmpty { null }
+}

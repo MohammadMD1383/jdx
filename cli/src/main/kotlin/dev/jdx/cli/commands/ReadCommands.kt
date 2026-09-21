@@ -95,7 +95,7 @@ class MembersCommand(
 
     private val withDoc by option(
         "--with-doc",
-        help = "Include the first javadoc sentence per member (not yet implemented, T-072).",
+        help = "Include the first javadoc sentence per member.",
     ).flag()
 
     private val sort by option(
@@ -180,6 +180,7 @@ class MembersCommand(
             fromRef = from,
             grep = grep?.let { Regex(it) },
             sort = ReadCommandSupport.sortOf(sort),
+            withDoc = withDoc,
         )
         when (val resolved = ReadCommandSupport.resolveRoots(
             jars,
@@ -270,7 +271,7 @@ class OutlineCommand(
 
     private val withDoc by option(
         "--with-doc",
-        help = "Include the first javadoc sentence per member (not yet implemented, T-072).",
+        help = "Include the first javadoc sentence per member.",
     ).flag()
 
     private val sort by option(
@@ -355,6 +356,7 @@ class OutlineCommand(
             fromRef = from,
             grep = grep?.let { Regex(it) },
             sort = ReadCommandSupport.sortOf(sort),
+            withDoc = withDoc,
         )
         when (val resolved = ReadCommandSupport.resolveRoots(
             jars,

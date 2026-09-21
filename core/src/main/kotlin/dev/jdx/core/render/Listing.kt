@@ -43,9 +43,18 @@ public data class MemberRow(
     public val overriddenTypes: List<TypeName.ClassType>,
     public val hiddenTypes: List<TypeName.ClassType>,
     public val memberName: String,
+    /**
+     * First javadoc sentence (`--with-doc`, T-072): `null` when the flag is
+     * off or no doc exists, so pre-flag goldens stay byte-identical.
+     */
+    public val doc: String? = null,
 ) {
-    /** The text line: `  method public int getX()`. */
-    public fun textLine(): String = "  ${kind.word} $signature"
+    /** The text line: `  method public int getX()` plus ` — doc` when present. */
+    public fun textLine(): String = if (doc == null) {
+        "  ${kind.word} $signature"
+    } else {
+        "  ${kind.word} $signature — $doc"
+    }
 
     /** The structural row: empty lists and `false` are omitted (token economy). */
     public fun toJson(): String = buildString {
@@ -54,6 +63,7 @@ public data class MemberRow(
         append(",\"declaring\":").append(JsonEscape.quote(declaringType.binaryName))
         append(",\"signature\":").append(JsonEscape.quote(signature))
         append(",\"depth\":").append(depth)
+        if (doc != null) append(",\"doc\":").append(JsonEscape.quote(doc))
         if (overriddenTypes.isNotEmpty()) {
             append(",\"overridden\":")
             append(overriddenTypes.map { JsonEscape.quote(it.binaryName) }.joinToString(",", "[", "]"))

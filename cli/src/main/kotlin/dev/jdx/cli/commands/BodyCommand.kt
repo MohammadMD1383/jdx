@@ -70,7 +70,7 @@ class BodyCommand(
 
     private val withDoc by option(
         "--with-doc",
-        help = "Include the member's javadoc (not yet implemented, T-072).",
+        help = "Include the member's javadoc beside the body.",
     ).flag()
 
     private val withSignature by option(
@@ -161,6 +161,7 @@ class BodyCommand(
                         lineNumbers = lineNumbers,
                         maxLines = maxLines,
                         withSignature = withSignature,
+                        withDoc = withDoc,
                         engine = when {
                             engine.equals("vineflower", ignoreCase = true) -> DecompilerId.VINEFLOWER
                             engine.equals("javap", ignoreCase = true) -> DecompilerId.JAVAP
@@ -194,9 +195,6 @@ internal fun validateBodyFlags(
         !engine.equals("javap", ignoreCase = true)
     ) {
         return "usage error: --engine $engine is not a known engine (vineflower|javap)"
-    }
-    if (withDoc) {
-        return "usage error: --with-doc is not yet implemented (T-072: javadoc enrichment over the T-025 seam)"
     }
     return null
 }

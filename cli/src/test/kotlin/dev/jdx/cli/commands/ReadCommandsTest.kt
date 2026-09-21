@@ -320,23 +320,18 @@ class ReadCommandsTest {
     }
 
     @Test
-    fun `members --with-doc names T-072 and exits 3`() {
-        val output = captureStdout {
-            val thrown = try {
-                MembersCommand(
-                    query = { _, _, _, _, _, _ -> pointListing() },
-                    terminate = noExit,
-                    discover = noDiscovery,
-                    store = emptyStore(),
-                    getenv = noEnv,
-                ).parse(listOf("Point", "--with-doc"))
-                null
-            } catch (e: TestExit) {
-                e
-            }
-            (thrown?.code) shouldBe 3
+    fun `members --with-doc reaches the service`() {
+        var seen = false
+        captureStdout {
+            MembersCommand(
+                query = { _, _, filters, _, _, _ -> seen = filters.withDoc; pointListing() },
+                terminate = noExit,
+                discover = noDiscovery,
+                store = emptyStore(),
+                getenv = noEnv,
+            ).parse(listOf("Point", "--with-doc"))
         }
-        output shouldContain "T-072"
+        seen shouldBe true
     }
 
     @Test

@@ -360,9 +360,6 @@ internal object ReadCommandSupport {
                 return "usage error: invalid --grep regex '$grep': ${e.message}"
             }
         }
-        if (withDoc) {
-            return "usage error: --with-doc is not yet implemented (T-072: javadoc enrichment over the T-025 seam)"
-        }
         if (sortOf(sort) == dev.jdx.core.render.MemberSort.KIND && sort.lowercase() != "kind") {
             return "usage error: invalid --sort '$sort' (expected kind|name|declaring)"
         }
