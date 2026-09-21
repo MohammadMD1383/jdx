@@ -1,0 +1,1 @@
+{"jdx":1,"ok":true,"command":"samples","query":"s.Bean#<init>()","result":{"target":"s.Bean#<init>","samples":[{"from":"s.Factory#make()","artifact":"samples-case.jar","target":"s.Bean#<init>()"}]},"warnings":[],"provenance":[{"artifact":"samples-case.jar","origin":"bytecode"}]}

@@ -109,14 +109,14 @@ class UsagesServiceTest {
         textOf(impl) shouldContain "jdx hierarchy"
         val thrown = JdxService.usages("u.Lib", caseRoots(), UsageOptions(kind = UsageKindFilter.THROW))
         thrown.exitCode shouldBe 3
-        textOf(thrown) shouldContain "T-034"
+        textOf(thrown) shouldContain "T-075"
     }
 
     @Test
     fun `context is rejected naming samples`() {
         val outcome = JdxService.usages("u.Lib", caseRoots(), UsageOptions(contextLines = 2))
         outcome.exitCode shouldBe 3
-        textOf(outcome) shouldContain "T-034"
+        textOf(outcome) shouldContain "jdx samples"
     }
 
     // -- artifact filters and truncation ----------------------------------------

@@ -3,6 +3,7 @@ package dev.jdx.index.soak
 import dev.jdx.core.model.WarningCode
 import dev.jdx.core.model.typeNameFromBinaryName
 import dev.jdx.core.render.JsonEscape
+import dev.jdx.core.render.MAX_SAMPLE_SNIPPET_LINES
 import dev.jdx.index.artifact.ArtifactLoader
 import dev.jdx.index.index.ArtifactIndexer
 import dev.jdx.index.service.JdxService
@@ -417,6 +418,7 @@ private fun warningCodesOf(outcome: ServiceOutcome): List<WarningCode> = when (o
     is ServiceOutcome.UsageList -> outcome.listing.warnings.map { it.code }
     is ServiceOutcome.Hierarchy -> outcome.listing.warnings.map { it.code }
     is ServiceOutcome.CallGraph -> outcome.listing.warnings.map { it.code }
+    is ServiceOutcome.SampleList -> outcome.listing.warnings.map { it.code }
     is ServiceOutcome.Failure -> emptyList()
 }
 
@@ -519,6 +521,21 @@ private fun entitiesOf(outcome: ServiceOutcome): List<String> = when (outcome) {
         for (row in outcome.listing.rows) {
             add(row.ref)
             row.artifact?.let { add(it) }
+        }
+        for (warning in outcome.listing.warnings) add(warning.code.name)
+    }
+    is ServiceOutcome.SampleList -> buildList {
+        add(outcome.listing.targetRef)
+        for (row in outcome.listing.rows) {
+            add(row.fromRef)
+            add(row.artifact)
+            add(row.targetRef)
+            row.snippet?.let { snippet ->
+                add(snippet.file)
+                // Text caps snippets (MAX_SAMPLE_SNIPPET_LINES): only the
+                // shown prefix is a text entity.
+                for (line in snippet.lines.take(MAX_SAMPLE_SNIPPET_LINES)) add(line)
+            }
         }
         for (warning in outcome.listing.warnings) add(warning.code.name)
     }

@@ -49,6 +49,7 @@ import dev.jdx.core.render.buildSignatureBlock
 import dev.jdx.core.render.buildSourceBlock
 import dev.jdx.core.render.renderJavadoc
 import dev.jdx.core.render.DEFAULT_MEMBER_LIMIT
+import dev.jdx.core.render.DEFAULT_SAMPLES_LIMIT
 import dev.jdx.core.render.DEFAULT_SEARCH_LIMIT
 import dev.jdx.core.render.DEFAULT_TREE_DEPTH
 import dev.jdx.core.render.DEFAULT_USAGES_LIMIT
@@ -63,6 +64,9 @@ import dev.jdx.core.render.OBJECT_BINARY_NAME
 import dev.jdx.core.render.PackageEntry
 import dev.jdx.core.render.SearchHit
 import dev.jdx.core.render.SearchListing
+import dev.jdx.core.render.SampleHit
+import dev.jdx.core.render.SampleListing
+import dev.jdx.core.render.SampleSnippet
 import dev.jdx.core.render.SignatureLines
 import dev.jdx.core.render.SubtypeEntry
 import dev.jdx.core.render.SupertypeEntry
@@ -73,8 +77,10 @@ import dev.jdx.core.render.buildArtifactTree
 import dev.jdx.core.render.buildHierarchyListing
 import dev.jdx.core.render.buildLsListing
 import dev.jdx.core.render.buildSearchListing
+import dev.jdx.core.render.buildSampleListing
 import dev.jdx.core.render.buildTreeListing
 import dev.jdx.core.render.buildUsageListing
+import dev.jdx.core.render.sampleOrderKey
 import dev.jdx.core.render.buildClassCard
 import dev.jdx.core.render.buildMemberListing
 import dev.jdx.core.render.countNodes
@@ -260,6 +266,13 @@ public object JdxService {
 
         /** A call-hierarchy tree (`callers`, `calls`) — exit 0. */
         public data class CallGraph(public val listing: CallListing) : ServiceOutcome {
+            override val exitCode: Int = 0
+            override fun renderText(color: Boolean): String = listing.renderText(color)
+            override fun toJson(command: String): String = listing.toJson(command)
+        }
+
+        /** Ranked usage examples (`samples`) — exit 0. */
+        public data class SampleList(public val listing: SampleListing) : ServiceOutcome {
             override val exitCode: Int = 0
             override fun renderText(color: Boolean): String = listing.renderText(color)
             override fun toJson(command: String): String = listing.toJson(command)
@@ -2005,7 +2018,7 @@ public object JdxService {
         /**
          * Source lines around each call site (`--context N`). Parsed here so
          * the flag exists, but always rejected: no line data in v1 (D-042 §4)
-         * and source rendering belongs to `samples` (T-034).
+         * and source rendering belongs to `samples` (`jdx samples`, T-034).
          */
         public val contextLines: Int = 0,
     )
@@ -2034,7 +2047,7 @@ public object JdxService {
                 3,
                 rawRef,
                 "usage error: --context is not supported for usages yet " +
-                    "(source-rendered call sites: T-034)",
+                    "(source-rendered call sites: jdx samples '$rawRef')",
             )
         }
         when (options.kind) {
@@ -2050,7 +2063,7 @@ public object JdxService {
                     3,
                     rawRef,
                     "usage error: --kind ${options.kind.flag} is not supported for usages yet " +
-                        "(graph enrichment: T-034)",
+                        "(graph enrichment: T-075)",
                 )
             else -> Unit
         }
@@ -3239,6 +3252,442 @@ public object JdxService {
                 )
             }
         }
+    }
+
+    // -- samples (T-034) -----------------------------------------------------------
+
+    /**
+     * Options for `samples`: how many ranked examples to show and how much of
+     * the workspace to cover. [limit] defaults to 3 (PROPOSAL.md §7.3);
+     * [preferSources] ranks callers from sources-paired artifacts first.
+     */
+    public data class SampleOptions(
+        public val limit: Int = DEFAULT_SAMPLES_LIMIT,
+        public val inArtifact: String? = null,
+        public val exclude: String? = null,
+        public val preferSources: Boolean = false,
+    )
+
+    /**
+     * Answers `samples <symbol>`: ranked usage examples with enclosing-method
+     * source snippets when paired sources exist.
+     *
+     * Live-roots scan (D-043 precedent): every class's `METHOD_CALL` edges are
+     * extracted once with the T-029 [ReferenceExtractor], ranked in memory by
+     * exemplariness, and source-sliced through the T-021 seam — no persistent
+     * index read yet (indexed acceleration lands with the daemon/`jdx index`
+     * work). Structure is bytecode-authoritative (D-009): the target resolves
+     * with the T-011 machinery before any scan, so a typo reports
+     * did-you-mean instead of an empty answer. Matching is overload-blind at
+     * the root unless the ref carries a parameter list (the usages rule,
+     * D-042 §5).
+     */
+    public fun samples(
+        rawRef: String,
+        roots: RootsSpec,
+        options: SampleOptions = SampleOptions(),
+    ): ServiceOutcome {
+        if (options.limit < 0) {
+            return failure(3, rawRef, "usage error: --limit must be >= 0, got ${options.limit}")
+        }
+        val parsed = SymbolRefParser.parse(rawRef)
+        if (parsed is SymbolRefParseResult.Failure) {
+            return failure(
+                3,
+                rawRef,
+                "usage error: invalid reference '$rawRef': ${parsed.message} at column ${parsed.position}",
+            )
+        }
+        val ref = (parsed as SymbolRefParseResult.Ok).ref
+        if (ref is PackageSymbolRef || ref is ModuleSymbolRef) {
+            return failure(3, rawRef, "usage error: samples takes a type or member reference, got '$rawRef'")
+        }
+        if (ref is MemberSymbolRef && ref.name == "<clinit>") {
+            return failure(3, rawRef, "usage error: static initialisers are never invoked: '$rawRef'")
+        }
+        val coordinate = (ref as? MemberSymbolRef)?.coordinate ?: (ref as? TypeSymbolRef)?.coordinate
+        if (roots.jarSpecs.isEmpty() && !roots.includeJdk && coordinate == null) {
+            return failure(
+                4,
+                rawRef,
+                "no workspace: no --jars given, no workspace selected (-w <name>, " +
+                    "JDX_WORKSPACE, jdx ws use) and --no-jdk set " +
+                    "(pass --jars <path>, select a workspace, or drop --no-jdk)",
+            )
+        }
+        // A `g:a:v/` prefix scopes the query to one artifact (T-019): its jar
+        // reads first (shadowing order), and candidates match inside it only —
+        // while the edge scan still covers the full workspace behind it.
+        var scopedRoots = roots
+        var candidateScope: Set<String>? = null
+        if (coordinate != null) {
+            val coordText = "${coordinate.group}:${coordinate.artifact}:${coordinate.version}"
+            val outcome = try {
+                roots.mavenResolve(coordText, roots.allowFetch)
+            } catch (e: Exception) {
+                return failure(
+                    6,
+                    rawRef,
+                    "internal error: coordinate resolution failed: ${e.message ?: e.javaClass.simpleName}",
+                )
+            }
+            val artifact = when (outcome) {
+                is MavenResolver.Outcome.Resolved -> outcome.artifact
+                is MavenResolver.Outcome.Unresolved ->
+                    return failure(5, rawRef, "artifact read error: ${outcome.message}")
+            }
+            val binarySpec = artifact.binaryJar.toString()
+            val scope = try {
+                ArtifactLoader.open(artifact.binaryJar).use { root -> root.classEntryPaths().map(::entryToBinary).toSet() }
+            } catch (e: ArtifactReadException) {
+                return failure(5, rawRef, e.message ?: "artifact read error")
+            } catch (e: Exception) {
+                return failure(6, rawRef, "internal error: ${e.javaClass.simpleName}: ${e.message ?: "no detail"}")
+            }
+            scopedRoots = roots.copy(jarSpecs = listOf(binarySpec) + roots.jarSpecs)
+            candidateScope = scope
+        }
+        return try {
+            executeSamples(ref, rawRef, scopedRoots, options, candidateScope)
+        } catch (e: ArtifactReadException) {
+            failure(5, rawRef, e.message ?: "artifact read error")
+        } catch (e: Exception) {
+            failure(6, rawRef, "internal error: ${e.javaClass.simpleName}: ${e.message ?: "no detail"}")
+        }
+    }
+
+    /**
+     * Serves `samples`: resolves the target type or method from bytecode
+     * (D-009), scans every class in every open root once for `METHOD_CALL`
+     * edges to it, ranks the calling methods by exemplariness, and slices the
+     * displayed callers' bodies through their own paired sources. Unreadable
+     * classes warn once each ([WarningCode.CORRUPT_CLASS]) and are skipped —
+     * one bad entry never aborts the scan (D-017). Callers without sources
+     * render as snippet-less rows, never as failures.
+     */
+    private fun executeSamples(
+        ref: SymbolRef,
+        rawRef: String,
+        roots: RootsSpec,
+        options: SampleOptions,
+        candidateScope: Set<String>? = null,
+    ): ServiceOutcome {
+        val declaring = when (ref) {
+            is MemberSymbolRef -> ref.declaringType as? TypeName.ClassType
+            is TypeSymbolRef -> ref.type as? TypeName.ClassType
+            else -> null
+        } ?: return failure(3, rawRef, "usage error: samples takes a type or member reference, got '$rawRef'")
+        val opened = openRoots(roots)
+        // Paired sources per root, opened lazily: presence is the cheap
+        // `--prefer-sources` signal (no parsing), the bodies behind them slice
+        // only the displayed rows. Every opened root closes here.
+        val sourceCache = mutableMapOf<Int, dev.jdx.sources.SourceRoot?>()
+        try {
+            val binariesByRoot = opened.map { it.root.classEntryPaths().map(::entryToBinary).toSet() }
+            val providers = mutableMapOf<String, MutableList<Int>>()
+            binariesByRoot.forEachIndexed { index, binaries ->
+                for (binary in binaries) providers.getOrPut(binary) { mutableListOf() }.add(index)
+            }
+            val allBinaries = providers.keys
+
+            val candidates = matchCandidates(declaring, candidateScope ?: allBinaries)
+            if (candidates.isEmpty()) {
+                val suggestions = suggestSimilar(declaring.simpleName, allBinaries)
+                return ServiceOutcome.Failure(ErrorResult.notFound(rawRef, suggestions))
+            }
+            if (candidates.size > 1) {
+                return ServiceOutcome.Failure(ErrorResult.ambiguous(rawRef, candidates))
+            }
+            val binary = candidates.single()
+            val winner = providers.getValue(binary).first()
+
+            val warnings = mutableListOf<Warning>()
+            warnings.addAll(roots.extraWarnings)
+            for (open in opened) warnings.addAll(open.root.warnings)
+            val extraProviders = providers.getValue(binary).drop(1)
+            if (extraProviders.isNotEmpty()) {
+                val names = listOf(winner).plus(extraProviders).map { rootLabel(opened[it], binary) }
+                warnings.add(
+                    Warning(
+                        code = WarningCode.DUPLICATE_FQN,
+                        message = "$binary is provided by ${names.joinToString(", ")}; " +
+                            "showing ${names.first()} (classpath order)",
+                        subject = binary,
+                    ),
+                )
+            }
+
+            val workspace = Workspace(opened, providers, warnings)
+            val target = workspace.load(binary)
+            if (target == null) {
+                return failure(
+                    5,
+                    rawRef,
+                    "artifact read error: $binary in ${rootLabel(opened[winner], binary)} cannot be parsed",
+                )
+            }
+
+            // The target set is structural (D-009): a member proven absent
+            // from bytecode reports did-you-mean, and a field reports the
+            // usages redirect — fields have no call sites to exemplify.
+            // Overload-blind unless the ref carries parameters (D-042 §5).
+            val memberName: String?
+            val memberDescriptors: Set<String>?
+            val canonicalTarget: String
+            if (ref is MemberSymbolRef) {
+                val methods = matchBytecodeMembers(target, ref).filterIsInstance<BytecodeMember.Method>()
+                if (methods.isEmpty()) {
+                    if (matchBytecodeMembers(target, ref).isEmpty()) {
+                        return ServiceOutcome.Failure(
+                            ErrorResult.notFound(rawRef, suggestSimilarMember(target, ref.name)),
+                        )
+                    }
+                    return failure(
+                        3,
+                        rawRef,
+                        "usage error: fields have no usage examples: '$rawRef' " +
+                            "(find reads and writes: jdx usages '$rawRef')",
+                    )
+                }
+                memberName = ref.name
+                memberDescriptors = if (ref.parameterTypes != null) {
+                    methods.map { it.info.descriptor.descriptor }.toSet()
+                } else {
+                    null
+                }
+                canonicalTarget = SymbolRefPrinter.print(MemberSymbolRef(target.name, ref.name))
+            } else {
+                memberName = null
+                memberDescriptors = null
+                canonicalTarget = binary
+            }
+
+            val targetArtifact = rootLabel(opened[winner], binary)
+            val calls = scanSampleEdges(opened, warnings, options)
+            // One example per calling method and artifact label (a class
+            // provided by two roots renders once per root, mirroring
+            // `usages`): multiple edges from one caller to several overloads
+            // collapse to the fullest overload touched.
+            val grouped = calls
+                .filter { call ->
+                    if (call.edge.toOwner != binary) return@filter false
+                    if (memberName != null) {
+                        if (call.edge.toMember != memberName) return@filter false
+                        if (memberDescriptors != null &&
+                            (call.edge.toDescriptor == null || call.edge.toDescriptor !in memberDescriptors)
+                        ) {
+                            return@filter false
+                        }
+                    }
+                    true
+                }
+                .groupBy { call ->
+                    SampleCaller(
+                        fromClass = call.edge.fromClass,
+                        fromMember = call.edge.fromMember,
+                        fromDescriptor = call.edge.fromDescriptor,
+                        label = call.label,
+                    )
+                }
+            if (grouped.isEmpty()) {
+                return ServiceOutcome.Failure(
+                    ErrorResult.notFound(
+                        rawRef,
+                        emptyList(),
+                        detail = "no samples of '$canonicalTarget' in the workspace",
+                    ),
+                )
+            }
+            val ranked = grouped.map { (caller, edges) ->
+                val fullest = edges.maxBy { targetParamCount(it.edge.toDescriptor) }
+                val rootIndex = providers[caller.fromClass]?.firstOrNull()
+                val fromRef = canonicalFromRef(caller.fromClass, caller.fromMember, caller.fromDescriptor)
+                RankedSample(
+                    fromRef = fromRef,
+                    label = caller.label,
+                    targetRef = edgeTargetRef(fullest.edge),
+                    paramCount = targetParamCount(fullest.edge.toDescriptor),
+                    hasSources = hasSampleSources(opened, sourceCache, rootIndex),
+                    rootIndex = rootIndex,
+                    fromClass = caller.fromClass,
+                    fromMember = caller.fromMember,
+                )
+            }.sortedWith(
+                compareBy(
+                    { sampleOrderKey(it.fromRef, it.paramCount, options.preferSources, it.hasSources) },
+                    { it.label },
+                    { it.targetRef },
+                ),
+            )
+            // Snippets slice only the displayed prefix: parsing a Java file
+            // per workspace-wide hit would turn a 3-row answer into a
+            // whole-corpus parse. Rows past the limit never render, so their
+            // absent snippets are invisible (D-007 holds over shown rows).
+            val effectiveLimit = options.limit.coerceAtLeast(0)
+            val hits = ranked.mapIndexed { index, sample ->
+                SampleHit(
+                    fromRef = sample.fromRef,
+                    artifact = sample.label,
+                    targetRef = sample.targetRef,
+                    snippet = if (index < effectiveLimit) {
+                        snippetForCaller(sample.fromClass, sample.fromMember, sample.rootIndex, opened, sourceCache)
+                    } else {
+                        null
+                    },
+                )
+            }
+            val provenance = listOf(
+                Provenance(
+                    artifact = targetArtifact,
+                    origin = if (opened[winner].root.kind == ArtifactKind.JRT) Origin.JRT else Origin.BYTECODE,
+                ),
+            )
+            return ServiceOutcome.SampleList(
+                buildSampleListing(
+                    query = rawRef,
+                    targetRef = canonicalTarget,
+                    hits = hits,
+                    limit = options.limit,
+                    warnings = warnings.sortedBy { it.code },
+                    provenance = provenance,
+                ),
+            )
+        } finally {
+            sourceCache.values.forEach { runCatching { it?.close() } }
+            opened.forEach { it.root.close() }
+        }
+    }
+
+    /** One calling method in one artifact: the grouping key for examples. */
+    private data class SampleCaller(
+        val fromClass: String,
+        val fromMember: String,
+        val fromDescriptor: String,
+        val label: String,
+    )
+
+    /** One `METHOD_CALL` edge plus the artifact label of the class holding it. */
+    private data class ScannedSample(val edge: ReferenceEdge, val label: String)
+
+    /** One ranked example before snippet slicing. */
+    private data class RankedSample(
+        val fromRef: String,
+        val label: String,
+        val targetRef: String,
+        val paramCount: Int,
+        val hasSources: Boolean,
+        val rootIndex: Int?,
+        val fromClass: String,
+        val fromMember: String,
+    )
+
+    /**
+     * Extracts every `METHOD_CALL` edge in the workspace once, honouring the
+     * display filters. Unreadable classes warn once each and contribute
+     * nothing. Source dirs (`--src`) are not scanned: textual mentions have
+     * no enclosing method to render (documented in D-047).
+     */
+    private fun scanSampleEdges(
+        opened: List<OpenRoot>,
+        warnings: MutableList<Warning>,
+        options: SampleOptions,
+    ): List<ScannedSample> {
+        val scanned = mutableListOf<ScannedSample>()
+        val reported = mutableSetOf<String>()
+        for (open in opened) {
+            for (entry in open.root.classEntryPaths()) {
+                val fromBinary = entryToBinary(entry)
+                val label = rootLabel(open, fromBinary)
+                if (!matchesArtifactFilter(options.inArtifact, label) ||
+                    (options.exclude != null && matchesArtifactFilter(options.exclude, label))
+                ) {
+                    continue
+                }
+                val bytes = try {
+                    open.root.openClass(entry).use { it.readBytes() }
+                } catch (e: Exception) {
+                    if (reported.add(fromBinary)) {
+                        warnings.add(
+                            Warning(
+                                code = WarningCode.CORRUPT_CLASS,
+                                message = "cannot read $fromBinary from ${open.root.displayName}: " +
+                                    "${e.message ?: e.javaClass.simpleName}",
+                                subject = fromBinary,
+                            ),
+                        )
+                    }
+                    continue
+                }
+                for (edge in ReferenceExtractor.extract(bytes)) {
+                    if (edge.kind != ReferenceKind.METHOD_CALL) continue
+                    scanned.add(ScannedSample(edge, label))
+                }
+            }
+        }
+        return scanned
+    }
+
+    /** Erased parameter count of a method descriptor; hostile bytes count zero, never throw. */
+    private fun targetParamCount(descriptor: String?): Int {
+        if (descriptor == null) return 0
+        return runCatching {
+            (JvmDescriptor.parse(descriptor) as? JvmDescriptor.Method)?.parameters?.size ?: 0
+        }.getOrDefault(0)
+    }
+
+    /**
+     * Whether the caller's root pairs sources: the cheap `--prefer-sources`
+     * signal (root presence, no parsing). Roots are opened once into
+     * [sourceCache] and closed by the caller. Never throws: an unreadable
+     * sources root reads as absent, and the row degrades to snippet-less.
+     */
+    private fun hasSampleSources(
+        opened: List<OpenRoot>,
+        sourceCache: MutableMap<Int, dev.jdx.sources.SourceRoot?>,
+        rootIndex: Int?,
+    ): Boolean {
+        if (rootIndex == null) return false
+        return runCatching {
+            sourceCache.getOrPut(rootIndex) { openSourcesFor(opened[rootIndex]) } != null
+        }.getOrDefault(false)
+    }
+
+    /**
+     * Slices the caller's enclosing method through its own paired sources
+     * (best effort): any miss — no sources root, no file for the class,
+     * unparseable member — yields `null` and the row renders snippet-less.
+     * Never throws.
+     */
+    private fun snippetForCaller(
+        fromClass: String,
+        fromMember: String,
+        rootIndex: Int?,
+        opened: List<OpenRoot>,
+        sourceCache: MutableMap<Int, dev.jdx.sources.SourceRoot?>,
+    ): SampleSnippet? {
+        if (fromMember == "<clinit>") return null
+        if (rootIndex == null) return null
+        return runCatching {
+            val sources = sourceCache.getOrPut(rootIndex) { openSourcesFor(opened[rootIndex]) }
+                ?: return@runCatching null
+            val declaring = (
+                runCatching { typeNameFromBinaryName(fromClass) }.getOrNull() as? TypeName.ClassType
+                ) ?: return@runCatching null
+            val lookup = MemberSymbolRef(declaringType = declaring, name = fromMember)
+            when (val found = dev.jdx.sources.findJavaBodies(sources, lookup)) {
+                is dev.jdx.sources.JavaBodyResult.Found -> {
+                    val body = found.bodies.firstOrNull() ?: return@runCatching null
+                    SampleSnippet(
+                        file = body.file,
+                        startLine = body.startLine,
+                        endLine = body.endLine,
+                        lines = body.text.split("\n"),
+                        truncated = false,
+                    )
+                }
+                else -> null
+            }
+        }.getOrNull()
     }
 
     // -- signature execution (T-024) -----------------------------------------------

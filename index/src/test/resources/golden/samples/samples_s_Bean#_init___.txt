@@ -1,0 +1,2 @@
+samples of 's.Bean#<init>()'
+  example s.Factory#make()  samples-case.jar

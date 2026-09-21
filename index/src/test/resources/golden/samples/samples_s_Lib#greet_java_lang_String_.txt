@@ -1,0 +1,10 @@
+samples of 's.Lib#greet(java.lang.String)'
+  example s.App#run()  samples-case.jar
+    s/App.java:3-6
+        public void run() {
+            Lib lib = null;
+            lib.greet("hi");
+        }
+  example s.Util#help()  samples-case.jar
+  example s.Gen$Inner#run()  samples-case.jar
+  example s.AppTest#runTest()  samples-case.jar

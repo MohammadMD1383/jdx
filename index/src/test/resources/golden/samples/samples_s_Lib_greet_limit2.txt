@@ -1,0 +1,9 @@
+samples of 's.Lib#greet'
+  example s.Other#work()  samples-case.jar
+  example s.App#run()  samples-case.jar
+    s/App.java:3-6
+        public void run() {
+            Lib lib = null;
+            lib.greet("hi");
+        }
+2 of 5 samples shown (--limit 5 to see more)
