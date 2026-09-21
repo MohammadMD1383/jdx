@@ -25,6 +25,16 @@ Every entry here was **decided explicitly by the project owner** or, where marke
 only for the entries a task needs. Context efficiency is the point — don't read the whole
 log.
 
+## Topic guide
+
+| Topic | Entries |
+|---|---|
+| Product scope (language, engines, index, interfaces, naming, classpath, output) | D-001…D-008 |
+| Truth model, usages scope, v1 extras, repo | D-009…D-012, D-018 |
+| Contracts (storage, ref syntax, exit codes, ambiguity, read-only) | D-013…D-017, D-025 |
+| Process (docs gate, testing, cadence, sharding, lessons) | D-019…D-024 |
+| Command semantics (launcher → hierarchy, in task order) | D-026…D-045 |
+
 ## Index
 
 | ID | Subject | Status | Shard |
@@ -60,7 +70,7 @@ log.
 | D-029 | Workspace file shape and resolution semantics (T-015) | proposed-by-implementer | `D-026-050.md` |
 | D-030 | Project auto-discovery semantics and deviations (T-016) | proposed-by-implementer | `D-026-050.md` |
 | D-031 | Search, resolve, ls and tree semantics (T-017) | proposed-by-implementer | `D-026-050.md` |
-| D-032 | Maven coordinate resolution and fetching semantics (T-019) | proposed-by-implementer | `D-026-050.md` |
+| D-032 | Maven coordinate resolution and fetching semantics (T-019; §6 superseded by D-034) | proposed-by-implementer | `D-026-050.md` |
 | D-033 | Member `--sort` order semantics (T-062) | proposed-by-implementer | `D-026-050.md` |
 | D-034 | Configurable Maven repositories, `--repo` semantics (T-069; supersedes D-032 §6) | proposed-by-implementer | `D-026-050.md` |
 | D-035 | `jdx body` output semantics (T-022) | proposed-by-implementer | `D-026-050.md` |

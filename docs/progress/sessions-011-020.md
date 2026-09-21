@@ -539,8 +539,6 @@ available as infra alternatives.
 ---
 
 ## Session 13 — 2026-09-16 — Text and JSON renderers over one result model (T-010)
-
-## Session 13 — 2026-09-16 — Text and JSON renderers over one result model (T-010)
 **Agent:** Muse Spark (via opencode) · **Branch:** `t010-renderers` ·
 **Commits:** claim `81359c9` + one feat commit (this entry included)
 

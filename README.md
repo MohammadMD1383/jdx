@@ -1,7 +1,8 @@
 # `jdx` — an IDE for AI agents
 
-> **Status: design complete, implementation not started.**
-> Nothing below works yet. This README describes the target. See
+> **Status: M0–M3 implemented, M4 in progress.**
+> Core read path, index, workspaces, bodies, sources, docs, decompilers,
+> usages and hierarchy work. This README describes the target; see
 > [`docs/PROGRESS.md`](docs/PROGRESS.md) for the real state and
 > [`docs/TASKS.md`](docs/TASKS.md) for what's next.
 
