@@ -69,3 +69,5 @@ log.
 | D-038 | Vineflower decompilation semantics (T-026) | proposed-by-implementer | `D-026-050.md` |
 | D-039 | `javap` engine semantics (T-027) | proposed-by-implementer | `D-026-050.md` |
 | D-040 | `SOURCES_VERSION_MISMATCH` detection semantics (T-028) | proposed-by-implementer | `D-026-050.md` |
+| D-041 | `--with-doc` enrichment semantics (T-072) | proposed-by-implementer | `D-026-050.md` |
+| D-042 | Reference-edge extraction and storage semantics (T-029) | proposed-by-implementer | `D-026-050.md` |

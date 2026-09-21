@@ -42,11 +42,11 @@ be fiction.
 
 | Milestone | Goal | Status |
 |---|---|---|
-| **M0** | Skeleton: build, launcher, `doctor`, `version`, **test spine** | WIP |
-| **M1** | Read path: model, refs, `show`/`outline`/`members --inherited` | TODO |
-| **M2** | Index: SQLite, `search`, workspaces, auto-discovery | TODO |
-| **M3** | Bodies: sources, JavaParser, Vineflower, `body`/`source`/`doc` | TODO |
-| **M4** | Graph: `usages`/`hierarchy`/`callers`/`calls`/`samples` | TODO |
+| **M0** | Skeleton: build, launcher, `doctor`, `version`, **test spine** | DONE |
+| **M1** | Read path: model, refs, `show`/`outline`/`members --inherited` | DONE |
+| **M2** | Index: SQLite, `search`, workspaces, auto-discovery | DONE |
+| **M3** | Bodies: sources, JavaParser, Vineflower, `body`/`source`/`doc` | DONE |
+| **M4** | Graph: `usages`/`hierarchy`/`callers`/`calls`/`samples` | WIP (T-029 DONE) |
 | **M5** | Kotlin: `@Metadata` + PSI source parsing | TODO |
 | **M6** | Serving: daemon, MCP, HTTP, `batch` | TODO |
 | **M7** | Polish: token budgets, AppCDS, mutation gates, docs, install | TODO |
@@ -60,8 +60,10 @@ over that seam) is DONE; T-023 (`jdx source` over that seam) is DONE;
 T-024 (`jdx signature` over bytecode) is DONE; T-025 (`jdx doc` incl.
 inherited javadoc) is DONE; T-026 (Vineflower decompiler fallback) is DONE;
 T-027 (`javap` engine) is DONE; T-028 (`SOURCES_VERSION_MISMATCH`
-detection) is DONE; T-072 (`--with-doc` enrichment) is DONE.**
-T-073 (Vineflower→javap auto-fallback) is filed TODO.
+detection) is DONE; T-072 (`--with-doc` enrichment) is DONE;
+T-073 (Vineflower→javap auto-fallback) is DONE — M3 complete.**
+**M4 has started: T-029 (reference-edge extraction) is DONE.**
+T-030…T-034 remain coarse one-liners to expand when started.
 
 ---
 
@@ -1639,7 +1641,7 @@ stashed-clean; this suite costs ~5.3s standalone, inside the noise).
 reads), L-064 (no concurrent Gradle builds in one checkout).*
 
 # M4 — Graph
-### T-029 — Reference-edge extraction (bytecode → edges → store) · `WIP`
+### T-029 — Reference-edge extraction (bytecode → edges → store) · `DONE` (session 50)
 **Depends:** T-013/T-014 (store + indexer), T-008 (ASM reader) · **Files:** `core/.../model/Reference.kt`, `index/.../refs/ReferenceExtractor.kt`, `index/.../store/IndexStore.kt`, `index/.../store/sqlite/SqliteIndexStore.kt`, `index/.../index/ArtifactIndexer.kt`
 
 *(First M4 slice: extract reference edges from bytecode and persist them. No CLI surface — `usages`/`hierarchy`/`callers`/`calls`/`samples` (T-030…T-034) query this data. The v1 `ref` table already exists in the schema (T-013) with no writers; this task fills it without a migration.)*
@@ -1647,12 +1649,39 @@ reads), L-064 (no concurrent Gradle builds in one checkout).*
 Extract per-method reference edges with a lightweight ASM visitor (PROPOSAL.md §10.4 step 3: `visitMethodInsn`, `visitFieldInsn`, `visitTypeInsn`, `visitLdcInsn`; `visitInvokeDynamicInsn` bootstrap/handle targets) into a pure `core` model, stored per artifact and queryable by target.
 
 **Acceptance**
-- [ ] `core`: `ReferenceKind` (closed enum: `METHOD_CALL`, `FIELD_READ`, `FIELD_WRITE`, `TYPE_REFERENCE`) + `ReferenceEdge` (from class binary + from member name/descriptor, to owner binary + optional member name/descriptor, kind) — pure, sorted, deterministic; test-first
-- [ ] `index`: `ReferenceExtractor.extract(classBytes)` returns sorted edges, never throws on agent-reachable input (truncated/corrupt bytes → empty + no throw); field vs method vs type kinds correct; `invokedynamic` bootstrap + handle method targets recorded as `METHOD_CALL`
-- [ ] `IndexStore`: `replaceReferences(artifactId, edges)` + `findReferencesTo(toFqn, toMember?, descriptor?)` + `countReferences(artifactId)`; scoped deletes already drop `ref` rows; per-artifact replacement is transactional
-- [ ] `ArtifactIndexer`: `indexRoot` extracts edges for every readable class and stores them (bad entries warn, never abort); short-circuit `SKIPPED` leaves stored edges untouched; `classCount` behaviour unchanged
-- [ ] Tests: core tier-1 examples + 1,000-case properties (determinism/sorted, never-throws); index tier-1 extractor examples + properties (never-throws, slice law); index tier-2 store round-trip + indexer integration over fixture jars + truncated-class fault + determinism; tiers 1+2 green
-- [ ] `TASKS.md` status, `PROGRESS.md` entry
+- [x] `core`: `ReferenceKind` (closed enum: `METHOD_CALL`, `FIELD_READ`, `FIELD_WRITE`, `TYPE_REFERENCE`) + `ReferenceEdge` (from class binary + from member name/descriptor, to owner binary + optional member name/descriptor, kind) — pure, sorted, deterministic; test-first
+- [x] `index`: `ReferenceExtractor.extract(classBytes)` returns sorted edges, never throws on agent-reachable input (truncated/corrupt bytes → empty + no throw); field vs method vs type kinds correct; `invokedynamic` bootstrap + handle method targets recorded as `METHOD_CALL`
+- [x] `IndexStore`: `replaceReferences(artifactId, edges)` + `findReferencesTo(toFqn, toMember?, descriptor?)` + `countReferences(artifactId)`; scoped deletes already drop `ref` rows; per-artifact replacement is transactional
+- [x] `ArtifactIndexer`: `indexRoot` extracts edges for every readable class and stores them (bad entries warn, never abort); short-circuit `SKIPPED` leaves stored edges untouched; `classCount` behaviour unchanged
+- [x] Tests: core tier-1 examples + 1,000-case properties (determinism/sorted, never-throws); index tier-1 extractor examples + properties (never-throws, slice law); index tier-2 store round-trip + indexer integration over fixture jars + truncated-class fault + determinism; tiers 1+2 green
+- [x] `TASKS.md` status, `PROGRESS.md` entry
+
+*Implementation notes (session 50): `core/.../model/Reference.kt` —
+`ReferenceKind` + `ReferenceEdge` (string binary names, no `TypeName`
+validation, so JFR-style `$$` names store fine) + `sortedEdges()`
+(canonical order, test-first). `index/.../refs/ReferenceExtractor.kt` —
+tree-API pass over method bodies (calls/field read-write/type/lambda
+bootstrap+handles; `MethodType` constants excluded, `new String[4]`
+collapses to the element type; per-edge try/catch, dedupe, sorted).
+`IndexStore` gains `replaceReferences`/`findReferencesTo`/`countReferences`
++ `ReferenceHit`; SQLite encodes `to_member` as `name<SEP>descriptor`
+(no migration — D-042 §5), resolves from-ids via one member map, batches
+inserts per 5,000 rows (no generated ids, so T-064's warning does not
+apply), member-only queries are overload-blind by design. `ArtifactIndexer`
+extracts on the same bytes and stores classes-then-edges (replace clears
+first), releasing both lists after (JDK-scale OOM hygiene). `FakeIndexStore`
+mirrors the new methods incl. the replace-clears-edges rule. Scale cost,
+measured: 27,777 JDK classes → 1,127,225 edges, end-to-end 1,350/s (was
+~4,575/s); single-parse recovery belongs to T-050 (D-042 §7). The same
+scale broke the 512 MB soak worker — `soakTest` now runs at 2 g with
+batched writes (L-081). Tests: core `ReferenceTest` (6) +
+`ReferencePropertyTest` (3 thousand-case) + index tier-1
+`ReferenceExtractorTest` (10 incl. the hostile-bytes property) + tier-2
+`ReferenceStoreTest` (10) + `ReferenceIndexerTest` (5, incl. two-store
+determinism + truncated-entry fault). Standing bar: `test`+`tier2Test`
+1,416 tests 0 failures; `soak` green (3m 22s); `verifyTier1Budget` red
+pre-existing (machine variance, slowest suites unrelated). Lesson L-082
+(`bsmArgs` is `Object[]`); decision D-042.*
 
 ### T-030 `jdx usages` · **T-031** project source-dir usages · **T-032** `jdx hierarchy` / `implementors` · **T-033** `jdx callers` / `calls --depth` · **T-034** `jdx samples` with exemplariness ranking
 

@@ -4,6 +4,94 @@ Newest first. Each entry follows the template at the bottom of `docs/PROGRESS.md
 
 ---
 
+## Session 50 — 2026-09-21 — T-029 reference-edge extraction done (M4 opens)
+**Agent/Author:** Muse Spark 1.3 Free · **Commits:** `476cd70` (claim) + feat + close (this session)
+
+### Goal
+Implement 1 task: the lowest-numbered unblocked TODO, M4 T-029
+(reference-edge extraction — the foundation `usages`/`callers`/`calls`/
+`samples` query). Expand the coarse M4 one-liner into a detail block per
+the board rules, then build it.
+
+### What I did
+- Claimed T-029 first (`docs/TASKS.md` coarse line → detail block + `WIP`,
+  committed `476cd70` before coding).
+- `core` — new `model/Reference.kt`: `ReferenceKind` (4 kinds, closed) +
+  `ReferenceEdge` (string binary names, no `TypeName` validation) +
+  `sortedEdges()` canonical order. Test-first: `ReferenceTest` (6 examples)
+  + `ReferencePropertyTest` (3 thousand-case: sorted, fixed-point,
+  compare-equals consistency). Two test-expectation bugs of mine (kind-major
+  order, null-member test setup) failed honestly before the fix — the tests
+  were asserting, not rubber-stamping.
+- `index/.../refs/ReferenceExtractor.kt` — tree-API pass over method
+  bodies: `METHOD_CALL` (incl. `invokedynamic` bootstrap + handle args, so
+  lambdas link to their `lambda$…` impls), `FIELD_READ`/`FIELD_WRITE`,
+  `TYPE_REFERENCE` (`new`/`checkcast`/`instanceof`/`ldc` class constants,
+  arrays collapse to elements, `MethodType` constants excluded). Never
+  throws (truncated/corrupt → fewer/zero edges), deduped, sorted.
+  `ReferenceExtractorTest` (10 tier-1: examples + 10 %-step truncation sweep
+  + thousand-case hostile-bytes property).
+- `IndexStore` — `replaceReferences` + `findReferencesTo(toFqn,
+  toMember?, descriptor?)` + `countReferences` + `ReferenceHit`.
+  `SqliteIndexStore`: `to_member` encodes `name<SEP>descriptor` (no schema
+  migration — D-042 §5), one-query from-id map, `addBatch` inserts flushed
+  per 5,000 (safe: no generated ids, so T-064's warning does not apply).
+  `FakeIndexStore` mirrors all three methods incl. replace-clears-edges.
+  `ReferenceStoreTest` (10 tier-2) + `ReferenceIndexerTest` (5 tier-2:
+  crafted 2-class jar, two-store determinism, SKIPPED-leaves-edges,
+  truncated-entry fault, empty jar).
+- `ArtifactIndexer.indexRoot` extracts on the same bytes and stores
+  classes-then-edges (replace clears first), releasing both lists after.
+- Scale fallout, found by the soak suite doing its job: the full-JDK run
+  OOMed the default 512 MB soak worker (1.13 M edges) — fixed with list
+  release + batched writes + `soakTest maxHeapSize = "2g"` (root build).
+  Measured: 27,777 JDK classes → 1,127,225 edges (~40/class), end-to-end
+  1,350/s (was ~4,575/s); single-parse recovery noted for T-050 (D-042 §7).
+- Docs: D-042 (edge semantics), L-081 (soak-heap OOM), L-082 (`bsmArgs` is
+  `Object[]`), D-041 index row repaired (session 48 added the entry but no
+  index row), `TASKS.md` milestone table + summary synced to reality
+  (M0–M3 DONE, M4 WIP).
+
+### Decisions made
+- D-042 — Reference-edge extraction and storage semantics (T-029).
+
+### Tasks moved
+- T-029: TODO → WIP (`476cd70`) → DONE.
+
+### Lessons distilled
+- L-081 — a second full-corpus pass OOMs the default Gradle test heap.
+- L-082 — ASM tree `InvokeDynamicInsnNode.bsmArgs` is an array, not a list.
+
+### What works now (and how to verify it yourself)
+```bash
+./gradlew :core:test --tests "dev.jdx.core.model.Reference*"
+./gradlew :index:test --tests "dev.jdx.index.refs.ReferenceExtractorTest"
+./gradlew :index:tier2Test --tests "dev.jdx.index.store.ReferenceStoreTest" --tests "dev.jdx.index.index.ReferenceIndexerTest"
+./gradlew :index:soakTest --tests "dev.jdx.index.index.ArtifactIndexerSoakTest"  # prints edge count
+python3 -c "import xml.etree.ElementTree as ET,glob
+tests=fails=0
+for f in glob.glob('*/build/test-results/test/*.xml')+glob.glob('*/build/test-results/tier2Test/*.xml'):
+ t=ET.parse(f).getroot(); tests+=int(t.attrib['tests']); fails+=int(t.attrib['failures'])+int(t.attrib['errors'])
+print(tests,fails)"  # 1416 0
+```
+
+### What is broken / half-done
+- Nothing from this task. Pre-existing: `verifyTier1Budget` red (machine
+  variance — slowest suites are `JavaBodiesTest`/`DoctorEnvironmentTest`,
+  none from T-029; new suites cost ~3 s).
+- Known follow-up (not a defect): edge extraction re-parses each class
+  (members + edges = two ASM passes); single-parse recovery belongs to the
+  T-050 bench context (D-042 §7).
+
+### Open questions / blockers
+- None.
+
+### Next action
+- **M4 T-030** (`jdx usages` — expand into a detail block when started;
+  reads the T-029 `findReferencesTo` seam; T-031…T-034 stay coarse).
+
+---
+
 ## Session 49 — 2026-09-21 — T-073 Vineflower→javap auto-fallback done (parallel-worktree orchestration)
 **Agent/Author:** Muse Spark 1.3 Free (orchestrator + 1 subagent) · **Commits:** `573933a` (claim) + `15e0a7d` (feat) + `d1052aa` (close) + integrator PROGRESS commit
 
