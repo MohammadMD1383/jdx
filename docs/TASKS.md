@@ -1683,7 +1683,44 @@ determinism + truncated-entry fault). Standing bar: `test`+`tier2Test`
 pre-existing (machine variance, slowest suites unrelated). Lesson L-082
 (`bsmArgs` is `Object[]`); decision D-042.*
 
-### T-030 `jdx usages` · **T-031** project source-dir usages · **T-032** `jdx hierarchy` / `implementors` · **T-033** `jdx callers` / `calls --depth` · **T-034** `jdx samples` with exemplariness ranking
+### T-030 — `jdx usages` (live bytecode usages) · `WIP`
+**Depends:** T-029 (ReferenceEdge/ReferenceExtractor model), T-011 (read-command patterns), T-015/T-016 (roots) · **Files:** `core/.../render/Usages.kt`, `index/.../service/JdxService.kt` (`usages`), `cli/.../commands/UsagesCommand.kt`
+
+*(First M4 CLI slice: find-usages over live bytecode roots via the T-029
+`ReferenceExtractor` (no persistent-index read yet — the `findReferencesTo`
+seam stays the store-side contract; the indexed acceleration lands with the
+daemon/`jdx index` work. Mirrors D-031's "live roots first" precedent).
+Project source-dir usages stay in T-031; hierarchy/implementors in T-032;
+callers/calls in T-033; samples in T-034.)*
+
+Wire live reference scanning to the CLI: `JdxService.usages(rawRef,
+roots, opts)` resolves the target type/member with the T-011 machinery
+(exact/short-name matching, `g:a:v` scope, `DUPLICATE_FQN`), then scans
+every class in every open root with `ReferenceExtractor` and renders the
+matching call sites grouped by artifact.
+
+**Acceptance**
+- [ ] `jdx usages '<symbol>'` exits 0 with one row per referencing method
+      (`<from-binary>#<member>(params)` + artifact + kind word), grouped by
+      artifact; type refs match all edges to the type, member refs match by
+      name (overload-blind) narrowed by descriptor when the ref carries one
+- [ ] `--kind call|read|write|ref|all` filters (default `all`); `impl`,
+      `override`, `new`, `throw`, `annotation` exit 3 naming the owning task
+      (T-032/T-034)
+- [ ] `--in <artifact-glob>` / `--exclude <glob>` filter by artifact label;
+      `--limit N` truncates with `shown`/`total`/`hint`; unknown type/member
+      exits 1 with did-you-mean; ambiguous short names exit 2; invalid refs
+      exit 3; no roots exit 4
+- [ ] Text+JSON parity (D-007), deterministic bytes (artifact, from-class,
+      from-member, kind, target order)
+- [ ] Tests: core tier-1 examples + 1,000-case properties (determinism,
+      text⊆JSON, truncation law); index tier-2 service tests over fixture +
+      crafted jars (type/member/kind/in/exclude/limit/determinism); cli
+      tier-1 flag validation + tier-2 in-process tests; tiers 1+2 green
+- [ ] `--help` text, Appendix B usages flags verified, `TASKS.md` status,
+      `PROGRESS.md` entry
+
+### T-031 project source-dir usages · **T-032** `jdx hierarchy` / `implementors` · **T-033** `jdx callers` / `calls --depth` · **T-034** `jdx samples` with exemplariness ranking
 
 # M5 — Kotlin
 ### T-035 `@Metadata` decoding · **T-036** Kotlin member mapping (properties, default args, suspend) · **T-037** `--view jvm` · **T-038** side-loaded Kotlin PSI module (D-008 mitigations 1–5 are acceptance criteria) · **T-039** Kotlin source body extraction
