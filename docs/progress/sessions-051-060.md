@@ -5,6 +5,93 @@ Append-only (D-023): 10 sessions per shard, newest first. Template and rules in
 
 ---
 
+## Session 56 — 2026-09-21 — `@Metadata` decoding (T-035)
+**Agent/Author:** Muse Spark 1.3 (opencode) · **Commits:** `076e6cb` (claim) + implementation (this session)
+
+### Goal
+Implement T-035, the lowest-numbered unblocked TODO: `@Metadata` decoding —
+the first M5 slice (no member mapping, no `--view jvm`, no PSI, no Kotlin
+bodies, no `ktmeta` blob — those stay on T-036…T-039).
+
+### What I did
+- Claimed T-035 (`TODO`→`WIP` + expanded the one-liner into a detail block)
+  and committed the claim before coding.
+- `core`: `ClassInfo.isKotlin: Boolean = false` (default keeps all existing
+  constructors compiling) + `ClassCard` text `kotlin` line (mirroring
+  `deprecated`) and `"kotlin":true` in JSON only when true (zero churn on
+  Java goldens). Tests first: 2 new `ClassCardTest` cases (RED was the missing
+  field, GREEN after).
+- `index/.../kotlin/KotlinMetadata.kt` (new pure decoder): ASM
+  visible+invisible annotations → `kotlin.Metadata` entry → the supported
+  `kotlin.metadata.jvm.Metadata(...)` builder → `readLenient` →
+  `KotlinMetadata` (metadata kind + `KmClass.kind` when CLASS). Never throws:
+  absent → `null`, corrupt → `null`. Tests first: tier-1 `KotlinMetadataTest`
+  (4) + `KotlinMetadataPropertyTest` (2 thousand-case: never-throws,
+  determinism — the generating family).
+- `AsmClassReader.mapClass`: one decode per class feeding both `isKotlin`
+  (file facades count) and kind refinement (`OBJECT`/`COMPANION_OBJECT` only;
+  every other Kotlin kind keeps its JVM kind).
+- `SqliteIndexStore`: `is_kotlin` bound from `ClassInfo` (was hardcoded `0`)
+  + read back; KDoc updated. No migration (columns exist at schema v1).
+- Tier-2 `KotlinClassesTest` (7, over the fixture jar, bytes never loaded):
+  class/object/companion/file-facade/data-object positives, Java negative,
+  store round-trip of flag + refined kinds.
+- Goldens updated via `-Pgolden.update=true` **after reading the diff**: 9
+  `show` pairs gain the `kotlin` marker (`"kotlin":true`), `Companion` →
+  `companion`, `Registry`/`Sealed$Empty` → `object`; `ls-types` kind words
+  match. No Java golden touched.
+- `check -x verifyTier1Budget` green (tiers 1+2 + JaCoCo gates). `soak`: 3/4
+  green; `JavapCorpusSoakTest` red on JDK-internal synthetic `access$000` /
+  `access$100` in `JrtDirectoryStream` — proven pre-existing by rerunning on
+  the stashed-clean tree (same drift family as sessions 53/55).
+- Live proof: fixture `KotlinMembers` (kotlin class), `KotlinRegistry`
+  (object), `$Companion` (companion), `TrafficLight` (Java, no marker) — text
+  + JSON.
+- Docs: D-048, L-087, T-035 DONE, CURRENT STATE (M5 open, next: T-036).
+
+### Decisions made
+D-048 (`@Metadata` decoding and Kotlin marking semantics: one decode per
+class, file facades count as Kotlin, only OBJECT/COMPANION refine kinds,
+flag persisted without the blob, T-036…T-039 split).
+
+### Tasks moved
+T-035: TODO → WIP → DONE.
+
+### Lessons distilled
+L-087 (`KotlinClassHeader` is deprecated to an error; use the
+`kotlin.metadata.jvm.Metadata(...)` builder).
+
+### What works now (and how to verify it yourself)
+```bash
+./gradlew :app:installDist -x verifyTier1Budget
+J=testfixtures/build/libs/testfixtures-0.1.0-SNAPSHOT.jar
+app/build/jdx show 'dev.jdx.fixtures.KotlinMembers' --jars $J --no-jdk         # class + kotlin
+app/build/jdx show 'dev.jdx.fixtures.KotlinRegistry' --jars $J --no-jdk       # object + kotlin
+app/build/jdx show 'dev.jdx.fixtures.KotlinMembers$Companion' --jars $J --no-jdk  # companion + kotlin
+app/build/jdx show 'dev.jdx.fixtures.TrafficLight' --jars $J --no-jdk         # enum, no kotlin line
+./gradlew check -x verifyTier1Budget   # tiers 1+2 + JaCoCo gates, green
+```
+
+### What is broken / half-done
+- `verifyTier1Budget` stays red on this machine (pre-existing variance, 0 test
+  failures). Nothing from this task.
+- `JavapCorpusSoakTest` reds on JDK-internal synthetic members (proven
+  stashed-clean corpus drift). Nothing from this task.
+- No Kotlin member mapping yet: `members` on Kotlin classes still shows the
+  JVM projection (`getX`, `$default` stubs, `Continuation` params) — T-036.
+  No `--view jvm` flag (T-037); the JVM view is currently the only view.
+- `ktmeta` blob still unwritten; `is_kotlin` is the only persisted signal.
+
+### Open questions / blockers
+None.
+
+### Next action
+M5 T-036 (Kotlin member mapping: properties, default args, suspend — expand
+into a detail block when started; T-074/T-075 explicitly defer to M5 per the
+lowest-numbered-TODO rule).
+
+---
+
 ## Session 55 — 2026-09-21 — `jdx samples` with exemplariness ranking (T-034)
 **Agent/Author:** Muse Spark 1.3 (opencode) · **Commits:** `8f7c7dd` (claim) + implementation (this session)
 

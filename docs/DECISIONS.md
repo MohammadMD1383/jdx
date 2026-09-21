@@ -33,7 +33,7 @@ log.
 | Truth model, usages scope, v1 extras, repo | D-009…D-012, D-018 |
 | Contracts (storage, ref syntax, exit codes, ambiguity, read-only) | D-013…D-017, D-025 |
 | Process (docs gate, testing, cadence, sharding, lessons) | D-019…D-024 |
-| Command semantics (launcher → hierarchy, in task order) | D-026…D-047 |
+| Command semantics (launcher → hierarchy, in task order) | D-026…D-048 |
 
 ## Index
 
@@ -86,3 +86,4 @@ log.
 | D-045 | `jdx hierarchy` output semantics (T-032) | proposed-by-implementer | `D-026-050.md` |
 | D-046 | `jdx callers` / `jdx calls` output semantics (T-033) | proposed-by-implementer | `D-026-050.md` |
 | D-047 | `jdx samples` output semantics (T-034) | proposed-by-implementer | `D-026-050.md` |
+| D-048 | `@Metadata` decoding and Kotlin marking semantics (T-035) | proposed-by-implementer | `D-026-050.md` |

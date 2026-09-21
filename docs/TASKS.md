@@ -51,8 +51,8 @@ be fiction.
 | **M6** | Serving: daemon, MCP, HTTP, `batch` | TODO |
 | **M7** | Polish: token budgets, AppCDS, mutation gates, docs, install | TODO (T-060 done early) |
 
-**DONE: T-001…T-034** (M0–M2 in full; M3 via the T-020 umbrella's slices —
-T-071 + T-021…T-028 + T-072/T-073; M4 via T-029…T-034) **plus T-053…T-073.**
+**DONE: T-001…T-035** (M0–M2 in full; M3 via the T-020 umbrella's slices —
+T-071 + T-021…T-028 + T-072/T-073; M4 via T-029…T-034; M5 opened with T-035) **plus T-053…T-073.**
 DONE entries below are
 compressed to a summary + pointers; full notes live in git history and the
 session log. **TODO: T-075** (`usages` graph enrichment), **T-074** (T-020 `srcmap`
@@ -696,7 +696,7 @@ Teach `usages` the three deferred edge kinds over the T-029 vocabulary
 task per the lowest-numbered-TODO rule.
 
 # M5 — Kotlin
-### T-035 — `@Metadata` decoding (live-roots + `show` + stored `is_kotlin`) · `WIP` (session 56)
+### T-035 — `@Metadata` decoding (live-roots + `show` + stored `is_kotlin`) · `DONE` (session 56)
 
 **Depends:** T-008 (ASM reader), T-013 (store schema already has `is_kotlin` + `ktmeta`) ·
 **Files:** `core/.../model/ClassInfo.kt` (`isKotlin`), `core/.../render/ClassCard.kt`,
@@ -730,6 +730,9 @@ mapping (T-036), no `--view jvm` (T-037), no PSI (T-038), no Kotlin bodies
   updated after reading the diff.
 - Live proof: `show` on `KotlinMembers` (kotlin class), `KotlinRegistry`
   (object), `$Companion` (companion), a Java class (no kotlin marker).
+
+*Closed in session 56. Decisions: D-048. Lessons: L-087. Full notes in git history +
+session log.*
 
 ### T-036 Kotlin member mapping (properties, default args, suspend) · TODO
 

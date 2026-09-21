@@ -59,6 +59,7 @@ session-log references keep resolving. Numbers are never reused.)
 | Seams: inject, default to the seam, split in the seam | L-052, L-053, L-062, L-069, L-074, L-076 |
 | Never zip sorted views against their source | L-071 |
 | Symbol reference grammar (package globs) | L-086 |
+| Kotlin `@Metadata` reading (`Metadata(...)` helper, not `KotlinClassHeader`) | L-087 |
 
 ## Adding an entry
 

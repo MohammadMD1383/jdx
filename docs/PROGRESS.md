@@ -14,14 +14,14 @@ or delete a past entry — if one turned out to be wrong, say so in a *new* entr
 
 | | |
 |---|---|
-| **Last updated** | 2026-09-21 (session 55) |
+| **Last updated** | 2026-09-21 (session 56) |
 | **Repository** | <https://github.com/MohammadMD1383/jdx> (public, Apache-2.0) |
-| **Phase** | Design complete; **M0–M4 DONE** (T-029…T-034), **M5 TODO** (next: T-035), M6–M7 TODO |
-| **Next task** | **M5 T-035** (`@Metadata` decoding — expand into a detail block when started; first Kotlin slice) |
-| **Task count** | 75 tasks (T-001…T-075): all DONE except T-074 (`srcmap` remainder), T-075 (`usages` graph enrichment), and the coarse M5–M7 one-liners (T-060 done early) |
+| **Phase** | Design complete; **M0–M4 DONE**, **M5 open** (T-035 DONE, next: T-036), M6–M7 TODO |
+| **Next task** | **M5 T-036** (Kotlin member mapping — expand into a detail block when started) |
+| **Task count** | 75 tasks (T-001…T-075): all DONE except T-074 (`srcmap` remainder), T-075 (`usages` graph enrichment), and the coarse M5–M7 one-liners (T-060 done early, T-035 done) |
 | **Build status** | **Green.** `./gradlew build` passes. Runnable `jdx`: `./gradlew :app:installDist` → `app/build/jdx`. Live commands: `version`, `doctor`, `show`, `members`, `outline`, `search`, `resolve`, `ls`, `tree`, `ws`, `cache`, `body`, `source`, `signature`, `doc`, `usages` (+`--src`), `hierarchy`/`implementors`, `callers`/`calls --depth`, `samples --prefer-sources` — text+JSON, `--coord`/`--fetch`/`--repo`, JDK via `jrt:/` + `src.zip`, workspaces + auto-discovery. |
 | **Test status** | **Tiers 1–3 green** (`check`, `soak`); mutation tier 4 green (`core` 91 % vs the 80 gate). **Caveat:** `verifyTier1Budget` is red on this machine (pre-existing machine variance, 0 test failures — not a test failure). |
-| **Docs** | Sharded append-only logs (D-023): sessions → `docs/progress/` (`sessions-051-060.md` open at 55), decisions → `docs/decisions/` (shard 2 at D-047), lessons → `docs/lessons/` (`L-076-100.md` open at L-086). New decisions/lessons go to the newest shard, never into session entries. |
+| **Docs** | Sharded append-only logs (D-023): sessions → `docs/progress/` (`sessions-051-060.md` open at 56), decisions → `docs/decisions/` (shard 2 at D-048), lessons → `docs/lessons/` (`L-076-100.md` open at L-087). New decisions/lessons go to the newest shard, never into session entries. |
 | **Blocked on** | Nothing. Unpushed sessions need owner go-ahead per session (D-012). |
 
 **What exists:** see `docs/TASKS.md` status summary + the session log — this file no
