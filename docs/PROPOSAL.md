@@ -1127,8 +1127,10 @@ hierarchy --up --down --direct --depth N --in --exclude --limit
           [-w …] [--jars …] [--no-jdk] [--json] [--no-color]
 implementors [--direct --depth N --in --exclude --limit]
           [-w …] [--jars …] [--no-jdk] [--json] [--no-color]
-callers   --depth N --in --limit
-calls     --depth N --external-only --limit
+callers   --depth N --in --exclude --limit
+          [-w …] [--jars …] [--no-jdk] [--json] [--no-color]
+calls     --depth N --in --exclude --external-only --limit
+          [-w …] [--jars …] [--no-jdk] [--json] [--no-color]
 samples   --limit N --prefer-sources
 ws        create|list|info|remove|add|use   --auto --jars --src --coord --repo --jdk
 index     --force -w

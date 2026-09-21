@@ -33,7 +33,7 @@ log.
 | Truth model, usages scope, v1 extras, repo | D-009…D-012, D-018 |
 | Contracts (storage, ref syntax, exit codes, ambiguity, read-only) | D-013…D-017, D-025 |
 | Process (docs gate, testing, cadence, sharding, lessons) | D-019…D-024 |
-| Command semantics (launcher → hierarchy, in task order) | D-026…D-045 |
+| Command semantics (launcher → hierarchy, in task order) | D-026…D-046 |
 
 ## Index
 
@@ -84,3 +84,4 @@ log.
 | D-043 | `jdx usages` output semantics (T-030) | proposed-by-implementer | `D-026-050.md` |
 | D-044 | source-dir usages are textual `ref` mentions (T-031) | proposed-by-implementer | `D-026-050.md` |
 | D-045 | `jdx hierarchy` output semantics (T-032) | proposed-by-implementer | `D-026-050.md` |
+| D-046 | `jdx callers` / `jdx calls` output semantics (T-033) | proposed-by-implementer | `D-026-050.md` |

@@ -5,6 +5,104 @@ Append-only (D-023): 10 sessions per shard, newest first. Template and rules in
 
 ---
 
+## Session 54 — 2026-09-21 — `jdx callers` / `jdx calls --depth` (T-033)
+**Agent/Author:** Muse Spark 1.3 (opencode) · **Commits:** `4a1ad55` (claim) + `2586a93` (core) + `a972bcf` (index) + `13a2cf6` (cli) + docs (this session)
+
+### Goal
+Implement T-033, the lowest-numbered unblocked TODO: `jdx callers` /
+`jdx calls --depth` — the third M4 CLI slice over live bytecode roots (no
+persistent-index read yet, mirroring D-043's live-roots-first precedent).
+
+### What I did
+- Claimed T-033 (`TODO`→`WIP` + expanded the one-liner into a detail block)
+  and committed the claim before coding.
+- `core/.../render/Calls.kt` (test-first): `CallDirection`
+  (callers|calls), `CallNode` (ref, nullable artifact, cycle flag,
+  children), `CallRow` (flattened pre-order with depth), `CallListing`
+  (direction header, depth-indented kind-led lines, `…(cycle)` markers,
+  shared truncation footer), `buildCallListing` (cycle rows flatten as
+  leaves; truncation is always a connected pre-order prefix).
+- `index`: `JdxService.callers` / `calls` + `CallOptions`
+  (`depth` default 1 / `inArtifact` / `exclude` / `limit` / `externalOnly`) +
+  `executeCallGraph` (T-011 resolution incl. `g:a:v` scope + `DUPLICATE_FQN`,
+  one full `METHOD_CALL` scan walked in memory to `--depth`, exact
+  name+descriptor matching, overload-blind root unless parameterised,
+  field refs exit 3 naming `usages`, `callers` of `<clinit>` exits 3 while
+  `calls` from it is allowed, zero nodes exit 1, `CORRUPT_CLASS`
+  warn-and-skip) + `ServiceOutcome.CallGraph` (+ the two `CorpusSoakTest`
+  branches).
+- `cli`: thin `CallersCommand` + `CallsCommand` (`--depth/--in/--exclude/
+  --limit`, `calls` adds `--external-only`), registered in `JdxCli`, +
+  `CallGraphQuery` seam.
+- Tests: core `CallsTest` (8) + `CallsPropertyTest` (3 thousand-case:
+  determinism, truncation + pre-order-prefix law, text⊆JSON); index
+  `CallCaseJars` (ASM `c.*` chain + diamond + two-cycle + self-recursion +
+  overloads + ctor + field, `d.Lib` ambiguity namesake) +
+  `CallersServiceTest` (15) + `CallsServiceTest` (13) incl. the TESTING.md §6
+  `callers⟺calls` depth-1 duality over every case method + `CallGraphGoldenTest`
+  (9 query pairs, read before accepting); cli `CallCommandsTest` (5 tier-1) +
+  `CallCommandsServiceTest` (7 tier-2 incl. D-017). `check
+  -x verifyTier1Budget` green incl. JaCoCo gates.
+- Three test-expectation misses on first run, all implementation-correct:
+  (1) the detail names the *bare* target (`c.Factory#make`, the usages
+  convention) while the header carries the raw query; (2) `c.Bean#<init>`
+  calls `c.Util#help`, so depth-2 caller trees are wider than the naive
+  sketch; (3) the cycle marker lands exactly at the re-entry (depth-3 loop
+  query yields b/a/b-cycle, not b/a-cycle). The duality failure was the
+  L-085 printer-spacing trap (`, ` vs `,`).
+- Live proof: fixture self-call (`copy()` callers plain at depth 1, `…(cycle)`
+  for `calls` depth 1 — the designed asymmetry: the queried method is the
+  tree root for `calls`, the target for `callers`), type/field exit-3 paths,
+  `--help`, and a JDK-scale probe (with the ambient `fx` workspace shelved,
+  since it sets `include_jdk = false` — a pre-existing environmental fact:
+  baseline `show java.util.HashMap` fails identically there): 231 callers of
+  `HashMap#put` with truncation footer and `<clinit>` from-rows (static map
+  init — real-world validation of keeping `<clinit>` callers).
+- Docs: D-046, L-085, T-033 DONE, Appendix B `--exclude` + roots lines,
+  CURRENT STATE (next: T-034).
+
+### Decisions made
+D-046 (`jdx callers`/`calls` output semantics: member-only with usages
+redirect, blind-root/exact-tree matching, no virtual dispatch in v1, tree
+with diamonds + `…(cycle)`, pre-order truncation, null-artifact rows,
+`--external-only` as same-artifact prune, exit-1-on-empty).
+
+### Tasks moved
+T-033: TODO → WIP → DONE.
+
+### Lessons distilled
+L-085 (printer `", "` vs query `","`: normalise both sides for identity
+comparison across the parse/render boundary).
+
+### What works now (and how to verify it yourself)
+```bash
+./gradlew :app:installDist -x verifyTier1Budget
+J=testfixtures/build/libs/testfixtures-0.1.0-SNAPSHOT.jar
+app/build/jdx callers 'dev.jdx.fixtures.CovariantOverrides$Child#copy()' --jars $J --no-jdk
+app/build/jdx calls 'dev.jdx.fixtures.CovariantOverrides$Child#copy()' --jars $J --no-jdk --depth 2
+app/build/jdx callers 'dev.jdx.fixtures.Generics' --jars $J --no-jdk; echo "exit=$?"  # exit 3, takes a member
+app/build/jdx calls 'dev.jdx.fixtures.TrafficLight#RED' --jars $J --no-jdk; echo "exit=$?"  # exit 3, use usages
+./gradlew check -x verifyTier1Budget   # tiers 1+2 + JaCoCo gates, green
+```
+
+### What is broken / half-done
+- `verifyTier1Budget` stays red on this machine (pre-existing variance, 0 test
+  failures). Nothing from this task.
+- Indexed acceleration still deferred by design (D-043 §1/D-046): `callers` /
+  `calls` scan live roots; JDK-scale queries parse every class (seconds on
+  first touch — the 231-row `HashMap#put` probe above).
+- No virtual-dispatch resolution: exact name+descriptor matches only
+  (D-046 §2). Override-aware call hierarchy is future work.
+
+### Open questions / blockers
+None.
+
+### Next action
+M4 T-034 (`jdx samples` with exemplariness ranking — expand into a detail
+block when started; the last M4 task).
+
+---
+
 ## Session 53 — 2026-09-21 — `jdx hierarchy` / `implementors` (T-032)
 **Agent/Author:** Muse Spark 1.3 (opencode) · **Commits:** `2eda8b0` (claim) + implementation (this session)
 

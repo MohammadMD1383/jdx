@@ -14,14 +14,14 @@ or delete a past entry — if one turned out to be wrong, say so in a *new* entr
 
 | | |
 |---|---|
-| **Last updated** | 2026-09-21 (session 53) |
+| **Last updated** | 2026-09-21 (session 54) |
 | **Repository** | <https://github.com/MohammadMD1383/jdx> (public, Apache-2.0) |
-| **Phase** | Design complete; **M0–M3 DONE, M4 WIP** (T-029…T-032 DONE; T-033/T-034 TODO), M5–M7 TODO |
-| **Next task** | **M4 T-033** (`jdx callers` / `calls --depth` — expand into a detail block when started; T-034 coarse) |
-| **Task count** | 74 tasks (T-001…T-074): all DONE except T-033/T-034, T-074 (`srcmap` remainder), and the coarse M5–M7 one-liners (T-060 done early) |
-| **Build status** | **Green.** `./gradlew build` passes. Runnable `jdx`: `./gradlew :app:installDist` → `app/build/jdx`. Live commands: `version`, `doctor`, `show`, `members`, `outline`, `search`, `resolve`, `ls`, `tree`, `ws`, `cache`, `body`, `source`, `signature`, `doc`, `usages` (+`--src`), `hierarchy`/`implementors` — text+JSON, `--coord`/`--fetch`/`--repo`, JDK via `jrt:/` + `src.zip`, workspaces + auto-discovery. |
+| **Phase** | Design complete; **M0–M3 DONE, M4 WIP** (T-029…T-033 DONE; T-034 TODO), M5–M7 TODO |
+| **Next task** | **M4 T-034** (`jdx samples` with exemplariness ranking — expand into a detail block when started; last M4 task) |
+| **Task count** | 74 tasks (T-001…T-074): all DONE except T-034, T-074 (`srcmap` remainder), and the coarse M5–M7 one-liners (T-060 done early) |
+| **Build status** | **Green.** `./gradlew build` passes. Runnable `jdx`: `./gradlew :app:installDist` → `app/build/jdx`. Live commands: `version`, `doctor`, `show`, `members`, `outline`, `search`, `resolve`, `ls`, `tree`, `ws`, `cache`, `body`, `source`, `signature`, `doc`, `usages` (+`--src`), `hierarchy`/`implementors`, `callers`/`calls --depth` — text+JSON, `--coord`/`--fetch`/`--repo`, JDK via `jrt:/` + `src.zip`, workspaces + auto-discovery. |
 | **Test status** | **Tiers 1–3 green** (`check`, `soak`); mutation tier 4 green (`core` 91 % vs the 80 gate). **Caveat:** `verifyTier1Budget` is red on this machine (pre-existing machine variance, 0 test failures — not a test failure). |
-| **Docs** | Sharded append-only logs (D-023): sessions → `docs/progress/` (`sessions-051-060.md` open at 53), decisions → `docs/decisions/` (shard 2 at D-045), lessons → `docs/lessons/` (`L-076-100.md` open at L-084). New decisions/lessons go to the newest shard, never into session entries. |
+| **Docs** | Sharded append-only logs (D-023): sessions → `docs/progress/` (`sessions-051-060.md` open at 54), decisions → `docs/decisions/` (shard 2 at D-046), lessons → `docs/lessons/` (`L-076-100.md` open at L-085). New decisions/lessons go to the newest shard, never into session entries. |
 | **Blocked on** | Nothing. Unpushed sessions need owner go-ahead per session (D-012). |
 
 **What exists:** see `docs/TASKS.md` status summary + the session log — this file no

@@ -46,15 +46,15 @@ be fiction.
 | **M1** | Read path: model, refs, `show`/`outline`/`members --inherited` | DONE |
 | **M2** | Index: SQLite, `search`, workspaces, auto-discovery | DONE |
 | **M3** | Bodies: sources, JavaParser, Vineflower, `body`/`source`/`doc` | DONE |
-| **M4** | Graph: `usages`/`hierarchy`/`callers`/`calls`/`samples` | WIP (T-029…T-032 DONE; T-033/T-034 TODO) |
+| **M4** | Graph: `usages`/`hierarchy`/`callers`/`calls`/`samples` | WIP (T-029…T-033 DONE; T-034 TODO) |
 | **M5** | Kotlin: `@Metadata` + PSI source parsing | TODO |
 | **M6** | Serving: daemon, MCP, HTTP, `batch` | TODO |
 | **M7** | Polish: token budgets, AppCDS, mutation gates, docs, install | TODO (T-060 done early) |
 
-**DONE: T-001…T-032** (M0–M2 in full; M3 via the T-020 umbrella's slices —
+**DONE: T-001…T-033** (M0–M2 in full; M3 via the T-020 umbrella's slices —
 T-071 + T-021…T-028 + T-072/T-073) **plus T-053…T-073.** DONE entries below are
 compressed to a summary + pointers; full notes live in git history and the
-session log. **TODO: T-033/T-034** (M4, coarse one-liners to expand when
+session log. **TODO: T-034** (M4, coarse one-liner to expand when
 started), **T-074** (T-020 `srcmap` remainder, see below), **plus M5–M7** (coarse; T-060 already DONE).
 
 ---
@@ -598,7 +598,7 @@ in T-033; samples in T-034; `usages --kind impl|override` repoints here.)*
 
 *Closed in session 53. Decisions: D-007, D-017, D-045. Full notes in git history + session log.*
 
-### T-033 `jdx callers` / `calls --depth` · `WIP` (session 54)
+### T-033 `jdx callers` / `calls --depth` · `DONE` (session 54)
 
 **Depends:** T-029 (ReferenceEdge/ReferenceExtractor model), T-030 (usages live-scan patterns),
 T-011 (read-command resolution incl. `g:a:v` scope + `DUPLICATE_FQN`), T-015/T-016 (roots) ·
@@ -752,7 +752,7 @@ resolve to no source file — `binaryName → source file` maps per top-level na
 in git history (pre-compression T-028 implementation notes) + session 47 log.)*
 
 Map every top-level type declared in the same `.java` file to that file, so `body`/`source`/`doc`
-find siblings without a full scan. Unblocked but low priority: T-033 stays the next task per the
+find siblings without a full scan. Unblocked but low priority: T-034 stays the next task per the
 lowest-numbered-TODO rule.
 
 ## Open questions
