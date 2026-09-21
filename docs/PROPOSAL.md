@@ -1132,6 +1132,7 @@ callers   --depth N --in --exclude --limit
 calls     --depth N --in --exclude --external-only --limit
           [-w …] [--jars …] [--no-jdk] [--json] [--no-color]
 samples   --limit N --prefer-sources
+          [-w …] [--jars …] [--no-jdk] [--json] [--no-color]
 ws        create|list|info|remove|add|use   --auto --jars --src --coord --repo --jdk
 index     --force -w
 cache     info|gc|clear [--cache-dir --json]  (gc: --dry-run)

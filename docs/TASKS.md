@@ -46,16 +46,17 @@ be fiction.
 | **M1** | Read path: model, refs, `show`/`outline`/`members --inherited` | DONE |
 | **M2** | Index: SQLite, `search`, workspaces, auto-discovery | DONE |
 | **M3** | Bodies: sources, JavaParser, Vineflower, `body`/`source`/`doc` | DONE |
-| **M4** | Graph: `usages`/`hierarchy`/`callers`/`calls`/`samples` | WIP (T-029…T-033 DONE; T-034 TODO) |
+| **M4** | Graph: `usages`/`hierarchy`/`callers`/`calls`/`samples` | DONE (T-029…T-034) |
 | **M5** | Kotlin: `@Metadata` + PSI source parsing | TODO |
 | **M6** | Serving: daemon, MCP, HTTP, `batch` | TODO |
 | **M7** | Polish: token budgets, AppCDS, mutation gates, docs, install | TODO (T-060 done early) |
 
-**DONE: T-001…T-033** (M0–M2 in full; M3 via the T-020 umbrella's slices —
-T-071 + T-021…T-028 + T-072/T-073) **plus T-053…T-073.** DONE entries below are
+**DONE: T-001…T-034** (M0–M2 in full; M3 via the T-020 umbrella's slices —
+T-071 + T-021…T-028 + T-072/T-073; M4 via T-029…T-034) **plus T-053…T-073.**
+DONE entries below are
 compressed to a summary + pointers; full notes live in git history and the
-session log. **TODO: T-034** (M4, coarse one-liner to expand when
-started), **T-074** (T-020 `srcmap` remainder, see below), **plus M5–M7** (coarse; T-060 already DONE).
+session log. **TODO: T-075** (`usages` graph enrichment), **T-074** (T-020 `srcmap`
+remainder, see below), **plus M5–M7** (coarse; T-060 already DONE).
 
 ---
 
@@ -636,7 +637,7 @@ does M call" as a depth-bounded tree. Samples stay in T-034.)*
   depth-1 metamorphic over every case method; goldens; CLI tier-1 + tier-2;
   `CorpusSoakTest` outcome branches.
 
-### T-034 — `jdx samples` with exemplariness ranking · `WIP` (session 55)
+### T-034 — `jdx samples` with exemplariness ranking · `DONE` (session 55)
 
 **Depends:** T-029 (ReferenceEdge/ReferenceExtractor model), T-030 (usages live-scan patterns),
 T-022 (JavaBodies source slicing for snippets), T-011 (read-command resolution incl. `g:a:v`
@@ -658,7 +659,8 @@ source snippets when paired sources exist.)*
 - Exemplariness ranking (deterministic, PROPOSAL.md §7.3): non-test before test (class/member
   containing `test`, case-insensitive), non-generated before generated (`$` nesting,
   `lambda$`/`access$`/metafactory members), fuller overloads first (more target params), then
-  `fromRef` alphabetical. `--prefer-sources` ranks snippet-backed hits first.
+  `fromRef` alphabetical. `--prefer-sources` ranks callers from sources-paired
+  artifacts first.
 - Snippets: enclosing caller method sliced via the T-021 `findJavaBodies` seam over the
   caller's own paired sources (best effort — any miss yields a snippet-less row, never a
   failure); capped to 15 lines with a `… (truncated)` marker. Rows without sources still print
@@ -670,9 +672,28 @@ source snippets when paired sources exist.)*
   warn once each (`CORRUPT_CLASS`) and are skipped (D-017).
 - Repoints the parked T-034 messages: `usages --context` and `--kind new|throw|annotation`
   rejections now name `jdx samples` / the live rule instead of the task number.
-- Tests: core `SamplesTest` (test-first) + property (determinism, ranking + pre-order-prefix
-  law, text⊆JSON); index ASM case jar (callers + test-named + generated + overloads) with
-  `SamplesServiceTest`; goldens; CLI tier-1 + tier-2; `CorpusSoakTest` outcome branch.
+- Tests: core `SamplesTest` (test-first) + property (determinism, ranking law,
+  truncation-prefix law, text⊆JSON); index ASM case jar (plain + test-named +
+  generated + overloads + ctor, sibling `-sources.jar` for the snippet/degrade
+  pair) with `SamplesServiceTest`; goldens; CLI tier-1 + tier-2;
+  `CorpusSoakTest` outcome branches.
+
+*Closed in session 55. Decisions: D-047. Lessons: L-086. Follow-up split to
+T-075 (`usages` graph-enrichment remainder). Full notes in git history +
+session log.*
+
+### T-075 — `usages` graph enrichment: `--kind new|throw|annotation` + `--context` · `TODO`
+
+**Depends:** T-030 (usages live-scan), T-034 (`samples` source rendering) ·
+**Files:** `index/.../service/JdxService.kt` (`usages`), `cli/.../commands/UsagesCommand.kt`
+*(Split out of T-034 in session 55: the parked `usages` flags still exit 3 —
+`new|throw|annotation` naming this task, `--context` naming `jdx samples`.)*
+
+Teach `usages` the three deferred edge kinds over the T-029 vocabulary
+(constructor `new` sites, `throw` sites, annotation uses) and decide whether
+`--context` renders inline snippets (reusing the T-034 slice) or stays a
+`samples` redirect. Unblocked but low priority: M5 (T-035) stays the next
+task per the lowest-numbered-TODO rule.
 
 # M5 — Kotlin
 ### T-035 `@Metadata` decoding · **T-036** Kotlin member mapping (properties, default args, suspend) · **T-037** `--view jvm` · **T-038** side-loaded Kotlin PSI module (D-008 mitigations 1–5 are acceptance criteria) · **T-039** Kotlin source body extraction
@@ -788,8 +809,8 @@ resolve to no source file — `binaryName → source file` maps per top-level na
 in git history (pre-compression T-028 implementation notes) + session 47 log.)*
 
 Map every top-level type declared in the same `.java` file to that file, so `body`/`source`/`doc`
-find siblings without a full scan. Unblocked but low priority: T-034 stays the next task per the
-lowest-numbered-TODO rule.
+find siblings without a full scan. Unblocked but low priority: M5 (T-035) stays the next
+task per the lowest-numbered-TODO rule (T-075 is the `usages` remainder).
 
 ## Open questions
 

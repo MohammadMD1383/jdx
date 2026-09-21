@@ -5,6 +5,99 @@ Append-only (D-023): 10 sessions per shard, newest first. Template and rules in
 
 ---
 
+## Session 55 — 2026-09-21 — `jdx samples` with exemplariness ranking (T-034)
+**Agent/Author:** Muse Spark 1.3 (opencode) · **Commits:** `8f7c7dd` (claim) + implementation (this session)
+
+### Goal
+Implement T-034, the lowest-numbered unblocked TODO: `jdx samples` — the last
+M4 CLI slice over live bytecode roots (no persistent-index read yet,
+mirroring D-043's live-roots-first precedent). Closes out M4.
+
+### What I did
+- Claimed T-034 (`TODO`→`WIP` + expanded the one-liner into a detail block)
+  and committed the claim before coding.
+- `core/.../render/Samples.kt` (test-first): `SampleSnippet` (file, 1-based
+  range, verbatim lines, 15-line display cap with a `… (shown of total)`
+  marker), `SampleHit` (caller ref, artifact, per-edge target, nullable
+  snippet), `SampleRank` + `sampleOrderKey` (sourced → non-test →
+  non-generated → fuller overload → caller ref; total and deterministic),
+  `SampleListing` + `buildSampleListing` (ranked-input contract, shared
+  truncation footer).
+- `index`: `JdxService.samples` / `SampleOptions`
+  (`limit` default 3 / `inArtifact` / `exclude` / `preferSources`) +
+  `executeSamples` (T-011 resolution incl. `g:a:v` scope + `DUPLICATE_FQN`,
+  one full `METHOD_CALL` scan grouped per (caller, label) collapsing to the
+  fullest overload, field refs exit 3 naming `usages`, `<clinit>` exits 3,
+  zero samples exit 1, `CORRUPT_CLASS` warn-and-skip) + snippet slicing for
+  the displayed prefix only via the T-021 `findJavaBodies` seam over each
+  caller's own paired sources (best effort, snippet-less degrade) +
+  `ServiceOutcome.SampleList` (+ the two `CorpusSoakTest` branches).
+- `cli`: thin `SamplesCommand`
+  (`--limit/--in/--exclude/--prefer-sources`), registered in `JdxCli`, +
+  `SamplesQuery` seam.
+- Repointed the parked T-034 messages: `usages --context` now names
+  `jdx samples`; `--kind new|throw|annotation` now names the new T-075
+  (graph enrichment); `UsagesCommand` help texts updated to match.
+- Tests: core `SamplesTest` (8) + `SamplesPropertyTest` (4: determinism,
+  truncation-prefix law, text⊆JSON, ranking law); index `SamplesCaseJars`
+  (ASM `s.*` corpus: plain + test-named + `$`-nested + overloads + ctor +
+  field, `t.Lib` ambiguity namesake, sibling `-sources.jar` with `s/App.java`
+  only) + `SamplesServiceTest` (14 incl. snippet/degrade pair) +
+  `SamplesGoldenTest` (6 query pairs, read before accepting); cli
+  `SamplesCommandTest` (4 tier-1) + `SamplesCommandsServiceTest` (6 tier-2
+  incl. D-017). `check -x verifyTier1Budget` green incl. JaCoCo gates.
+- Three test-expectation misses on first run, all implementation-correct:
+  (1) goldens are created empty (update + read the diff); (2) a bare `s`
+  parses as a *type*, not a package — package refs need a `*` glob (L-086);
+  (3) `--limit 1` over a single sample is an exact fit, so no footer — the
+  truncation test pins `--limit 0` instead.
+- Live proof: fixture self-call renders the `CovariantOverrides.java:40-43`
+  body with provenance (text + JSON), field/unknown refs exit 3/1, `--help`
+  complete.
+- Docs: D-047, L-086, T-034 DONE, T-075 filed, Appendix B `samples` roots
+  flags, CURRENT STATE (M4 DONE, next: M5 T-035).
+
+### Decisions made
+D-047 (`jdx samples` output semantics: per-(caller,label) examples,
+structural exemplariness rank in `core`, best-effort displayed-prefix
+snippets with a 15-line cap, `--prefer-sources` as a root-presence signal,
+exit-1-on-empty, parked-flag ownership split with T-075).
+
+### Tasks moved
+T-034: TODO → WIP → DONE. T-075 (new): filed as TODO.
+
+### Lessons distilled
+L-086 (package refs need a `*` glob; bare dotted names parse as types).
+
+### What works now (and how to verify it yourself)
+```bash
+./gradlew :app:installDist -x verifyTier1Budget
+J=testfixtures/build/libs/testfixtures-0.1.0-SNAPSHOT.jar
+app/build/jdx samples 'dev.jdx.fixtures.CovariantOverrides$Child#copy()' --jars $J --no-jdk
+app/build/jdx samples 'dev.jdx.fixtures.TrafficLight' --jars $J --no-jdk --limit 2 --json
+app/build/jdx samples 'dev.jdx.fixtures.TrafficLight#RED' --jars $J --no-jdk; echo "exit=$?"  # exit 3, fields belong to usages
+./gradlew check -x verifyTier1Budget   # tiers 1+2 + JaCoCo gates, green
+```
+
+### What is broken / half-done
+- `verifyTier1Budget` stays red on this machine (pre-existing variance, 0 test
+  failures). Nothing from this task.
+- Indexed acceleration still deferred by design (D-043 §1/D-047): `samples`
+  scans live roots; JDK-scale queries parse every class.
+- `usages --kind new|throw|annotation` + `--context` still exit 3 (T-075).
+- Tier-3 `soak` was running in background at log time — see its result before
+  claiming tiers 1–3 green without caveat.
+
+### Open questions / blockers
+None.
+
+### Next action
+M5 T-035 (`@Metadata` decoding — expand into a detail block when started;
+first Kotlin slice; T-074/T-075 explicitly defer to it per the
+lowest-numbered-TODO rule).
+
+---
+
 ## Session 54 — 2026-09-21 — `jdx callers` / `jdx calls --depth` (T-033)
 **Agent/Author:** Muse Spark 1.3 (opencode) · **Commits:** `4a1ad55` (claim) + `2586a93` (core) + `a972bcf` (index) + `13a2cf6` (cli) + docs (this session)
 
