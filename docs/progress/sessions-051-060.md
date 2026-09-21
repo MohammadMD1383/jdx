@@ -85,8 +85,11 @@ app/build/jdx samples 'dev.jdx.fixtures.TrafficLight#RED' --jars $J --no-jdk; ec
 - Indexed acceleration still deferred by design (D-043 §1/D-047): `samples`
   scans live roots; JDK-scale queries parse every class.
 - `usages --kind new|throw|annotation` + `--context` still exit 3 (T-075).
-- Tier-3 `soak` was running in background at log time — see its result before
-  claiming tiers 1–3 green without caveat.
+- Tier-3 `soak`: `CorpusSoakTest` (incl. the new `SampleList` branches)
+  green; `JavapCorpusSoakTest` red on JDK-internal synthetic `access$000`
+  members — proven pre-existing on the clean pre-T-034 tree via a detached
+  worktree at `3245166` (corpus drift, same family as the session-53 reds;
+  untouched `members`-vs-`javap` path).
 
 ### Open questions / blockers
 None.
