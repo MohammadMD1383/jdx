@@ -1313,7 +1313,7 @@ doc; `#identity(U)` → exit 1 no-doc; `Child#copy` → exit 2. Lessons
 L-072 (nested KDoc), L-073 (exhaustive `when`), L-074 (unknown vs
 undocumented); decision D-037.*
 
-### T-072 — Wire `--with-doc` into `body`/`members`/`outline` over the T-025 seam · `TODO`
+### T-072 — Wire `--with-doc` into `body`/`members`/`outline` over the T-025 seam · `WIP`
 **Depends:** T-025 · **Files:** `cli/.../commands/BodyCommand.kt`, `ReadCommands.kt`, `ReadCommandSupport.kt`, `core/.../render/*`, `index/.../service/JdxService.kt`
 *(Split out of T-025 in session 44: per-row/per-body javadoc enrichment is a
 different scale from one-shot `jdx doc` — `members`/`outline` need the first
