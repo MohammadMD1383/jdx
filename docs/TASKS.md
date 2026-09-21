@@ -696,7 +696,42 @@ Teach `usages` the three deferred edge kinds over the T-029 vocabulary
 task per the lowest-numbered-TODO rule.
 
 # M5 — Kotlin
-### T-035 `@Metadata` decoding · **T-036** Kotlin member mapping (properties, default args, suspend) · **T-037** `--view jvm` · **T-038** side-loaded Kotlin PSI module (D-008 mitigations 1–5 are acceptance criteria) · **T-039** Kotlin source body extraction
+### T-035 — `@Metadata` decoding (live-roots + `show` + stored `is_kotlin`) · `WIP` (session 56)
+
+**Depends:** T-008 (ASM reader), T-013 (store schema already has `is_kotlin` + `ktmeta`) ·
+**Files:** `core/.../model/ClassInfo.kt` (`isKotlin`), `core/.../render/ClassCard.kt`,
+`index/.../kotlin/KotlinMetadata.kt` (new decoder), `index/.../asm/AsmClassReader.kt`,
+`index/.../store/sqlite/SqliteIndexStore.kt`, `index/.../store/IndexStore.kt` (KDoc)
+
+*(First M5 slice: decode Kotlin `@Metadata` from class bytes with
+`kotlin-metadata-jvm` (already a dependency, unused) and surface it. No member
+mapping (T-036), no `--view jvm` (T-037), no PSI (T-038), no Kotlin bodies
+(T-039), no `ktmeta` blob writes — `is_kotlin` persistence only.)*
+
+- New pure decoder `index/.../kotlin/KotlinMetadata.kt`: ASM
+  `visible+invisibleAnnotations` → find `Lkotlin/Metadata;` → build
+  `KotlinClassHeader` → `KotlinClassMetadata.readLenient` → `KotlinMetadata`
+  (`metadataKind`: CLASS/FILE_FACADE/MULTI_FILE_*/SYNTHETIC/UNKNOWN, plus
+  `classKind` when CLASS). Never throws: absent → `null`, corrupt → `null`.
+- `AsmClassReader.mapClass`: `isKotlin = metadata != null` (file facades count);
+  kind refinement only `OBJECT`/`COMPANION_OBJECT` → `TypeKind.OBJECT`/`COMPANION`
+  (the kinds `ClassInfo` already reserves); every other Kotlin kind keeps its JVM
+  kind so Java output is byte-identical.
+- `core`: `ClassInfo.isKotlin: Boolean = false` (default keeps all existing
+  constructors compiling); `ClassCard` text gains a `kotlin` line (mirroring
+  `deprecated`) and JSON gains `"kotlin":true` only when true (D-007 parity,
+  zero churn on Java goldens).
+- `SqliteIndexStore`: bind `is_kotlin` from `ClassInfo` (today hardcoded `0`);
+  `readClass` returns it. No migration: columns already exist at schema v1.
+- Tests: core `ClassCard` kotlin line + JSON (test-first); index tier-1
+  `KotlinMetadataTest` (fixture bytes: class/object/companion/file-facade/Java-negative)
+  + never-throws/determinism properties (the generating family); index tier-2
+  reader test over the fixture jar; `show` goldens for the Kotlin fixtures
+  updated after reading the diff.
+- Live proof: `show` on `KotlinMembers` (kotlin class), `KotlinRegistry`
+  (object), `$Companion` (companion), a Java class (no kotlin marker).
+
+### T-036 Kotlin member mapping (properties, default args, suspend) · TODO
 
 # M6 — Serving
 ### T-040 `JdxService` RPC protocol · **T-041** daemon + unix socket + 5-min idle shutdown (D-004) · **T-042** transparent CLI daemon client + `--no-daemon` · **T-043** MCP stdio server with generated schemas · **T-044** HTTP/JSON server on `com.sun.net.httpserver` · **T-045** `jdx batch` · **T-046** adapter parity test (CLI/HTTP/MCP byte-identical payloads)
