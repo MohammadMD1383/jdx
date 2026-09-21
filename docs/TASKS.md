@@ -1016,6 +1016,18 @@ stored workspace mirror). `check` green shelved; `cli:tier2Test` with ambient
 ### T-020 Sources-jar/dir access and `srcmap` · **T-021** JavaParser integration and Java body extraction · **T-022** `jdx body` · **T-023** `jdx source` · **T-024** `jdx signature` · **T-025** `jdx doc` incl. inherited javadoc · **T-028** `SOURCES_VERSION_MISMATCH` detection
 *(Expand into detail blocks when M3 starts.)*
 
+### T-028 — `SOURCES_VERSION_MISMATCH` detection · `WIP` (session 47)
+**Depends:** T-021 (`listJavaMembers` seam), T-022/T-023/T-025 (body/source/doc patterns) · **Files:** `sources/.../SourcesMismatch.kt`, `index/.../service/JdxService.kt`
+*(Last M3 one-liner: turn the `WarningCode.SOURCES_VERSION_MISMATCH` enum (D-009, PROPOSAL.md §11.1) from a dead code into an emitted warning. Structure stays bytecode-authoritative: successful `body`/`source`/`doc` answers from paired Java sources carry the warning when the sources declare a different member set; missing-member/type failures keep exit 1 with the code named.)*
+
+Emit a structured `SOURCES_VERSION_MISMATCH` warning on successful sources-backed `body`/`source`/`doc` when bytecode and sources disagree; keep exit codes unchanged.
+
+**Acceptance**
+- [ ] Successful `body`/`source`/`doc` from paired Java sources emit `SOURCES_VERSION_MISMATCH` (text `warning SOURCES_VERSION_MISMATCH: …` + JSON `warnings[]`) when a non-synthetic bytecode member is absent from sources or a source member is absent from bytecode (added/removed/renamed)
+- [ ] Synthetic/bridge members, `<clinit>`, and `<init>`-arity quirks never trigger the warning
+- [ ] Missing-member/type failures stay exit 1 and name `SOURCES_VERSION_MISMATCH` (no `T-028` task ref in user output)
+- [ ] Tests: `sources` tier-1 pure detector examples + 1,000-case never-throws/determinism properties; index tier-2 crafted-jar service tests (extra/missing/renamed member, foreign sources jar) + determinism/text⊆JSON; tiers 1+2 green
+
 ### T-027 — `javap` engine for `body`/`source` · `DONE` (session 46)
 **Depends:** T-022/T-023 (body/source patterns), T-026 (`DecompilerEngine` seam + forced-engine plumbing), T-011/T-015/T-016 (roots) · **Files:** `decompile/.../JavapDecompiler.kt`, `JavapOutput.kt`, `DecompilerEngine.kt`, `index/.../service/JdxService.kt`, `cli/.../commands/BodyCommand.kt`, `SourceCommand.kt`
 *(Second and last decompiler slice of M3: the `--engine javap` opcode path
