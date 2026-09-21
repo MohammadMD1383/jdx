@@ -1761,7 +1761,41 @@ Wire source-dir roots into `usages`: `WorkspaceDefinition.srcs` + TOML `srcs` ke
 - [ ] Tests: index tier-1 pure scanner examples + 1,000-case properties (never-throws, determinism, whole-word law); index tier-2 service tests over temp source dirs (type/member/in/exclude/kind-filter/missing-dir/determinism); workspace TOML/resolver round-trips; cli tier-1 flag validation + tier-2 in-process tests; tiers 1+2 green
 - [ ] `--help` text, Appendix B usages flags verified, `TASKS.md` status, `PROGRESS.md` entry
 
-### T-032 `jdx hierarchy` / `implementors` · **T-033** `jdx callers` / `calls --depth` · **T-034** `jdx samples` with exemplariness ranking
+### T-032 — `jdx hierarchy` / `implementors` (live-roots type hierarchy) · `WIP`
+**Depends:** T-011 (read-command patterns), T-015/T-016 (roots) · **Files:** `core/.../render/Hierarchy.kt`, `index/.../service/JdxService.kt` (`hierarchy`), `cli/.../commands/HierarchyCommand.kt`
+
+*(Second M4 CLI slice: supertypes upward + subtypes/implementors downward across
+live bytecode roots via ASM `ClassInfo` supertype edges (no persistent-index
+read yet — mirroring D-043's live-roots-first precedent). Callers/calls stay
+in T-033; samples in T-034; `usages --kind impl|override` repoints here.)*
+
+Wire supertype/subtype answers to the CLI: `JdxService.hierarchy(rawRef,
+roots, opts)` resolves the target type with the T-011 machinery
+(exact/short-name matching, `g:a:v` scope, `DUPLICATE_FQN`), walks supertypes
+upward transitively (superclass + interfaces, BFS, cycle-safe) and scans every
+class in every open root for transitive subtypes downward.
+
+**Acceptance**
+- [ ] `jdx hierarchy '<type>'` exits 0 with supertypes (`extends`/`implements`
+      relation word + artifact) and subtypes (binary + artifact) across the
+      workspace; member refs exit 3; unknown types exit 1 with did-you-mean;
+      ambiguous short names exit 2; invalid refs exit 3; no roots exit 4
+- [ ] `--up`/`--down` select directions (default both); `--direct` shows one
+      level; `--depth N` caps transitive levels; `--in <glob>`/`--exclude
+      <glob>` filter by artifact label; `--limit N` truncates with
+      `shown`/`total`/`hint`
+- [ ] `jdx implementors '<type>'` is a thin alias for `hierarchy --down`
+- [ ] `usages --kind impl|override` now names `hierarchy`/`implementors`
+      instead of T-032
+- [ ] Text+JSON parity (D-007), deterministic bytes (artifact, binary order)
+- [ ] Tests: core tier-1 examples + 1,000-case properties (determinism,
+      text⊆JSON, truncation law); index tier-2 service tests over fixture +
+      crafted jars (up/down/direct/depth/in/exclude/limit/determinism); cli
+      tier-1 flag validation + tier-2 in-process tests; tiers 1+2 green
+- [ ] `--help` text, Appendix B hierarchy flags verified, `TASKS.md` status,
+      `PROGRESS.md` entry
+
+### T-033 `jdx callers` / `calls --depth` · **T-034** `jdx samples` with exemplariness ranking
 
 # M5 — Kotlin
 ### T-035 `@Metadata` decoding · **T-036** Kotlin member mapping (properties, default args, suspend) · **T-037** `--view jvm` · **T-038** side-loaded Kotlin PSI module (D-008 mitigations 1–5 are acceptance criteria) · **T-039** Kotlin source body extraction
