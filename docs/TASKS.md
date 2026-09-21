@@ -1744,7 +1744,22 @@ pre-existing (machine variance — new suites cost ~2 s). Live proof:
 `usages 'dev.jdx.fixtures.TrafficLight'` → 17 grouped rows with edge
 targets. Decisions in D-043; lesson L-083.*
 
-### T-031 project source-dir usages · **T-032** `jdx hierarchy` / `implementors` · **T-033** `jdx callers` / `calls --depth` · **T-034** `jdx samples` with exemplariness ranking
+### T-031 project source-dir usages · `WIP` (session 52)
+**Depends:** T-030 (usages over live bytecode), T-015 (workspaces), T-016 (discovery) · **Files:** `index/.../workspace/WorkspaceDefinition.kt`, `WorkspaceToml.kt`, `WorkspaceResolver.kt`, `index/.../service/JdxService.kt` (`usages` + `usages/.../SourceUsages.kt`), `index/.../usages/SourceUsages.kt`, `cli/.../commands/UsagesCommand.kt`, `WsCommands.kt`, `ReadCommandSupport.kt`
+
+*(Second M4 CLI slice: D-010 promises usages over "all workspace jars **plus** the project's own source dirs" — T-030 scans jars only. This task adds `--src <dir>` source-dir roots (explicit flag + stored workspace `srcs`) scanned textually for whole-word mentions with file:line call sites. Hierarchy/implementors stay in T-032; callers/calls in T-033; samples in T-034.)*
+
+Wire source-dir roots into `usages`: `WorkspaceDefinition.srcs` + TOML `srcs` key (optional, default empty — pre-srcs files decode), resolver merges explicit `--src` in front of stored `srcs` (§13), `RootsSpec.srcSpecs` carries them, `executeUsages` scans each dir's `.java`/`.kt` files for whole-word occurrences of the target simple/member name and emits `ref`-kind hits (`fromRef = <relpath>:<line>`, artifact = dir label). Source hits are textual mentions (`ref` only — `--kind call|read|write` shows bytecode edges alone); `--in`/`--exclude` filter source labels too; a missing `--src` dir exits 5 naming the path; unreadable files warn-and-skip.
+
+**Acceptance**
+- [ ] `jdx usages '<symbol>' --src <dir>` exits 0 with one `ref <relpath>:<line>` row per whole-word mention grouped under the dir label, alongside bytecode rows; `--kind ref|all` includes them, `--kind call|read|write` excludes them (documented in `--help`)
+- [ ] `jdx ws create <name> --src <dir>` stores the dir; `-w <name>` usages scans it without the flag; pre-`srcs` TOML files decode with empty `srcs`
+- [ ] Missing `--src` dir exits 5 naming the path; unreadable source file warns and skips (never aborts); no stack trace on any path
+- [ ] Text+JSON parity (D-007), deterministic bytes (dir label, path, line order)
+- [ ] Tests: index tier-1 pure scanner examples + 1,000-case properties (never-throws, determinism, whole-word law); index tier-2 service tests over temp source dirs (type/member/in/exclude/kind-filter/missing-dir/determinism); workspace TOML/resolver round-trips; cli tier-1 flag validation + tier-2 in-process tests; tiers 1+2 green
+- [ ] `--help` text, Appendix B usages flags verified, `TASKS.md` status, `PROGRESS.md` entry
+
+### T-032 `jdx hierarchy` / `implementors` · **T-033** `jdx callers` / `calls --depth` · **T-034** `jdx samples` with exemplariness ranking
 
 # M5 — Kotlin
 ### T-035 `@Metadata` decoding · **T-036** Kotlin member mapping (properties, default args, suspend) · **T-037** `--view jvm` · **T-038** side-loaded Kotlin PSI module (D-008 mitigations 1–5 are acceptance criteria) · **T-039** Kotlin source body extraction
