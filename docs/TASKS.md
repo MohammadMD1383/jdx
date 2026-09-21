@@ -1639,7 +1639,22 @@ stashed-clean; this suite costs ~5.3s standalone, inside the noise).
 reads), L-064 (no concurrent Gradle builds in one checkout).*
 
 # M4 — Graph
-### T-029 Reference-edge extraction · **T-030** `jdx usages` · **T-031** project source-dir usages · **T-032** `jdx hierarchy` / `implementors` · **T-033** `jdx callers` / `calls --depth` · **T-034** `jdx samples` with exemplariness ranking
+### T-029 — Reference-edge extraction (bytecode → edges → store) · `WIP`
+**Depends:** T-013/T-014 (store + indexer), T-008 (ASM reader) · **Files:** `core/.../model/Reference.kt`, `index/.../refs/ReferenceExtractor.kt`, `index/.../store/IndexStore.kt`, `index/.../store/sqlite/SqliteIndexStore.kt`, `index/.../index/ArtifactIndexer.kt`
+
+*(First M4 slice: extract reference edges from bytecode and persist them. No CLI surface — `usages`/`hierarchy`/`callers`/`calls`/`samples` (T-030…T-034) query this data. The v1 `ref` table already exists in the schema (T-013) with no writers; this task fills it without a migration.)*
+
+Extract per-method reference edges with a lightweight ASM visitor (PROPOSAL.md §10.4 step 3: `visitMethodInsn`, `visitFieldInsn`, `visitTypeInsn`, `visitLdcInsn`; `visitInvokeDynamicInsn` bootstrap/handle targets) into a pure `core` model, stored per artifact and queryable by target.
+
+**Acceptance**
+- [ ] `core`: `ReferenceKind` (closed enum: `METHOD_CALL`, `FIELD_READ`, `FIELD_WRITE`, `TYPE_REFERENCE`) + `ReferenceEdge` (from class binary + from member name/descriptor, to owner binary + optional member name/descriptor, kind) — pure, sorted, deterministic; test-first
+- [ ] `index`: `ReferenceExtractor.extract(classBytes)` returns sorted edges, never throws on agent-reachable input (truncated/corrupt bytes → empty + no throw); field vs method vs type kinds correct; `invokedynamic` bootstrap + handle method targets recorded as `METHOD_CALL`
+- [ ] `IndexStore`: `replaceReferences(artifactId, edges)` + `findReferencesTo(toFqn, toMember?, descriptor?)` + `countReferences(artifactId)`; scoped deletes already drop `ref` rows; per-artifact replacement is transactional
+- [ ] `ArtifactIndexer`: `indexRoot` extracts edges for every readable class and stores them (bad entries warn, never abort); short-circuit `SKIPPED` leaves stored edges untouched; `classCount` behaviour unchanged
+- [ ] Tests: core tier-1 examples + 1,000-case properties (determinism/sorted, never-throws); index tier-1 extractor examples + properties (never-throws, slice law); index tier-2 store round-trip + indexer integration over fixture jars + truncated-class fault + determinism; tiers 1+2 green
+- [ ] `TASKS.md` status, `PROGRESS.md` entry
+
+### T-030 `jdx usages` · **T-031** project source-dir usages · **T-032** `jdx hierarchy` / `implementors` · **T-033** `jdx callers` / `calls --depth` · **T-034** `jdx samples` with exemplariness ranking
 
 # M5 — Kotlin
 ### T-035 `@Metadata` decoding · **T-036** Kotlin member mapping (properties, default args, suspend) · **T-037** `--view jvm` · **T-038** side-loaded Kotlin PSI module (D-008 mitigations 1–5 are acceptance criteria) · **T-039** Kotlin source body extraction
