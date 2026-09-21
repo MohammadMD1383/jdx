@@ -598,7 +598,45 @@ in T-033; samples in T-034; `usages --kind impl|override` repoints here.)*
 
 *Closed in session 53. Decisions: D-007, D-017, D-045. Full notes in git history + session log.*
 
-### T-033 `jdx callers` / `calls --depth` · **T-034** `jdx samples` with exemplariness ranking
+### T-033 `jdx callers` / `calls --depth` · `WIP` (session 54)
+
+**Depends:** T-029 (ReferenceEdge/ReferenceExtractor model), T-030 (usages live-scan patterns),
+T-011 (read-command resolution incl. `g:a:v` scope + `DUPLICATE_FQN`), T-015/T-016 (roots) ·
+**Files:** `core/.../render/Calls.kt`, `index/.../service/JdxService.kt` (`callers`/`calls`,
+`CallOptions`, `executeCallGraph`), `cli/.../commands/CallCommands.kt`, `cli/.../JdxCli.kt`
+
+*(Third M4 CLI slice: the call-hierarchy pair over live bytecode roots via the T-029
+`ReferenceExtractor` (no persistent-index read yet — mirroring D-043's live-roots-first
+precedent). `usages` answers "what touches X" flat; these answer "what calls M" / "what
+does M call" as a depth-bounded tree. Samples stay in T-034.)*
+
+- Member refs only: methods + `<init>`; type refs and field refs exit 3 (fields belong
+  to `usages`); `callers` of `<clinit>` exits 3 (never invoked), `calls` from `<clinit>`
+  is allowed (static init calls out).
+- Overload-blind unless the ref carries a parameter list — the usages rule (D-042 §5):
+  a bare `Lib#greet` matches every overload's edges; deeper tree levels always expand
+  overload-blind. Tree nodes are descriptor-specific `(class, member, descriptor)` so
+  sibling overloads render as distinct rows with canonical `Owner#m(params)` refs.
+- `callers`: incoming `METHOD_CALL` edges; `calls`: outgoing `METHOD_CALL` edges from the
+  resolved overload(s). Exact name+descriptor matching only — no virtual-dispatch /
+  override-aware resolution in v1 (documented limitation).
+- `--depth N` (default 1, `< 1` exits 3): transitive BFS walk, cycle-safe with `…(cycle)`
+  markers on the re-entrant row; diamonds repeat (tree semantics, IntelliJ-like).
+- `--in`/`--exclude` artifact-label filters (D-031 matching, mirror usages/hierarchy);
+  `calls --external-only` prunes callees in the query target's own artifact (Appendix B
+  dependency view).
+- `--limit N` (default 50) caps total tree nodes shown (pre-order), flat footer
+  `shown of total … (--limit M to see more)`.
+- Zero nodes exit 1 with a `no callers` / `no calls` detail (mirror usages); unknown
+  target exits 1 with did-you-mean; ambiguous short names exit 2; unreadable classes
+  warn once each (`CORRUPT_CLASS`) and are skipped (D-017).
+- Tests: core `CallsTest` (test-first) + property (determinism, sorted law, cycle law);
+  index ASM case jar (chain + diamond + cycle + self-recursion + overloads) with
+  `CallersServiceTest`/`CallsServiceTest` incl. the TESTING.md §6 `callers⟺calls`
+  depth-1 metamorphic over every case method; goldens; CLI tier-1 + tier-2;
+  `CorpusSoakTest` outcome branches.
+
+**T-034** `jdx samples` with exemplariness ranking
 
 # M5 — Kotlin
 ### T-035 `@Metadata` decoding · **T-036** Kotlin member mapping (properties, default args, suspend) · **T-037** `--view jvm` · **T-038** side-loaded Kotlin PSI module (D-008 mitigations 1–5 are acceptance criteria) · **T-039** Kotlin source body extraction
