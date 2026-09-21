@@ -87,3 +87,4 @@ log.
 | D-046 | `jdx callers` / `jdx calls` output semantics (T-033) | proposed-by-implementer | `D-026-050.md` |
 | D-047 | `jdx samples` output semantics (T-034) | proposed-by-implementer | `D-026-050.md` |
 | D-048 | `@Metadata` decoding and Kotlin marking semantics (T-035) | proposed-by-implementer | `D-026-050.md` |
+| D-049 | Kotlin `KmClass` carrier semantics (T-076) | proposed-by-implementer | `D-026-050.md` |

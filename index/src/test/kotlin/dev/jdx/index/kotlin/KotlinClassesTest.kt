@@ -96,6 +96,54 @@ class KotlinClassesTest {
     }
 
     @Test
+    fun `a kotlin class carries its KmClass functions under kotlin names`() {
+        val kmClass = requireNotNull(decodeFixture("dev.jdx.fixtures.KotlinMembers")?.kmClass) {
+            "CLASS metadata carries KmClass"
+        }
+        val functions = kmClass.functions.map { it.name }
+        // Kotlin declaration names, not JVM names: the source says `originalName`.
+        (functions.contains("originalName")) shouldBe true
+        (functions.contains("fetch")) shouldBe true
+        (functions.contains("withDefault")) shouldBe true
+        (functions.contains("renamedForJvm")) shouldBe false
+    }
+
+    @Test
+    fun `a kotlin data class carries its KmClass properties`() {
+        val kmClass = requireNotNull(decodeFixture("dev.jdx.fixtures.KotlinData")?.kmClass) {
+            "CLASS metadata carries KmClass"
+        }
+        val properties = kmClass.properties.map { it.name }
+        (properties.contains("name")) shouldBe true
+        (properties.contains("count")) shouldBe true
+        (properties.contains("greeting")) shouldBe true
+        (properties.contains("nickname")) shouldBe true
+    }
+
+    @Test
+    fun `a companion object carries its KmClass members`() {
+        val kmClass = requireNotNull(decodeFixture("dev.jdx.fixtures.KotlinMembers\$Companion")?.kmClass) {
+            "CLASS metadata carries KmClass"
+        }
+        (kmClass.functions.map { it.name }.contains("create")) shouldBe true
+        (kmClass.properties.map { it.name }.contains("VERSION")) shouldBe true
+    }
+
+    @Test
+    fun `a file facade carries no KmClass`() {
+        decodeFixture("dev.jdx.fixtures.KotlinShapesKt")?.kmClass shouldBe null
+    }
+
+    @Test
+    fun `KmClass contents are deterministic across decodes`() {
+        // KmClass itself has no value equality — compare contents, never carriers.
+        val first = requireNotNull(decodeFixture("dev.jdx.fixtures.KotlinMembers")?.kmClass)
+        val second = requireNotNull(decodeFixture("dev.jdx.fixtures.KotlinMembers")?.kmClass)
+        first.functions.map { it.name } shouldBe second.functions.map { it.name }
+        first.properties.map { it.name } shouldBe second.properties.map { it.name }
+    }
+
+    @Test
     fun `a java class is not kotlin and keeps its jvm kind`() {
         decodeFixture("dev.jdx.fixtures.TrafficLight") shouldBe null
 

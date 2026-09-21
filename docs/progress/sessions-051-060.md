@@ -5,6 +5,73 @@ Append-only (D-023): 10 sessions per shard, newest first. Template and rules in
 
 ---
 
+## Session 57 — 2026-09-21 — Kotlin `KmClass` carrier (T-076)
+**Agent/Author:** Muse Spark 1.3 (opencode) · **Commits:** `4a37de2` (claim) + implementation (this session)
+
+### Goal
+Implement the first T-036 slice as the new task T-076 (filed when T-036 proved
+too big for one sitting, per the split-first cadence): carry the decoded
+`KmClass` on `KotlinMetadata` so T-077 (suspend/`@JvmName`) and T-078
+(properties/default-args) have declarations to map against. No rendering
+change by design.
+
+### What I did
+- Claimed T-036 (`TODO`→`WIP` + expanded the one-liner into a detail block
+  naming slices T-076…T-078/T-037) and filed T-076 as `WIP`; committed the
+  claim before coding.
+- `index/.../kotlin/KotlinMetadata.kt`: `KotlinMetadata` gains
+  `kmClass: KmClass? = null` (default keeps all existing constructors
+  compiling); the reader returns `metadata.kmClass` on the `Class` branch,
+  `null` everywhere else. No touch to `AsmClassReader` (flag/kinds
+  byte-identical), the store, or any renderer — zero golden churn.
+- Tests: 5 new tier-2 `KotlinClassesTest` cases over the fixture jar —
+  `KotlinMembers` functions under Kotlin names (`originalName` present,
+  `renamedForJvm` absent, `fetch`/`withDefault` present), `KotlinData`
+  properties (`name`/`count`/`greeting`/`nickname`), companion
+  (`create` + `VERSION`), file-facade `null`, contents-determinism across
+  decodes (never `==` on carriers — L-088). The existing never-throws/
+  determinism properties cover the new field via `data class` equality on
+  their all-`null` shapes.
+- `check -x verifyTier1Budget` green incl. JaCoCo gates (tiers 1+2, 12/12
+  Kotlin tier-2 green). `verifyTier1Budget` itself not run — red on this
+  machine pre-existing (sessions 53–56, 0 test failures).
+- Docs: D-049, L-088, T-076 DONE (T-036 stays WIP), CURRENT STATE (next: T-077).
+
+### Decisions made
+D-049 (carrier-only, `KmClass` has no value equality, still no `ktmeta` blob,
+T-077/T-078/T-037 split).
+
+### Tasks moved
+T-036: TODO → WIP. T-076 (new): filed as WIP → DONE.
+
+### Lessons distilled
+L-088 (`KmClass` has no value equality; compare contents, never carriers).
+
+### What works now (and how to verify it yourself)
+```bash
+./gradlew :index:tier2Test --tests "dev.jdx.index.kotlin.*" -x verifyTier1Budget   # 12/12 green
+./gradlew check -x verifyTier1Budget   # tiers 1+2 + JaCoCo gates, green
+J=testfixtures/build/libs/testfixtures-0.1.0-SNAPSHOT.jar
+app/build/jdx members 'dev.jdx.fixtures.KotlinMembers' --jars $J --no-jdk   # byte-identical to session 56 (no rendering change yet)
+```
+
+### What is broken / half-done
+- `verifyTier1Budget` stays red on this machine (pre-existing variance, 0 test
+  failures). Nothing from this task.
+- No Kotlin member rendering yet: `members` still shows the JVM projection
+  (`Continuation` params, `getX`/`setX`, mangled `internal`) — T-077/T-078.
+  `ktmeta` blob still unwritten; `--view jvm` still parked (T-037).
+
+### Open questions / blockers
+None.
+
+### Next action
+M5 T-077 (suspend + `@JvmName` + mangled-`internal` signature repair over the
+T-076 carrier; T-074/T-075 explicitly defer to M5 per the
+lowest-numbered-TODO rule).
+
+---
+
 ## Session 56 — 2026-09-21 — `@Metadata` decoding (T-035)
 **Agent/Author:** Muse Spark 1.3 (opencode) · **Commits:** `076e6cb` (claim) + implementation (this session)
 

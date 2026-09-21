@@ -1,6 +1,7 @@
 package dev.jdx.index.kotlin
 
 import kotlin.metadata.ClassKind
+import kotlin.metadata.KmClass
 import kotlin.metadata.jvm.KotlinClassMetadata
 import kotlin.metadata.jvm.Metadata as buildMetadataAnnotation
 import kotlin.metadata.kind
@@ -27,11 +28,19 @@ public enum class KotlinMetadataKind {
  *
  * Produced by [KotlinMetadataReader] from ASM annotation nodes; consumed by
  * `AsmClassReader` (the `isKotlin` flag and the `OBJECT`/`COMPANION` kind
- * refinement) and, from T-036, by the Kotlin member mapping.
+ * refinement) and, from T-076, by the Kotlin member mapping (T-036): [kmClass]
+ * carries the full declaration container for `CLASS` metadata so callers can
+ * match JVM members against Kotlin functions and properties.
+ *
+ * [kmClass] is present only when [metadataKind] is [KotlinMetadataKind.CLASS];
+ * file facades, multi-file parts, synthetic classes and corrupt/absent metadata
+ * all carry `null`. `KmClass` is a mutable model type without value equality —
+ * compare its contents (names, flags), never two carriers with `==`.
  */
 public data class KotlinMetadata(
     public val metadataKind: KotlinMetadataKind,
     public val classKind: ClassKind?,
+    public val kmClass: KmClass? = null,
 )
 
 /**
@@ -95,7 +104,8 @@ public object KotlinMetadataReader {
             extraInt = values["xi"] as? Int ?: 0,
         )
         return when (val metadata = KotlinClassMetadata.readLenient(annotation)) {
-            is KotlinClassMetadata.Class -> KotlinMetadata(KotlinMetadataKind.CLASS, metadata.kmClass.kind)
+            is KotlinClassMetadata.Class ->
+                KotlinMetadata(KotlinMetadataKind.CLASS, metadata.kmClass.kind, metadata.kmClass)
             is KotlinClassMetadata.FileFacade -> KotlinMetadata(KotlinMetadataKind.FILE_FACADE, null)
             is KotlinClassMetadata.MultiFileClassFacade ->
                 KotlinMetadata(KotlinMetadataKind.MULTI_FILE_FACADE, null)

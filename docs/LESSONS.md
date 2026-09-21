@@ -60,6 +60,7 @@ session-log references keep resolving. Numbers are never reused.)
 | Never zip sorted views against their source | L-071 |
 | Symbol reference grammar (package globs) | L-086 |
 | Kotlin `@Metadata` reading (`Metadata(...)` helper, not `KotlinClassHeader`) | L-087 |
+| Kotlin `KmClass` equality (compare contents, never carriers) | L-088 |
 
 ## Adding an entry
 
