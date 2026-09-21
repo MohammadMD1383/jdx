@@ -2103,7 +2103,7 @@ public object JdxService {
             return if (ref is MemberSymbolRef) {
                 memberDocOutcome(ref, rawRef, binary, target, workspace, opened, providers, warnings, options)
             } else {
-                typeDocOutcome(binary, rawRef, opened, providers, warnings, options)
+                typeDocOutcome(binary, rawRef, target, opened, providers, warnings, options)
             }
         } finally {
             opened.forEach { it.root.close() }
@@ -2229,16 +2229,18 @@ public object JdxService {
                 val replacement = if (directDoc.rawComment.contains("{@inheritDoc")) inherited?.paragraph else null
                 val lines = docLines(directDoc, options.raw, replacement)
                 if (lines.isNotEmpty()) {
+                    val allWarnings = warnings + listOfNotNull(mismatchWarning(target, sources, binary))
                     return docOutcome(
                         directDoc, sources.displayName, binary, canonicalRef,
-                        docSubjectOf(directDoc.kind), warnings, options, lines, inheritedFrom = null,
+                        docSubjectOf(directDoc.kind), allWarnings, options, lines, inheritedFrom = null,
                     )
                 }
             }
             if (inherited != null) {
+                val allWarnings = warnings + listOfNotNull(mismatchWarning(target, sources, binary))
                 return docOutcome(
                     inherited.doc, inherited.displayName, binary, canonicalRef,
-                    docSubjectOf(inherited.doc.kind), warnings, options, inherited.lines,
+                    docSubjectOf(inherited.doc.kind), allWarnings, options, inherited.lines,
                     inheritedFrom = inherited.superBinary,
                 )
             }
@@ -2247,7 +2249,7 @@ public object JdxService {
                 "no javadoc comment for '$rawRef' in $label nor any documenting supertype"
             } else {
                 "'$rawRef' has no source counterpart in $label " +
-                    "(possible SOURCES_VERSION_MISMATCH, T-028)"
+                    "(SOURCES_VERSION_MISMATCH)"
             }
             return ServiceOutcome.Failure(ErrorResult.notFound(rawRef, detail = detail))
         } finally {
@@ -2263,6 +2265,7 @@ public object JdxService {
     private fun typeDocOutcome(
         binary: String,
         rawRef: String,
+        target: ClassInfo,
         opened: List<OpenRoot>,
         providers: Map<String, List<Int>>,
         warnings: List<Warning>,
@@ -2292,9 +2295,10 @@ public object JdxService {
                             ),
                         )
                     } else {
+                        val allWarnings = warnings + listOfNotNull(mismatchWarning(target, sources, binary))
                         docOutcome(
                             doc, sources.displayName, binary, binary,
-                            docSubjectOf(doc.kind), warnings, options, lines, inheritedFrom = null,
+                            docSubjectOf(doc.kind), allWarnings, options, lines, inheritedFrom = null,
                         )
                     }
                 }
@@ -2304,7 +2308,7 @@ public object JdxService {
                         ErrorResult.notFound(
                             rawRef,
                             detail = "$binary has no source counterpart in $label " +
-                                "(possible SOURCES_VERSION_MISMATCH, T-028)",
+                                "(SOURCES_VERSION_MISMATCH)",
                         ),
                     )
                 is dev.jdx.sources.JavaDocResult.TypeUndocumented ->
@@ -2435,6 +2439,23 @@ public object JdxService {
         val listed = dev.jdx.sources.listJavaMembers(sources, binary)
         return (listed as? dev.jdx.sources.JavaMemberList.Listed)
             ?.members?.any { it.name == memberName } == true
+    }
+
+    /**
+     * The `SOURCES_VERSION_MISMATCH` warning for one sources-backed answer
+     * (T-028): compares the winning root's source declarations against the
+     * bytecode the query resolved from. `null` when they agree or when the
+     * sources cannot be listed (missing file, `.kt`-only, unparseable) — those
+     * degradations already have their own labels.
+     */
+    private fun mismatchWarning(
+        target: ClassInfo,
+        sources: dev.jdx.sources.SourceRoot,
+        binary: String,
+    ): Warning? {
+        val listed = dev.jdx.sources.listJavaMembers(sources, binary)
+        val members = (listed as? dev.jdx.sources.JavaMemberList.Listed)?.members ?: return null
+        return dev.jdx.sources.detectSourcesMismatch(target, members, sources.displayName)
     }
 
     /** Rendered (`--raw` verbatim) lines of one doc, before `--max-lines` truncation. */
@@ -2664,6 +2685,7 @@ public object JdxService {
                         }
                         val body = found.bodies.singleOrNull()
                             ?: return ServiceOutcome.Failure(ErrorResult.ambiguous(rawRef, matchRefs))
+                        mismatchWarning(target, sources, binary)?.let(warnings::add)
                         return bodyOutcome(
                             body = body,
                             sources = sources,
@@ -2697,7 +2719,7 @@ public object JdxService {
                             ErrorResult.notFound(
                                 rawRef,
                                 detail = "$binary has no source counterpart in $label " +
-                                    "(possible SOURCES_VERSION_MISMATCH, T-028)",
+                                    "(SOURCES_VERSION_MISMATCH)",
                             ),
                         )
                     is dev.jdx.sources.JavaBodyResult.NotJava ->
@@ -2717,7 +2739,7 @@ public object JdxService {
                     ErrorResult.notFound(
                         rawRef,
                         detail = "$rawRef has no source counterpart in $label " +
-                            "(possible SOURCES_VERSION_MISMATCH, T-028)",
+                            "(SOURCES_VERSION_MISMATCH)",
                     ),
                 )
             } finally {
@@ -2884,7 +2906,7 @@ public object JdxService {
             ErrorResult.notFound(
                 rawRef,
                 detail = "$rawRef has no decompiled counterpart in $label " +
-                    "(possible SOURCES_VERSION_MISMATCH, T-028)",
+                    "(SOURCES_VERSION_MISMATCH)",
             ),
         )
     }
@@ -3023,7 +3045,7 @@ public object JdxService {
             ErrorResult.notFound(
                 aroundRaw,
                 detail = "$aroundRaw has no decompiled counterpart in $label " +
-                    "(possible SOURCES_VERSION_MISMATCH, T-028)",
+                    "(SOURCES_VERSION_MISMATCH)",
             ),
         )
     }
@@ -3091,7 +3113,7 @@ public object JdxService {
                 ErrorResult.notFound(
                     rawRef,
                     detail = "$rawRef has no disassembled counterpart in $label " +
-                        "(possible SOURCES_VERSION_MISMATCH, T-028)",
+                        "(SOURCES_VERSION_MISMATCH)",
                 ),
             )
         val fileLines = splitTextLines(text)
@@ -3204,7 +3226,7 @@ public object JdxService {
                 ErrorResult.notFound(
                     aroundRaw,
                     detail = "$aroundRaw has no disassembled counterpart in $label " +
-                        "(possible SOURCES_VERSION_MISMATCH, T-028)",
+                        "(SOURCES_VERSION_MISMATCH)",
                 ),
             )
         val fileLines = splitTextLines(text)
@@ -3437,6 +3459,7 @@ public object JdxService {
         }
         val fileLines = readSourceLines(sources, path)
             ?: return failure(5, rawRef, "source read error: cannot read $path")
+        val allWarnings = warnings + listOfNotNull(mismatchWarning(target, sources, binary))
         return fileSourceOutcome(
             binary = binary,
             rawRef = rawRef,
@@ -3445,7 +3468,7 @@ public object JdxService {
             fileLines = fileLines,
             window = options.lines,
             origin = Origin.SOURCES,
-            warnings = warnings,
+            warnings = allWarnings,
             options = options,
         )
     }
@@ -3482,7 +3505,7 @@ public object JdxService {
             ErrorResult.notFound(
                 rawRef,
                 detail = "$binary has no source counterpart in $label " +
-                    "(possible SOURCES_VERSION_MISMATCH, T-028)",
+                    "(SOURCES_VERSION_MISMATCH)",
             ),
         )
     }
@@ -3578,6 +3601,7 @@ public object JdxService {
                         ?: return ServiceOutcome.Failure(ErrorResult.ambiguous(aroundRaw, matchRefs))
                     val fileLines = readSourceLines(sources, body.file)
                         ?: return failure(5, rawRef, "source read error: cannot read ${body.file}")
+                    val allWarnings = warnings + listOfNotNull(mismatchWarning(target, sources, binary))
                     return ServiceOutcome.Source(
                         buildSourceBlock(
                             canonicalRef = binary,
@@ -3594,7 +3618,7 @@ public object JdxService {
                                     lineRange = body.startLine..body.endLine,
                                 ),
                             ),
-                            warnings = warnings.sortedBy { it.code },
+                            warnings = allWarnings.sortedBy { it.code },
                             contextLines = options.contextLines,
                             lineNumbers = options.lineNumbers,
                             maxLines = options.maxLines,
@@ -3612,7 +3636,7 @@ public object JdxService {
                         ErrorResult.notFound(
                             rawRef,
                             detail = "$binary has no source counterpart in $label " +
-                                "(possible SOURCES_VERSION_MISMATCH, T-028)",
+                                "(SOURCES_VERSION_MISMATCH)",
                         ),
                     )
                 is dev.jdx.sources.JavaBodyResult.NotJava ->
@@ -3632,7 +3656,7 @@ public object JdxService {
             ErrorResult.notFound(
                 aroundRaw,
                 detail = "$aroundRaw has no source counterpart in $label " +
-                    "(possible SOURCES_VERSION_MISMATCH, T-028)",
+                    "(SOURCES_VERSION_MISMATCH)",
             ),
         )
     }

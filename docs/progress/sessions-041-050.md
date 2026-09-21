@@ -4,6 +4,101 @@ Newest first. Each entry follows the template at the bottom of `docs/PROGRESS.md
 
 ---
 
+## Session 47 — 2026-09-21 — T-028 `SOURCES_VERSION_MISMATCH` done
+**Agent/Author:** Muse Spark 1.3 Free · **Commits:** `492fa76` (claim) + closing commit (this session)
+
+### Goal
+Implement T-028, the last M3 one-liner: turn `WarningCode.SOURCES_VERSION_MISMATCH`
+(D-009, PROPOSAL.md §11.1) from a dead enum into an emitted warning on
+sources-backed `body`/`source`/`doc` answers, without changing exit codes.
+
+### What I did
+- Claimed T-028 first: expanded the M3 one-liner into a detail block with
+  acceptance (`docs/TASKS.md`) and committed the `WIP` (`492fa76`) before coding.
+- `sources/.../SourcesMismatch.kt` (new): pure total `detectSourcesMismatch(
+  target, sourceMembers, sourcesName)` — kind-aware multiset pairing by name +
+  arity + lenient keys (erased descriptor, generic-signature spelling,
+  varargs/array collapse), with excuses for synthetic/bridge/`<clinit>`,
+  implicit default ctors, record accessors + compact↔canonical pairing +
+  `toString`/`hashCode`/`equals`, enum `values()`/`valueOf` + `(String,int)`
+  ctor prefix, and inner leading outer-`this`. Bounded message (3 refs +
+  count, both directions, "Structure shown from bytecode.").
+- `sources/.../JavaBodies.kt`: `declaredMembersOf` now lists record
+  components (header `Parameters`) and annotation elements
+  (`AnnotationMemberDeclaration`) — without them every record/annotation
+  read as mismatched (L-078). Updated the `Point` pin accordingly.
+- `index` (`JdxService`): `mismatchWarning` helper wired into `body`,
+  `source` whole/`--around`, and `doc` (direct/inherited/type) successes —
+  decompiled/javap/`.kt`/unparseable paths never warn; all 11
+  `(possible …, T-028)` user-facing details are now `(SOURCES_VERSION_MISMATCH)`.
+- Tests: sources tier-1 `SourcesMismatchTest` (15 examples + 3 thousand-case
+  properties: never-throws, determinism, derived-set self-agreement); index
+  tier-2 `SourcesMismatchServiceTest` (7: matched silence over
+  generics/record/enum/annotation/inner/annotated types in text+JSON,
+  extra/missing/renamed crafted jars, determinism); 6 reworded `T-028`→code
+  assertions; `ArtifactShapeFaultTest` comments updated to past tense.
+- Real bugs caught pre-review by the matched-silence tests: record component
+  fields (header, not members) and the `Point` pin; enum/inner hidden ctor
+  params confirmed via `javap -s` (L-079).
+- Verified: `check -x verifyTier1Budget` green incl. JaCoCo gates (54 tasks);
+  `soak` green solo (2m 28s); goldens byte-identical (no warning on matched
+  jars). `verifyTier1Budget` red pre-existing (67.1s stashed-clean on this
+  machine; new suites cost <2s, absent from the slowest-10). Live CLI proof
+  below (matched silent, stale warns, exit 0 both).
+
+### Decisions made
+- D-040 (`SOURCES_VERSION_MISMATCH` semantics: warn-on-success, kind-aware
+  pairing, compiler-output excuses, no-warning-without-sources, pinned
+  silence) in `docs/decisions/D-026-050.md`.
+
+### Tasks moved
+- T-028: TODO → WIP (`492fa76`) → DONE. T-072/T-073 stay TODO (M3 remainder).
+
+### Lessons distilled
+- **L-078** — JavaParser hides declarations outside the member list (record
+  header `Parameters`, `AnnotationMemberDeclaration`); any source-member
+  enumeration must cover them.
+- **L-079** — enum `(String, int)` and inner outer-`this` hidden ctor params
+  (`jvm-spec`); strip before arity checks.
+
+### What works now (and how to verify it yourself)
+```bash
+./gradlew :sources:test --tests "dev.jdx.sources.SourcesMismatchTest" -x verifyTier1Budget
+./gradlew :index:tier2Test --tests "dev.jdx.index.service.SourcesMismatchServiceTest" \
+  --tests "dev.jdx.index.service.BodyServiceTest" --tests "dev.jdx.index.service.SourceServiceTest" \
+  --tests "dev.jdx.index.service.DocServiceTest"
+./gradlew check -x verifyTier1Budget  # green incl. gates
+./gradlew soak                        # green (2m 28s solo)
+JAR=testfixtures/build/libs/testfixtures-0.1.0-SNAPSHOT.jar
+./app/build/jdx body 'dev.jdx.fixtures.Generics#identity(java.lang.Object)' --jars "$JAR" --no-jdk
+# exit 0, verbatim slice, no warning (matched jars stay silent)
+./app/build/jdx doc 'dev.jdx.fixtures.PersonRecord' --jars "$JAR" --no-jdk
+# exit 0, class doc, no warning (record leniency incl. components)
+```
+Stale proof (crafted `/tmp/opencode/stale/case.jar` + `case-sources.jar` with
+an added `brandNew()`): same `body` query exits 0 with
+`warning SOURCES_VERSION_MISMATCH: case-sources.jar declares
+dev.jdx.fixtures.Generics#brandNew() which is absent from
+dev.jdx.fixtures.Generics. Structure shown from bytecode.`
+Note: from the repo dir the ambient `fx` workspace adds a `DUPLICATE_FQN`
+line naming the fixture jar (L-067) — the explicit jar still wins.
+
+### What is broken / half-done
+- Nothing from this task. Pre-existing, untouched: `verifyTier1Budget` red on
+  this machine (proven stashed-clean); T-072/T-073 TODO. Discovered, not
+  done: same-file top-level siblings (`Matrix`/`Tag` in `Annos.java`) resolve
+  no source file (outer-file-only lookup) — the unbuilt `srcmap` (T-020
+  remainder) owns that.
+
+### Open questions / blockers
+- None.
+
+### Next action
+- **T-072** (`--with-doc` enrichment — lowest TODO by number with deps DONE;
+  T-073 auto-fallback likewise TODO; then M4 T-029…T-034 coarse).
+
+---
+
 ## Session 46 — 2026-09-20 — T-027 `javap` engine done
 **Agent/Author:** Muse Spark 1.3 Free · **Commits:** `e4c1466` (claim) + closing commit (this session)
 

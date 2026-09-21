@@ -68,3 +68,4 @@ log.
 | D-037 | `jdx doc` output semantics (T-025) | proposed-by-implementer | `D-026-050.md` |
 | D-038 | Vineflower decompilation semantics (T-026) | proposed-by-implementer | `D-026-050.md` |
 | D-039 | `javap` engine semantics (T-027) | proposed-by-implementer | `D-026-050.md` |
+| D-040 | `SOURCES_VERSION_MISMATCH` detection semantics (T-028) | proposed-by-implementer | `D-026-050.md` |

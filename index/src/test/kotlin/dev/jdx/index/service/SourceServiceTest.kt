@@ -373,7 +373,7 @@ class SourceServiceTest {
     }
 
     @Test
-    fun `stale sources without the type degrade naming T-028`(@TempDir tempDir: Path) {
+    fun `stale sources without the type degrade naming SOURCES_VERSION_MISMATCH`(@TempDir tempDir: Path) {
         // Paired sources exist but hold no file for the type: a stale or
         // mismatched sources jar, not a missing one.
         val binary = tempDir.resolve("stale.jar")
@@ -386,7 +386,7 @@ class SourceServiceTest {
         val roots = RootsSpec(jarSpecs = listOf(binary.toString()), includeJdk = false)
         val outcome = JdxService.source("dev.jdx.fixtures.Generics", roots)
         outcome.exitCode shouldBe 1
-        textOf(outcome) shouldContain "T-028"
+        textOf(outcome) shouldContain "SOURCES_VERSION_MISMATCH"
     }
 
     @Test

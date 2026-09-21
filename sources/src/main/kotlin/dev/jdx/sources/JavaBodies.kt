@@ -352,6 +352,18 @@ private fun declaredMembersOf(target: TypeDeclaration<*>): List<DeclaredSourceMe
             member.isCompactConstructorDeclaration -> {
                 DeclaredSourceMember(SourceBodyKind.CONSTRUCTOR, "<init>", emptyList())
             }
+            member.isAnnotationMemberDeclaration -> {
+                // Annotation elements (`String[] names() default {};`) are
+                // methods in bytecode but annotation-member declarations in
+                // JavaParser — without this branch every annotation type
+                // would read as mismatched (T-028).
+                val element = member.asAnnotationMemberDeclaration()
+                DeclaredSourceMember(
+                    SourceBodyKind.METHOD,
+                    element.nameAsString,
+                    emptyList(),
+                )
+            }
             else -> null
         }
     }
@@ -368,7 +380,18 @@ private fun declaredMembersOf(target: TypeDeclaration<*>): List<DeclaredSourceMe
     } else {
         emptyList()
     }
-    return executables + fields + entries
+    // Record components (`record Point(int x, int y)`) live in the header,
+    // not in the member list — but the compiler emits a field per component,
+    // so the T-028 pairing lists them as fields (a removed component then
+    // warns instead of passing silently).
+    val components = if (target.isRecordDeclaration) {
+        target.asRecordDeclaration().parameters.map {
+            DeclaredSourceMember(SourceBodyKind.FIELD, it.nameAsString, emptyList())
+        }
+    } else {
+        emptyList()
+    }
+    return executables + fields + entries + components
 }
 
 /** Slices one matched declaration to a verbatim [SourceBody]. */

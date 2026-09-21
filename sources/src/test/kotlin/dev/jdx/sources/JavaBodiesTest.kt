@@ -308,7 +308,12 @@ class JavaBodiesTest {
     fun `listJavaMembers covers records enums and parse errors`() {
         val point = listJavaMembers(shapes, "com.example.Point")
             .shouldBeInstanceOf<JavaMemberList.Listed>().members
-        point shouldBe listOf(DeclaredSourceMember(SourceBodyKind.CONSTRUCTOR, "<init>", emptyList()))
+        point shouldBe listOf(
+            DeclaredSourceMember(SourceBodyKind.CONSTRUCTOR, "<init>", emptyList()),
+            // Record components live in the header but pair as fields (T-028).
+            DeclaredSourceMember(SourceBodyKind.FIELD, "x", emptyList()),
+            DeclaredSourceMember(SourceBodyKind.FIELD, "y", emptyList()),
+        )
 
         val traffic = listJavaMembers(shapes, "com.example.Traffic")
             .shouldBeInstanceOf<JavaMemberList.Listed>().members

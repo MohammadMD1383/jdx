@@ -59,7 +59,8 @@ T-021 (JavaParser body extraction over that seam) is DONE; T-022 (`jdx body`
 over that seam) is DONE; T-023 (`jdx source` over that seam) is DONE;
 T-024 (`jdx signature` over bytecode) is DONE; T-025 (`jdx doc` incl.
 inherited javadoc) is DONE; T-026 (Vineflower decompiler fallback) is DONE;
-T-027 (`javap` engine) is DONE.**
+T-027 (`javap` engine) is DONE; T-028 (`SOURCES_VERSION_MISMATCH`
+detection) is DONE.**
 T-072 (`--with-doc` enrichment) and T-073 (Vineflower→javap auto-fallback) are filed TODO.
 
 ---
@@ -1016,17 +1017,46 @@ stored workspace mirror). `check` green shelved; `cli:tier2Test` with ambient
 ### T-020 Sources-jar/dir access and `srcmap` · **T-021** JavaParser integration and Java body extraction · **T-022** `jdx body` · **T-023** `jdx source` · **T-024** `jdx signature` · **T-025** `jdx doc` incl. inherited javadoc · **T-028** `SOURCES_VERSION_MISMATCH` detection
 *(Expand into detail blocks when M3 starts.)*
 
-### T-028 — `SOURCES_VERSION_MISMATCH` detection · `WIP` (session 47)
-**Depends:** T-021 (`listJavaMembers` seam), T-022/T-023/T-025 (body/source/doc patterns) · **Files:** `sources/.../SourcesMismatch.kt`, `index/.../service/JdxService.kt`
+### T-028 — `SOURCES_VERSION_MISMATCH` detection · `DONE` (session 47)
+**Depends:** T-021 (`listJavaMembers` seam), T-022/T-023/T-025 (body/source/doc patterns) · **Files:** `sources/.../SourcesMismatch.kt`, `JavaBodies.kt`, `index/.../service/JdxService.kt`
 *(Last M3 one-liner: turn the `WarningCode.SOURCES_VERSION_MISMATCH` enum (D-009, PROPOSAL.md §11.1) from a dead code into an emitted warning. Structure stays bytecode-authoritative: successful `body`/`source`/`doc` answers from paired Java sources carry the warning when the sources declare a different member set; missing-member/type failures keep exit 1 with the code named.)*
 
 Emit a structured `SOURCES_VERSION_MISMATCH` warning on successful sources-backed `body`/`source`/`doc` when bytecode and sources disagree; keep exit codes unchanged.
 
 **Acceptance**
-- [ ] Successful `body`/`source`/`doc` from paired Java sources emit `SOURCES_VERSION_MISMATCH` (text `warning SOURCES_VERSION_MISMATCH: …` + JSON `warnings[]`) when a non-synthetic bytecode member is absent from sources or a source member is absent from bytecode (added/removed/renamed)
-- [ ] Synthetic/bridge members, `<clinit>`, and `<init>`-arity quirks never trigger the warning
-- [ ] Missing-member/type failures stay exit 1 and name `SOURCES_VERSION_MISMATCH` (no `T-028` task ref in user output)
-- [ ] Tests: `sources` tier-1 pure detector examples + 1,000-case never-throws/determinism properties; index tier-2 crafted-jar service tests (extra/missing/renamed member, foreign sources jar) + determinism/text⊆JSON; tiers 1+2 green
+- [x] Successful `body`/`source`/`doc` from paired Java sources emit `SOURCES_VERSION_MISMATCH` (text `warning SOURCES_VERSION_MISMATCH: …` + JSON `warnings[]`) when a non-synthetic bytecode member is absent from sources or a source member is absent from bytecode (added/removed/renamed)
+- [x] Synthetic/bridge members, `<clinit>`, and `<init>`-arity quirks never trigger the warning
+- [x] Missing-member/type failures stay exit 1 and name `SOURCES_VERSION_MISMATCH` (no `T-028` task ref in user output)
+- [x] Tests: `sources` tier-1 pure detector examples + 1,000-case never-throws/determinism properties; index tier-2 crafted-jar service tests (extra/missing/renamed member, foreign sources jar) + determinism/text⊆JSON; tiers 1+2 green
+
+*Implementation notes (session 47): `sources/.../SourcesMismatch.kt` —
+`detectSourcesMismatch(target, sourceMembers, sourcesName)` (pure, total):
+kind-aware multiset pairing (methods/ctors/fields, enum entries as fields)
+by name + arity + lenient keys (erased descriptor, generic-signature
+spelling, varargs/array collapse); implicit-member excuses (synthetic/
+bridge/`<clinit>`, implicit default ctor, record accessors + compact pairing
++ `toString`/`hashCode`/`equals`, enum `values()`/`valueOf` + `(String,int)`
+ctor prefix, inner leading outer-`this`); bounded message (3 refs + count,
+both directions, "Structure shown from bytecode."). `JavaBodies.
+declaredMembersOf` now lists record components (header `Parameters`) and
+annotation elements (`AnnotationMemberDeclaration`) — without them every
+record/annotation read as mismatched (L-078). `JdxService.mismatchWarning`
+wires the detector into `body`/`source`/whole/`--around`/`doc` successes
+(decompiled/javap/`.kt`/unparseable paths never warn); all 11
+`(possible …, T-028)` details are now `(SOURCES_VERSION_MISMATCH)`.
+Tests: sources tier-1 `SourcesMismatchTest` (15 examples + 3 thousand-case
+properties incl. the derived-set self-agreement law) + updated
+`listJavaMembers` record pin; index tier-2 `SourcesMismatchServiceTest`
+(7: matched silence over generics/record/enum/annotation/inner/annotated
+types in text+JSON, extra/missing/renamed crafted jars, determinism) +
+6 reworded `T-028`→code assertions. Standing bar: `check
+-x verifyTier1Budget` green incl. JaCoCo gates; `soak` green (2m 28s);
+`verifyTier1Budget` red pre-existing (67.1s stashed-clean; new suites cost
+<2s, absent from the slowest-10). Goldens byte-identical. Lesson L-078
+(JavaParser hidden declarations), L-079 (hidden ctor params); decision
+D-040. Discovered follow-up (not done): same-file top-level siblings
+(`Matrix`/`Tag` in `Annos.java`) resolve no source file — the unbuilt
+`srcmap` (T-020 remainder) owns that, noted for the next milestone.*
 
 ### T-027 — `javap` engine for `body`/`source` · `DONE` (session 46)
 **Depends:** T-022/T-023 (body/source patterns), T-026 (`DecompilerEngine` seam + forced-engine plumbing), T-011/T-015/T-016 (roots) · **Files:** `decompile/.../JavapDecompiler.kt`, `JavapOutput.kt`, `DecompilerEngine.kt`, `index/.../service/JdxService.kt`, `cli/.../commands/BodyCommand.kt`, `SourceCommand.kt`

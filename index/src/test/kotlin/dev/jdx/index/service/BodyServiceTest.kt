@@ -185,7 +185,7 @@ class BodyServiceTest {
             fixtureRoots(),
         )
         outcome.exitCode shouldBe 1
-        textOf(outcome) shouldContain "T-028"
+        textOf(outcome) shouldContain "SOURCES_VERSION_MISMATCH"
     }
 
     @Test
@@ -267,7 +267,7 @@ class BodyServiceTest {
     }
 
     @Test
-    fun `a member missing from reconstructed text names T-028`(@TempDir tempDir: Path) {
+    fun `a member missing from reconstructed text names SOURCES_VERSION_MISMATCH`(@TempDir tempDir: Path) {
         val binary = bareJar(tempDir)
         val roots = RootsSpec(jarSpecs = listOf(binary.toString()), includeJdk = false)
         val scripted = ScriptedDecompiler(
@@ -279,7 +279,7 @@ class BodyServiceTest {
             BodyOptions(decompiler = scripted),
         )
         outcome.exitCode shouldBe 1
-        textOf(outcome) shouldContain "T-028"
+        textOf(outcome) shouldContain "SOURCES_VERSION_MISMATCH"
     }
 
     @Test
@@ -472,7 +472,7 @@ class BodyServiceTest {
     }
 
     @Test
-    fun `a member missing from disassembly names T-028`(@TempDir tempDir: Path) {
+    fun `a member missing from disassembly names SOURCES_VERSION_MISMATCH`(@TempDir tempDir: Path) {
         val binary = bareJar(tempDir)
         val roots = RootsSpec(jarSpecs = listOf(binary.toString()), includeJdk = false)
         val scripted = ScriptedDecompiler(
@@ -484,7 +484,7 @@ class BodyServiceTest {
             BodyOptions(engine = DecompilerId.JAVAP, javapDecompiler = scripted),
         )
         outcome.exitCode shouldBe 1
-        textOf(outcome) shouldContain "T-028"
+        textOf(outcome) shouldContain "SOURCES_VERSION_MISMATCH"
     }
 
     @Test

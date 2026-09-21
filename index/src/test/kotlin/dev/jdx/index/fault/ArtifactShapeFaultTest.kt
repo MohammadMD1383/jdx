@@ -32,7 +32,8 @@ import org.junit.jupiter.api.io.TempDir
  * Two §7 bullets are *not* here: decompiler timeout/crash has no decompiler to
  * fault yet (the engines land in T-026/T-027, which extend this suite), and
  * `SOURCES_VERSION_MISMATCH` detection is T-028 — the sources tests below pin
- * the current degrade-to-bytecode contract that T-028 must preserve.
+ * the degrade-to-bytecode contract that T-028 preserves (mismatched sources
+ * still answer structural queries from bytecode).
  *
  * Tagged `tier2` (docs/TESTING.md §2): crafts jars on disk and reads them back.
  */
@@ -273,8 +274,9 @@ class ArtifactShapeFaultTest {
         ArtifactTestJars.craftJar(jar, mapOf(entry to ArtifactTestJars.fixtureClassBytes(binaryJar, entry)))
         // Same stem, unrelated contents: pairing is by name and never inspects the
         // sources, so this pairs — and the query answers from bytecode regardless.
-        // T-028 will add SOURCES_VERSION_MISMATCH detection; this test pins the
-        // degrade-to-bytecode half of that contract so T-028 cannot break it.
+        // T-028 adds the SOURCES_VERSION_MISMATCH warning on sources-backed
+        // answers; structural queries like `show` stay warning-free by design.
+        // This test pins the degrade-to-bytecode half of that contract.
         val sources = temp.resolve("mismatched-sources.jar")
         ArtifactTestJars.craftJar(sources, mapOf("notes.txt" to "unrelated".toByteArray()))
         ArtifactLoader.openJar(jar).use { root ->

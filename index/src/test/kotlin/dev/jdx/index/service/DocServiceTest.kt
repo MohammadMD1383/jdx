@@ -328,7 +328,7 @@ class DocServiceTest {
         val jars = partialJars(tempDir, sourcesEntries = mapOf("doc/Base.java" to stripped))
         val outcome = JdxService.doc("doc.Base#greet(java.lang.String)", caseRoots(jars))
         outcome.exitCode shouldBe 1
-        textOf(outcome) shouldContain "T-028"
+        textOf(outcome) shouldContain "SOURCES_VERSION_MISMATCH"
     }
 
     @Test
@@ -342,7 +342,7 @@ class DocServiceTest {
         val jars = partialJars(tempDir, sourcesEntries = mapOf("doc/Base.java" to renamed))
         val outcome = JdxService.doc("doc.Base", caseRoots(jars))
         outcome.exitCode shouldBe 1
-        textOf(outcome) shouldContain "T-028"
+        textOf(outcome) shouldContain "SOURCES_VERSION_MISMATCH"
     }
 
     @Test
