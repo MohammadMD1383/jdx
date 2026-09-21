@@ -36,8 +36,9 @@ class WorkspacePropertyTest {
             Arb.boolean(),
             Arb.list(nastyString, 0..3),
             Arb.list(nastyString, 0..3),
-        ) { name, jars, includeJdk, coords, repos ->
-            val original = WorkspaceDefinition(name, jars, includeJdk, coords, repos)
+            Arb.list(nastyString, 0..3),
+        ) { name, jars, includeJdk, coords, repos, srcs ->
+            val original = WorkspaceDefinition(name, jars, includeJdk, coords, repos, srcs)
             val decoded = WorkspaceToml.decode(WorkspaceToml.encode(original), "$name.toml")
             (decoded.isSuccess) shouldBe true
             decoded.getOrThrow() shouldBe original
@@ -64,8 +65,10 @@ class WorkspacePropertyTest {
             Arb.list(nastyString, 0..3),
             Arb.list(nastyString, 0..3),
             Arb.list(nastyString, 0..3),
-        ) { explicit, stored, jdk, explicitCoords, storedCoords, explicitRepos, storedRepos ->
-            val lookup = mapOf("ws" to WorkspaceDefinition("ws", stored, jdk, storedCoords, storedRepos))
+            Arb.list(nastyString, 0..3),
+            Arb.list(nastyString, 0..3),
+        ) { explicit, stored, jdk, explicitCoords, storedCoords, explicitRepos, storedRepos, explicitSrcs, storedSrcs ->
+            val lookup = mapOf("ws" to WorkspaceDefinition("ws", stored, jdk, storedCoords, storedRepos, storedSrcs))
             val result = WorkspaceResolver.resolve(
                 explicitJars = explicit,
                 explicitNoJdk = false,
@@ -74,12 +77,14 @@ class WorkspacePropertyTest {
                 listNames = { listOf("ws") },
                 explicitCoords = explicitCoords,
                 explicitRepos = explicitRepos,
+                explicitSrcs = explicitSrcs,
             )
             (result is WorkspaceResolver.Result.success) shouldBe true
             val resolved = (result as WorkspaceResolver.Result.success).value
             resolved.jarSpecs shouldBe explicit + stored
             resolved.coords shouldBe explicitCoords + storedCoords
             resolved.repos shouldBe explicitRepos + storedRepos
+            resolved.srcSpecs shouldBe explicitSrcs + storedSrcs
             resolved.includeJdk shouldBe jdk
             resolved.workspaceName shouldBe "ws"
         }

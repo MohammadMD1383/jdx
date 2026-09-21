@@ -126,6 +126,11 @@ public object JdxService {
          * fake over fabricated repositories so no test touches the network.
          */
         public val mavenResolve: MavenResolveFn = ::productionMavenResolve,
+        /**
+         * Project source dirs (T-031): scanned textually by `usages` for
+         * whole-word mentions (`ref` kind); other readers ignore them.
+         */
+        public val srcSpecs: List<String> = emptyList(),
     ) {
         public companion object {
             /** Converts a resolved workspace selection into the roots a query opens. */
@@ -135,6 +140,7 @@ public object JdxService {
                 jarSpecs = resolved.jarSpecs,
                 includeJdk = resolved.includeJdk,
                 extraWarnings = resolved.warnings,
+                srcSpecs = resolved.srcSpecs,
             )
         }
     }
@@ -2242,6 +2248,41 @@ public object JdxService {
                                 artifact = label,
                                 kind = usageKindWord(edge.kind),
                                 targetRef = edgeTargetRef(edge),
+                            ),
+                        )
+                    }
+                }
+            }
+
+            // T-031 source-dir scan (D-010): textual whole-word mentions, always
+            // `ref` kind — text cannot tell call from read from write, so
+            // `--kind call|read|write` shows bytecode edges alone while
+            // `--kind all|ref` adds these rows. Missing dirs fail (exit 5,
+            // like missing `--jars`); unreadable files read as no mentions
+            // inside the scanner (never abort the scan).
+            if (ReferenceKind.TYPE_REFERENCE in wantKinds) {
+                val wanted = if (memberName != null && memberName != "<init>") memberName else declaring.simpleName
+                val seenDirs = LinkedHashSet<String>()
+                for (spec in roots.srcSpecs) {
+                    val dir = java.nio.file.Paths.get(spec)
+                    if (!java.nio.file.Files.isDirectory(dir)) {
+                        return failure(5, rawRef, "artifact read error: source dir '$spec' does not exist or is not a directory")
+                    }
+                    val key = runCatching { dir.toAbsolutePath().normalize().toString() }.getOrElse { spec }
+                    if (!seenDirs.add(key)) continue
+                    val label = dir.fileName?.toString() ?: spec
+                    if (!matchesArtifactFilter(options.inArtifact, label) ||
+                        (options.exclude != null && matchesArtifactFilter(options.exclude, label))
+                    ) {
+                        continue
+                    }
+                    for (mention in dev.jdx.index.usages.SourceUsages.scanSourceDir(dir, wanted)) {
+                        hits.add(
+                            UsageHit(
+                                fromRef = "${mention.relativePath}:${mention.line}",
+                                artifact = label,
+                                kind = "ref",
+                                targetRef = canonicalTarget,
                             ),
                         )
                     }

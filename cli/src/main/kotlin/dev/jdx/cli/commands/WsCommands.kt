@@ -74,6 +74,7 @@ private data class WsPayload(
     val jars: List<String> = emptyList(),
     val coords: List<String> = emptyList(),
     val repos: List<String> = emptyList(),
+    val srcs: List<String> = emptyList(),
     val includeJdk: Boolean = true,
     val active: Boolean = false,
     val workspaces: List<String> = emptyList(),
@@ -111,11 +112,11 @@ private fun corruptOrIoMessage(action: String, name: String, e: IOException): St
     }
 
 /**
- * `jdx ws create <name> [--jars <path>...] [--coord <g:a:v>...] [--repo <url>...] [--jdk/--no-jdk]`.
+ * `jdx ws create <name> [--jars <path>...] [--src <dir>...] [--coord <g:a:v>...] [--repo <url>...] [--jdk/--no-jdk]`.
  *
  * Refuses when the name exists (exit 1) rather than silently overwriting ordered roots
- * the user crafted — `ws add` extends, `ws remove` clears the way. `--src` fails
- * naming the owning task instead of storing roots no reader honours yet; `--coord`
+ * the user crafted — `ws add` extends, `ws remove` clears the way. `--src`
+ * values are stored and scanned textually by `usages` (T-031); `--coord`
  * values are stored and resolved to jars at query time (T-019); `--repo` values
  * are stored and prepended to the fetch order at query time (T-069).
  */
@@ -141,7 +142,7 @@ class WsCreateCommand(
 
     private val src by option(
         "--src",
-        help = "Source dirs (not yet implemented, T-031).",
+        help = "Source dirs: directories of .java/.kt files scanned textually by jdx usages (repeatable, order kept).",
     ).multiple()
 
     private val coord by option(
@@ -181,14 +182,6 @@ class WsCreateCommand(
             )
             return
         }
-        if (src.isNotEmpty()) {
-            finishWs(
-                "usage error: --src is not yet implemented (T-031: project source-dir roots)",
-                WsPayload(workspace = name, message = "--src is not yet implemented (T-031)"),
-                "ws create", json, 3, terminate,
-            )
-            return
-        }
         for (text in coord) {
             if (dev.jdx.index.maven.MavenCoords.parse(text) == null) {
                 val reason = dev.jdx.index.maven.MavenCoords.invalidReason(text)
@@ -210,7 +203,7 @@ class WsCreateCommand(
                 return
             }
         }
-        val definition = WorkspaceDefinition(name, jars, includeJdk = !noJdk, coords = coord, repos = repo)
+        val definition = WorkspaceDefinition(name, jars, includeJdk = !noJdk, coords = coord, repos = repo, srcs = src)
         try {
             if (store.load(name) != null) {
                 finishWs(
@@ -237,13 +230,14 @@ class WsCreateCommand(
         }
         val jdkWord = if (definition.includeJdk) "included" else "excluded"
         finishWs(
-            "workspace '$name' created\n  jars: ${jars.size} root(s)\n  coords: ${coord.size} root(s)\n  repos: ${repo.size} root(s)\n  jdk: $jdkWord\n" +
+            "workspace '$name' created\n  jars: ${jars.size} root(s)\n  srcs: ${src.size} root(s)\n  coords: ${coord.size} root(s)\n  repos: ${repo.size} root(s)\n  jdk: $jdkWord\n" +
                 "next: jdx -w $name members <type>",
             WsPayload(
                 workspace = name,
                 jars = jars,
                 coords = coord,
                 repos = repo,
+                srcs = src,
                 includeJdk = definition.includeJdk,
                 message = "created",
             ),
@@ -345,15 +339,18 @@ class WsInfoCommand(
             "  coords:\n" + definition.coords.joinToString("\n") { "    $it" }
         val repoLines = if (definition.repos.isEmpty()) "  repos: (none)" else
             "  repos:\n" + definition.repos.joinToString("\n") { "    $it" }
+        val srcLines = if (definition.srcs.isEmpty()) "  srcs: (none)" else
+            "  srcs:\n" + definition.srcs.joinToString("\n") { "    $it" }
         val jdkWord = if (definition.includeJdk) "included" else "excluded"
         val defaultWord = if (active == name) "yes (jdx ws use)" else "no"
         finishWs(
-            "workspace '$name'\n$jarLines\n$coordLines\n$repoLines\n  jdk: $jdkWord\n  default: $defaultWord",
+            "workspace '$name'\n$jarLines\n$coordLines\n$repoLines\n$srcLines\n  jdk: $jdkWord\n  default: $defaultWord",
             WsPayload(
                 workspace = name,
                 jars = definition.jars,
                 coords = definition.coords,
                 repos = definition.repos,
+                srcs = definition.srcs,
                 includeJdk = definition.includeJdk,
                 active = active == name,
                 message = "ok",

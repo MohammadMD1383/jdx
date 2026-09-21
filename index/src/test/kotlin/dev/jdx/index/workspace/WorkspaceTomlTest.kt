@@ -21,6 +21,7 @@ class WorkspaceTomlTest {
             "jars = [\"a.jar\", \"b/*.jar\"]\n" +
             "coords = []\n" +
             "repos = []\n" +
+            "srcs = []\n" +
             "include_jdk = true\n"
     }
 
@@ -66,6 +67,31 @@ class WorkspaceTomlTest {
         )
         (decoded.isSuccess) shouldBe true
         decoded.getOrThrow().repos shouldBe emptyList()
+    }
+
+    @Test
+    fun `srcs round-trip through encode`() {
+        val original = WorkspaceDefinition(
+            "mc",
+            listOf("a.jar"),
+            true,
+            emptyList(),
+            emptyList(),
+            listOf("./src/main/java", "./src/test/java"),
+        )
+        val decoded = WorkspaceToml.decode(WorkspaceToml.encode(original), "mc.toml")
+        (decoded.isSuccess) shouldBe true
+        decoded.getOrThrow() shouldBe original
+    }
+
+    @Test
+    fun `srcs default to empty for pre-srcs files`() {
+        val decoded = WorkspaceToml.decode(
+            "name = \"mc\"\njars = [\"a.jar\"]\ncoords = []\nrepos = []\ninclude_jdk = true\n",
+            "mc.toml",
+        )
+        (decoded.isSuccess) shouldBe true
+        decoded.getOrThrow().srcs shouldBe emptyList()
     }
 
     @Test

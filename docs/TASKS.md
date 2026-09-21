@@ -46,7 +46,7 @@ be fiction.
 | **M1** | Read path: model, refs, `show`/`outline`/`members --inherited` | DONE |
 | **M2** | Index: SQLite, `search`, workspaces, auto-discovery | DONE |
 | **M3** | Bodies: sources, JavaParser, Vineflower, `body`/`source`/`doc` | DONE |
-| **M4** | Graph: `usages`/`hierarchy`/`callers`/`calls`/`samples` | WIP (T-029 DONE) |
+| **M4** | Graph: `usages`/`hierarchy`/`callers`/`calls`/`samples` | WIP (T-029…T-031 DONE) |
 | **M5** | Kotlin: `@Metadata` + PSI source parsing | TODO |
 | **M6** | Serving: daemon, MCP, HTTP, `batch` | TODO |
 | **M7** | Polish: token budgets, AppCDS, mutation gates, docs, install | TODO |
@@ -63,7 +63,9 @@ T-027 (`javap` engine) is DONE; T-028 (`SOURCES_VERSION_MISMATCH`
 detection) is DONE; T-072 (`--with-doc` enrichment) is DONE;
 T-073 (Vineflower→javap auto-fallback) is DONE — M3 complete.**
 **M4 has started: T-029 (reference-edge extraction) is DONE.**
-T-030…T-034 remain coarse one-liners to expand when started.
+T-030 (`jdx usages` over live bytecode) is DONE; T-031 (project source-dir
+usages: `--src` roots + textual `ref` scan) is DONE.
+T-032…T-034 remain coarse one-liners to expand when started.
 
 ---
 
@@ -1744,8 +1746,8 @@ pre-existing (machine variance — new suites cost ~2 s). Live proof:
 `usages 'dev.jdx.fixtures.TrafficLight'` → 17 grouped rows with edge
 targets. Decisions in D-043; lesson L-083.*
 
-### T-031 project source-dir usages · `WIP` (session 52)
-**Depends:** T-030 (usages over live bytecode), T-015 (workspaces), T-016 (discovery) · **Files:** `index/.../workspace/WorkspaceDefinition.kt`, `WorkspaceToml.kt`, `WorkspaceResolver.kt`, `index/.../service/JdxService.kt` (`usages` + `usages/.../SourceUsages.kt`), `index/.../usages/SourceUsages.kt`, `cli/.../commands/UsagesCommand.kt`, `WsCommands.kt`, `ReadCommandSupport.kt`
+### T-031 project source-dir usages · `DONE` (session 52)
+**Depends:** T-030 (usages over live bytecode), T-015 (workspaces), T-016 (discovery) · **Files:** `index/.../workspace/WorkspaceDefinition.kt`, `WorkspaceToml.kt`, `WorkspaceResolver.kt`, `index/.../service/JdxService.kt` (`usages`), `index/.../usages/SourceUsages.kt`, `cli/.../commands/UsagesCommand.kt`, `WsCommands.kt`, `ReadCommandSupport.kt`
 
 *(Second M4 CLI slice: D-010 promises usages over "all workspace jars **plus** the project's own source dirs" — T-030 scans jars only. This task adds `--src <dir>` source-dir roots (explicit flag + stored workspace `srcs`) scanned textually for whole-word mentions with file:line call sites. Hierarchy/implementors stay in T-032; callers/calls in T-033; samples in T-034.)*
 

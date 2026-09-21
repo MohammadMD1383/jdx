@@ -72,3 +72,4 @@ log.
 | D-041 | `--with-doc` enrichment semantics (T-072) | proposed-by-implementer | `D-026-050.md` |
 | D-042 | Reference-edge extraction and storage semantics (T-029) | proposed-by-implementer | `D-026-050.md` |
 | D-043 | `jdx usages` output semantics (T-030) | proposed-by-implementer | `D-026-050.md` |
+| D-044 | source-dir usages are textual `ref` mentions (T-031) | proposed-by-implementer | `D-026-050.md` |

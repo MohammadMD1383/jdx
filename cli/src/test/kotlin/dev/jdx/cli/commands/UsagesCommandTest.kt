@@ -122,6 +122,32 @@ class UsagesCommandTest {
     }
 
     @Test
+    fun `src flag reaches the roots`() {
+        var seenRoots: JdxService.RootsSpec? = null
+        val query: UsagesQuery = { _, roots, _ ->
+            seenRoots = roots
+            usageOutcome()
+        }
+        val original = System.out
+        val buffer = ByteArrayOutputStream()
+        System.setOut(PrintStream(buffer))
+        try {
+            UsagesCommand(
+                query = query,
+                terminate = noExit,
+                store = InMemoryWorkspaceStore(),
+                getenv = noEnv,
+                discover = noDiscovery,
+            ).parse(listOf("--jars", "app.jar", "--src", "src/main/java", "com.example.Lib"))
+        } catch (e: TestExit) {
+            // exit 0 never throws
+        } finally {
+            System.setOut(original)
+        }
+        seenRoots?.srcSpecs shouldBe listOf("src/main/java")
+    }
+
+    @Test
     fun `json flag renders the envelope`() {
         val run = run(listOf("com.example.Lib#greet", "--json"))
         run.exit shouldBe 0

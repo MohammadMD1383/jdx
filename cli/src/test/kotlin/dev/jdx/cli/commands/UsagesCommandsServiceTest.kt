@@ -144,4 +144,24 @@ class UsagesCommandsServiceTest {
         val marker = File(System.getProperty("java.io.tmpdir"), "jdx-fixture-static-init-marker")
         marker.exists() shouldBe false
     }
+
+    @Test
+    fun `src dir mentions appear as ref rows`() {
+        val src = java.nio.file.Files.createTempDirectory("usages-cli-src")
+        java.nio.file.Files.writeString(src.resolve("Use.java"), "class Use { dev.jdx.fixtures.TrafficLight t; }\n")
+        val run = run(
+            listOf("usages") + fixtureArgs("--src", src.toString(), "dev.jdx.fixtures.TrafficLight"),
+        )
+        run.exit shouldBe 0
+        run.output shouldContain "  ref Use.java:1"
+    }
+
+    @Test
+    fun `missing src dir exits 5 naming the path`() {
+        val run = run(
+            listOf("usages") + fixtureArgs("--src", "/no/such/src-dir-xyz", "dev.jdx.fixtures.TrafficLight"),
+        )
+        run.exit shouldBe 5
+        run.output shouldContain "src-dir-xyz"
+    }
 }

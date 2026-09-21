@@ -5,6 +5,74 @@ Append-only (D-023): 10 sessions per shard, newest first. Template and rules in
 
 ---
 
+## Session 52 — 2026-09-21 — project source-dir usages (T-031)
+**Agent/Author:** Muse Spark 1.3 (opencode) · **Commits:** `ecf8348` (claim) + implementation (this session)
+
+### Goal
+Implement T-031, the lowest-numbered unblocked TODO: `usages` over the
+project's own source dirs (D-010's second half — T-030 scans jars only).
+
+### What I did
+- Claimed T-031 (`TODO`→`WIP` + detail block) and committed the claim before coding.
+- `WorkspaceDefinition.srcs` + TOML `srcs` key (optional, default empty —
+  pre-srcs files decode) + `ResolvedRoots.srcSpecs` (explicit `--src` in
+  front of stored `srcs`, §13) + `RootsSpec.srcSpecs` (+ `fromResolved`).
+- New pure scanner `index/.../usages/SourceUsages.kt` (test-first):
+  whole-word mentions of one simple name as sorted `(relpath, line)` pairs;
+  `.java`/`.kt` only; unreadable files read as no mentions, never throws.
+- `executeUsages` scans each src dir after the bytecode pass: `ref`
+  `<relpath>:<line>` rows under the dir-name label, honouring
+  `--in`/`--exclude`; missing dirs exit 5 naming the path; source rows only
+  join when the kind filter admits `ref` (`all|ref` — text cannot tell call
+  from read from write). `<init>` scans the class simple name.
+- `cli`: `usages --src` (repeatable) threaded through `resolveRoots`;
+  `ws create --src` now stores instead of exiting 3; `ws info` renders `srcs`;
+  help texts updated. The parked `create rejects src` test now pins storage.
+- Tests: index tier-1 `SourceUsagesTest` (5 examples + 4 thousand-case
+  properties: never-throws, determinism, whole-word law, sorted-scan law);
+  index tier-2 `SourceUsagesServiceTest` (9: type/member rows, kind
+  filtering, in/exclude, missing-dir exit 5, determinism+text⊆JSON, stored
+  workspace srcs); workspace TOML examples + fixed-point/merge properties
+  widened to `srcs`; cli tier-1 `--src`-reaches-roots + tier-2 end-to-end
+  ref rows and missing-dir exit 5.
+- Docs: D-044, L-084, T-031 DONE, CURRENT STATE (next: T-032).
+
+### Decisions made
+D-044 (source-dir usages are textual `ref` mentions: kind, label, exit-5,
+ctor rule).
+
+### Tasks moved
+T-031: TODO → WIP → DONE.
+
+### Lessons distilled
+L-084 (defaulted data-class fields migrate silently; pin the serialised shape).
+
+### What works now (and how to verify it yourself)
+```bash
+./gradlew :app:installDist -x verifyTier1Budget
+J=testfixtures/build/libs/testfixtures-0.1.0-SNAPSHOT.jar
+mkdir -p /tmp/s && printf 'class Use {\n  dev.jdx.fixtures.TrafficLight t;\n}\n' > /tmp/s/Use.java
+app/build/jdx usages 'dev.jdx.fixtures.TrafficLight' --jars $J --no-jdk --src /tmp/s
+app/build/jdx usages 'dev.jdx.fixtures.TrafficLight' --jars $J --no-jdk --src /tmp/s --kind call  # bytecode only
+jdx ws create demo --src /tmp/s && jdx usages 'dev.jdx.fixtures.TrafficLight' --jars $J --no-jdk -w demo
+./gradlew check -x verifyTier1Budget   # tiers 1+2 + JaCoCo gates, green
+```
+
+### What is broken / half-done
+- `verifyTier1Budget` stays red on this machine (pre-existing variance, 0 test
+  failures; new suites cost ~2 s tier-1). Nothing from this task.
+- Indexed acceleration still deferred by design (D-043 §1/D-044): `usages`
+  scans live roots (bytecode + source dirs); JDK-scale queries cost seconds.
+
+### Open questions / blockers
+None.
+
+### Next action
+M4 T-032 (`jdx hierarchy` / `implementors` — expand into a detail block when
+started; T-033/T-034 coarse).
+
+---
+
 ## Session 51 — 2026-09-21 — `jdx usages` (T-030)
 **Agent/Author:** Muse Spark 1.3 (opencode) · **Commits:** `f992721` (claim) + implementation (this session)
 

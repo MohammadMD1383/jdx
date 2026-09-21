@@ -90,11 +90,15 @@ class WsCommandsTest {
     }
 
     @Test
-    fun `create rejects src naming the owning task`() {
-        val (group, _) = testWsGroup()
-        val (srcOut, srcCode) = run(group, listOf("create", "mc", "--src", "src/main/java"))
-        srcCode shouldBe 3
-        srcOut shouldContain "T-031"
+    fun `create stores src roots`() {
+        val (group, store) = testWsGroup()
+        val (output, code) = run(group, listOf("create", "mc", "--src", "src/main/java"))
+        code shouldBe null
+        output shouldContain "workspace 'mc' created"
+        store.load("mc")?.srcs shouldBe listOf("src/main/java")
+        val (infoOut, infoCode) = run(group, listOf("info", "mc"))
+        infoCode shouldBe null
+        infoOut shouldContain "srcs:\n    src/main/java"
     }
 
     @Test

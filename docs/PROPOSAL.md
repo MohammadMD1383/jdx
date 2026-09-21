@@ -1121,7 +1121,8 @@ resolve   <name> [--limit]
 ls        [package-glob] [--limit]
 tree      [artifact-glob] [--depth --counts --limit]
 usages    --kind call|ref|impl|override|read|write|new|throw|annotation|all
-          --in --exclude --limit --context
+          --in --exclude --limit --context --src
+          [-w …] [--jars …] [--no-jdk] [--json] [--no-color]
 hierarchy --up --down --direct --depth N --in
 callers   --depth N --in --limit
 calls     --depth N --external-only --limit

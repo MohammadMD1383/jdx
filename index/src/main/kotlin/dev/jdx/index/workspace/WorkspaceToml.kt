@@ -17,13 +17,15 @@ package dev.jdx.index.workspace
  * jars = ["~/.gradle/caches/**/*.jar", "./build/classes/java/main"]
  * coords = ["com.google.code.gson:gson:2.14.0"]
  * repos = ["https://repo.example.com/maven2"]
+ * srcs = ["./src/main/java"]
  * include_jdk = true
  * ```
  *
  * Rules: `#` starts a comment outside a string; blank lines ignored; `include_jdk` accepts
  * the `includeJdk` camelCase spelling as an alias for hand-edits; `coords` (T-019) is
  * optional and defaults to empty, so pre-coords files still decode; `repos` (T-069) is
- * optional and defaults to empty, so pre-repos files still decode; unknown keys are
+ * optional and defaults to empty, so pre-repos files still decode; `srcs` (T-031) is
+ * optional and defaults to empty, so pre-srcs files still decode; unknown keys are
  * rejected (a typoed key silently doing nothing would mislead worse than an error);
  * a `name` that disagrees with the file stem is rejected — the stem is the identity.
  */
@@ -51,6 +53,12 @@ public object WorkspaceToml {
             append(quote(repo))
         }
         appendLine("]")
+        append("srcs = [")
+        definition.srcs.forEachIndexed { index, src ->
+            if (index > 0) append(", ")
+            append(quote(src))
+        }
+        appendLine("]")
         appendLine("include_jdk = ${if (definition.includeJdk) "true" else "false"}")
     }
 
@@ -66,6 +74,7 @@ public object WorkspaceToml {
         var jars: List<String>? = null
         var coords: List<String>? = null
         var repos: List<String>? = null
+        var srcs: List<String>? = null
         var includeJdk: Boolean? = null
         val seen = mutableSetOf<String>()
         text.lines().forEachIndexed { index, rawLine ->
@@ -101,6 +110,10 @@ public object WorkspaceToml {
                     repos = parseStringArray(value)
                         ?: return Result.failure(IllegalArgumentException("$fileName:$lineNumber: `repos` must be an array of quoted strings"))
                 }
+                "srcs" -> {
+                    srcs = parseStringArray(value)
+                        ?: return Result.failure(IllegalArgumentException("$fileName:$lineNumber: `srcs` must be an array of quoted strings"))
+                }
                 "include_jdk" -> {
                     includeJdk = when (value) {
                         "true" -> true
@@ -126,6 +139,7 @@ public object WorkspaceToml {
                 includeJdk = includeJdk ?: true,
                 coords = coords ?: emptyList(),
                 repos = repos ?: emptyList(),
+                srcs = srcs ?: emptyList(),
             ),
         )
     }

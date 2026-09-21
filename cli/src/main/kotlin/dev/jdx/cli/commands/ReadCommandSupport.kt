@@ -67,6 +67,7 @@ internal object ReadCommandSupport {
         mavenRepositories: MavenResolver.Repositories? = null,
         mavenFetcher: MavenFetch.Fetcher? = null,
         repos: List<String> = emptyList(),
+        srcs: List<String> = emptyList(),
     ): RootsOrFailure {
         val envWorkspace = try {
             getenv("JDX_WORKSPACE")
@@ -126,6 +127,7 @@ internal object ReadCommandSupport {
             discoveredWarnings = discovered?.warnings ?: emptyList(),
             explicitCoords = coords,
             explicitRepos = repos,
+            explicitSrcs = srcs,
         )
         // A stored `--repo` from a hand-edited workspace file is validated here,
         // after selection: it names the value like the explicit flag (exit 3).
@@ -214,6 +216,7 @@ internal object ReadCommandSupport {
                         extraWarnings = resolved.warnings,
                         allowFetch = allowFetch,
                         mavenResolve = mavenResolve,
+                        srcSpecs = resolved.srcSpecs,
                     ),
                 )
             }

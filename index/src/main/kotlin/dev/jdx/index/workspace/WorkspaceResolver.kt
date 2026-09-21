@@ -50,6 +50,12 @@ public object WorkspaceResolver {
          * combined list is empty.
          */
         public val repos: List<String> = emptyList(),
+        /**
+         * Project source dirs (T-031): explicit `--src` values first, then the
+         * selected workspace's stored `srcs`. The caller scans them textually
+         * in `usages`; other readers ignore them.
+         */
+        public val srcSpecs: List<String> = emptyList(),
     )
 
     /** A resolution failure: the message already names the problem and the fix. */
@@ -73,6 +79,7 @@ public object WorkspaceResolver {
         discoveredWarnings: List<Warning> = emptyList(),
         explicitCoords: List<String> = emptyList(),
         explicitRepos: List<String> = emptyList(),
+        explicitSrcs: List<String> = emptyList(),
     ): Result<ResolvedRoots, ResolutionFailure> {
         val flag = flagWorkspace?.trim().orEmpty().ifEmpty { null }
         val env = envWorkspace?.trim().orEmpty().ifEmpty { null }
@@ -103,6 +110,7 @@ public object WorkspaceResolver {
                         warnings = discoveredWarnings,
                         coords = explicitCoords,
                         repos = explicitRepos,
+                        srcSpecs = explicitSrcs,
                     ),
                 )
             }
@@ -111,13 +119,14 @@ public object WorkspaceResolver {
                     jarSpecs = explicitJars,
                     includeJdk = !explicitNoJdk,
                     workspaceName = null,
-                    selection = if (explicitJars.isNotEmpty() || explicitNoJdk || explicitCoords.isNotEmpty() || explicitRepos.isNotEmpty()) {
+                    selection = if (explicitJars.isNotEmpty() || explicitNoJdk || explicitCoords.isNotEmpty() || explicitRepos.isNotEmpty() || explicitSrcs.isNotEmpty()) {
                         "flags"
                     } else {
                         "none"
                     },
                     coords = explicitCoords,
                     repos = explicitRepos,
+                    srcSpecs = explicitSrcs,
                 ),
             )
         }
@@ -145,6 +154,7 @@ public object WorkspaceResolver {
                 selection = selection,
                 coords = explicitCoords + definition.coords,
                 repos = explicitRepos + definition.repos,
+                srcSpecs = explicitSrcs + definition.srcs,
             ),
         )
     }

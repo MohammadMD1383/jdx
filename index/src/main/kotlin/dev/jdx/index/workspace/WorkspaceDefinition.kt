@@ -14,8 +14,8 @@ package dev.jdx.index.workspace
  * by `jdx -w <name>` / `JDX_WORKSPACE` / `jdx ws use` via [WorkspaceResolver].
  *
  * v1 holds binary roots, Maven coordinates and the JDK switch. Source dirs
- * (`--src`, T-031) are accepted by no v1 field — `jdx ws create` rejects them
- * naming the owning task rather than storing something the reader ignores.
+ * (`--src`, T-031) are stored here and scanned textually by `usages`
+ * (whole-word mentions, `ref` kind); other readers ignore them.
  * Coordinates (`--coord`, T-019) resolve to jars at query time (local caches
  * first, remotes only with `--fetch`), ordered after [jars].
  * Remote repositories (`--repo`, T-069) are stored alongside and prepended in
@@ -34,6 +34,8 @@ public data class WorkspaceDefinition(
     public val coords: List<String> = emptyList(),
     /** Remote Maven repository base URLs (`--repo`, as passed to `ws create`), in order. */
     public val repos: List<String> = emptyList(),
+    /** Project source dirs (`--src`, as passed to `ws create`), in order (T-031). */
+    public val srcs: List<String> = emptyList(),
 )
 
 /**
