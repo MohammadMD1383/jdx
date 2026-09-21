@@ -11,6 +11,8 @@ import dev.jdx.cli.commands.LsCommand
 import dev.jdx.cli.commands.cacheGroup
 import dev.jdx.cli.commands.BodyCommand
 import dev.jdx.cli.commands.DocCommand
+import dev.jdx.cli.commands.HierarchyCommand
+import dev.jdx.cli.commands.ImplementorsCommand
 import dev.jdx.cli.commands.SignatureCommand
 import dev.jdx.cli.commands.SourceCommand
 import dev.jdx.cli.commands.MembersCommand
@@ -100,6 +102,8 @@ fun main(args: Array<String>): Unit =
         LsCommand(),
         TreeCommand(),
         UsagesCommand(),
+        HierarchyCommand(),
+        ImplementorsCommand(),
         wsGroup(),
         cacheGroup(),
     ).main(args)

@@ -5,6 +5,93 @@ Append-only (D-023): 10 sessions per shard, newest first. Template and rules in
 
 ---
 
+## Session 53 — 2026-09-21 — `jdx hierarchy` / `implementors` (T-032)
+**Agent/Author:** Muse Spark 1.3 (opencode) · **Commits:** `2eda8b0` (claim) + implementation (this session)
+
+### Goal
+Implement T-032, the lowest-numbered unblocked TODO: `jdx hierarchy` /
+`implementors` — the second M4 CLI slice over live bytecode roots (no
+persistent-index read yet, mirroring D-043's live-roots-first precedent).
+
+### What I did
+- Claimed T-032 (`TODO`→`WIP` + expanded the one-liner into a detail block)
+  and committed the claim before coding.
+- `core/.../render/Hierarchy.kt` (test-first): `SupertypeEntry` (binary,
+  relation, **nullable** artifact, depth), `SubtypeEntry` (binary, artifact,
+  `via`), `HierarchyListing` (direction flags, truncation over subtypes
+  only), `buildHierarchyListing` (shared footer).
+- `index`: `JdxService.hierarchy` / `HierarchyOptions`
+  (`up`/`down`/`directOnly`/`depth`/`inArtifact`/`exclude`/`limit`) +
+  `executeHierarchy` (T-011 resolution incl. `g:a:v` scope + `DUPLICATE_FQN`,
+  BFS up-walk with per-child-kind relations, per-distinct-binary down scan
+  with first-step `via`, `--in`/`--exclude` on subtypes, exit 0 on empty
+  sections) + `ServiceOutcome.Hierarchy` (+ the two `CorpusSoakTest`
+  branches) + `SubtypeMatch` sealed tri-state (absent/direct/transitive —
+  a bare `String?` cannot tell "not a subtype" from "direct child").
+- `cli`: thin `HierarchyCommand` + `ImplementorsCommand` (`hierarchy --down`
+  alias), registered in `JdxCli`, + `HierarchyQuery` seam.
+  `usages --kind impl|override` and its `--help` now name the live commands.
+- Tests: core `HierarchyTest` (6 incl. the null-artifact row) +
+  `HierarchyPropertyTest` (3 thousand-case); index `HierarchyCaseJars` (ASM
+  `h.*` graph + `h2.Leaf` ambiguity namesake) + `HierarchyServiceTest`
+  (20 tier-2 incl. the TESTING.md §6 up⟺down metamorphic over every corpus
+  class) + `HierarchyGoldenTest` (10 files, read before accepting);
+  cli `HierarchyCommandTest` (6 tier-1) + `HierarchyCommandsServiceTest`
+  (6 tier-2 incl. D-017). `check -x verifyTier1Budget` green incl. JaCoCo
+  gates; new tier-1 suites cost ~0.5 s, out of the slowest-10.
+- Live proof: fixture sealed hierarchy (Circle/Rect down rows),
+  `CovariantOverrides$Child --direct` up row, member-ref exit 3, and
+  `java.util.HashMap --up` (AbstractMap/Map/Cloneable/Serializable/Object
+  with `java.base` labels — probed with the ambient `fx` workspace shelved,
+  since it sets `include_jdk = false`, a pre-existing environmental fact:
+  baseline `show` fails identically there).
+- `soak`: green except one `JavapCorpusSoakTest` red on JDK-internal
+  synthetic `access$000` members — proven stashed-clean (corpus drift,
+  unrelated to this task; same family as the T-065 reds).
+- Docs: D-045, T-032 DONE, Appendix B hierarchy/implementors flags,
+  CURRENT STATE (next: T-033).
+
+### Decisions made
+D-045 (`jdx hierarchy` output semantics: per-child-kind relations,
+null-artifact supertype rows with the `Object` warning exemption, `via`
+notes, winner-only down rows, exit 0 on empty sections).
+
+### Tasks moved
+T-032: TODO → WIP → DONE.
+
+### Lessons distilled
+None — the two traps hit (ambient `fx` re-rooting zero-config probes;
+sealed tri-state for absent/direct/transitive) are already covered by
+L-038/T-066 and the in-code KDoc respectively.
+
+### What works now (and how to verify it yourself)
+```bash
+./gradlew :app:installDist -x verifyTier1Budget
+J=testfixtures/build/libs/testfixtures-0.1.0-SNAPSHOT.jar
+app/build/jdx hierarchy 'dev.jdx.fixtures.SealedHierarchy' --jars $J --no-jdk
+app/build/jdx implementors 'dev.jdx.fixtures.SealedHierarchy' --jars $J --no-jdk --json
+app/build/jdx hierarchy 'dev.jdx.fixtures.CovariantOverrides$Child' --jars $J --no-jdk --up
+app/build/jdx hierarchy 'dev.jdx.fixtures.Generics#identity' --jars $J --no-jdk; echo "exit=$?"  # exit 3, takes a type
+./gradlew check -x verifyTier1Budget   # tiers 1+2 + JaCoCo gates, green
+```
+
+### What is broken / half-done
+- `verifyTier1Budget` stays red on this machine (pre-existing variance, 0 test
+  failures; new suites cost ~0.5 s tier-1). Nothing from this task.
+- `JavapCorpusSoakTest` reds on JDK-internal synthetic members (proven
+  stashed-clean corpus drift). Nothing from this task.
+- Indexed acceleration still deferred by design (D-043 §1/D-045): `hierarchy`
+  scans live roots; JDK-scale down queries parse every class.
+
+### Open questions / blockers
+None.
+
+### Next action
+M4 T-033 (`jdx callers` / `calls --depth` — expand into a detail block when
+started; T-034 coarse).
+
+---
+
 ## Session 52 — 2026-09-21 — project source-dir usages (T-031)
 **Agent/Author:** Muse Spark 1.3 (opencode) · **Commits:** `ecf8348` (claim) + implementation (this session)
 

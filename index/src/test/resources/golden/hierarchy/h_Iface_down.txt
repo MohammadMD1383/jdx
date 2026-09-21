@@ -1,0 +1,6 @@
+hierarchy of 'h.Iface'
+  subtypes in workspace (4)
+    class h.Impl  hierarchy-case.jar
+    class h.Leaf  hierarchy-case.jar (extends h.Middle)
+    class h.Middle  hierarchy-case.jar
+    class h.SubIface  hierarchy-case.jar

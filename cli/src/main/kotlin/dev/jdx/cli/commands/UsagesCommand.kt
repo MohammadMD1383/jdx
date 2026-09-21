@@ -41,8 +41,8 @@ class UsagesCommand(
             "line (source dirs, ref kind). " +
             "--kind narrows to call|read|write|ref (default: all); source-dir hits are " +
             "textual mentions (ref only), so call|read|write show bytecode edges alone. " +
-            "impl|override land with hierarchy (T-032), new|throw|annotation with " +
-            "graph enrichment (T-034). " +
+            "impl|override land with hierarchy (jdx hierarchy, jdx implementors), " +
+            "new|throw|annotation with graph enrichment (T-034). " +
             "--in/--exclude filter by artifact label (jar file, JDK module or source-dir name). " +
             "--src adds a source dir root (repeatable; stored via jdx ws create --src). " +
             "Exits 1 when the symbol is unknown or unused, 2 on an ambiguous short name."
@@ -52,7 +52,8 @@ class UsagesCommand(
     private val kind by option(
         "--kind",
         help = "Edge kind: call, read, write, ref or all (default all). " +
-            "impl|override (T-032) and new|throw|annotation (T-034) are rejected for now.",
+            "impl|override land with hierarchy (jdx hierarchy, jdx implementors); " +
+            "new|throw|annotation (T-034) are rejected for now.",
     ).choice(
         "all", "call", "read", "write", "ref",
         "impl", "override", "new", "throw", "annotation",

@@ -503,6 +503,19 @@ internal fun defaultUsagesQuery(
     roots: JdxService.RootsSpec,
     options: JdxService.UsageOptions,
 ): JdxService.ServiceOutcome = JdxService.usages(ref, roots, options)
+
+/** Query behind `hierarchy`/`implementors`, injectable so command tests run without IO (T-032). */
+internal typealias HierarchyQuery = (
+    ref: String,
+    roots: JdxService.RootsSpec,
+    options: JdxService.HierarchyOptions,
+) -> JdxService.ServiceOutcome
+
+internal fun defaultHierarchyQuery(
+    ref: String,
+    roots: JdxService.RootsSpec,
+    options: JdxService.HierarchyOptions,
+): JdxService.ServiceOutcome = JdxService.hierarchy(ref, roots, options)
 /** Query behind `search`, injectable so command tests run without IO (T-017). */
 internal typealias SearchQuery = (
     pattern: String,

@@ -106,10 +106,10 @@ class UsagesCommandsServiceTest {
     }
 
     @Test
-    fun `deferred kind names its task`() {
+    fun `deferred kind names its command`() {
         val run = run(listOf("usages") + fixtureArgs("--kind", "impl", "dev.jdx.fixtures.TrafficLight"))
         run.exit shouldBe 3
-        run.output shouldContain "T-032"
+        run.output shouldContain "jdx hierarchy"
     }
 
     @Test

@@ -106,7 +106,7 @@ class UsagesServiceTest {
     fun `deferred kinds name their owning task`() {
         val impl = JdxService.usages("u.Lib", caseRoots(), UsageOptions(kind = UsageKindFilter.IMPL))
         impl.exitCode shouldBe 3
-        textOf(impl) shouldContain "T-032"
+        textOf(impl) shouldContain "jdx hierarchy"
         val thrown = JdxService.usages("u.Lib", caseRoots(), UsageOptions(kind = UsageKindFilter.THROW))
         thrown.exitCode shouldBe 3
         textOf(thrown) shouldContain "T-034"

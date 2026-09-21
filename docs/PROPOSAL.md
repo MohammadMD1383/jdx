@@ -1123,7 +1123,10 @@ tree      [artifact-glob] [--depth --counts --limit]
 usages    --kind call|ref|impl|override|read|write|new|throw|annotation|all
           --in --exclude --limit --context --src
           [-w …] [--jars …] [--no-jdk] [--json] [--no-color]
-hierarchy --up --down --direct --depth N --in
+hierarchy --up --down --direct --depth N --in --exclude --limit
+          [-w …] [--jars …] [--no-jdk] [--json] [--no-color]
+implementors [--direct --depth N --in --exclude --limit]
+          [-w …] [--jars …] [--no-jdk] [--json] [--no-color]
 callers   --depth N --in --limit
 calls     --depth N --external-only --limit
 samples   --limit N --prefer-sources

@@ -1,0 +1,1 @@
+{"jdx":1,"ok":true,"command":"hierarchy","query":"h.Iface","result":{"target":"h.Iface","supertypes":[],"subtypes":[{"type":"h.Impl","artifact":"hierarchy-case.jar"},{"type":"h.Leaf","artifact":"hierarchy-case.jar","via":"extends h.Middle"}]},"truncated":{"shown":2,"total":4,"hint":"--limit 4"},"warnings":[],"provenance":[]}

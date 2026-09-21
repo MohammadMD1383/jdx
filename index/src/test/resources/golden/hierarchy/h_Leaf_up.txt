@@ -1,0 +1,6 @@
+hierarchy of 'h.Leaf'
+  supertypes
+    extends h.Middle  hierarchy-case.jar
+    extends h.Base  hierarchy-case.jar
+    implements h.Iface  hierarchy-case.jar
+    extends java.lang.Object

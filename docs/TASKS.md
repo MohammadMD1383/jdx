@@ -64,8 +64,9 @@ detection) is DONE; T-072 (`--with-doc` enrichment) is DONE;
 T-073 (Vineflower→javap auto-fallback) is DONE — M3 complete.**
 **M4 has started: T-029 (reference-edge extraction) is DONE.**
 T-030 (`jdx usages` over live bytecode) is DONE; T-031 (project source-dir
-usages: `--src` roots + textual `ref` scan) is DONE.
-T-032…T-034 remain coarse one-liners to expand when started.
+usages: `--src` roots + textual `ref` scan) is DONE; T-032 (`jdx hierarchy` /
+`implementors`: live-roots supertype walk + subtype scan) is DONE.
+T-033/T-034 remain coarse one-liners to expand when started.
 
 ---
 
@@ -1761,7 +1762,7 @@ Wire source-dir roots into `usages`: `WorkspaceDefinition.srcs` + TOML `srcs` ke
 - [ ] Tests: index tier-1 pure scanner examples + 1,000-case properties (never-throws, determinism, whole-word law); index tier-2 service tests over temp source dirs (type/member/in/exclude/kind-filter/missing-dir/determinism); workspace TOML/resolver round-trips; cli tier-1 flag validation + tier-2 in-process tests; tiers 1+2 green
 - [ ] `--help` text, Appendix B usages flags verified, `TASKS.md` status, `PROGRESS.md` entry
 
-### T-032 — `jdx hierarchy` / `implementors` (live-roots type hierarchy) · `WIP`
+### T-032 — `jdx hierarchy` / `implementors` (live-roots type hierarchy) · `DONE` (session 53)
 **Depends:** T-011 (read-command patterns), T-015/T-016 (roots) · **Files:** `core/.../render/Hierarchy.kt`, `index/.../service/JdxService.kt` (`hierarchy`), `cli/.../commands/HierarchyCommand.kt`
 
 *(Second M4 CLI slice: supertypes upward + subtypes/implementors downward across
@@ -1794,6 +1795,29 @@ class in every open root for transitive subtypes downward.
       tier-1 flag validation + tier-2 in-process tests; tiers 1+2 green
 - [ ] `--help` text, Appendix B hierarchy flags verified, `TASKS.md` status,
       `PROGRESS.md` entry
+
+*Implementation notes (session 53): `core/.../render/Hierarchy.kt` (test-first:
+`SupertypeEntry` with nullable artifact, `SubtypeEntry` with `via`,
+`HierarchyListing` with direction flags, `buildHierarchyListing` truncating
+subtypes only) + `index`: `JdxService.hierarchy`/`HierarchyOptions`/
+`executeHierarchy` (T-011 resolution incl. `g:a:v` scope and `DUPLICATE_FQN`,
+BFS up-walk with per-child-kind relations, per-distinct-binary down scan with
+first-step `via`, `--in`/`--exclude` on subtypes, exit 0 on empty sections) +
+`ServiceOutcome.Hierarchy` (+ the two `CorpusSoakTest` branches) + `cli`: thin
+`HierarchyCommand`/`ImplementorsCommand` (registered in `JdxCli`) +
+`HierarchyQuery` seam. `usages --kind impl|override` and `--help` now name
+the live commands. Tests: core `HierarchyTest` (6) + `HierarchyPropertyTest`
+(3 thousand-case); index `HierarchyCaseJars` (ASM `h.*` graph + `h2.Leaf`
+ambiguity namesake) + `HierarchyServiceTest` (20 tier-2 incl. the TESTING.md
+§6 up⟺down metamorphic) +
+`HierarchyGoldenTest` (10 files); cli `HierarchyCommandTest` (6 tier-1) +
+`HierarchyCommandsServiceTest` (6 tier-2 incl. D-017). Standing bar: `check
+-x verifyTier1Budget` green incl. JaCoCo gates; `verifyTier1Budget` red
+pre-existing (machine variance); `soak` green except one stashed-clean
+`JavapCorpusSoakTest` red on JDK-internal synthetic members (corpus drift,
+unrelated to this task). Live proof: `hierarchy`/`implementors` over the
+fixture sealed hierarchy and `java.util.HashMap` (shelved ambient `fx`,
+which sets `include_jdk = false`). Decisions in D-045.*
 
 ### T-033 `jdx callers` / `calls --depth` · **T-034** `jdx samples` with exemplariness ranking
 

@@ -13,6 +13,7 @@ import dev.jdx.core.model.Provenance
 import dev.jdx.core.model.ReferenceEdge
 import dev.jdx.core.model.ReferenceKind
 import dev.jdx.core.model.SymbolRef
+import dev.jdx.core.model.TypeKind
 import dev.jdx.core.model.TypeName
 import dev.jdx.core.model.TypeSymbolRef
 import dev.jdx.core.model.Visibility
@@ -27,6 +28,7 @@ import dev.jdx.core.render.BodyBlock
 import dev.jdx.core.render.ClassCard
 import dev.jdx.core.render.DEFAULT_BODY_MAX_LINES
 import dev.jdx.core.render.DEFAULT_DOC_MAX_LINES
+import dev.jdx.core.render.DEFAULT_HIERARCHY_LIMIT
 import dev.jdx.core.render.DEFAULT_SIGNATURE_LIMIT
 import dev.jdx.core.render.DEFAULT_SOURCE_MAX_LINES
 import dev.jdx.core.render.DocBlock
@@ -45,6 +47,7 @@ import dev.jdx.core.render.DEFAULT_SEARCH_LIMIT
 import dev.jdx.core.render.DEFAULT_TREE_DEPTH
 import dev.jdx.core.render.DEFAULT_USAGES_LIMIT
 import dev.jdx.core.render.ErrorResult
+import dev.jdx.core.render.HierarchyListing
 import dev.jdx.core.render.LsListing
 import dev.jdx.core.render.LsTypeEntry
 import dev.jdx.core.render.MemberListing
@@ -55,10 +58,13 @@ import dev.jdx.core.render.PackageEntry
 import dev.jdx.core.render.SearchHit
 import dev.jdx.core.render.SearchListing
 import dev.jdx.core.render.SignatureLines
+import dev.jdx.core.render.SubtypeEntry
+import dev.jdx.core.render.SupertypeEntry
 import dev.jdx.core.render.TreeListing
 import dev.jdx.core.render.UsageHit
 import dev.jdx.core.render.UsageListing
 import dev.jdx.core.render.buildArtifactTree
+import dev.jdx.core.render.buildHierarchyListing
 import dev.jdx.core.render.buildLsListing
 import dev.jdx.core.render.buildSearchListing
 import dev.jdx.core.render.buildTreeListing
@@ -234,6 +240,13 @@ public object JdxService {
 
         /** A find-usages listing (`usages`) — exit 0. */
         public data class UsageList(public val listing: UsageListing) : ServiceOutcome {
+            override val exitCode: Int = 0
+            override fun renderText(color: Boolean): String = listing.renderText(color)
+            override fun toJson(command: String): String = listing.toJson(command)
+        }
+
+        /** A type-hierarchy listing (`hierarchy`, `implementors`) — exit 0. */
+        public data class Hierarchy(public val listing: HierarchyListing) : ServiceOutcome {
             override val exitCode: Int = 0
             override fun renderText(color: Boolean): String = listing.renderText(color)
             override fun toJson(command: String): String = listing.toJson(command)
@@ -2017,7 +2030,7 @@ public object JdxService {
                     3,
                     rawRef,
                     "usage error: --kind ${options.kind.flag} is not supported for usages yet " +
-                        "(hierarchy/implementors: T-032)",
+                        "(type hierarchy: jdx hierarchy, implementors: jdx implementors)",
                 )
             UsageKindFilter.NEW, UsageKindFilter.THROW, UsageKindFilter.ANNOTATION ->
                 return failure(
@@ -2360,6 +2373,367 @@ public object JdxService {
         return SymbolRefPrinter.print(
             MemberSymbolRef(declaringType = declaring, name = member, parameterTypes = parameters),
         )
+    }
+
+    // -- hierarchy (T-032) ------------------------------------------------------
+
+    /**
+     * Options for `hierarchy`/`implementors`: which directions to show and how
+     * much of the workspace to cover. [depth] caps transitive levels (1 =
+     * direct supertypes/subtypes only); [directOnly] is `--direct`, spelled
+     * separately so `implementors --direct` reads naturally. [inArtifact] and
+     * [exclude] scope the downward workspace scan by artifact label (jar file
+     * names, class-dir names, JDK module names); the upward lineage always
+     * shows — it is the type's own ancestry, not a workspace search.
+     */
+    public data class HierarchyOptions(
+        public val up: Boolean = true,
+        public val down: Boolean = true,
+        public val directOnly: Boolean = false,
+        public val depth: Int = Int.MAX_VALUE,
+        public val inArtifact: String? = null,
+        public val exclude: String? = null,
+        public val limit: Int = DEFAULT_HIERARCHY_LIMIT,
+    )
+
+    /**
+     * Answers `hierarchy <type>`: supertypes upward and subtypes downward.
+     *
+     * Live-roots scan (D-043 precedent): the upward chain walks lazily-loaded
+     * supertypes and the downward scan parses every class in every open root
+     * with ASM — no persistent index read yet (indexed acceleration lands with
+     * the daemon/`jdx index` work). Structure is bytecode-authoritative
+     * (D-009): the target resolves with the T-011 machinery before any scan,
+     * so a typo reports did-you-mean instead of an empty answer.
+     */
+    public fun hierarchy(
+        rawRef: String,
+        roots: RootsSpec,
+        options: HierarchyOptions = HierarchyOptions(),
+    ): ServiceOutcome {
+        if (options.limit < 0) {
+            return failure(3, rawRef, "usage error: --limit must be >= 0, got ${options.limit}")
+        }
+        if (options.depth < 1) {
+            return failure(3, rawRef, "usage error: --depth must be >= 1, got ${options.depth}")
+        }
+        if (!options.up && !options.down) {
+            return failure(3, rawRef, "usage error: select --up and/or --down (both off shows nothing)")
+        }
+        val parsed = SymbolRefParser.parse(rawRef)
+        if (parsed is SymbolRefParseResult.Failure) {
+            return failure(
+                3,
+                rawRef,
+                "usage error: invalid reference '$rawRef': ${parsed.message} at column ${parsed.position}",
+            )
+        }
+        val ref = (parsed as SymbolRefParseResult.Ok).ref
+        if (ref is MemberSymbolRef) {
+            return failure(3, rawRef, "usage error: hierarchy takes a type reference, got '$rawRef'")
+        }
+        if (ref is PackageSymbolRef || ref is ModuleSymbolRef) {
+            return failure(3, rawRef, "usage error: hierarchy takes a type reference, got '$rawRef'")
+        }
+        val coordinate = (ref as? TypeSymbolRef)?.coordinate
+        if (roots.jarSpecs.isEmpty() && !roots.includeJdk && coordinate == null) {
+            return failure(
+                4,
+                rawRef,
+                "no workspace: no --jars given, no workspace selected (-w <name>, " +
+                    "JDX_WORKSPACE, jdx ws use) and --no-jdk set " +
+                    "(pass --jars <path>, select a workspace, or drop --no-jdk)",
+            )
+        }
+        // A `g:a:v/` prefix scopes the query to one artifact (T-019): its jar
+        // reads first (shadowing order), and candidates match inside it only —
+        // while the downward scan still covers the full workspace behind it.
+        var scopedRoots = roots
+        var candidateScope: Set<String>? = null
+        if (coordinate != null) {
+            val coordText = "${coordinate.group}:${coordinate.artifact}:${coordinate.version}"
+            val outcome = try {
+                roots.mavenResolve(coordText, roots.allowFetch)
+            } catch (e: Exception) {
+                return failure(
+                    6,
+                    rawRef,
+                    "internal error: coordinate resolution failed: ${e.message ?: e.javaClass.simpleName}",
+                )
+            }
+            val artifact = when (outcome) {
+                is MavenResolver.Outcome.Resolved -> outcome.artifact
+                is MavenResolver.Outcome.Unresolved ->
+                    return failure(5, rawRef, "artifact read error: ${outcome.message}")
+            }
+            val binarySpec = artifact.binaryJar.toString()
+            val scope = try {
+                ArtifactLoader.open(artifact.binaryJar).use { root -> root.classEntryPaths().map(::entryToBinary).toSet() }
+            } catch (e: ArtifactReadException) {
+                return failure(5, rawRef, e.message ?: "artifact read error")
+            } catch (e: Exception) {
+                return failure(6, rawRef, "internal error: ${e.javaClass.simpleName}: ${e.message ?: "no detail"}")
+            }
+            scopedRoots = roots.copy(jarSpecs = listOf(binarySpec) + roots.jarSpecs)
+            candidateScope = scope
+        }
+        return try {
+            executeHierarchy(ref, rawRef, scopedRoots, options, candidateScope)
+        } catch (e: ArtifactReadException) {
+            failure(5, rawRef, e.message ?: "artifact read error")
+        } catch (e: Exception) {
+            failure(6, rawRef, "internal error: ${e.javaClass.simpleName}: ${e.message ?: "no detail"}")
+        }
+    }
+
+    /**
+     * Serves `hierarchy <type>`: resolves the target type from bytecode
+     * (D-009), walks its supertype chain upward through lazily-loaded parents
+     * and scans every distinct workspace class once for transitive subtypes
+     * downward. Unreadable classes warn once each ([WarningCode.CORRUPT_CLASS])
+     * and are skipped — one bad entry never aborts the scan (D-017).
+     */
+    private fun executeHierarchy(
+        ref: SymbolRef,
+        rawRef: String,
+        roots: RootsSpec,
+        options: HierarchyOptions,
+        candidateScope: Set<String>? = null,
+    ): ServiceOutcome {
+        val declaring = (ref as? TypeSymbolRef)?.type as? TypeName.ClassType
+            ?: return failure(3, rawRef, "usage error: hierarchy takes a type reference, got '$rawRef'")
+        val opened = openRoots(roots)
+        try {
+            val binariesByRoot = opened.map { it.root.classEntryPaths().map(::entryToBinary).toSet() }
+            val providers = mutableMapOf<String, MutableList<Int>>()
+            binariesByRoot.forEachIndexed { index, binaries ->
+                for (binary in binaries) providers.getOrPut(binary) { mutableListOf() }.add(index)
+            }
+            val allBinaries = providers.keys
+
+            val candidates = matchCandidates(declaring, candidateScope ?: allBinaries)
+            if (candidates.isEmpty()) {
+                val suggestions = suggestSimilar(declaring.simpleName, allBinaries)
+                return ServiceOutcome.Failure(ErrorResult.notFound(rawRef, suggestions))
+            }
+            if (candidates.size > 1) {
+                return ServiceOutcome.Failure(ErrorResult.ambiguous(rawRef, candidates))
+            }
+            val binary = candidates.single()
+            val winner = providers.getValue(binary).first()
+
+            val warnings = mutableListOf<Warning>()
+            warnings.addAll(roots.extraWarnings)
+            for (open in opened) warnings.addAll(open.root.warnings)
+            val extraProviders = providers.getValue(binary).drop(1)
+            if (extraProviders.isNotEmpty()) {
+                val names = listOf(winner).plus(extraProviders).map { rootLabel(opened[it], binary) }
+                warnings.add(
+                    Warning(
+                        code = WarningCode.DUPLICATE_FQN,
+                        message = "$binary is provided by ${names.joinToString(", ")}; " +
+                            "showing ${names.first()} (classpath order)",
+                        subject = binary,
+                    ),
+                )
+            }
+
+            val workspace = Workspace(opened, providers, warnings)
+            val target = workspace.load(binary)
+            if (target == null) {
+                return failure(
+                    5,
+                    rawRef,
+                    "artifact read error: $binary in ${rootLabel(opened[winner], binary)} cannot be parsed",
+                )
+            }
+
+            val maxDepth = if (options.directOnly) 1 else options.depth
+            val supertypes = if (options.up) {
+                collectSupertypes(binary, target, workspace, opened, providers, maxDepth, warnings)
+            } else {
+                emptyList()
+            }
+            val subtypes = if (options.down) {
+                collectSubtypes(binary, workspace, opened, providers, options, maxDepth)
+            } else {
+                emptyList()
+            }
+            val listing = buildHierarchyListing(
+                query = rawRef,
+                targetRef = binary,
+                supertypes = supertypes,
+                subtypes = subtypes.sortedBy { it.binary },
+                showUp = options.up,
+                showDown = options.down,
+                limit = options.limit,
+                warnings = warnings.sortedBy { it.code },
+            )
+            return ServiceOutcome.Hierarchy(listing)
+        } finally {
+            opened.forEach { it.root.close() }
+        }
+    }
+
+    /**
+     * The direct supertype edges out of one class: its superclass (`extends`)
+     * plus its interfaces (`implements` — or `extends` when the child is
+     * itself an interface or annotation, mirroring `ClassCard`, since
+     * interfaces extend their superinterfaces).
+     */
+    private fun directSupertypeEdges(info: ClassInfo): List<Pair<String, String>> {
+        val edges = mutableListOf<Pair<String, String>>()
+        (info.superclass as? TypeName.ClassType)?.let { edges.add("extends" to it.binaryName) }
+        val interfaceRelation = if (info.kind == TypeKind.INTERFACE || info.kind == TypeKind.ANNOTATION) {
+            "extends"
+        } else {
+            "implements"
+        }
+        for (iface in info.interfaces) {
+            (iface as? TypeName.ClassType)?.let { edges.add(interfaceRelation to it.binaryName) }
+        }
+        return edges
+    }
+
+    /**
+     * Walks the supertype chain upward, breadth-first (superclass then
+     * interfaces per level, first visit wins) and cycle-safe. Rows for
+     * supertypes outside the workspace still print — the edge is known from
+     * the child's bytes — with a null artifact; every genuinely missing
+     * supertype warns [WarningCode.UNRESOLVED_SUPERTYPE] once, except
+     * `java.lang.Object` (the universal root: absent under `--no-jdk` by
+     * design, with no supertypes of its own to lose).
+     */
+    private fun collectSupertypes(
+        binary: String,
+        target: ClassInfo,
+        workspace: Workspace,
+        opened: List<OpenRoot>,
+        providers: Map<String, List<Int>>,
+        maxDepth: Int,
+        warnings: MutableList<Warning>,
+    ): List<SupertypeEntry> {
+        val entries = mutableListOf<SupertypeEntry>()
+        val visited = mutableSetOf(binary)
+        val warned = mutableSetOf<String>()
+        val queue = ArrayDeque<Pair<ClassInfo, Int>>()
+        queue.add(target to 0)
+        while (queue.isNotEmpty()) {
+            val (info, depth) = queue.removeFirst()
+            if (depth >= maxDepth) continue
+            for ((relation, parent) in directSupertypeEdges(info)) {
+                if (!visited.add(parent)) continue
+                val parentDepth = depth + 1
+                val provider = providers[parent]?.firstOrNull()
+                entries.add(
+                    SupertypeEntry(
+                        binary = parent,
+                        relation = relation,
+                        artifact = provider?.let { rootLabel(opened[it], parent) },
+                        depth = parentDepth,
+                    ),
+                )
+                if (provider == null) {
+                    if (parent != OBJECT_BINARY_NAME && warned.add(parent)) {
+                        warnings.add(
+                            Warning(
+                                code = WarningCode.UNRESOLVED_SUPERTYPE,
+                                message = "$parent (a supertype of ${info.name.binaryName}) " +
+                                    "is not in the workspace; the chain above it is unknown",
+                                subject = parent,
+                            ),
+                        )
+                    }
+                    continue
+                }
+                if (parentDepth < maxDepth) {
+                    workspace.load(parent)?.let { queue.add(it to parentDepth) }
+                }
+            }
+        }
+        return entries
+    }
+
+    /**
+     * Scans every distinct workspace class once for transitive subtypes of
+     * [binary]. Each class's supertype closure is walked breadth-first and
+     * cycle-safe; the first step of the winning path becomes the row's `via`
+     * note (`extends h.Middle`), null for direct children. One FQN in two
+     * roots resolves to its shadowing winner (first provider) rather than
+     * printing twice.
+     */
+    private fun collectSubtypes(
+        binary: String,
+        workspace: Workspace,
+        opened: List<OpenRoot>,
+        providers: Map<String, List<Int>>,
+        options: HierarchyOptions,
+        maxDepth: Int,
+    ): List<SubtypeEntry> {
+        val found = mutableListOf<SubtypeEntry>()
+        for (candidate in providers.keys) {
+            if (candidate == binary) continue
+            val info = workspace.load(candidate) ?: continue
+            val match = findSubtypePath(candidate, info, binary, workspace, maxDepth)
+            if (match is SubtypeMatch.Absent) continue
+            val label = rootLabel(opened[providers.getValue(candidate).first()], candidate)
+            if (!matchesArtifactFilter(options.inArtifact, label) ||
+                (options.exclude != null && matchesArtifactFilter(options.exclude, label))
+            ) {
+                continue
+            }
+            found.add(SubtypeEntry(binary = candidate, artifact = label, via = (match as SubtypeMatch.Present).via))
+        }
+        return found
+    }
+
+    /**
+     * Whether [candidate] is a subtype of [binary] within [maxDepth] levels:
+     * [Absent], or [Present] carrying the `via` note (null for a direct
+     * child, `extends h.Middle` for a transitive path's first step).
+     */
+    private sealed interface SubtypeMatch {
+        data class Present(val via: String?) : SubtypeMatch
+
+        data object Absent : SubtypeMatch
+    }
+
+    /**
+     * Returns [SubtypeMatch.Present] when [binary] is a supertype of
+     * [candidate] within [maxDepth] levels, [SubtypeMatch.Absent] otherwise.
+     * Breadth-first and cycle-safe; paths through supertypes missing from the
+     * workspace simply end.
+     */
+    private fun findSubtypePath(
+        candidate: String,
+        info: ClassInfo,
+        binary: String,
+        workspace: Workspace,
+        maxDepth: Int,
+    ): SubtypeMatch {
+        // The direct edges first: a direct child answers without any loads.
+        for ((_, parent) in directSupertypeEdges(info)) {
+            if (parent == binary) return SubtypeMatch.Present(null)
+        }
+        if (maxDepth < 2) return SubtypeMatch.Absent
+        val visited = mutableSetOf(candidate)
+        // Each queued node carries the first step out of the candidate, so the
+        // row can name the direct parent even on a transitive path.
+        val queue = ArrayDeque<Triple<String, String, Int>>()
+        for ((relation, parent) in directSupertypeEdges(info)) {
+            if (visited.add(parent)) queue.add(Triple(parent, "$relation $parent", 1))
+        }
+        while (queue.isNotEmpty()) {
+            val (current, firstStep, depth) = queue.removeFirst()
+            val currentInfo = workspace.load(current) ?: continue
+            for ((_, parent) in directSupertypeEdges(currentInfo)) {
+                if (parent == binary) return SubtypeMatch.Present(firstStep)
+                if (depth + 1 < maxDepth && visited.add(parent)) {
+                    queue.add(Triple(parent, firstStep, depth + 1))
+                }
+            }
+        }
+        return SubtypeMatch.Absent
     }
 
     // -- signature execution (T-024) -----------------------------------------------

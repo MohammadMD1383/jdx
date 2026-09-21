@@ -1,0 +1,5 @@
+hierarchy of 'h.Iface'
+  subtypes in workspace (2)
+    class h.Impl  hierarchy-case.jar
+    class h.Leaf  hierarchy-case.jar (extends h.Middle)
+2 of 4 subtypes shown (--limit 4 to see more)
