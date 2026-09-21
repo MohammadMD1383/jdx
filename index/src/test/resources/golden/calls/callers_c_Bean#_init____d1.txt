@@ -1,0 +1,2 @@
+callers of 'c.Bean#<init>()'
+  call c.Factory#make()  calls-case.jar

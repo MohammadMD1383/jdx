@@ -10,6 +10,8 @@ import dev.jdx.cli.commands.DoctorCommand
 import dev.jdx.cli.commands.LsCommand
 import dev.jdx.cli.commands.cacheGroup
 import dev.jdx.cli.commands.BodyCommand
+import dev.jdx.cli.commands.CallersCommand
+import dev.jdx.cli.commands.CallsCommand
 import dev.jdx.cli.commands.DocCommand
 import dev.jdx.cli.commands.HierarchyCommand
 import dev.jdx.cli.commands.ImplementorsCommand
@@ -104,6 +106,8 @@ fun main(args: Array<String>): Unit =
         UsagesCommand(),
         HierarchyCommand(),
         ImplementorsCommand(),
+        CallersCommand(),
+        CallsCommand(),
         wsGroup(),
         cacheGroup(),
     ).main(args)

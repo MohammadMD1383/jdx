@@ -1,0 +1,4 @@
+callers of 'c.Lib#greet'
+  call c.App#run()  calls-case.jar
+  call c.Other#work()  calls-case.jar
+  call c.Util#help()  calls-case.jar

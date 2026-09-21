@@ -1,0 +1,1 @@
+{"jdx":1,"ok":true,"command":"calls","query":"c.Bean#<init>()","result":{"target":"c.Bean#<init>","direction":"calls","calls":[{"ref":"c.Util#help()","artifact":"calls-case.jar","depth":1,"cycle":false}]},"warnings":[],"provenance":[{"artifact":"calls-case.jar","origin":"bytecode"}]}

@@ -1,0 +1,4 @@
+callers of 'c.Loop#a()'
+  call c.Loop#b()  calls-case.jar
+    call c.Loop#a()  calls-case.jar
+      call c.Loop#b()  calls-case.jar …(cycle)

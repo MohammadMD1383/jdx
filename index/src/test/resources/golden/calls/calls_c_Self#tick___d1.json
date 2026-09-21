@@ -1,0 +1,1 @@
+{"jdx":1,"ok":true,"command":"calls","query":"c.Self#tick()","result":{"target":"c.Self#tick","direction":"calls","calls":[{"ref":"c.Self#tick()","artifact":"calls-case.jar","depth":1,"cycle":true}]},"warnings":[],"provenance":[{"artifact":"calls-case.jar","origin":"bytecode"}]}

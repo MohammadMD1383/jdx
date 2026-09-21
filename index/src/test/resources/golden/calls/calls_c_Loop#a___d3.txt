@@ -1,0 +1,3 @@
+calls from 'c.Loop#a()'
+  call c.Loop#b()  calls-case.jar
+    call c.Loop#a()  calls-case.jar …(cycle)

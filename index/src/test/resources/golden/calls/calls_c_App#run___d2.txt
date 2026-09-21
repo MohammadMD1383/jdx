@@ -1,0 +1,4 @@
+calls from 'c.App#run()'
+  call c.Lib#greet(java.lang.String)  calls-case.jar
+  call c.Util#help()  calls-case.jar
+    call c.Lib#greet(java.lang.String)  calls-case.jar

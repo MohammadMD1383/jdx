@@ -1,0 +1,5 @@
+callers of 'c.Lib#greet(java.lang.String)'
+  call c.App#run()  calls-case.jar
+    call c.Main#main(java.lang.String[])  calls-case.jar
+    call c.Top#go()  calls-case.jar
+3 of 7 calls shown (--limit 7 to see more)

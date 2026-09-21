@@ -516,6 +516,24 @@ internal fun defaultHierarchyQuery(
     roots: JdxService.RootsSpec,
     options: JdxService.HierarchyOptions,
 ): JdxService.ServiceOutcome = JdxService.hierarchy(ref, roots, options)
+
+/** Query behind `callers`/`calls`, injectable so command tests run without IO (T-033). */
+internal typealias CallGraphQuery = (
+    ref: String,
+    roots: JdxService.RootsSpec,
+    options: JdxService.CallOptions,
+    direction: dev.jdx.core.render.CallDirection,
+) -> JdxService.ServiceOutcome
+
+internal fun defaultCallGraphQuery(
+    ref: String,
+    roots: JdxService.RootsSpec,
+    options: JdxService.CallOptions,
+    direction: dev.jdx.core.render.CallDirection,
+): JdxService.ServiceOutcome = when (direction) {
+    dev.jdx.core.render.CallDirection.CALLERS -> JdxService.callers(ref, roots, options)
+    dev.jdx.core.render.CallDirection.CALLS -> JdxService.calls(ref, roots, options)
+}
 /** Query behind `search`, injectable so command tests run without IO (T-017). */
 internal typealias SearchQuery = (
     pattern: String,

@@ -1,0 +1,2 @@
+calls from 'c.Self#tick()'
+  call c.Self#tick()  calls-case.jar …(cycle)
