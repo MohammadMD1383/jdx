@@ -2838,12 +2838,15 @@ public object JdxService {
             }
             val sources = openSourcesFor(opened[winner])
                 // No sources root is routine (most jars ship without one): the
-                // ladder degrades to reconstruction (T-026), not a dead end.
-                ?: return decompiledBodyOutcome(
+                // ladder degrades to reconstruction (T-026), then to raw
+                // disassembly when reconstruction itself fails (T-073) —
+                // not a dead end.
+                ?: return defaultBodyOutcome(
                     memberRef = memberRef,
                     rawRef = rawRef,
                     binary = binary,
                     target = target,
+                    bytecodeMatches = bytecodeMatches,
                     lookupRefs = lookupRefs,
                     matchRefs = matchRefs,
                     specified = specified,
@@ -2955,7 +2958,10 @@ public object JdxService {
      * workspace roots as library context (PROPOSAL.md §11.2). Never throws:
      * Vineflower failures become exit 1 naming the `--engine javap` escape
      * hatch; `javap` itself is the last rung of the ladder, so its failures
-     * name only their cause.
+     * name only their cause. The default ladder (T-073) retries through
+     * `javap` one level up ([defaultBodyOutcome]/[defaultSourceOutcome])
+     * before this failure surfaces; forced `--engine vineflower` surfaces it
+     * directly (strict, no silent swap).
      */
     private fun decompileClassText(
         opened: List<OpenRoot>,
@@ -2985,6 +2991,97 @@ public object JdxService {
                 ),
             )
         }
+    }
+
+    /**
+     * The default-ladder `body` reconstruction (T-073): Vineflower first, then
+     * the T-027 `javap` engine when Vineflower fails. Only an exit-1
+     * Vineflower failure retries (timeout, crash, unparseable text, a member
+     * missing from the reconstruction): ambiguity (exit 2) is structural
+     * (D-009) and identical through either engine, so it returns as-is. A
+     * `javap` failure too exits 1 naming both causes; a `javap` success exits
+     * 0 with `DECOMPILED_JAVAP` provenance. Forced `--engine vineflower`
+     * never reaches here — it stays strict (no silent swap).
+     */
+    private fun defaultBodyOutcome(
+        memberRef: MemberSymbolRef,
+        rawRef: String,
+        binary: String,
+        target: ClassInfo,
+        bytecodeMatches: List<BytecodeMember>,
+        lookupRefs: List<MemberSymbolRef>,
+        matchRefs: List<String>,
+        specified: Boolean,
+        signatureLine: String?,
+        doc: List<String>? = null,
+        opened: List<OpenRoot>,
+        winner: Int,
+        label: String,
+        warnings: List<Warning>,
+        options: BodyOptions,
+    ): ServiceOutcome {
+        val first = decompiledBodyOutcome(
+            memberRef, rawRef, binary, target, lookupRefs, matchRefs, specified,
+            signatureLine, doc, opened, winner, label, warnings, options,
+        )
+        val firstFailure = first as? ServiceOutcome.Failure ?: return first
+        if (firstFailure.exitCode != 1) return first
+        val second = javapBodyOutcome(
+            memberRef, rawRef, binary, target, bytecodeMatches, matchRefs,
+            signatureLine, doc, opened, winner, label, warnings, options,
+        )
+        val secondFailure = second as? ServiceOutcome.Failure ?: return second
+        if (secondFailure.exitCode != 1) return second
+        return ServiceOutcome.Failure(
+            ErrorResult.notFound(rawRef, detail = combinedEngineDetail(firstFailure, secondFailure)),
+        )
+    }
+
+    /**
+     * The default-ladder `source` reconstruction (T-073): the `source`
+     * counterpart of [defaultBodyOutcome] — same retry rule, same
+     * double-failure shape. Whole files, `--lines` windows and `--around`
+     * slices all retry through `javap` identically, because the retry wraps
+     * the whole decompiled outcome.
+     */
+    private fun defaultSourceOutcome(
+        rawRef: String,
+        binary: String,
+        label: String,
+        target: ClassInfo,
+        opened: List<OpenRoot>,
+        winner: Int,
+        options: SourceOptions,
+        warnings: List<Warning>,
+    ): ServiceOutcome {
+        val first = decompiledSourceOutcome(rawRef, binary, label, target, opened, winner, options, warnings)
+        val firstFailure = first as? ServiceOutcome.Failure ?: return first
+        if (firstFailure.exitCode != 1) return first
+        val second = javapSourceOutcome(rawRef, binary, label, target, opened, winner, options, warnings)
+        val secondFailure = second as? ServiceOutcome.Failure ?: return second
+        if (secondFailure.exitCode != 1) return second
+        return ServiceOutcome.Failure(
+            ErrorResult.notFound(rawRef, detail = combinedEngineDetail(firstFailure, secondFailure)),
+        )
+    }
+
+    /**
+     * One double-failure line naming both ladder causes (T-073): the
+     * Vineflower detail (minus its now-stale `--engine javap` hatch pointer —
+     * the retry already happened) plus the `javap` detail. Both renderers
+     * carry it via [ErrorResult.notFound] (D-007); the join is a fixed
+     * string, so bytes stay deterministic.
+     */
+    private fun combinedEngineDetail(
+        first: ServiceOutcome.Failure,
+        second: ServiceOutcome.Failure,
+    ): String = "${detailOf(first).removeSuffix(" (raw bytecode: --engine javap)")}; ${detailOf(second)}"
+
+    /** The prose behind one exit-1 engine failure, for [combinedEngineDetail]. */
+    private fun detailOf(failure: ServiceOutcome.Failure): String = when (val error = failure.error) {
+        is ErrorResult.NotFound -> error.detail ?: "not found: ${error.query}"
+        is ErrorResult.Generic -> error.message
+        is ErrorResult.Ambiguous -> "ambiguous: ${error.candidates.size} candidates for ${error.query}"
     }
 
     /** The `.java` path decompiled text is keyed under: the outer class file. */
@@ -3598,8 +3695,10 @@ public object JdxService {
             }
             val sources = openSourcesFor(opened[winner])
                 // No sources root is routine (most jars ship without one): the
-                // ladder degrades to reconstruction (T-026), not a dead end.
-                ?: return decompiledSourceOutcome(rawRef, binary, label, target, opened, winner, options, warnings)
+                // ladder degrades to reconstruction (T-026), then to raw
+                // disassembly when reconstruction itself fails (T-073) —
+                // not a dead end.
+                ?: return defaultSourceOutcome(rawRef, binary, label, target, opened, winner, options, warnings)
             try {
                 return sourceOutcome(binary, rawRef, label, target, sources, options, warnings)
             } finally {

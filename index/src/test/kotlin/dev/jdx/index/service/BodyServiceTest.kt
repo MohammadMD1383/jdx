@@ -41,7 +41,7 @@ class BodyServiceTest {
     private fun textOf(outcome: ServiceOutcome): String = outcome.renderText(false)
 
     /** A failing reconstruction engine that counts its invocations. */
-    private class FailingDecompiler : DecompilerEngine {
+    private class FailingDecompiler(val message: String = "boom") : DecompilerEngine {
         override val id: DecompilerId = DecompilerId.VINEFLOWER
         var calls: Int = 0
         override fun decompileClass(
@@ -50,7 +50,7 @@ class BodyServiceTest {
             classpath: List<Path>,
         ): DecompileResult {
             calls++
-            return DecompileResult.Failed("boom")
+            return DecompileResult.Failed(message)
         }
     }
 
@@ -251,23 +251,80 @@ class BodyServiceTest {
     }
 
     @Test
-    fun `a failing engine exits 1 naming the javap hatch`(@TempDir tempDir: Path) {
+    fun `a doubly failing ladder exits 1 naming both causes`(@TempDir tempDir: Path) {
+        // The default ladder (T-073) retries a Vineflower failure through
+        // `javap`: only the double failure exits 1, naming both engines.
         val binary = bareJar(tempDir)
         val roots = RootsSpec(jarSpecs = listOf(binary.toString()), includeJdk = false)
-        val fake = FailingDecompiler()
+        val vineflower = FailingDecompiler("vineflower-boom")
+        val javap = FailingJavapDecompiler("javap-boom")
         val outcome = JdxService.body(
             "dev.jdx.fixtures.Generics#identity(java.lang.Object)",
             roots,
-            BodyOptions(decompiler = fake),
+            BodyOptions(decompiler = vineflower, javapDecompiler = javap),
         )
         outcome.exitCode shouldBe 1
-        fake.calls shouldBe 1
+        vineflower.calls shouldBe 1
+        javap.calls shouldBe 1
+        val text = textOf(outcome)
+        text shouldContain "vineflower-boom"
+        text shouldContain "javap-boom"
+        text shouldNotContain "Exception in thread"
+        val json = outcome.toJson("body")
+        json shouldContain "vineflower-boom"
+        json shouldContain "javap-boom"
+    }
+
+    @Test
+    fun `a failing vineflower degrades to disassembly`(@TempDir tempDir: Path) {
+        // A Vineflower timeout on the default ladder answers from `javap`
+        // (T-073) — exit 0 with javap provenance, never the engine failure.
+        assumeTrue(javapPresent(), "no javap on this machine")
+        val binary = bareJar(tempDir)
+        val roots = RootsSpec(jarSpecs = listOf(binary.toString()), includeJdk = false)
+        val vineflower = FailingDecompiler("vineflower timed out after 30s")
+        val javap = tempJavapEngine(tempDir)
+        val outcome = JdxService.body(
+            "dev.jdx.fixtures.Generics#identity(java.lang.Object)",
+            roots,
+            BodyOptions(decompiler = vineflower, javapDecompiler = javap),
+        )
+        outcome.exitCode shouldBe 0
+        vineflower.calls shouldBe 1
+        val text = textOf(outcome)
+        text shouldContain "disassembled by javap from bare.jar"
+        text shouldContain "Code:"
+        text shouldContain "descriptor: (Ljava/lang/Object;)Ljava/lang/Object;"
+        text shouldNotContain "Exception in thread"
+        val json = outcome.toJson("body")
+        json shouldContain "\"origin\":\"decompiled-javap\""
+        json shouldContain "Code:"
+    }
+
+    @Test
+    fun `forced vineflower stays strict on engine failure`(@TempDir tempDir: Path) {
+        // Forced `--engine vineflower` never swaps engines silently (T-073):
+        // its failure exits 1 naming the hatch, without touching `javap`.
+        val binary = bareJar(tempDir)
+        val roots = RootsSpec(jarSpecs = listOf(binary.toString()), includeJdk = false)
+        val vineflower = FailingDecompiler("boom")
+        val javap = FailingJavapDecompiler("unused")
+        val outcome = JdxService.body(
+            "dev.jdx.fixtures.Generics#identity(java.lang.Object)",
+            roots,
+            BodyOptions(engine = DecompilerId.VINEFLOWER, decompiler = vineflower, javapDecompiler = javap),
+        )
+        outcome.exitCode shouldBe 1
+        vineflower.calls shouldBe 1
+        javap.calls shouldBe 0
         textOf(outcome) shouldContain "--engine javap"
-        textOf(outcome) shouldNotContain "Exception"
+        textOf(outcome) shouldNotContain "Exception in thread"
     }
 
     @Test
     fun `a member missing from reconstructed text names SOURCES_VERSION_MISMATCH`(@TempDir tempDir: Path) {
+        // Forced vineflower is strict (T-073): the member proven in bytecode
+        // but absent from the reconstruction exits 1 here.
         val binary = bareJar(tempDir)
         val roots = RootsSpec(jarSpecs = listOf(binary.toString()), includeJdk = false)
         val scripted = ScriptedDecompiler(
@@ -276,10 +333,33 @@ class BodyServiceTest {
         val outcome = JdxService.body(
             "dev.jdx.fixtures.Generics#identity(java.lang.Object)",
             roots,
-            BodyOptions(decompiler = scripted),
+            BodyOptions(engine = DecompilerId.VINEFLOWER, decompiler = scripted),
         )
         outcome.exitCode shouldBe 1
         textOf(outcome) shouldContain "SOURCES_VERSION_MISMATCH"
+    }
+
+    @Test
+    fun `a member missing from reconstructed text falls back to disassembly`(@TempDir tempDir: Path) {
+        // The same gap on the default ladder answers from `javap` (T-073):
+        // the member exists in bytecode, so disassembly serves it.
+        assumeTrue(javapPresent(), "no javap on this machine")
+        val binary = bareJar(tempDir)
+        val roots = RootsSpec(jarSpecs = listOf(binary.toString()), includeJdk = false)
+        val scripted = ScriptedDecompiler(
+            "package dev.jdx.fixtures;\npublic class Generics {\n    public void unrelated() {}\n}\n",
+        )
+        val outcome = JdxService.body(
+            "dev.jdx.fixtures.Generics#identity(java.lang.Object)",
+            roots,
+            BodyOptions(decompiler = scripted, javapDecompiler = tempJavapEngine(tempDir)),
+        )
+        outcome.exitCode shouldBe 0
+        val text = textOf(outcome)
+        text shouldContain "disassembled by javap from bare.jar"
+        text shouldContain "descriptor: (Ljava/lang/Object;)Ljava/lang/Object;"
+        text shouldNotContain "Exception in thread"
+        outcome.toJson("body") shouldContain "\"origin\":\"decompiled-javap\""
     }
 
     @Test
@@ -384,8 +464,11 @@ class BodyServiceTest {
         if (outcome.exitCode == 0) {
             textOf(outcome) shouldContain "source: "
         } else {
+            // No src.zip and both engines down: the double failure (T-073)
+            // names vineflower and javap alike.
             outcome.exitCode shouldBe 1
-            textOf(outcome) shouldContain "--engine javap"
+            textOf(outcome) shouldContain "vineflower"
+            textOf(outcome) shouldContain "javap"
         }
         // Trace proxy, scoped: decompiled bodies legitimately name exception
         // types (`NoSuchElementException`, …) — only a trace header is a failure.
@@ -401,7 +484,7 @@ class BodyServiceTest {
         runCatching { JavapEnvironment.system().resolveExecutable() != null }.getOrDefault(false)
 
     /** A failing javap engine that counts its invocations. */
-    private class FailingJavapDecompiler : DecompilerEngine {
+    private class FailingJavapDecompiler(val message: String = "boom") : DecompilerEngine {
         override val id: DecompilerId = DecompilerId.JAVAP
         var calls: Int = 0
         override fun decompileClass(
@@ -410,7 +493,7 @@ class BodyServiceTest {
             classpath: List<Path>,
         ): DecompileResult {
             calls++
-            return DecompileResult.Failed("boom")
+            return DecompileResult.Failed(message)
         }
     }
 
