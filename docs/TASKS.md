@@ -636,7 +636,43 @@ does M call" as a depth-bounded tree. Samples stay in T-034.)*
   depth-1 metamorphic over every case method; goldens; CLI tier-1 + tier-2;
   `CorpusSoakTest` outcome branches.
 
-**T-034** `jdx samples` with exemplariness ranking
+### T-034 — `jdx samples` with exemplariness ranking · `WIP` (session 55)
+
+**Depends:** T-029 (ReferenceEdge/ReferenceExtractor model), T-030 (usages live-scan patterns),
+T-022 (JavaBodies source slicing for snippets), T-011 (read-command resolution incl. `g:a:v`
+scope + `DUPLICATE_FQN`), T-015/T-016 (roots) ·
+**Files:** `core/.../render/Samples.kt`, `index/.../service/JdxService.kt` (`samples`,
+`SampleOptions`, `executeSamples`, `ServiceOutcome.SampleList`), `cli/.../commands/SamplesCommand.kt`,
+`cli/.../JdxCli.kt`
+
+*(Last M4 CLI slice: source-rendered usage examples over live bytecode roots via the T-029
+`ReferenceExtractor` (no persistent-index read yet — mirroring D-043's live-roots-first
+precedent). `usages` answers "what touches X" flat; `callers` answers "who calls M" as a tree;
+`samples` answers "how is X really used" with evidence: ranked call sites with enclosing-method
+source snippets when paired sources exist.)*
+
+- Type refs and method refs only: incoming `METHOD_CALL` edges (type query matches any member
+  of the type; member query is overload-blind unless the ref carries a parameter list — the
+  usages rule, D-042 §5). Field refs exit 3 naming `usages`; `<clinit>` samples exit 3 (never
+  invoked); package/module refs exit 3.
+- Exemplariness ranking (deterministic, PROPOSAL.md §7.3): non-test before test (class/member
+  containing `test`, case-insensitive), non-generated before generated (`$` nesting,
+  `lambda$`/`access$`/metafactory members), fuller overloads first (more target params), then
+  `fromRef` alphabetical. `--prefer-sources` ranks snippet-backed hits first.
+- Snippets: enclosing caller method sliced via the T-021 `findJavaBodies` seam over the
+  caller's own paired sources (best effort — any miss yields a snippet-less row, never a
+  failure); capped to 15 lines with a `… (truncated)` marker. Rows without sources still print
+  the canonical caller ref + artifact, so samples degrades to ranked `callers` depth-1.
+- `--limit N` (default 3, per proposal) caps ranked rows shown, flat footer
+  `shown of total … (--limit M to see more)`; `--in`/`--exclude` artifact-label filters
+  (D-031 matching, mirror usages/callers). Zero samples exit 1 with a `no samples` detail;
+  unknown target exits 1 with did-you-mean; ambiguous short names exit 2; unreadable classes
+  warn once each (`CORRUPT_CLASS`) and are skipped (D-017).
+- Repoints the parked T-034 messages: `usages --context` and `--kind new|throw|annotation`
+  rejections now name `jdx samples` / the live rule instead of the task number.
+- Tests: core `SamplesTest` (test-first) + property (determinism, ranking + pre-order-prefix
+  law, text⊆JSON); index ASM case jar (callers + test-named + generated + overloads) with
+  `SamplesServiceTest`; goldens; CLI tier-1 + tier-2; `CorpusSoakTest` outcome branch.
 
 # M5 — Kotlin
 ### T-035 `@Metadata` decoding · **T-036** Kotlin member mapping (properties, default args, suspend) · **T-037** `--view jvm` · **T-038** side-loaded Kotlin PSI module (D-008 mitigations 1–5 are acceptance criteria) · **T-039** Kotlin source body extraction
