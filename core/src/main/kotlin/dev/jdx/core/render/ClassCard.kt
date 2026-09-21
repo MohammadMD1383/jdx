@@ -30,6 +30,7 @@ public data class ClassCard(
         superclassLine(info)?.let { lines.add("  $it") }
         interfacesLine(info)?.let { lines.add("  $it") }
         if (info.deprecated) lines.add("  deprecated")
+        if (info.isKotlin) lines.add("  kotlin")
         lines.add("  ${countLine(counts)}")
         for (warning in warnings) lines.add("warning ${warning.code}: ${warning.message}")
         lines.add(provenanceText())
@@ -66,6 +67,7 @@ public data class ClassCard(
             append("]")
             append(",\"counts\":").append(counts.toJson())
             if (info.deprecated) append(",\"deprecated\":true")
+            if (info.isKotlin) append(",\"kotlin\":true")
             append("}")
         }
         return envelopeJson(

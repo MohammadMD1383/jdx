@@ -1,6 +1,7 @@
-class dev.jdx.fixtures.KotlinRegistry
-  public final class KotlinRegistry
+object dev.jdx.fixtures.KotlinRegistry
+  public final object KotlinRegistry
   extends java.lang.Object
+  kotlin
   members: 1 constructor, 1 method, 2 fields
 source: fixture-corpus.jar (bytecode)
 next: jdx members dev.jdx.fixtures.KotlinRegistry --inherited

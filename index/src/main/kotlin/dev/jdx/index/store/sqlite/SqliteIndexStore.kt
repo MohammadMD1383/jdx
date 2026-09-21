@@ -54,7 +54,8 @@ public class IndexStoreException(message: String, cause: Throwable? = null) :
  *   then methods (the `ClassInfo.members` order) and every read orders by
  *   `member.id` — ids are monotonic within one replacement, so the order is stable
  *   across processes without an extra position column.
- * - `is_kotlin` is always `0` in v1; `@Metadata` decoding is T-035's job.
+ * - `is_kotlin` is written by `replaceClasses` from `ClassInfo.isKotlin` and read
+ *   back by `readClass` (T-035); the `ktmeta` blob still has no writer (T-036).
  * - `ktmeta`, `doc`, `srcmap`, `ref`, `name_idx` exist so the schema is complete
  *   for T-014/T-017 readers, but no writer fills them yet (sources index lazily
  *   on first source query, PROPOSAL.md §10.4; edges land with T-029).
@@ -678,7 +679,7 @@ public class SqliteIndexStore private constructor(
         private val classInsert = connection.prepareStatement(
             "INSERT INTO class(artifact_id, fqn, simple_name, package, access, kind, signature, " +
                 "super_fqn, super_id, source_file, is_kotlin, deprecated, outer_fqn, outer_id) " +
-                "VALUES(?, ?, ?, ?, ?, ?, ?, ?, NULL, ?, 0, ?, ?, NULL)",
+                "VALUES(?, ?, ?, ?, ?, ?, ?, ?, NULL, ?, ?, ?, ?, NULL)",
         )
         private val rowIdQuery = connection.prepareStatement("SELECT last_insert_rowid()")
         private val ifaceInsert =
@@ -710,8 +711,9 @@ public class SqliteIndexStore private constructor(
             classInsert.setNullableString(7, clazz.genericSignature?.signature)
             classInsert.setNullableString(8, clazz.superclass?.binaryName)
             classInsert.setNullableString(9, clazz.sourceFileName)
-            classInsert.setInt(10, if (clazz.deprecated) 1 else 0)
-            classInsert.setNullableString(11, clazz.outerClass?.binaryName)
+            classInsert.setInt(10, if (clazz.isKotlin) 1 else 0)
+            classInsert.setInt(11, if (clazz.deprecated) 1 else 0)
+            classInsert.setNullableString(12, clazz.outerClass?.binaryName)
             classInsert.executeUpdate()
             val classId = lastRowId()
             for (iface in clazz.interfaces) {
@@ -800,7 +802,7 @@ public class SqliteIndexStore private constructor(
      */
     private fun readClass(classId: Long): ClassInfo {
         val row = connection.prepareStatement(
-            "SELECT fqn, simple_name, package, access, kind, signature, super_fqn, source_file, deprecated, outer_fqn " +
+            "SELECT fqn, simple_name, package, access, kind, signature, super_fqn, source_file, deprecated, outer_fqn, is_kotlin " +
                 "FROM class WHERE id=?",
         ).use { query ->
             query.setLong(1, classId)
@@ -815,6 +817,7 @@ public class SqliteIndexStore private constructor(
                     sourceFile = rows.getString(8),
                     deprecated = rows.getInt(9) != 0,
                     outerFqn = rows.getString(10),
+                    isKotlin = rows.getInt(11) != 0,
                 )
             }
         }
@@ -895,6 +898,7 @@ public class SqliteIndexStore private constructor(
             outerClass = row.outerFqn?.let { classTypeName(it) },
             sourceFileName = row.sourceFile,
             deprecated = row.deprecated,
+            isKotlin = row.isKotlin,
         )
     }
 
@@ -907,6 +911,7 @@ public class SqliteIndexStore private constructor(
         val sourceFile: String?,
         val deprecated: Boolean,
         val outerFqn: String?,
+        val isKotlin: Boolean,
     )
 
     private fun readAnnots(ownerKind: String, ownerId: Long): List<AnnotationInfo> =

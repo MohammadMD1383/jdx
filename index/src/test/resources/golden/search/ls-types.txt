@@ -9,10 +9,10 @@ types in package 'dev.jdx.fixtures'
   class dev.jdx.fixtures.Generics$Recursive  fixture-corpus.jar
   class dev.jdx.fixtures.KotlinData  fixture-corpus.jar
   class dev.jdx.fixtures.KotlinMembers  fixture-corpus.jar
-  class dev.jdx.fixtures.KotlinMembers$Companion  fixture-corpus.jar
-  class dev.jdx.fixtures.KotlinRegistry  fixture-corpus.jar
+  companion dev.jdx.fixtures.KotlinMembers$Companion  fixture-corpus.jar
+  object dev.jdx.fixtures.KotlinRegistry  fixture-corpus.jar
   class dev.jdx.fixtures.KotlinSealed  fixture-corpus.jar
-  class dev.jdx.fixtures.KotlinSealed$Empty  fixture-corpus.jar
+  object dev.jdx.fixtures.KotlinSealed$Empty  fixture-corpus.jar
   class dev.jdx.fixtures.KotlinSealed$Sub  fixture-corpus.jar
   class dev.jdx.fixtures.KotlinShapesKt  fixture-corpus.jar
   annotation dev.jdx.fixtures.Matrix  fixture-corpus.jar

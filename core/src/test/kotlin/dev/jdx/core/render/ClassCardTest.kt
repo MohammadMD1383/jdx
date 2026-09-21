@@ -193,4 +193,34 @@ class ClassCardTest {
         ).renderText()
         none shouldContain "members: 0 constructors, 0 methods, 0 fields"
     }
+
+    // -- T-035: kotlin marker --------------------------------------------------
+    //
+    // `@Metadata` decoding (T-035) marks Kotlin classes on `ClassInfo.isKotlin`;
+    // the card names the language so an agent never mistakes JVM projections
+    // (suspend/Continuation, getters-for-properties) for Java declarations.
+
+    @Test
+    fun `show marks kotlin types and omits the marker for java types`() {
+        val kotlinText = buildClassCard(
+            target = point.copy(isKotlin = true),
+            provenance = emptyList(),
+        ).renderText()
+        kotlinText shouldContain "kotlin"
+
+        val javaText = buildClassCard(target = point, provenance = emptyList()).renderText()
+        javaText shouldNotContain "kotlin"
+    }
+
+    @Test
+    fun `show json carries the kotlin marker only for kotlin types`() {
+        val kotlinJson = buildClassCard(
+            target = point.copy(isKotlin = true),
+            provenance = emptyList(),
+        ).toJson(command = "show")
+        kotlinJson shouldContain "\"kotlin\":true"
+
+        val javaJson = buildClassCard(target = point, provenance = emptyList()).toJson(command = "show")
+        javaJson shouldNotContain "\"kotlin\""
+    }
 }

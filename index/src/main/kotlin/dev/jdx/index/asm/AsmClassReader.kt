@@ -14,7 +14,10 @@ import dev.jdx.core.model.TypeName
 import dev.jdx.core.model.Warning
 import dev.jdx.core.model.WarningCode
 import dev.jdx.core.model.typeNameFromBinaryName
+import dev.jdx.index.kotlin.KotlinMetadataKind
+import dev.jdx.index.kotlin.KotlinMetadataReader
 import java.io.InputStream
+import kotlin.metadata.ClassKind
 import org.objectweb.asm.ClassReader
 import org.objectweb.asm.Opcodes
 import org.objectweb.asm.Type
@@ -154,9 +157,12 @@ public object AsmClassReader {
     private fun mapClass(node: ClassNode): ClassInfo {
         val internalName = node.name ?: throw IllegalArgumentException("class file has no name")
         val access = node.access
-        val kind = mapKind(access)
         val annotations = readAnnotations(node.visibleAnnotations, node.invisibleAnnotations)
         val deprecated = isDeprecated(access, annotations)
+        // One `@Metadata` decode per class: the flag and the kind refinement share it.
+        // Absent or corrupt metadata is `null` — the class stays a JVM-view class (D-009).
+        val kotlinMetadata = KotlinMetadataReader.read(node.visibleAnnotations, node.invisibleAnnotations)
+        val kind = refineKind(mapKind(access), kotlinMetadata)
         val superclass = mapSuperclass(kind, internalName, node.superName)
         return ClassInfo(
             name = mapInternalName(internalName),
@@ -175,6 +181,7 @@ public object AsmClassReader {
             outerClass = mapOuterClass(node),
             sourceFileName = node.sourceFile,
             deprecated = deprecated,
+            isKotlin = kotlinMetadata != null,
         )
     }
 
@@ -184,7 +191,25 @@ public object AsmClassReader {
         access and ACC_RECORD != 0 -> TypeKind.RECORD
         access and Opcodes.ACC_INTERFACE != 0 -> TypeKind.INTERFACE
         else -> TypeKind.CLASS
-        // Kotlin OBJECT/COMPANION are decoded from @Metadata later (T-035), never here.
+    }
+
+    /**
+     * Refines the JVM kind with the Kotlin class kind (T-035): `object` (incl. `data
+     * object`) and `companion object` become [TypeKind.OBJECT]/[TypeKind.COMPANION],
+     * the kinds `ClassInfo` reserves for them. Every other Kotlin kind keeps its JVM
+     * kind — a Kotlin interface is still an interface — and file facades (which carry
+     * `FILE_FACADE`, not `CLASS`, metadata) stay `CLASS`, so Java output is untouched.
+     */
+    private fun refineKind(
+        jvmKind: TypeKind,
+        metadata: dev.jdx.index.kotlin.KotlinMetadata?,
+    ): TypeKind {
+        if (metadata?.metadataKind != KotlinMetadataKind.CLASS) return jvmKind
+        return when (metadata.classKind) {
+            ClassKind.OBJECT -> TypeKind.OBJECT
+            ClassKind.COMPANION_OBJECT -> TypeKind.COMPANION
+            else -> jvmKind
+        }
     }
 
     private fun mapSuperclass(kind: TypeKind, internalName: String, superName: String?): TypeName? {

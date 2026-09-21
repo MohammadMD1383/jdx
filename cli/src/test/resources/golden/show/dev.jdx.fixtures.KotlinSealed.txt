@@ -1,6 +1,7 @@
 class dev.jdx.fixtures.KotlinSealed
   public abstract class KotlinSealed
   extends java.lang.Object
+  kotlin
   members: 2 constructors, 0 methods, 0 fields
 source: fixture-corpus.jar (bytecode)
 next: jdx members dev.jdx.fixtures.KotlinSealed --inherited

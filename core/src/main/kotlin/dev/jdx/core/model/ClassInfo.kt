@@ -34,6 +34,10 @@ public data class AnnotationInfo(
  *
  * [deprecated] is true when the class carries the `Deprecated` attribute or a
  * `@Deprecated` annotation (T-008 reads both — either source proves deprecation).
+ *
+ * [isKotlin] is true when the class file carries a Kotlin `@Metadata` annotation
+ * (T-035 decodes it in `index`; file facades count — they are Kotlin declarations
+ * whose JVM projection is a static utility class).
  */
 public data class ClassInfo(
     public val name: TypeName.ClassType,
@@ -48,6 +52,7 @@ public data class ClassInfo(
     public val outerClass: TypeName.ClassType? = null,
     public val sourceFileName: String? = null,
     public val deprecated: Boolean = false,
+    public val isKotlin: Boolean = false,
 ) {
     /** Fields then methods, in declaration order — the order renderers print. */
     public val members: List<MemberInfo>
