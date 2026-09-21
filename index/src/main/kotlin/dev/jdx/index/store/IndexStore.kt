@@ -1,6 +1,8 @@
 package dev.jdx.index.store
 
 import dev.jdx.core.model.ClassInfo
+import dev.jdx.core.model.ReferenceEdge
+import dev.jdx.core.model.ReferenceKind
 import java.io.Closeable
 
 /**
@@ -68,6 +70,36 @@ public interface IndexStore : Closeable {
 
     /** How many classes are indexed under [artifactId]. */
     public fun classCount(artifactId: Long): Int
+
+    /**
+     * Replaces every reference edge for [artifactId] with [edges], in one
+     * transaction (T-029, PROPOSAL.md §10.3 `ref` table).
+     *
+     * Each edge's `from*` triple must name a method stored by [replaceClasses]
+     * for the same artifact; edges naming no stored method are skipped (the
+     * extractor only emits methods the reader stored, so this is defensive,
+     * never routine). [replaceClasses] clears an artifact's edges as a side
+     * effect (scoped delete) — the indexer calls it first, then this.
+     */
+    public fun replaceReferences(artifactId: Long, edges: List<ReferenceEdge>)
+
+    /**
+     * Every edge targeting [toFqn] across all artifacts, ordered by artifact
+     * hash, source class, source member and target (deterministic — D-007).
+     *
+     * With [toMember] `null`, all edges to the type match (calls to its
+     * methods count as references to the type); with a member, only edges to
+     * that member match, narrowed to [toDescriptor] when given. This is the
+     * seam the M4 `usages`/`callers` queries read through.
+     */
+    public fun findReferencesTo(
+        toFqn: String,
+        toMember: String? = null,
+        toDescriptor: String? = null,
+    ): List<ReferenceHit>
+
+    /** How many reference edges are stored under [artifactId]. */
+    public fun countReferences(artifactId: Long): Int
 }
 
 /**
@@ -77,6 +109,22 @@ public interface IndexStore : Closeable {
 public data class ClassHit(
     public val artifact: StoredArtifact,
     public val clazz: ClassInfo,
+)
+
+/**
+ * One stored reference edge plus the artifact that provides it (T-029) — the
+ * unit the M4 graph queries render. `from*` names the enclosing method,
+ * `to*` the referenced type/member, [kind] the edge flavour.
+ */
+public data class ReferenceHit(
+    public val artifact: StoredArtifact,
+    public val fromClass: String,
+    public val fromMember: String,
+    public val fromDescriptor: String,
+    public val toOwner: String,
+    public val toMember: String?,
+    public val toDescriptor: String?,
+    public val kind: ReferenceKind,
 )
 
 /**

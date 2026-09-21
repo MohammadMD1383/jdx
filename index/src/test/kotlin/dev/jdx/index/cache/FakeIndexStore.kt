@@ -1,12 +1,14 @@
 package dev.jdx.index.cache
 
 import dev.jdx.core.model.ClassInfo
+import dev.jdx.core.model.ReferenceEdge
 import dev.jdx.core.model.TypeKind
 import dev.jdx.core.model.TypeName
 import dev.jdx.core.model.typeNameFromBinaryName
 import dev.jdx.index.store.ClassHit
 import dev.jdx.index.store.IndexStore
 import dev.jdx.index.store.NewArtifact
+import dev.jdx.index.store.ReferenceHit
 import dev.jdx.index.store.SqliteSchemaVersion
 import dev.jdx.index.store.StoredArtifact
 
@@ -19,6 +21,7 @@ internal class FakeIndexStore : IndexStore {
     private var nextId = 1L
     private val artifacts = linkedMapOf<String, StoredArtifact>()
     private val classes = mutableMapOf<Long, List<ClassInfo>>()
+    private val references = mutableMapOf<Long, List<ReferenceEdge>>()
 
     override fun schemaVersion(): Int = SqliteSchemaVersion.CURRENT
 
@@ -46,11 +49,14 @@ internal class FakeIndexStore : IndexStore {
     override fun deleteArtifactByHash(hash: String): Boolean {
         val removed = artifacts.remove(hash) ?: return false
         classes.remove(removed.id)
+        references.remove(removed.id)
         return true
     }
 
     override fun replaceClasses(artifactId: Long, classes: List<ClassInfo>) {
         this.classes[artifactId] = classes.toList()
+        // Mirrors the SQLite scoped delete: replacing classes drops the edges.
+        this.references.remove(artifactId)
     }
 
     override fun findClassesByFqn(binaryName: String): List<ClassHit> =
@@ -66,6 +72,37 @@ internal class FakeIndexStore : IndexStore {
         classes[artifactId].orEmpty().map { it.name.binaryName }.sorted()
 
     override fun classCount(artifactId: Long): Int = classes[artifactId].orEmpty().size
+
+    override fun replaceReferences(artifactId: Long, edges: List<ReferenceEdge>) {
+        references[artifactId] = edges.sortedWith(ReferenceEdge::compare)
+    }
+
+    override fun findReferencesTo(
+        toFqn: String,
+        toMember: String?,
+        toDescriptor: String?,
+    ): List<ReferenceHit> = artifacts.values.sortedBy { it.hash }.flatMap { artifact ->
+        references[artifact.id].orEmpty()
+            .filter { edge ->
+                edge.toOwner == toFqn &&
+                    (toMember == null || edge.toMember == toMember) &&
+                    (toDescriptor == null || toMember == null || edge.toDescriptor == toDescriptor)
+            }
+            .map { edge ->
+                ReferenceHit(
+                    artifact = artifact,
+                    fromClass = edge.fromClass,
+                    fromMember = edge.fromMember,
+                    fromDescriptor = edge.fromDescriptor,
+                    toOwner = edge.toOwner,
+                    toMember = edge.toMember,
+                    toDescriptor = edge.toDescriptor,
+                    kind = edge.kind,
+                )
+            }
+    }
+
+    override fun countReferences(artifactId: Long): Int = references[artifactId].orEmpty().size
 
     override fun close() = Unit
 }

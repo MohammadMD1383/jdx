@@ -10,12 +10,15 @@ import dev.jdx.core.model.GenericSignature
 import dev.jdx.core.model.JvmDescriptor
 import dev.jdx.core.model.MethodInfo
 import dev.jdx.core.model.MethodSignature
+import dev.jdx.core.model.ReferenceEdge
+import dev.jdx.core.model.ReferenceKind
 import dev.jdx.core.model.TypeKind
 import dev.jdx.core.model.TypeName
 import dev.jdx.core.model.typeNameFromBinaryName
 import dev.jdx.index.store.ClassHit
 import dev.jdx.index.store.IndexStore
 import dev.jdx.index.store.NewArtifact
+import dev.jdx.index.store.ReferenceHit
 import dev.jdx.index.store.SqliteSchemaVersion
 import dev.jdx.index.store.StoredArtifact
 import java.nio.file.Files
@@ -388,6 +391,174 @@ public class SqliteIndexStore private constructor(
                 }
             } catch (e: Exception) {
                 throw IndexStoreException("cannot count classes: ${e.message}", e)
+            }
+        }
+    }
+
+    // -- references (T-029, PROPOSAL.md §10.3 `ref`) ----------------------------
+
+    override fun replaceReferences(artifactId: Long, edges: List<ReferenceEdge>) {
+        synchronized(lock) {
+            try {
+                val wasAutoCommit = connection.autoCommit
+                connection.autoCommit = false
+                try {
+                    // Resolve every from-method to its stored row id in one
+                    // query: per-edge lookups would cost a round-trip each on
+                    // JDK-scale artifacts (hundreds of thousands of edges).
+                    val fromIds = connection.prepareStatement(
+                        "SELECT c.fqn, m.name, m.descriptor, m.id FROM member m " +
+                            "JOIN class c ON c.id=m.class_id WHERE c.artifact_id=?",
+                    ).use { query ->
+                        query.setLong(1, artifactId)
+                        query.executeQuery().use { rows ->
+                            buildMap {
+                                while (rows.next()) {
+                                    put(
+                                        Triple(rows.getString(1), rows.getString(2), rows.getString(3)),
+                                        rows.getLong(4),
+                                    )
+                                }
+                            }
+                        }
+                    }
+                    connection.prepareStatement(
+                        "DELETE FROM ref WHERE from_member_id IN " +
+                            "(SELECT id FROM member WHERE class_id IN " +
+                            "(SELECT id FROM class WHERE artifact_id=?))",
+                    ).use { delete ->
+                        delete.setLong(1, artifactId)
+                        delete.executeUpdate()
+                    }
+                    connection.prepareStatement(
+                        "INSERT INTO ref(from_member_id, to_fqn, to_member, kind, line) " +
+                            "VALUES(?, ?, ?, ?, NULL)",
+                    ).use { insert ->
+                        // True JDBC batching (T-064's warning does not apply:
+                        // ref rows need no generated ids, so there is no
+                        // `last_insert_rowid` round-trip and no cross-process
+                        // id race — one flush per chunk, not one per row).
+                        var batched = 0
+                        fun flush() {
+                            if (batched > 0) {
+                                insert.executeBatch()
+                                batched = 0
+                            }
+                        }
+                        for (edge in edges) {
+                            val fromId = fromIds[Triple(edge.fromClass, edge.fromMember, edge.fromDescriptor)]
+                                ?: continue
+                            insert.setLong(1, fromId)
+                            insert.setString(2, edge.toOwner)
+                            insert.setNullableString(3, encodeToMember(edge.toMember, edge.toDescriptor))
+                            insert.setString(4, edge.kind.name)
+                            insert.addBatch()
+                            if (++batched >= 5_000) flush()
+                        }
+                        flush()
+                    }
+                    connection.commit()
+                } catch (e: Exception) {
+                    connection.rollback()
+                    throw e
+                } finally {
+                    connection.autoCommit = wasAutoCommit
+                }
+            } catch (e: IndexStoreException) {
+                throw e
+            } catch (e: Exception) {
+                throw IndexStoreException("cannot store ${edges.size} reference edges: ${e.message}", e)
+            }
+        }
+    }
+
+    override fun findReferencesTo(
+        toFqn: String,
+        toMember: String?,
+        toDescriptor: String?,
+    ): List<ReferenceHit> {
+        synchronized(lock) {
+            return try {
+                // The member filter rides in SQL so a crowded target (every
+                // edge to java.lang.String) does not drag the whole table
+                // through the JNI boundary; the descriptor-exact case is a
+                // plain equality, the name-only case a prefix match on the
+                // `name<sep>descriptor` encoding (LIKE wildcards escaped —
+                // member names may legally contain `_`).
+                val sql = buildString {
+                    append(
+                        "SELECT a.id, a.hash, a.path, a.sources_path, a.kind, a.jar_mtime, a.jar_size, " +
+                            "a.indexed_at, a.schema_ver, c.fqn, m.name, m.descriptor, " +
+                            "r.to_fqn, r.to_member, r.kind " +
+                            "FROM ref r JOIN member m ON m.id=r.from_member_id " +
+                            "JOIN class c ON c.id=m.class_id JOIN artifact a ON a.id=c.artifact_id " +
+                            "WHERE r.to_fqn=?",
+                    )
+                    if (toMember != null && toDescriptor != null) append(" AND r.to_member=?")
+                    else if (toMember != null) append(" AND (r.to_member=? OR r.to_member LIKE ? ESCAPE '\\')")
+                    append(" ORDER BY a.hash, c.fqn, m.name, m.descriptor, r.to_fqn, r.to_member, r.kind")
+                }
+                connection.prepareStatement(sql).use { query ->
+                    query.setString(1, toFqn)
+                    if (toMember != null && toDescriptor != null) {
+                        query.setString(2, encodeToMember(toMember, toDescriptor))
+                    } else if (toMember != null) {
+                        query.setString(2, toMember)
+                        query.setString(3, escapeLike(toMember) + MEMBER_SEPARATOR + "%")
+                    }
+                    query.executeQuery().use { rows ->
+                        buildList {
+                            while (rows.next()) {
+                                val artifact = StoredArtifact(
+                                    id = rows.getLong(1),
+                                    hash = rows.getString(2),
+                                    path = rows.getString(3),
+                                    sourcesPath = rows.getString(4),
+                                    kind = rows.getString(5),
+                                    jarMtime = rows.nullableLong(6),
+                                    jarSize = rows.nullableLong(7),
+                                    indexedAt = rows.getLong(8),
+                                    schemaVer = rows.getInt(9),
+                                )
+                                val (member, descriptor) = decodeToMember(rows.getString(14))
+                                add(
+                                    ReferenceHit(
+                                        artifact = artifact,
+                                        fromClass = rows.getString(10),
+                                        fromMember = rows.getString(11),
+                                        fromDescriptor = rows.getString(12),
+                                        toOwner = rows.getString(13),
+                                        toMember = member,
+                                        toDescriptor = descriptor,
+                                        kind = ReferenceKind.valueOf(rows.getString(15)),
+                                    ),
+                                )
+                            }
+                        }
+                    }
+                }
+            } catch (e: Exception) {
+                throw IndexStoreException("cannot search references to $toFqn: ${e.message}", e)
+            }
+        }
+    }
+
+    override fun countReferences(artifactId: Long): Int {
+        synchronized(lock) {
+            return try {
+                connection.prepareStatement(
+                    "SELECT COUNT(*) FROM ref WHERE from_member_id IN " +
+                        "(SELECT id FROM member WHERE class_id IN " +
+                        "(SELECT id FROM class WHERE artifact_id=?))",
+                ).use { query ->
+                    query.setLong(1, artifactId)
+                    query.executeQuery().use { rows ->
+                        rows.next()
+                        rows.getInt(1)
+                    }
+                }
+            } catch (e: Exception) {
+                throw IndexStoreException("cannot count references: ${e.message}", e)
             }
         }
     }
@@ -865,6 +1036,38 @@ private fun typeName(binaryName: String): TypeName =
     } catch (e: IllegalArgumentException) {
         throw IndexStoreException("stored type name is malformed: $binaryName")
     }
+
+/**
+ * Separates the member name from its descriptor inside `ref.to_member`
+ * (`name<sep>descriptor`, bare `name` when the descriptor is absent, SQL NULL
+ * when the edge names no member). The v1 schema (T-013) has no descriptor
+ * column; this encoding keeps overload precision without a migration. Same
+ * unit separator as LIST_SEPARATOR, same rationale.
+ */
+private const val MEMBER_SEPARATOR: String = "\u001F"
+
+/** `ref.to_member` encoding: `null` → NULL, bare name, or `name<sep>descriptor`. */
+private fun encodeToMember(name: String?, descriptor: String?): String? {
+    if (name == null) return null
+    if (descriptor == null) return name
+    return name + MEMBER_SEPARATOR + descriptor
+}
+
+/** Inverse of [encodeToMember]: splits on the first separator, if any. */
+private fun decodeToMember(raw: String?): Pair<String?, String?> {
+    if (raw == null) return Pair(null, null)
+    val separator = raw.indexOf(MEMBER_SEPARATOR)
+    if (separator < 0) return Pair(raw, null)
+    return Pair(raw.substring(0, separator), raw.substring(separator + 1))
+}
+
+/** Escapes `%`, `_` and the escape char itself for a `LIKE ... ESCAPE '\'` match. */
+private fun escapeLike(raw: String): String = buildString {
+    for (char in raw) {
+        if (char == '\\' || char == '%' || char == '_') append('\\')
+        append(char)
+    }
+}
 
 private fun classTypeName(binaryName: String): TypeName.ClassType =
     when (val name = typeName(binaryName)) {

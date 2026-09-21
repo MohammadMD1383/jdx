@@ -1,6 +1,7 @@
 package dev.jdx.index.index
 
 import dev.jdx.core.model.ClassInfo
+import dev.jdx.core.model.ReferenceEdge
 import dev.jdx.core.model.Warning
 import dev.jdx.core.model.WarningCode
 import dev.jdx.index.artifact.ArtifactLoader
@@ -11,6 +12,7 @@ import dev.jdx.index.artifact.JrtArtifact
 import dev.jdx.index.artifact.SourcesPair
 import dev.jdx.index.asm.AsmClassReader
 import dev.jdx.index.asm.ClassReadResult
+import dev.jdx.index.refs.ReferenceExtractor
 import dev.jdx.index.store.IndexStore
 import dev.jdx.index.store.NewArtifact
 import java.nio.file.Files
@@ -102,7 +104,8 @@ public fun interface IndexProgressListener {
  *
  * Per artifact: hash → short-circuit on a current-schema hit → ASM-read every
  * class entry (bad entries become warnings) → `upsert` + one-transaction
- * `replaceClasses`. Across artifacts: virtual-thread fan-out, one task each.
+ * `replaceClasses` + `replaceReferences` (edges extracted from the same
+ * bytes). Across artifacts: virtual-thread fan-out, one task each.
  * Sources are deliberately untouched here — they index lazily on first source
  * query (§10.4 step 4, M3's job).
  *
@@ -288,6 +291,7 @@ public object ArtifactIndexer {
         // Entry order is the artifact's sorted order — insertion order into the
         // store is therefore deterministic across runs and processes (D-007).
         val classes = ArrayList<ClassInfo>(entries.size)
+        val edges = ArrayList<ReferenceEdge>()
         val warnings = ArrayList<Warning>()
         warnings.addAll(root.warnings)
         for (entry in entries) {
@@ -306,14 +310,20 @@ public object ArtifactIndexer {
             }
             // AsmClassReader never throws: every failure mode arrives as a
             // warning-carrying value, so one bad class cannot abort its artifact.
+            // Reference extraction runs on the same bytes for readable classes;
+            // it never throws either, so it adds no failure mode here.
             when (val read = AsmClassReader.read(bytes, "$binary in $pathLabel")) {
-                is ClassReadResult.Ok -> classes.add(read.info)
+                is ClassReadResult.Ok -> {
+                    classes.add(read.info)
+                    edges.addAll(ReferenceExtractor.extract(bytes))
+                }
                 is ClassReadResult.UnsupportedVersion ->
                     warnings.add(read.warning.copy(subject = binary))
                 is ClassReadResult.Corrupt ->
                     warnings.add(read.warning.copy(subject = binary))
             }
         }
+        var classTotal = 0
         val stored = try {
             val upserted = store.upsertArtifact(
                 NewArtifact(
@@ -327,7 +337,16 @@ public object ArtifactIndexer {
             )
             // One transaction per artifact (batched inside the store): a parallel
             // indexer commits whole artifacts without touching their neighbours.
+            // Classes first: replaceClasses clears the artifact's stored edges
+            // (scoped delete), then the fresh edges land beside them.
+            // Both lists are released right after storing: on JDK-scale
+            // artifacts they hold ~10^5 objects each, and keeping them alive
+            // next to the store's own member-id map OOMs small heaps (T-029).
+            classTotal = classes.size
             store.replaceClasses(upserted.id, classes)
+            classes.clear()
+            store.replaceReferences(upserted.id, edges)
+            edges.clear()
             upserted
         } catch (e: Exception) {
             throw IndexException("cannot store the index for $pathLabel: ${e.message}", e)
@@ -337,7 +356,7 @@ public object ArtifactIndexer {
             hash = hash,
             artifactId = stored.id,
             status = EntryStatus.INDEXED,
-            classCount = classes.size,
+            classCount = classTotal,
             warnings = warnings.sortedBy { it.code },
             elapsedMs = elapsedMs(),
             error = null,

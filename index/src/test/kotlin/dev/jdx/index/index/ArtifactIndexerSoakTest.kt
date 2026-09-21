@@ -37,7 +37,8 @@ class ArtifactIndexerSoakTest {
             println(
                 "SOAK indexed ${result.classCount} JDK classes in ${result.elapsedMs}ms " +
                     "= ${"%.0f".format(result.classesPerSecond)}/s, " +
-                    "warnings=${result.warnings.size}",
+                    "warnings=${result.warnings.size}, " +
+                    "edges=${store.countReferences(requireNotNull(result.artifactId))}",
             )
             store.loadClass(requireNotNull(result.artifactId), "java.lang.Object") shouldNotBe null
             // Second run is a pure short-circuit: same id, same count, no warnings.

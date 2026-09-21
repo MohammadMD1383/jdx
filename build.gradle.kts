@@ -302,6 +302,11 @@ subprojects {
         useJUnitPlatform {
             includeTags("soak")
         }
+        // Soak indexes JDK-scale artifacts plus their reference edges (T-029
+        // roughly doubles the stored rows): the default 512 MB worker heap
+        // OOMs on the full `jrt:/` run. Tier 3 is explicitly the heavy tier,
+        // so size its heap like one — `check` never pays this.
+        maxHeapSize = "2g"
         systemProperty("jdx.tier", "soak")
         systemProperty("jdx.corpusDir", corpusDir)
         // Seeded sampling (T-059): `-PsoakSeed=<n>` reproduces a failing sample.
