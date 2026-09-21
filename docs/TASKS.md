@@ -734,7 +734,48 @@ mapping (T-036), no `--view jvm` (T-037), no PSI (T-038), no Kotlin bodies
 *Closed in session 56. Decisions: D-048. Lessons: L-087. Full notes in git history +
 session log.*
 
-### T-036 Kotlin member mapping (properties, default args, suspend) · TODO
+### T-036 Kotlin member mapping (properties, default args, suspend) · `WIP` (session 57)
+
+**Depends:** T-035 (decoder + `isKotlin` flag) ·
+**Files:** `index/.../kotlin/KotlinMetadata.kt`, `index/.../kotlin/KotlinMembers.kt`,
+`core/.../render/*`, `index/.../service/JdxService.kt`
+
+*(M5 second slice: map collected JVM members back onto Kotlin declarations
+(PROPOSAL.md §9.3 step 7, §12.1). T-035 proved the language; this task fixes
+the misleading projection: properties instead of `getX`/`setX` pairs,
+`suspend` without the hidden `Continuation`, default-arg `$default` stubs
+folded in, `@JvmName` mappings honoured. Split into one-sitting slices —
+carrier first, then renderings, then `--view jvm`:)*
+
+- **T-076 (carrier, this session):** `KotlinMetadata` carries the decoded
+  `KmClass` for `CLASS` kind (`null` for facades/non-Kotlin/corrupt) —
+  no rendering change, no `ktmeta` blob writes.
+- **T-077 (next):** suspend + `@JvmName` + mangled-`internal` signature repair
+  over the carrier.
+- **T-078 (next):** property folding (`getX`/`setX` → `val`/`var`) + default-arg
+  annotation over the carrier.
+- **T-037 (parked):** `--view jvm` forcing the JVM projection.
+
+### T-076 — Kotlin `KmClass` carrier (first T-036 slice) · `WIP`
+
+**Depends:** T-035 (decoder) · **Files:** `index/.../kotlin/KotlinMetadata.kt`
+
+Carry the decoded `KmClass` on `KotlinMetadata` for `CLASS` metadata
+(`kmClass: KmClass?`, `null` for facades/synthetic/unknown/non-Kotlin/corrupt)
+so T-077/T-078 have declarations to map against. No rendering, CLI, store or
+golden change: `isKotlin` and kinds are byte-identical.
+
+- `KotlinMetadataReader.read` returns `metadata.kmClass` on the `Class`
+  branch; every other branch carries `null`. Never throws (existing
+  never-throws/determinism properties cover the new field via `data class`
+  equality).
+- Tests: tier-2 `KotlinClassesTest` pins fixture truth — `KotlinMembers`
+  functions name `fetch`/`withDefault`/`originalName` (JVM: `renamedForJvm`),
+  properties name `Companion`/`VERSION`-adjacent state; `KotlinData`
+  properties name `name`/`count`/`greeting`/`nickname`; file facades and
+  Java negatives carry `null`.
+- Deferred explicitly: any signature/member rendering (T-077/T-078),
+  `ktmeta` blob persistence, `--view jvm` (T-037).
 
 # M6 — Serving
 ### T-040 `JdxService` RPC protocol · **T-041** daemon + unix socket + 5-min idle shutdown (D-004) · **T-042** transparent CLI daemon client + `--no-daemon` · **T-043** MCP stdio server with generated schemas · **T-044** HTTP/JSON server on `com.sun.net.httpserver` · **T-045** `jdx batch` · **T-046** adapter parity test (CLI/HTTP/MCP byte-identical payloads)
