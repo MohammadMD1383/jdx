@@ -1,0 +1,7 @@
+usages of 'u.Lib'
+usages-case.jar (5)
+  call u.App#run() -> #greet(java.lang.String)
+  read u.App#run() -> #count
+  ref u.App#run() -> u.Lib
+  write u.App#run() -> #count
+  call u.Other#work() -> #greet(java.lang.String, int)

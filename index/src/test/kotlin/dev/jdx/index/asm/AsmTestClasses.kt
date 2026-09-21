@@ -5,12 +5,14 @@ import org.objectweb.asm.ClassWriter
 import org.objectweb.asm.Label
 import org.objectweb.asm.Opcodes
 import org.objectweb.asm.tree.ClassNode
+import org.objectweb.asm.tree.FieldInsnNode
 import org.objectweb.asm.tree.FieldNode
 import org.objectweb.asm.tree.InsnNode
 import org.objectweb.asm.tree.LabelNode
 import org.objectweb.asm.tree.LocalVariableNode
 import org.objectweb.asm.tree.MethodInsnNode
 import org.objectweb.asm.tree.MethodNode
+import org.objectweb.asm.tree.TypeInsnNode
 import org.objectweb.asm.tree.VarInsnNode
 
 /**
@@ -104,6 +106,24 @@ internal class MethodBuilder(private val node: MethodNode) {
      */
     fun invoke(opcode: Int, owner: String, name: String, descriptor: String): Unit {
         node.instructions.add(MethodInsnNode(opcode, owner, name, descriptor, false))
+    }
+
+    /**
+     * Emits a field access (T-030 usages corpus): the extractor records the
+     * owner, name and descriptor as a read or write edge by opcode. No
+     * stack discipline is enforced — extraction never verifies.
+     */
+    fun fieldInsn(opcode: Int, owner: String, name: String, descriptor: String): Unit {
+        node.instructions.add(FieldInsnNode(opcode, owner, name, descriptor))
+    }
+
+    /**
+     * Emits a type instruction — `NEW`, `ANEWARRAY`, `CHECKCAST`, `INSTANCEOF`
+     * (T-030 usages corpus): the extractor records the operand as a pure
+     * type-reference edge.
+     */
+    fun typeInsn(opcode: Int, descriptor: String): Unit {
+        node.instructions.add(TypeInsnNode(opcode, descriptor))
     }
 
     /** Attaches a `LocalVariableTable` spanning the emitted code. */

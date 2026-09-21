@@ -414,6 +414,7 @@ private fun warningCodesOf(outcome: ServiceOutcome): List<WarningCode> = when (o
     is ServiceOutcome.SearchList -> outcome.listing.warnings.map { it.code }
     is ServiceOutcome.LsList -> outcome.listing.warnings.map { it.code }
     is ServiceOutcome.TreeList -> outcome.listing.warnings.map { it.code }
+    is ServiceOutcome.UsageList -> outcome.listing.warnings.map { it.code }
     is ServiceOutcome.Failure -> emptyList()
 }
 
@@ -488,6 +489,14 @@ private fun entitiesOf(outcome: ServiceOutcome): List<String> = when (outcome) {
         for (artifact in outcome.listing.artifacts) {
             add(artifact.artifact)
             collectPackages(artifact.roots, this)
+        }
+        for (warning in outcome.listing.warnings) add(warning.code.name)
+    }
+    is ServiceOutcome.UsageList -> buildList {
+        add(outcome.listing.targetRef)
+        for (hit in outcome.listing.hits) {
+            add(hit.fromRef)
+            add(hit.artifact)
         }
         for (warning in outcome.listing.warnings) add(warning.code.name)
     }

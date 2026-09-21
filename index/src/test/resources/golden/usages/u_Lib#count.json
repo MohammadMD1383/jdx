@@ -1,0 +1,1 @@
+{"jdx":1,"ok":true,"command":"usages","query":"u.Lib#count","result":{"target":"u.Lib#count","usages":[{"from":"u.App#run()","artifact":"usages-case.jar","kind":"read","target":"u.Lib#count"},{"from":"u.App#run()","artifact":"usages-case.jar","kind":"write","target":"u.Lib#count"}]},"warnings":[],"provenance":[]}

@@ -1683,7 +1683,7 @@ determinism + truncated-entry fault). Standing bar: `test`+`tier2Test`
 pre-existing (machine variance, slowest suites unrelated). Lesson L-082
 (`bsmArgs` is `Object[]`); decision D-042.*
 
-### T-030 — `jdx usages` (live bytecode usages) · `WIP`
+### T-030 — `jdx usages` (live bytecode usages) · `DONE` (session 51)
 **Depends:** T-029 (ReferenceEdge/ReferenceExtractor model), T-011 (read-command patterns), T-015/T-016 (roots) · **Files:** `core/.../render/Usages.kt`, `index/.../service/JdxService.kt` (`usages`), `cli/.../commands/UsagesCommand.kt`
 
 *(First M4 CLI slice: find-usages over live bytecode roots via the T-029
@@ -1700,25 +1700,49 @@ every class in every open root with `ReferenceExtractor` and renders the
 matching call sites grouped by artifact.
 
 **Acceptance**
-- [ ] `jdx usages '<symbol>'` exits 0 with one row per referencing method
+- [x] `jdx usages '<symbol>'` exits 0 with one row per referencing method
       (`<from-binary>#<member>(params)` + artifact + kind word), grouped by
       artifact; type refs match all edges to the type, member refs match by
       name (overload-blind) narrowed by descriptor when the ref carries one
-- [ ] `--kind call|read|write|ref|all` filters (default `all`); `impl`,
+- [x] `--kind call|read|write|ref|all` filters (default `all`); `impl`,
       `override`, `new`, `throw`, `annotation` exit 3 naming the owning task
       (T-032/T-034)
-- [ ] `--in <artifact-glob>` / `--exclude <glob>` filter by artifact label;
+- [x] `--in <artifact-glob>` / `--exclude <glob>` filter by artifact label;
       `--limit N` truncates with `shown`/`total`/`hint`; unknown type/member
       exits 1 with did-you-mean; ambiguous short names exit 2; invalid refs
       exit 3; no roots exit 4
-- [ ] Text+JSON parity (D-007), deterministic bytes (artifact, from-class,
+- [x] Text+JSON parity (D-007), deterministic bytes (artifact, from-class,
       from-member, kind, target order)
-- [ ] Tests: core tier-1 examples + 1,000-case properties (determinism,
+- [x] Tests: core tier-1 examples + 1,000-case properties (determinism,
       text⊆JSON, truncation law); index tier-2 service tests over fixture +
       crafted jars (type/member/kind/in/exclude/limit/determinism); cli
       tier-1 flag validation + tier-2 in-process tests; tiers 1+2 green
-- [ ] `--help` text, Appendix B usages flags verified, `TASKS.md` status,
+- [x] `--help` text, Appendix B usages flags verified, `TASKS.md` status,
       `PROGRESS.md` entry
+
+*Implementation notes (session 51): `core/.../render/Usages.kt` —
+`UsageHit` (from-ref, artifact, kind word, per-edge target) +
+`UsageListing` (artifact group headers, `showTargets` for type queries:
+rows suffix `-> #member(params)` so same-method touches of different
+members stay distinct — the first cut printed byte-identical rows, L-083)
++ `buildUsageListing` (shared truncation). `index`: `JdxService.usages` /
+`UsageOptions` / `UsageKindFilter` (all ten proposal kinds parsed, five
+deferred exit 3) + `executeUsages` (T-011 resolution incl. `g:a:v` scope
+and `DUPLICATE_FQN`, then a live `ReferenceExtractor` scan per class;
+unreadable classes warn-and-skip; `--in`/`--exclude` per artifact label,
+per module under `jrt:/`; zero hits exit 1 with a `no usages` detail;
+`--context` exits 3 naming T-034) + `ServiceOutcome.UsageList` (+ the two
+`CorpusSoakTest` branches). `cli`: thin `UsagesCommand` (registered in
+`JdxCli`) + `UsagesQuery` seam + `usageKindOf`. Tests: core `UsagesTest`
+(5) + `UsagesPropertyTest` (3 thousand-case); index `UsagesCaseJars`
+(ASM `u.*` corpus + `v.Lib` ambiguity namesake; DSL gains `fieldInsn` /
+`typeInsn`) + `UsagesServiceTest` (18 tier-2 incl. a JDK truncation smoke)
++ `UsagesGoldenTest` (8 files); cli `UsagesCommandTest` (5 tier-1) +
+`UsagesCommandsServiceTest` (7 tier-2 incl. D-017). Standing bar: `check
+-x verifyTier1Budget` green incl. JaCoCo gates; `verifyTier1Budget` red
+pre-existing (machine variance — new suites cost ~2 s). Live proof:
+`usages 'dev.jdx.fixtures.TrafficLight'` → 17 grouped rows with edge
+targets. Decisions in D-043; lesson L-083.*
 
 ### T-031 project source-dir usages · **T-032** `jdx hierarchy` / `implementors` · **T-033** `jdx callers` / `calls --depth` · **T-034** `jdx samples` with exemplariness ranking
 

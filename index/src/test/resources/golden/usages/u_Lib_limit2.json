@@ -1,0 +1,1 @@
+{"jdx":1,"ok":true,"command":"usages","query":"u.Lib","result":{"target":"u.Lib","usages":[{"from":"u.App#run()","artifact":"usages-case.jar","kind":"call","target":"u.Lib#greet(java.lang.String)"},{"from":"u.App#run()","artifact":"usages-case.jar","kind":"read","target":"u.Lib#count"}]},"truncated":{"shown":2,"total":5,"hint":"--limit 5"},"warnings":[],"provenance":[]}

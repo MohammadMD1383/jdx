@@ -488,6 +488,18 @@ internal fun defaultDocQuery(
     options: JdxService.DocOptions,
 ): JdxService.ServiceOutcome = JdxService.doc(ref, roots, options)
 
+/** Query behind `usages`, injectable so command tests run without IO (T-030). */
+internal typealias UsagesQuery = (
+    ref: String,
+    roots: JdxService.RootsSpec,
+    options: JdxService.UsageOptions,
+) -> JdxService.ServiceOutcome
+
+internal fun defaultUsagesQuery(
+    ref: String,
+    roots: JdxService.RootsSpec,
+    options: JdxService.UsageOptions,
+): JdxService.ServiceOutcome = JdxService.usages(ref, roots, options)
 /** Query behind `search`, injectable so command tests run without IO (T-017). */
 internal typealias SearchQuery = (
     pattern: String,

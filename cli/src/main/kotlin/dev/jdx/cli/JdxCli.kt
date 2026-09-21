@@ -19,6 +19,7 @@ import dev.jdx.cli.commands.ResolveCommand
 import dev.jdx.cli.commands.SearchCommand
 import dev.jdx.cli.commands.ShowCommand
 import dev.jdx.cli.commands.TreeCommand
+import dev.jdx.cli.commands.UsagesCommand
 import dev.jdx.cli.commands.VersionCommand
 import dev.jdx.cli.commands.cacheGroup
 import dev.jdx.cli.commands.wsGroup
@@ -98,6 +99,7 @@ fun main(args: Array<String>): Unit =
         ResolveCommand(),
         LsCommand(),
         TreeCommand(),
+        UsagesCommand(),
         wsGroup(),
         cacheGroup(),
     ).main(args)

@@ -3,12 +3,15 @@ package dev.jdx.index.service
 import dev.jdx.core.model.AccessFlag
 import dev.jdx.core.model.ClassInfo
 import dev.jdx.core.model.FieldInfo
+import dev.jdx.core.model.JvmDescriptor
 import dev.jdx.core.model.MemberSymbolRef
 import dev.jdx.core.model.MethodInfo
 import dev.jdx.core.model.ModuleSymbolRef
 import dev.jdx.core.model.Origin
 import dev.jdx.core.model.PackageSymbolRef
 import dev.jdx.core.model.Provenance
+import dev.jdx.core.model.ReferenceEdge
+import dev.jdx.core.model.ReferenceKind
 import dev.jdx.core.model.SymbolRef
 import dev.jdx.core.model.TypeName
 import dev.jdx.core.model.TypeSymbolRef
@@ -40,6 +43,7 @@ import dev.jdx.core.render.renderJavadoc
 import dev.jdx.core.render.DEFAULT_MEMBER_LIMIT
 import dev.jdx.core.render.DEFAULT_SEARCH_LIMIT
 import dev.jdx.core.render.DEFAULT_TREE_DEPTH
+import dev.jdx.core.render.DEFAULT_USAGES_LIMIT
 import dev.jdx.core.render.ErrorResult
 import dev.jdx.core.render.LsListing
 import dev.jdx.core.render.LsTypeEntry
@@ -52,10 +56,13 @@ import dev.jdx.core.render.SearchHit
 import dev.jdx.core.render.SearchListing
 import dev.jdx.core.render.SignatureLines
 import dev.jdx.core.render.TreeListing
+import dev.jdx.core.render.UsageHit
+import dev.jdx.core.render.UsageListing
 import dev.jdx.core.render.buildArtifactTree
 import dev.jdx.core.render.buildLsListing
 import dev.jdx.core.render.buildSearchListing
 import dev.jdx.core.render.buildTreeListing
+import dev.jdx.core.render.buildUsageListing
 import dev.jdx.core.render.buildClassCard
 import dev.jdx.core.render.buildMemberListing
 import dev.jdx.core.render.countNodes
@@ -80,6 +87,7 @@ import dev.jdx.index.asm.ClassReadResult
 import dev.jdx.index.maven.MavenResolveFn
 import dev.jdx.index.maven.MavenResolver
 import dev.jdx.index.maven.productionMavenResolve
+import dev.jdx.index.refs.ReferenceExtractor
 import java.nio.file.FileSystems
 import java.nio.file.Files
 import java.nio.file.Path
@@ -213,6 +221,13 @@ public object JdxService {
 
         /** A package forest (`tree`) — exit 0. */
         public data class TreeList(public val listing: TreeListing) : ServiceOutcome {
+            override val exitCode: Int = 0
+            override fun renderText(color: Boolean): String = listing.renderText(color)
+            override fun toJson(command: String): String = listing.toJson(command)
+        }
+
+        /** A find-usages listing (`usages`) — exit 0. */
+        public data class UsageList(public val listing: UsageListing) : ServiceOutcome {
             override val exitCode: Int = 0
             override fun renderText(color: Boolean): String = listing.renderText(color)
             override fun toJson(command: String): String = listing.toJson(command)
@@ -1921,6 +1936,389 @@ public object JdxService {
         } finally {
             search.close()
         }
+    }
+
+    // -- usages (T-030) ------------------------------------------------------------
+
+    /**
+     * `--kind` values for `usages` (PROPOSAL.md §7.3). The five T-030 kinds map
+     * onto the closed [ReferenceKind] vocabulary (D-042); the rest are parsed
+     * here so `--help` shows the full proposal vocabulary, but rejected in
+     * [executeUsages] naming the task that will add them.
+     */
+    public enum class UsageKindFilter(public val flag: String) {
+        ALL("all"),
+        CALL("call"),
+        READ("read"),
+        WRITE("write"),
+        REF("ref"),
+        IMPL("impl"),
+        OVERRIDE("override"),
+        NEW("new"),
+        THROW("throw"),
+        ANNOTATION("annotation"),
+    }
+
+    /**
+     * Options for `usages`: which edges count and how much to show. [inArtifact]
+     * is the `--in` glob over artifact labels (jar file names, class-dir names,
+     * JDK module names); [exclude] drops matching labels. Both accept globs,
+     * else match as case-insensitive substrings (D-031).
+     */
+    public data class UsageOptions(
+        public val kind: UsageKindFilter = UsageKindFilter.ALL,
+        public val inArtifact: String? = null,
+        public val exclude: String? = null,
+        public val limit: Int = DEFAULT_USAGES_LIMIT,
+        /**
+         * Source lines around each call site (`--context N`). Parsed here so
+         * the flag exists, but always rejected: no line data in v1 (D-042 §4)
+         * and source rendering belongs to `samples` (T-034).
+         */
+        public val contextLines: Int = 0,
+    )
+
+    /**
+     * Answers `usages <symbol>`: every referencing method across the
+     * workspace's roots, grouped by artifact.
+     *
+     * Live-roots scan (D-031 precedent): each class's edges are extracted with
+     * the T-029 [ReferenceExtractor] and filtered by target — no persistent
+     * index read yet (indexed acceleration lands with the daemon/`jdx index`
+     * work). Structure is bytecode-authoritative (D-009): the target resolves
+     * with the T-011 machinery before any scan, so a typo reports
+     * did-you-mean instead of an empty answer.
+     */
+    public fun usages(
+        rawRef: String,
+        roots: RootsSpec,
+        options: UsageOptions = UsageOptions(),
+    ): ServiceOutcome {
+        if (options.limit < 0) {
+            return failure(3, rawRef, "usage error: --limit must be >= 0, got ${options.limit}")
+        }
+        if (options.contextLines != 0) {
+            return failure(
+                3,
+                rawRef,
+                "usage error: --context is not supported for usages yet " +
+                    "(source-rendered call sites: T-034)",
+            )
+        }
+        when (options.kind) {
+            UsageKindFilter.IMPL, UsageKindFilter.OVERRIDE ->
+                return failure(
+                    3,
+                    rawRef,
+                    "usage error: --kind ${options.kind.flag} is not supported for usages yet " +
+                        "(hierarchy/implementors: T-032)",
+                )
+            UsageKindFilter.NEW, UsageKindFilter.THROW, UsageKindFilter.ANNOTATION ->
+                return failure(
+                    3,
+                    rawRef,
+                    "usage error: --kind ${options.kind.flag} is not supported for usages yet " +
+                        "(graph enrichment: T-034)",
+                )
+            else -> Unit
+        }
+        val parsed = SymbolRefParser.parse(rawRef)
+        if (parsed is SymbolRefParseResult.Failure) {
+            return failure(
+                3,
+                rawRef,
+                "usage error: invalid reference '$rawRef': ${parsed.message} at column ${parsed.position}",
+            )
+        }
+        val ref = (parsed as SymbolRefParseResult.Ok).ref
+        if (ref is PackageSymbolRef || ref is ModuleSymbolRef) {
+            return failure(3, rawRef, "usage error: usages takes a type or member reference, got '$rawRef'")
+        }
+        val coordinate = (ref as? MemberSymbolRef)?.coordinate ?: (ref as? TypeSymbolRef)?.coordinate
+        if (roots.jarSpecs.isEmpty() && !roots.includeJdk && coordinate == null) {
+            return failure(
+                4,
+                rawRef,
+                "no workspace: no --jars given, no workspace selected (-w <name>, " +
+                    "JDX_WORKSPACE, jdx ws use) and --no-jdk set " +
+                    "(pass --jars <path>, select a workspace, or drop --no-jdk)",
+            )
+        }
+        // A `g:a:v/` prefix scopes the query to one artifact (T-019): its jar
+        // reads first (shadowing order), and candidates match inside it only —
+        // while the scan still covers the full workspace behind it.
+        var scopedRoots = roots
+        var candidateScope: Set<String>? = null
+        if (coordinate != null) {
+            val coordText = "${coordinate.group}:${coordinate.artifact}:${coordinate.version}"
+            val outcome = try {
+                roots.mavenResolve(coordText, roots.allowFetch)
+            } catch (e: Exception) {
+                return failure(
+                    6,
+                    rawRef,
+                    "internal error: coordinate resolution failed: ${e.message ?: e.javaClass.simpleName}",
+                )
+            }
+            val artifact = when (outcome) {
+                is MavenResolver.Outcome.Resolved -> outcome.artifact
+                is MavenResolver.Outcome.Unresolved ->
+                    return failure(5, rawRef, "artifact read error: ${outcome.message}")
+            }
+            val binarySpec = artifact.binaryJar.toString()
+            val scope = try {
+                ArtifactLoader.open(artifact.binaryJar).use { root -> root.classEntryPaths().map(::entryToBinary).toSet() }
+            } catch (e: ArtifactReadException) {
+                return failure(5, rawRef, e.message ?: "artifact read error")
+            } catch (e: Exception) {
+                return failure(6, rawRef, "internal error: ${e.javaClass.simpleName}: ${e.message ?: "no detail"}")
+            }
+            scopedRoots = roots.copy(jarSpecs = listOf(binarySpec) + roots.jarSpecs)
+            candidateScope = scope
+        }
+        return try {
+            executeUsages(ref, rawRef, scopedRoots, options, candidateScope)
+        } catch (e: ArtifactReadException) {
+            failure(5, rawRef, e.message ?: "artifact read error")
+        } catch (e: Exception) {
+            failure(6, rawRef, "internal error: ${e.javaClass.simpleName}: ${e.message ?: "no detail"}")
+        }
+    }
+
+    /**
+     * Serves `usages <symbol>`: resolves the target type from bytecode (D-009),
+     * then scans every class in every open root with the T-029 extractor.
+     * Unreadable classes warn once each ([WarningCode.CORRUPT_CLASS]) and are
+     * skipped — one bad entry never aborts the scan (D-017).
+     */
+    private fun executeUsages(
+        ref: SymbolRef,
+        rawRef: String,
+        roots: RootsSpec,
+        options: UsageOptions,
+        candidateScope: Set<String>? = null,
+    ): ServiceOutcome {
+        val declaring = when (ref) {
+            is MemberSymbolRef -> ref.declaringType as? TypeName.ClassType
+            is TypeSymbolRef -> ref.type as? TypeName.ClassType
+            else -> null
+        } ?: return failure(3, rawRef, "usage error: usages takes a type or member reference, got '$rawRef'")
+        val opened = openRoots(roots)
+        try {
+            val binariesByRoot = opened.map { it.root.classEntryPaths().map(::entryToBinary).toSet() }
+            val providers = mutableMapOf<String, MutableList<Int>>()
+            binariesByRoot.forEachIndexed { index, binaries ->
+                for (binary in binaries) providers.getOrPut(binary) { mutableListOf() }.add(index)
+            }
+            val allBinaries = providers.keys
+
+            val candidates = matchCandidates(declaring, candidateScope ?: allBinaries)
+            if (candidates.isEmpty()) {
+                val suggestions = suggestSimilar(declaring.simpleName, allBinaries)
+                return ServiceOutcome.Failure(ErrorResult.notFound(rawRef, suggestions))
+            }
+            if (candidates.size > 1) {
+                return ServiceOutcome.Failure(ErrorResult.ambiguous(rawRef, candidates))
+            }
+            val binary = candidates.single()
+            val winner = providers.getValue(binary).first()
+
+            val warnings = mutableListOf<Warning>()
+            warnings.addAll(roots.extraWarnings)
+            for (open in opened) warnings.addAll(open.root.warnings)
+            val extraProviders = providers.getValue(binary).drop(1)
+            if (extraProviders.isNotEmpty()) {
+                val names = listOf(winner).plus(extraProviders).map { rootLabel(opened[it], binary) }
+                warnings.add(
+                    Warning(
+                        code = WarningCode.DUPLICATE_FQN,
+                        message = "$binary is provided by ${names.joinToString(", ")}; " +
+                            "showing ${names.first()} (classpath order)",
+                        subject = binary,
+                    ),
+                )
+            }
+
+            val workspace = Workspace(opened, providers, warnings)
+            val target = workspace.load(binary)
+            if (target == null) {
+                return failure(
+                    5,
+                    rawRef,
+                    "artifact read error: $binary in ${rootLabel(opened[winner], binary)} cannot be parsed",
+                )
+            }
+
+            // The target member set is structural (D-009): a member proven
+            // absent from bytecode reports did-you-mean instead of scanning.
+            // Member-only refs are overload-blind by design (D-042 §5) — every
+            // overload's edges count — and narrow to one overload only when
+            // the ref carries a parameter list.
+            val memberName: String?
+            val memberDescriptors: Set<String>?
+            val wantFieldEdges: Boolean
+            val canonicalTarget: String
+            if (ref is MemberSymbolRef) {
+                if (ref.name == "<clinit>") {
+                    return failure(3, rawRef, "usage error: static initialisers have no usages to show: '$rawRef'")
+                }
+                val matches = matchBytecodeMembers(target, ref)
+                if (matches.isEmpty()) {
+                    return ServiceOutcome.Failure(
+                        ErrorResult.notFound(rawRef, suggestSimilarMember(target, ref.name)),
+                    )
+                }
+                memberName = ref.name
+                memberDescriptors = if (ref.parameterTypes != null) {
+                    matches.filterIsInstance<BytecodeMember.Method>()
+                        .map { it.info.descriptor.descriptor }.toSet()
+                } else {
+                    null
+                }
+                wantFieldEdges = ref.parameterTypes == null && ref.returnType == null
+                canonicalTarget = SymbolRefPrinter.print(MemberSymbolRef(target.name, ref.name))
+            } else {
+                memberName = null
+                memberDescriptors = null
+                wantFieldEdges = true
+                canonicalTarget = binary
+            }
+
+            val wantKinds = when (options.kind) {
+                UsageKindFilter.ALL -> ReferenceKind.entries.toSet()
+                UsageKindFilter.CALL -> setOf(ReferenceKind.METHOD_CALL)
+                UsageKindFilter.READ -> setOf(ReferenceKind.FIELD_READ)
+                UsageKindFilter.WRITE -> setOf(ReferenceKind.FIELD_WRITE)
+                UsageKindFilter.REF -> setOf(ReferenceKind.TYPE_REFERENCE)
+                // Deferred kinds exit 3 in usages() before any scan reaches here.
+                else -> return failure(3, rawRef, "usage error: --kind ${options.kind.flag} is not supported yet")
+            }
+
+            val hits = mutableListOf<UsageHit>()
+            val reported = mutableSetOf<String>()
+            for (open in opened) {
+                for (entry in open.root.classEntryPaths()) {
+                    val fromBinary = entryToBinary(entry)
+                    // T-012 reports the JDK module as the artifact (e.g.
+                    // `java.base`) — per entry, since one `jrt:/` root spans
+                    // many modules.
+                    val label = rootLabel(open, fromBinary)
+                    if (!matchesArtifactFilter(options.inArtifact, label) ||
+                        (options.exclude != null && matchesArtifactFilter(options.exclude, label))
+                    ) {
+                        continue
+                    }
+                    val bytes = try {
+                        open.root.openClass(entry).use { it.readBytes() }
+                    } catch (e: Exception) {
+                        if (reported.add(fromBinary)) {
+                            warnings.add(
+                                Warning(
+                                    code = WarningCode.CORRUPT_CLASS,
+                                    message = "cannot read $fromBinary from ${open.root.displayName}: " +
+                                        "${e.message ?: e.javaClass.simpleName}",
+                                    subject = fromBinary,
+                                ),
+                            )
+                        }
+                        continue
+                    }
+                    for (edge in ReferenceExtractor.extract(bytes)) {
+                        if (edge.toOwner != binary) continue
+                        if (edge.kind !in wantKinds) continue
+                        if (memberName != null) {
+                            if (edge.toMember != memberName) continue
+                            val edgeDescriptor = edge.toDescriptor
+                            if (memberDescriptors != null) {
+                                if (edgeDescriptor == null || edgeDescriptor !in memberDescriptors) continue
+                            } else if (!wantFieldEdges && edgeDescriptor != null && !edgeDescriptor.startsWith("(")) {
+                                // A return-qualified ref names a method, never a field.
+                                continue
+                            }
+                        }
+                        hits.add(
+                            UsageHit(
+                                fromRef = canonicalFromRef(edge.fromClass, edge.fromMember, edge.fromDescriptor),
+                                artifact = label,
+                                kind = usageKindWord(edge.kind),
+                                targetRef = edgeTargetRef(edge),
+                            ),
+                        )
+                    }
+                }
+            }
+
+            if (hits.isEmpty()) {
+                return ServiceOutcome.Failure(
+                    ErrorResult.notFound(
+                        rawRef,
+                        emptyList(),
+                        detail = "no usages of '$canonicalTarget' in the workspace",
+                    ),
+                )
+            }
+            val sorted = hits.sortedWith(
+                compareBy({ it.artifact }, { it.fromRef }, { it.kind }, { it.targetRef }),
+            )
+            val listing = buildUsageListing(
+                query = rawRef,
+                targetRef = canonicalTarget,
+                hits = sorted,
+                limit = options.limit,
+                warnings = warnings.sortedBy { it.code },
+                showTargets = ref is TypeSymbolRef,
+            )
+            return ServiceOutcome.UsageList(listing)
+        } finally {
+            opened.forEach { it.root.close() }
+        }
+    }
+
+    /**
+     * The kind word an edge renders as: `call` (method invocation), `read` /
+     * `write` (field access), `ref` (any other mention of the type — `new`,
+     * `checkcast`, `instanceof`, class constants). The D-042 vocabulary.
+     */
+    private fun usageKindWord(kind: ReferenceKind): String = when (kind) {
+        ReferenceKind.METHOD_CALL -> "call"
+        ReferenceKind.FIELD_READ -> "read"
+        ReferenceKind.FIELD_WRITE -> "write"
+        ReferenceKind.TYPE_REFERENCE -> "ref"
+    }
+
+    /**
+     * Renders a call site as `Binary#member(params)`: the erased descriptor
+     * parses back to parameter types (pure string work, never throws — hostile
+     * bytes yield the bare `Binary#member` instead of a failure).
+     */
+    private fun canonicalFromRef(fromClass: String, fromMember: String, fromDescriptor: String): String {
+        val declaring = runCatching { typeNameFromBinaryName(fromClass) }.getOrNull()
+            as? TypeName.ClassType ?: return "$fromClass#$fromMember"
+        val parameters = (JvmDescriptor.parse(fromDescriptor) as? JvmDescriptor.Method)?.parameters
+            ?: return "$fromClass#$fromMember"
+        return SymbolRefPrinter.print(
+            MemberSymbolRef(declaringType = declaring, name = fromMember, parameterTypes = parameters),
+        )
+    }
+
+    /**
+     * Renders the touched member as `Owner#member(params)`: fields print bare
+     * (`Owner#name`), methods with their erased parameter list, pure type
+     * edges as the bare owner. Descriptors arrive from class files we do not
+     * control, so anything unparseable degrades to the bare member — never a
+     * throw (fault injection, TESTING.md §7).
+     */
+    private fun edgeTargetRef(edge: ReferenceEdge): String {
+        val member = edge.toMember ?: return edge.toOwner
+        val descriptor = edge.toDescriptor
+        if (descriptor == null || !descriptor.startsWith("(")) return "${edge.toOwner}#$member"
+        val declaring = runCatching { typeNameFromBinaryName(edge.toOwner) }.getOrNull()
+            as? TypeName.ClassType ?: return "${edge.toOwner}#$member"
+        val parameters = (JvmDescriptor.parse(descriptor) as? JvmDescriptor.Method)?.parameters
+            ?: return "${edge.toOwner}#$member"
+        return SymbolRefPrinter.print(
+            MemberSymbolRef(declaringType = declaring, name = member, parameterTypes = parameters),
+        )
     }
 
     // -- signature execution (T-024) -----------------------------------------------

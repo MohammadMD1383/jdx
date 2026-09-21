@@ -1,0 +1,4 @@
+usages of 'u.Lib#greet'
+usages-case.jar (2)
+  call u.App#run()
+  call u.Other#work()
