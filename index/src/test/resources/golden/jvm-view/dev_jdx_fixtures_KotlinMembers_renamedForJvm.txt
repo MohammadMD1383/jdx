@@ -1,0 +1,4 @@
+signatures of dev.jdx.fixtures.KotlinMembers#renamedForJvm
+  public final int renamedForJvm(int value)
+source: fixture-corpus.jar (bytecode)
+next: jdx show dev.jdx.fixtures.KotlinMembers

@@ -67,6 +67,8 @@ internal object ServiceDifferential {
             val countMismatches: List<String>,
             val jsonGaps: List<String>,
             val quirksApplied: List<String>,
+            /** True when the `jdx` side queried `--view jvm` (T-037: Kotlin classes). */
+            val jvmView: Boolean = false,
         ) : Comparison {
             val agrees: Boolean
                 get() = missing.isEmpty() && extra.isEmpty() &&
@@ -97,20 +99,21 @@ internal object ServiceDifferential {
         if (binaryName.contains("$$")) {
             return Comparison.Skipped(binaryName, "binary name is not a modellable type: $binaryName")
         }
-        // T-077: Kotlin classes render declarations (`originalName`,
-        // `suspend`, demangled `internal`), not `javap` names — comparing
-        // their refs against `javap` would pin the old projection. Reader-level
-        // JVM fidelity for every class (Kotlin included) stays owned by
+        // T-037: Kotlin classes render declarations by default (`originalName`,
+        // `suspend`, demangled `internal`, folded properties — T-077/T-078), not
+        // `javap` names. Compare them through `--view jvm` instead of skipping:
+        // the JVM projection must equal `javap` exactly. Reader-level JVM
+        // fidelity for every class (Kotlin included) stays owned by
         // `AsmClassReaderDifferentialTest`; the Kotlin command view is pinned
-        // by `KotlinViewsServiceTest` plus goldens. Re-include Kotlin here
-        // under `--view jvm` when T-037 lands.
-        if (isKotlinClass(jar, binaryName)) {
-            return Comparison.Skipped(binaryName, "kotlin-view: $binaryName renders Kotlin declarations (T-077)")
-        }
+        // by `KotlinViewsServiceTest` plus goldens.
+        val jvmView = isKotlinClass(jar, binaryName)
         val outcome = JdxService.members(
             binaryName,
             JdxService.RootsSpec(jarSpecs = listOf(jar.absolutePath), includeJdk = false),
-            JdxService.MemberFilters(access = ALL_VISIBILITIES),
+            JdxService.MemberFilters(
+                access = ALL_VISIBILITIES,
+                view = if (jvmView) JdxService.MemberView.JVM else JdxService.MemberView.KOTLIN,
+            ),
             declaredOnly = true,
             includeSynthetic = true,
             maxMembers = SERVICE_LIMIT,
@@ -209,6 +212,7 @@ internal object ServiceDifferential {
             countMismatches = countMismatches,
             jsonGaps = jsonGaps,
             quirksApplied = quirks.applied,
+            jvmView = jvmView,
         )
     }
 

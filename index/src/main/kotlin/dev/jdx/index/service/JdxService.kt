@@ -176,6 +176,16 @@ public object JdxService {
     }
 
     /**
+     * `--view` values for the members family (PROPOSAL.md §12.1, T-037):
+     * the Kotlin declaration view by default, the raw JVM projection on
+     * demand (calling Kotlin from Java, reading a stack trace).
+     */
+    public enum class MemberView(public val flag: String) {
+        KOTLIN("kotlin"),
+        JVM("jvm"),
+    }
+
+    /**
      * Filters applied to the resolved member set before rendering. `access = null`
      * means the proposal default (`public` + `protected`); `--access all` passes
      * the full set explicitly. `staticOnly = null` means both.
@@ -201,6 +211,11 @@ public object JdxService {
          * methods like `doc`); missing docs read as no suffix, never a failure.
          */
         public val withDoc: Boolean = false,
+        /**
+         * Kotlin declaration view by default; `JVM` forces the raw JVM
+         * projection (`--view jvm`, T-037).
+         */
+        public val view: MemberView = MemberView.KOTLIN,
     ) {
         public companion object {
             /** The §7.1 default: `public` + `protected` only. */
@@ -653,6 +668,11 @@ public object JdxService {
         public val includeSynthetic: Boolean = false,
         /** Maximum shown signature rows; the rest become a truncation footer (`--limit N`). */
         public val maxSignatures: Int = DEFAULT_SIGNATURE_LIMIT,
+        /**
+         * Kotlin declaration view by default; `JVM` forces the raw JVM
+         * projection (`--view jvm`, T-037).
+         */
+        public val view: MemberView = MemberView.KOTLIN,
     )
 
     /**
@@ -1039,7 +1059,11 @@ public object JdxService {
             val resolved = MemberResolver.resolve(
                 target,
                 workspace::loadByName,
-                MemberResolutionOptions(includeSynthetic = includeSynthetic),
+                MemberResolutionOptions(
+                    includeSynthetic = includeSynthetic,
+                    // `--view jvm` (T-037): the JVM projection ignores every Kotlin view.
+                    jvmView = filters.view == MemberView.JVM,
+                ),
             )
             val filtered = applyFilters(resolved, filters.copy(fromRef = null), fromBinary)
             val listing = buildMemberListing(
@@ -3779,22 +3803,22 @@ public object JdxService {
                 )
             }
 
-            val bytecodeMatches = matchBytecodeMembers(target, memberRef)
+            val bytecodeMatches = matchBytecodeMembers(target, memberRef, jvmView = options.view == MemberView.JVM)
                 .filter { match -> options.includeSynthetic || !isSyntheticMember(match) }
             if (bytecodeMatches.isEmpty()) {
                 if (memberRef.name == "<clinit>") {
                     return failure(3, rawRef, "usage error: static initialisers have no signature to show: '$rawRef'")
                 }
                 return ServiceOutcome.Failure(
-                    ErrorResult.notFound(rawRef, suggestSimilarMember(target, memberRef.name)),
+                    ErrorResult.notFound(rawRef, suggestSimilarMember(target, memberRef.name, jvmView = options.view == MemberView.JVM)),
                 )
             }
 
-            val matchRefs = canonicalMemberRefs(target, bytecodeMatches)
+            val matchRefs = canonicalMemberRefs(target, bytecodeMatches, jvmView = options.view == MemberView.JVM)
             // Pair in declaration order first: `canonicalMemberRefs` sorts, and
             // zipping a sorted list against declaration-ordered matches swaps
             // refs whenever the orders differ (bridge/field siblings).
-            val entries = bytecodeMatches.zip(orderedMemberRefs(target, bytecodeMatches)).map { (match, ref) ->
+            val entries = bytecodeMatches.zip(orderedMemberRefs(target, bytecodeMatches, jvmView = options.view == MemberView.JVM)).map { (match, ref) ->
                 when (match) {
                     is BytecodeMember.Method -> SignatureEntry(
                         canonicalRef = ref,
@@ -3802,7 +3826,7 @@ public object JdxService {
                         signature = SignatureLines.methodLine(
                             member = match.info,
                             declaringSimpleName = target.name.simpleName,
-                            kotlinView = kotlinViewOf(target, match.info),
+                            kotlinView = kotlinViewOf(target, match.info, jvmView = options.view == MemberView.JVM),
                         ),
                         declaringType = binary,
                     )
@@ -5867,6 +5891,9 @@ public object JdxService {
     private fun matchBytecodeMembers(
         target: ClassInfo,
         ref: MemberSymbolRef,
+        // `--view jvm` (T-037): JVM-exact matching only — no property alias,
+        // no Kotlin declaration-name aliases (true `javap` parity).
+        jvmView: Boolean = false,
     ): List<BytecodeMember> {
         if (ref.name == "<clinit>") return emptyList()
         val wanted = ref.parameterTypes
@@ -5879,14 +5906,14 @@ public object JdxService {
         // T-078 property alias: a bare `Owner#name` naming a folded Kotlin property
         // resolves to the property view (JVM exact first — accessors still match
         // below when the query spells `getX`; property alias second).
-        if (wanted == null && ref.returnType == null && ref.name in target.kotlinProperties) {
+        if (!jvmView && wanted == null && ref.returnType == null && ref.name in target.kotlinProperties) {
             val view = target.kotlinProperties.getValue(ref.name)
             return listOf(BytecodeMember.Property(view))
         }
         // Kotlin aliases (T-077): a query may spell the Kotlin declaration name
         // (`originalName`) or the JVM name (`renamedForJvm`) — the match always
         // returns the JVM-truthful member; only selection is alias-aware.
-        val views = target.kotlinMethodViews
+        val views = if (jvmView) emptyMap() else target.kotlinMethodViews
         val methods = target.methods.filter { it.name != "<clinit>" && methodNameMatches(it, ref.name, views) }
         val fields = if (wanted == null && ref.returnType == null) {
             target.fields.filter { it.name == ref.name }.map { BytecodeMember.Field(it) }
@@ -5924,10 +5951,19 @@ public object JdxService {
     /**
      * A Kotlin view of one JVM method for display and alias matching (T-077):
      * the declaring class's `@Metadata` entry for [method], or `null` for
-     * Java and unmapped Kotlin members (the JVM projection).
+     * Java and unmapped Kotlin members (the JVM projection). `--view jvm`
+     * (T-037) always reads `null`.
      */
-    private fun kotlinViewOf(target: ClassInfo, method: MethodInfo): KotlinMethodView? =
-        target.kotlinMethodViews[kotlinViewKey(method.name, method.descriptor.descriptor)]
+    private fun kotlinViewOf(
+        target: ClassInfo,
+        method: MethodInfo,
+        jvmView: Boolean = false,
+    ): KotlinMethodView? =
+        if (jvmView) {
+            null
+        } else {
+            target.kotlinMethodViews[kotlinViewKey(method.name, method.descriptor.descriptor)]
+        }
 
     /** JVM-name or Kotlin-alias name match (T-077); `<clinit>` never matches. */
     private fun methodNameMatches(
@@ -6008,8 +6044,12 @@ public object JdxService {
      * PROPOSAL.md §6) — the same rule [buildMemberListing] uses. Sorted, so
      * ambiguity candidate lists are stable.
      */
-    private fun canonicalMemberRefs(target: ClassInfo, matches: List<BytecodeMember>): List<String> =
-        orderedMemberRefs(target, matches).sorted()
+    private fun canonicalMemberRefs(
+        target: ClassInfo,
+        matches: List<BytecodeMember>,
+        jvmView: Boolean = false,
+    ): List<String> =
+        orderedMemberRefs(target, matches, jvmView).sorted()
 
     /**
      * The same refs in declaration order, for pairing against [matches] with
@@ -6017,7 +6057,11 @@ public object JdxService {
      * declaration-ordered match list — the orders differ for bridge/field
      * siblings and the refs would land on the wrong rows.
      */
-    private fun orderedMemberRefs(target: ClassInfo, matches: List<BytecodeMember>): List<String> {
+    private fun orderedMemberRefs(
+        target: ClassInfo,
+        matches: List<BytecodeMember>,
+        jvmView: Boolean = false,
+    ): List<String> {
         val methods = matches.filterIsInstance<BytecodeMember.Method>()
         val siblingCounts = methods.groupingBy {
             it.info.name to it.info.descriptor.parameters.joinToString("") { parameter -> parameter.descriptor }
@@ -6032,7 +6076,7 @@ public object JdxService {
                     methodRefString(
                         declaring = target.name,
                         member = match.info,
-                        view = kotlinViewOf(target, match.info),
+                        view = kotlinViewOf(target, match.info, jvmView),
                         disambiguateReturn = (siblingCounts[key] ?: 0) > 1 && match.info.name != "<init>",
                     )
                 }
@@ -6046,12 +6090,20 @@ public object JdxService {
     }
 
     /** Did-you-mean refs for a missed member: name-near members of the same type. */
-    private fun suggestSimilarMember(target: ClassInfo, missed: String, cap: Int = 5): List<String> {
+    private fun suggestSimilarMember(
+        target: ClassInfo,
+        missed: String,
+        cap: Int = 5,
+        // `--view jvm` (T-037): JVM names only — no Kotlin aliases, no properties.
+        jvmView: Boolean = false,
+    ): List<String> {
         // Kotlin declaration names join the pool (T-077): a mistyped
         // `originalName` should suggest the Kotlin spelling, not the JVM one.
         // T-078 property names join too.
-        val names = (target.methods.map { it.name } + target.methods.mapNotNull { kotlinViewOf(target, it)?.displayName } +
-            target.fields.map { it.name } + target.kotlinProperties.keys)
+        val names = (target.methods.map { it.name } +
+            (if (jvmView) emptyList() else target.methods.mapNotNull { kotlinViewOf(target, it)?.displayName }) +
+            target.fields.map { it.name } +
+            (if (jvmView) emptyList() else target.kotlinProperties.keys.toList()))
             .filter { it != "<clinit>" }.distinct()
         val near = names.filter { levenshtein(it, missed) <= 2 }.sorted()
             .ifEmpty { return emptyList() }
@@ -6070,16 +6122,18 @@ public object JdxService {
             }
             // Alias hits spell the Kotlin ref (T-077): the JVM loop above
             // found nothing under a Kotlin name, so emit the view spelling.
-            for (method in target.methods.filter {
-                it.name != name && kotlinViewOf(target, it)?.displayName == name
-            }) {
-                refs.add(methodRefString(target.name, method, kotlinViewOf(target, method), false))
+            if (!jvmView) {
+                for (method in target.methods.filter {
+                    it.name != name && kotlinViewOf(target, it)?.displayName == name
+                }) {
+                    refs.add(methodRefString(target.name, method, kotlinViewOf(target, method), false))
+                }
             }
             for (field in target.fields.filter { it.name == name }) {
                 refs.add(SymbolRefPrinter.print(MemberSymbolRef(target.name, field.name)))
             }
             // T-078 property hits spell `Owner#name`.
-            if (name in target.kotlinProperties) {
+            if (!jvmView && name in target.kotlinProperties) {
                 refs.add(SymbolRefPrinter.print(MemberSymbolRef(target.name, name)))
             }
             if (refs.size >= cap) break

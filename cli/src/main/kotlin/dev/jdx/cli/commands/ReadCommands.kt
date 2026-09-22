@@ -105,6 +105,13 @@ class MembersCommand(
             "declaring (alphabetical by declaring type).",
     ).choice("kind", "name", "declaring", ignoreCase = true).default("kind")
 
+    private val view by option(
+        "--view",
+        help = "Declaration projection: kotlin (the default, true Kotlin declarations " +
+            "from @Metadata) or jvm (the raw JVM projection: JVM names, hidden " +
+            "Continuation params, getters/setters, mangled internal names).",
+    ).choice("kotlin", "jvm", ignoreCase = true).default("kotlin")
+
     private val jars by option(
         "--jars",
         help = "Binary roots: jar files, class directories or globs (repeatable). " +
@@ -181,6 +188,7 @@ class MembersCommand(
             grep = grep?.let { Regex(it) },
             sort = ReadCommandSupport.sortOf(sort),
             withDoc = withDoc,
+            view = ReadCommandSupport.viewOf(view),
         )
         when (val resolved = ReadCommandSupport.resolveRoots(
             jars,
@@ -281,6 +289,13 @@ class OutlineCommand(
             "declaring (alphabetical by declaring type).",
     ).choice("kind", "name", "declaring", ignoreCase = true).default("kind")
 
+    private val view by option(
+        "--view",
+        help = "Declaration projection: kotlin (the default, true Kotlin declarations " +
+            "from @Metadata) or jvm (the raw JVM projection: JVM names, hidden " +
+            "Continuation params, getters/setters, mangled internal names).",
+    ).choice("kotlin", "jvm", ignoreCase = true).default("kotlin")
+
     private val jars by option(
         "--jars",
         help = "Binary roots: jar files, class directories or globs (repeatable). " +
@@ -357,6 +372,7 @@ class OutlineCommand(
             grep = grep?.let { Regex(it) },
             sort = ReadCommandSupport.sortOf(sort),
             withDoc = withDoc,
+            view = ReadCommandSupport.viewOf(view),
         )
         when (val resolved = ReadCommandSupport.resolveRoots(
             jars,

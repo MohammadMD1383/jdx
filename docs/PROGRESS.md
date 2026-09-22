@@ -14,14 +14,14 @@ or delete a past entry — if one turned out to be wrong, say so in a *new* entr
 
 | | |
 |---|---|
-| **Last updated** | 2026-09-22 (session 59) |
+| **Last updated** | 2026-09-22 (session 60) |
 | **Repository** | <https://github.com/MohammadMD1383/jdx> (public, Apache-2.0) |
-| **Phase** | Design complete; **M0–M4 DONE**, **M5 open** (T-035 DONE, T-076 DONE, T-077 DONE, T-078 DONE, T-036 WIP via T-037 next), M6–M7 TODO |
-| **Next task** | **M5 T-037** (`--view jvm` forcing the JVM projection; file the detail block when starting) |
-| **Task count** | 78 tasks (T-001…T-078): all DONE except T-036 (WIP), T-074 (`srcmap` remainder), T-075 (`usages` graph enrichment), and the coarse M5–M7 one-liners (T-060 done early, T-035 done) |
-| **Build status** | **Green.** `./gradlew build` passes. Runnable `jdx`: `./gradlew :app:installDist` → `app/build/jdx`. Live commands: `version`, `doctor`, `show`, `members`, `outline`, `search`, `resolve`, `ls`, `tree`, `ws`, `cache`, `body`, `source`, `signature`, `doc`, `usages` (+`--src`), `hierarchy`/`implementors`, `callers`/`calls --depth`, `samples --prefer-sources` — text+JSON, `--coord`/`--fetch`/`--repo`, JDK via `jrt:/` + `src.zip`, workspaces + auto-discovery. |
-| **Test status** | **Tiers 1–2 green** (`check`); **tier 3 green except** `JavapCorpusSoakTest`, which reds on JDK-internal synthetic `access$` members (proven pre-existing on the stashed-clean tree, same drift family as sessions 53/55/56/58); mutation tier 4 green (`core` 91 % vs the 80 gate, last measured session 55). **Caveat:** `verifyTier1Budget` is red on this machine (pre-existing machine variance, 0 test failures — not a test failure). |
-| **Docs** | Sharded append-only logs (D-023): sessions → `docs/progress/` (`sessions-051-060.md` open at 59), decisions → `docs/decisions/` (shard `D-051-075.md` open at D-051), lessons → `docs/lessons/` (`L-076-100.md` open at L-090). New decisions/lessons go to the newest shard, never into session entries. |
+| **Phase** | Design complete; **M0–M4 DONE**, **M5 open** (T-035 DONE, T-076/T-077/T-078/T-037 DONE, T-036 WIP via T-038/T-039 next), M6–M7 TODO |
+| **Next task** | **M5 T-038/T-039** (Kotlin PSI source parsing + Kotlin bodies; file detail blocks when starting) |
+| **Task count** | 78 tasks (T-001…T-078): all DONE except T-036 (WIP), T-074 (`srcmap` remainder), T-075 (`usages` graph enrichment), and the coarse M5–M7 one-liners (T-060 done early, T-035/T-037 done) |
+| **Build status** | **Green.** `./gradlew build` passes. Runnable `jdx`: `./gradlew :app:installDist` → `app/build/jdx`. Live commands: `version`, `doctor`, `show`, `members`, `outline`, `search`, `resolve`, `ls`, `tree`, `ws`, `cache`, `body`, `source`, `signature`, `doc`, `usages` (+`--src`), `hierarchy`/`implementors`, `callers`/`calls --depth`, `samples --prefer-sources` — text+JSON, `--coord`/`--fetch`/`--repo`, JDK via `jrt:/` + `src.zip`, workspaces + auto-discovery. `members`/`outline`/`signature` take `--view kotlin\|jvm` (raw JVM projection). |
+| **Test status** | **Tiers 1–2 green** (`check`); **tier 3 green except** `JavapCorpusSoakTest`, which reds only on JDK-internal synthetic `access$` members (proven pre-existing on the stashed-clean tree, same drift family as sessions 53/55/56/58; Kotlin re-inclusion via `--view jvm` contributed zero mismatches over 112 classes); mutation tier 4 green (`core` 91 % vs the 80 gate, last measured session 55). **Caveat:** `verifyTier1Budget` is red on this machine (pre-existing machine variance, 0 test failures — not a test failure). |
+| **Docs** | Sharded append-only logs (D-023): sessions → `docs/progress/` (`sessions-051-060.md` full at 60, `sessions-061-070.md` open), decisions → `docs/decisions/` (shard `D-051-075.md` open at D-052), lessons → `docs/lessons/` (`L-076-100.md` open at L-091). New decisions/lessons go to the newest shard, never into session entries. |
 | **Blocked on** | Nothing. Unpushed sessions need owner go-ahead per session (D-012). |
 
 **What exists:** see `docs/TASKS.md` status summary + the session log — this file no
@@ -44,7 +44,8 @@ when it holds 10 sessions, create the next (`sessions-011-020.md`) and update th
 | `docs/progress/sessions-021-030.md` | 21–30 | full |
 | `docs/progress/sessions-031-040.md` | 31–40 | full |
 | `docs/progress/sessions-041-050.md` | 41–50 | full |
-| `docs/progress/sessions-051-060.md` | 51–60 | open |
+| `docs/progress/sessions-051-060.md` | 51–60 | full |
+| `docs/progress/sessions-061-070.md` | 61–70 | open |
 
 ---
 

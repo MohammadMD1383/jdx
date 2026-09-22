@@ -63,7 +63,8 @@ net.minecraft.world.item.ItemStack#getMaxStackSize()
   entire classpath, not just one jar.
 - **Sources when they exist, decompilation when they don't** — uniformly, behind one command.
 - **True Kotlin signatures** from `@Metadata`: `suspend`, nullability, properties, extension
-  receivers, default arguments — not the misleading JVM projection.
+  receivers, default arguments — not the misleading JVM projection (`--view jvm` forces the
+  raw JVM projection when the agent genuinely needs it: Java interop, stack traces).
 - **Javadoc/KDoc**, including documentation inherited from a supertype.
 
 ## What makes it *for agents*, not for humans

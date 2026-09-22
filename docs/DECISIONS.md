@@ -91,3 +91,4 @@ log.
 | D-049 | Kotlin `KmClass` carrier semantics (T-076) | proposed-by-implementer | `D-026-050.md` |
 | D-050 | Kotlin suspend/`@JvmName`/`internal` signature repair semantics (T-077) | proposed-by-implementer | `D-026-050.md` |
 | D-051 | Kotlin property folding + default-arg annotation semantics (T-078) | proposed-by-implementer | `D-051-075.md` |
+| D-052 | `--view jvm` projection semantics (T-037) | proposed-by-implementer | `D-051-075.md` |

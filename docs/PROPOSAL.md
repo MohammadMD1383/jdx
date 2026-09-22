@@ -1106,15 +1106,15 @@ the authoritative machine-readable version.)*
 ```
 show      <type> [-w …] [--jars …] [--no-jdk] [--json] [--no-color]
 outline   <type> [--kind --static/--instance --access --from --grep
-          --include-synthetic --limit] [-w …] [--jars …] [--no-jdk] [--json] [--no-color]
+          --include-synthetic --limit --view kotlin|jvm] [-w …] [--jars …] [--no-jdk] [--json] [--no-color]
 members   --inherited/--declared --kind --static --instance --access --from
-          --grep --with-doc --sort --include-synthetic
+          --grep --with-doc --sort --view kotlin|jvm --include-synthetic
           [-w …] [--jars …] [--no-jdk] [--json] [--no-color]
 body      --engine vineflower|javap --with-doc --with-signature --context N
           --line-numbers --max-lines
 source    --lines A:B --around <ref> --context N --line-numbers --max-lines
           --engine vineflower|javap
-signature <member> [--include-synthetic --limit]
+signature <member> [--include-synthetic --limit --view kotlin|jvm]
 doc       --inherited/--no-inherited --raw --max-lines
 search    --kind --regex --fuzzy --in --package --limit
 resolve   <name> [--limit]

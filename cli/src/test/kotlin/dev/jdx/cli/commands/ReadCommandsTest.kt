@@ -276,6 +276,33 @@ class ReadCommandsTest {
     }
 
     @Test
+    fun `members --view jvm reaches the service, kotlin by default`() {
+        var filters: JdxService.MemberFilters? = null
+        captureStdout {
+            MembersCommand(
+                query = { _, _, f, _, _, _ -> filters = f; pointListing() },
+                terminate = noExit,
+                discover = noDiscovery,
+                store = emptyStore(),
+                getenv = noEnv,
+            ).parse(listOf("Point", "--view", "jvm"))
+        }
+        filters?.view shouldBe JdxService.MemberView.JVM
+
+        filters = null
+        captureStdout {
+            MembersCommand(
+                query = { _, _, f, _, _, _ -> filters = f; pointListing() },
+                terminate = noExit,
+                discover = noDiscovery,
+                store = emptyStore(),
+                getenv = noEnv,
+            ).parse(listOf("Point"))
+        }
+        filters?.view shouldBe JdxService.MemberView.KOTLIN
+    }
+
+    @Test
     fun `members --static and --instance together exit 3 without querying`() {
         var queried = false
         val output = captureStdout {
@@ -374,6 +401,29 @@ class ReadCommandsTest {
             }
             seen shouldBe expected
         }
+    }
+
+    @Test
+    fun `outline --view jvm reaches the service`() {
+        var seen: JdxService.MemberView? = null
+        captureStdout {
+            OutlineCommand(
+                query = { _, _, filters, _, _, _ -> seen = filters.view; pointListing() },
+                terminate = noExit,
+                discover = noDiscovery,
+                store = emptyStore(),
+                getenv = noEnv,
+            ).parse(listOf("Point", "--view", "jvm"))
+        }
+        seen shouldBe JdxService.MemberView.JVM
+    }
+
+    @Test
+    fun `view mapping covers both choice values`() {
+        ReadCommandSupport.viewOf("kotlin") shouldBe JdxService.MemberView.KOTLIN
+        ReadCommandSupport.viewOf("jvm") shouldBe JdxService.MemberView.JVM
+        ReadCommandSupport.viewOf("JVM") shouldBe JdxService.MemberView.JVM
+        ReadCommandSupport.viewOf("bogus") shouldBe JdxService.MemberView.KOTLIN
     }
 
     @Test

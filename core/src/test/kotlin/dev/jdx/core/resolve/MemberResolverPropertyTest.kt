@@ -95,6 +95,24 @@ class MemberResolverPropertyTest {
         }
     }
 
+    @Test
+    fun `jvmView on view-less graphs is identity`() = runBlocking<Unit> {
+        // Generated graphs carry no Kotlin views: the JVM projection must
+        // answer exactly like the default (T-037) — the flag changes nothing
+        // for Java, deterministically.
+        checkAll(1000, arbClassGraph(), arbSyntheticToggle()) { graph, includeSynthetic ->
+            val target = graphTarget(graph)
+            val lookup = graphLookup(graph)
+            val kotlin = MemberResolver.resolve(target, lookup, MemberResolutionOptions(includeSynthetic))
+            val jvm = MemberResolver.resolve(
+                target,
+                lookup,
+                MemberResolutionOptions(includeSynthetic = includeSynthetic, jvmView = true),
+            )
+            jvm shouldBe kotlin
+        }
+    }
+
     private fun isTestSynthetic(member: dev.jdx.core.model.MethodInfo): Boolean =
         member.access.has(dev.jdx.core.model.AccessFlag.SYNTHETIC) ||
             member.access.has(dev.jdx.core.model.AccessFlag.BRIDGE)

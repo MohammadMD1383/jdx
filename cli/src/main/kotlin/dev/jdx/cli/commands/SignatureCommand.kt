@@ -7,6 +7,7 @@ import com.github.ajalt.clikt.parameters.options.default
 import com.github.ajalt.clikt.parameters.options.flag
 import com.github.ajalt.clikt.parameters.options.multiple
 import com.github.ajalt.clikt.parameters.options.option
+import com.github.ajalt.clikt.parameters.types.choice
 import com.github.ajalt.clikt.parameters.types.int
 import dev.jdx.cli.effectiveJson
 import dev.jdx.cli.effectiveWorkspace
@@ -47,6 +48,13 @@ class SignatureCommand(
         "--include-synthetic",
         help = "Show bridge/synthetic members, hidden by default.",
     ).flag()
+
+    private val view by option(
+        "--view",
+        help = "Declaration projection: kotlin (the default, true Kotlin declarations " +
+            "from @Metadata) or jvm (the raw JVM projection: JVM names, hidden " +
+            "Continuation params, getters/setters, mangled internal names).",
+    ).choice("kotlin", "jvm", ignoreCase = true).default("kotlin")
 
     private val limit by option(
         "--limit",
@@ -128,6 +136,7 @@ class SignatureCommand(
                     JdxService.SignatureOptions(
                         includeSynthetic = includeSynthetic,
                         maxSignatures = limit,
+                        view = ReadCommandSupport.viewOf(view),
                     ),
                 )
                 ReadCommandSupport.finish(outcome, "signature", json, noColor, terminate)

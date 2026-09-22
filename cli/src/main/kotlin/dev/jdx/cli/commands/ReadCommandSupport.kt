@@ -335,6 +335,12 @@ internal object ReadCommandSupport {
         else -> JdxService.KindFilter.ALL
     }
 
+    /** Maps `--view` to the service projection; Clikt's `choice()` guarantees the input range. */
+    internal fun viewOf(view: String): JdxService.MemberView = when (view.lowercase()) {
+        "jvm" -> JdxService.MemberView.JVM
+        else -> JdxService.MemberView.KOTLIN
+    }
+
     /** Maps `--sort` to the listing order; Clikt's `choice()` guarantees the input range. */
     internal fun sortOf(sort: String): dev.jdx.core.render.MemberSort = when (sort.lowercase()) {
         "name" -> dev.jdx.core.render.MemberSort.NAME

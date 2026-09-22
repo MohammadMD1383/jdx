@@ -53,11 +53,12 @@ be fiction.
 
 **DONE: T-001…T-035** (M0–M2 in full; M3 via the T-020 umbrella's slices —
 T-071 + T-021…T-028 + T-072/T-073; M4 via T-029…T-034; M5 opened with T-035) **plus T-053…T-073
-plus T-076** (first T-036 slice) **plus T-077** (second T-036 slice) **plus T-078** (third T-036 slice).
+plus T-076** (first T-036 slice) **plus T-077** (second T-036 slice) **plus T-078** (third T-036 slice)
+**plus T-037** (`--view jvm`, last T-036 slice).
 DONE entries below are
 compressed to a summary + pointers; full notes live in git history and the
 session log. **TODO: T-075** (`usages` graph enrichment), **T-074** (T-020 `srcmap`
-remainder, see below), **WIP: T-036** (member mapping, T-078 DONE session 59, T-037 `--view jvm` next),
+remainder, see below), **WIP: T-036** (member mapping, T-037 DONE session 60, T-038/T-039 PSI/bodies next),
 **plus M5–M7** (coarse; T-060 already DONE).
 
 ---
@@ -837,7 +838,7 @@ Fold the two remaining JVM-projection lies over the T-076 carrier (PROPOSAL.md �
 *Closed in session 59. Decisions: D-051. Lessons: L-090. Full notes in git history +
 session log.*
 
-### T-037 — `--view jvm` forcing the JVM projection (last T-036 slice) · `WIP` (session 60)
+### T-037 — `--view jvm` forcing the JVM projection (last T-036 slice) · `DONE` (session 60)
 
 **Depends:** T-078 (Kotlin view to escape from) · **Files:** `core/.../resolve/MemberResolver.kt`
 (`MemberResolutionOptions.jvmView`), `index/.../service/JdxService.kt` (`MemberView`,
@@ -863,6 +864,9 @@ Force the raw JVM projection for agents that genuinely need the JVM truth
   family law; index tier-2 JVM-view service tests; CLI tier-1 flag + tier-2
   end-to-end; JVM goldens for the Kotlin fixtures; differential Kotlin
   re-inclusion.
+
+*Closed in session 60. Decisions: D-052. Lessons: L-091. T-036 stays WIP
+(T-038/T-039 next). Full notes in git history + session log.*
 
 # M6 — Serving
 ### T-040 `JdxService` RPC protocol · **T-041** daemon + unix socket + 5-min idle shutdown (D-004) · **T-042** transparent CLI daemon client + `--no-daemon` · **T-043** MCP stdio server with generated schemas · **T-044** HTTP/JSON server on `com.sun.net.httpserver` · **T-045** `jdx batch` · **T-046** adapter parity test (CLI/HTTP/MCP byte-identical payloads)

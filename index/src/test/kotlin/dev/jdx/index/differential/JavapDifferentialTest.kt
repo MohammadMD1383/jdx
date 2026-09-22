@@ -11,17 +11,18 @@ import org.junit.jupiter.api.Test
 /**
  * The tier-2 `javap` differential harness (T-056, TESTING.md §5.1).
  *
- * For **every Java class** in the fixture corpus: parse `javap -p -s` into a
+ * For **every class** in the fixture corpus: parse `javap -p -s` into a
  * member set and diff it against
  * `jdx members --declared --access all --include-synthetic --json` for the
  * same class. Any disagreement is a bug in `jdx` (or a new `javap` quirk that
  * belongs in [JavapQuirks] with a comment — an unexplained allowlist entry is
  * a review blocker).
  *
- * Kotlin classes skip with a counted `kotlin-view` reason: since T-077 they
- * render declarations, not `javap` names, by design. Their JVM fidelity is
- * still pinned member-for-member by `AsmClassReaderDifferentialTest`, and
- * their command view by `KotlinViewsServiceTest` plus goldens.
+ * Kotlin classes compare through `--view jvm` (T-037): by default they render
+ * declarations, not `javap` names, by design — the JVM projection must still
+ * equal `javap` member-for-member. Their JVM fidelity is also pinned by
+ * `AsmClassReaderDifferentialTest`, and their command view by
+ * `KotlinViewsServiceTest` plus goldens.
  *
  * Tagged `tier2` (docs/TESTING.md §2): every class costs a `javap` subprocess
  * plus a service query off disk. The seeded real-corpus sample lives in
@@ -37,25 +38,25 @@ class JavapDifferentialTest {
         val javap = assumeJavap()
         val failures = mutableListOf<String>()
         var compared = 0
-        var kotlinSkipped = 0
+        var jvmCompared = 0
         for (binaryName in fixtureClassNames()) {
             when (val result = ServiceDifferential.compare(binaryJar, binaryName, javap)) {
                 is ServiceDifferential.Comparison.Compared -> {
                     compared++
+                    if (result.jvmView) jvmCompared++
                     if (!result.agrees) failures.add(ServiceDifferential.formatMismatch(result))
                 }
                 is ServiceDifferential.Comparison.Skipped ->
-                    if (result.reason.startsWith("kotlin-view:")) kotlinSkipped++
-                    else failures.add("UNEXPECTED SKIP $binaryName: ${result.reason}")
+                    failures.add("UNEXPECTED SKIP $binaryName: ${result.reason}")
                 is ServiceDifferential.Comparison.ServiceError ->
                     failures.add("JDX ERROR $binaryName (exit ${result.exitCode}): ${result.message}")
             }
         }
         // The loop must have compared something: an empty corpus passing
         // vacuously would be a test that asserts nothing. The fixture ships
-        // Kotlin classes, so the Kotlin skip path must have fired too.
+        // Kotlin classes, so the `--view jvm` path must have fired too.
         (compared > 0) shouldBe true
-        (kotlinSkipped > 0) shouldBe true
+        (jvmCompared > 0) shouldBe true
         failures shouldBe emptyList<String>()
     }
 

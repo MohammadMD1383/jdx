@@ -198,4 +198,123 @@ class KotlinViewsServiceTest {
         text shouldContain "property public final val"
         text shouldNotContain "method "
     }
+
+    // -- T-037: --view jvm ----------------------------------------------------
+
+    private fun jvmFilters(): MemberFilters = MemberFilters(view = JdxService.MemberView.JVM)
+
+    private fun jvmMembersText(): String {
+        val outcome = JdxService.members("dev.jdx.fixtures.KotlinMembers", fixtureRoots(), jvmFilters())
+        outcome.exitCode shouldBe 0
+        return textOf(outcome)
+    }
+
+    @Test
+    fun `jvm view renders JVM names`() {
+        val text = jvmMembersText()
+        text shouldContain "renamedForJvm(int value)"
+        text shouldNotContain "originalName"
+    }
+
+    @Test
+    fun `jvm view keeps the hidden Continuation parameter`() {
+        val text = jvmMembersText()
+        text shouldContain "Continuation"
+        text shouldNotContain "suspend "
+    }
+
+    @Test
+    fun `jvm view keeps mangled internal names`() {
+        val text = jvmMembersText()
+        text shouldContain "internalHelper\$testfixtures"
+        // The demangled Kotlin spelling must not appear as its own row.
+        text shouldNotContain "internalHelper()"
+    }
+
+    @Test
+    fun `jvm view unfolds properties into accessors and backing fields`() {
+        val outcome = JdxService.members("dev.jdx.fixtures.KotlinData", fixtureRoots(), jvmFilters())
+        outcome.exitCode shouldBe 0
+        val text = textOf(outcome)
+        text shouldContain "getName()"
+        text shouldNotContain "property "
+    }
+
+    @Test
+    fun `jvm view renders no default-arg annotations`() {
+        val text = jvmMembersText()
+        text shouldNotContain "= ..."
+    }
+
+    @Test
+    fun `outline honours the jvm view`() {
+        val outcome = JdxService.outline("dev.jdx.fixtures.KotlinMembers", fixtureRoots(), jvmFilters())
+        outcome.exitCode shouldBe 0
+        val text = textOf(outcome)
+        text shouldContain "renamedForJvm(int value)"
+        text shouldContain "Continuation"
+        text shouldNotContain "originalName"
+    }
+
+    @Test
+    fun `signature in jvm view renders and matches JVM spellings`() {
+        val outcome = JdxService.signature(
+            "dev.jdx.fixtures.KotlinMembers#renamedForJvm",
+            fixtureRoots(),
+            JdxService.SignatureOptions(view = JdxService.MemberView.JVM),
+        )
+        outcome.exitCode shouldBe 0
+        textOf(outcome) shouldContain "renamedForJvm(int value)"
+    }
+
+    @Test
+    fun `signature in jvm view rejects Kotlin spellings`() {
+        // No JVM member is near `originalName` (levenshtein > 2), so the miss
+        // carries no suggestions — but it must stay a miss, never an alias hit.
+        val outcome = JdxService.signature(
+            "dev.jdx.fixtures.KotlinMembers#originalName",
+            fixtureRoots(),
+            JdxService.SignatureOptions(view = JdxService.MemberView.JVM),
+        )
+        outcome.exitCode shouldBe 1
+        val text = textOf(outcome)
+        text shouldContain "not found"
+        text shouldNotContain "originalName(int"
+    }
+
+    @Test
+    fun `signature in jvm view resolves the backing field for a property name`() {
+        // The JVM projection has no properties: `KotlinData#name` names the
+        // private backing field `javap` shows (T-037), not the folded `val`.
+        val outcome = JdxService.signature(
+            "dev.jdx.fixtures.KotlinData#name",
+            fixtureRoots(),
+            JdxService.SignatureOptions(view = JdxService.MemberView.JVM),
+        )
+        outcome.exitCode shouldBe 0
+        val text = textOf(outcome)
+        text shouldContain "private final java.lang.String name"
+        text shouldNotContain "val "
+    }
+
+    @Test
+    fun `did-you-mean in jvm view suggests JVM spellings`() {
+        val outcome = JdxService.signature(
+            "dev.jdx.fixtures.KotlinMembers#renamedForJv",
+            fixtureRoots(),
+            JdxService.SignatureOptions(view = JdxService.MemberView.JVM),
+        )
+        outcome.exitCode shouldBe 1
+        val text = textOf(outcome)
+        text shouldContain "renamedForJvm(int)"
+        text shouldNotContain "originalName"
+    }
+
+    @Test
+    fun `java output is identical across views`() {
+        val kotlin = JdxService.members("dev.jdx.fixtures.TrafficLight", fixtureRoots(), MemberFilters())
+        val jvm = JdxService.members("dev.jdx.fixtures.TrafficLight", fixtureRoots(), jvmFilters())
+        kotlin.exitCode shouldBe 0
+        textOf(jvm) shouldBe textOf(kotlin)
+    }
 }

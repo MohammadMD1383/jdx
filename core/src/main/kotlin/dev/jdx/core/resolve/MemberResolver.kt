@@ -68,7 +68,8 @@ public object MemberResolver {
 
             for (field in declaring.fields) {
                 // T-078 folded backing fields hide with the accessors (unless synthetic shown).
-                if (!options.includeSynthetic && field.name in declaring.kotlinHiddenFields) continue
+                // `--view jvm` (T-037) ignores the fold: the field is plain JVM API.
+                if (!options.jvmView && !options.includeSynthetic && field.name in declaring.kotlinHiddenFields) continue
                 if (!options.includeSynthetic && isSyntheticField(field)) continue
                 if (!isTarget && !isVisible(fieldAccess(field), declaringPackage, targetPackage)) {
                     continue
@@ -97,7 +98,8 @@ public object MemberResolver {
                 if (method.name == "<clinit>") continue // never a callable member
                 if (!isTarget && method.name == "<init>") continue // constructors are not inherited
                 // T-078 folded accessors hide with synthetics (unless shown explicitly).
-                if (!options.includeSynthetic &&
+                // `--view jvm` (T-037) ignores the fold: accessors are plain JVM API.
+                if (!options.jvmView && !options.includeSynthetic &&
                     kotlinViewKey(method.name, method.descriptor.descriptor) in declaring.kotlinHiddenMethods
                 ) {
                     continue
@@ -117,7 +119,12 @@ public object MemberResolver {
                             substituteMethod(it, node.environment)
                         },
                         overriddenTypes = emptyList(),
-                        kotlinView = declaring.kotlinMethodViews[kotlinViewKey(method.name, method.descriptor.descriptor)],
+                        // `--view jvm` (T-037) renders the JVM projection: no view attaches.
+                        kotlinView = if (options.jvmView) {
+                            null
+                        } else {
+                            declaring.kotlinMethodViews[kotlinViewKey(method.name, method.descriptor.descriptor)]
+                        },
                     )
                 } else {
                     // Override collapse (spec step 5): same name + erased descriptor means
@@ -129,7 +136,9 @@ public object MemberResolver {
             }
 
             // T-078 properties: one folded row per Kotlin declaration, nearer wins by name.
+            // `--view jvm` (T-037) synthesises none: getters/setters already resolved above.
             for ((propertyName, view) in declaring.kotlinProperties) {
+                if (options.jvmView) break
                 if (propertyName in seenProperties) {
                     val existing = seenProperties.getValue(propertyName)
                     seenProperties[propertyName] = existing.copy(
@@ -486,6 +495,13 @@ public object MemberResolver {
 public data class MemberResolutionOptions(
     /** Show bridge/synthetic members (`--include-synthetic`); hidden by default. */
     public val includeSynthetic: Boolean = false,
+    /**
+     * Render the raw JVM projection (`--view jvm`, T-037): folded Kotlin
+     * accessors/backing fields stay visible as plain members, no Kotlin view
+     * attaches, and no property row synthesises. `false` (the default) is the
+     * Kotlin view.
+     */
+    public val jvmView: Boolean = false,
 )
 
 /** One visited supertype: its name and its BFS depth below the target (target = 0). */

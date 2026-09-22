@@ -94,6 +94,16 @@ class SignatureCommandTest {
     }
 
     @Test
+    fun `view jvm reaches the service, kotlin by default`() {
+        val jvm = run(listOf("com.example.Point#getX()", "--view", "jvm"))
+        jvm.exit shouldBe 0
+        jvm.options?.view shouldBe JdxService.MemberView.JVM
+
+        val kotlin = run(listOf("com.example.Point#getX()"))
+        kotlin.options?.view shouldBe JdxService.MemberView.KOTLIN
+    }
+
+    @Test
     fun `negative limit is a usage error`() {
         val run = run(listOf("com.example.Point#getX()", "--limit", "-1"))
         run.exit shouldBe 3

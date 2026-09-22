@@ -6,10 +6,13 @@ import dev.jdx.core.model.ClassInfo
 import dev.jdx.core.model.ClassTypeSignature
 import dev.jdx.core.model.FieldInfo
 import dev.jdx.core.model.JvmDescriptor
+import dev.jdx.core.model.KotlinMethodView
+import dev.jdx.core.model.KotlinPropertyView
 import dev.jdx.core.model.MethodInfo
 import dev.jdx.core.model.ThrowsSignature
 import dev.jdx.core.model.TypeName
 import dev.jdx.core.model.Visibility
+import dev.jdx.core.model.kotlinViewKey
 import dev.jdx.core.model.typeNameFromBinaryName
 import io.kotest.matchers.shouldBe
 import org.junit.jupiter.api.Test
@@ -655,4 +658,92 @@ class MemberResolverTest {
         resolved.methods.single { it.member.name == "add" }
             .substitutedSignature?.signature shouldBe "(Ljava/lang/String;)Z"
     }
+
+    // -- T-037: --view jvm ------------------------------------------------------------
+    //
+    // The JVM projection ignores every Kotlin view: folded accessors and backing
+    // fields show as plain JVM members, no view attaches, no property synthesises.
+
+    @Test
+    fun `jvmView reveals folded accessors and backing fields with no views attached`() {
+        val target = kotlinishClass()
+        val lookup = mapLookup(objectInfo, target)
+
+        val kotlin = MemberResolver.resolve(target, lookup)
+        kotlin.methods.map { it.member.name }.toSet() shouldBe setOf("renamedForJvm")
+        kotlin.methods.single().kotlinView?.displayName shouldBe "originalName"
+        kotlin.fields shouldBe emptyList()
+        kotlin.properties.map { it.property.propertyName } shouldBe listOf("name")
+
+        val jvm = MemberResolver.resolve(target, lookup, MemberResolutionOptions(jvmView = true))
+        jvm.methods.map { it.member.name }.toSet() shouldBe
+            setOf("getName", "setName", "renamedForJvm")
+        jvm.methods.none { it.kotlinView != null } shouldBe true
+        jvm.fields.map { it.member.name } shouldBe listOf("name")
+        jvm.properties shouldBe emptyList()
+    }
+
+    @Test
+    fun `jvmView keeps the JVM name on renamed methods`() {
+        val target = kotlinishClass()
+        val lookup = mapLookup(objectInfo, target)
+
+        val jvm = MemberResolver.resolve(target, lookup, MemberResolutionOptions(jvmView = true))
+
+        val renamed = jvm.methods.single { it.member.name == "renamedForJvm" }
+        renamed.kotlinView shouldBe null
+    }
+
+    @Test
+    fun `jvmView still honours includeSynthetic for real synthetics`() {
+        val base = kotlinishClass()
+        val target = base.copy(
+            methods = base.methods + MethodInfo(
+                "\$default",
+                testMethodDescriptor("()V"),
+                Access.of(AccessFlag.PUBLIC, AccessFlag.SYNTHETIC),
+            ),
+        )
+        val lookup = mapLookup(objectInfo, target)
+
+        val hidden = MemberResolver.resolve(target, lookup, MemberResolutionOptions(jvmView = true))
+        hidden.methods.map { it.member.name }.toSet() shouldBe
+            setOf("getName", "setName", "renamedForJvm")
+
+        val shown = MemberResolver.resolve(
+            target,
+            lookup,
+            MemberResolutionOptions(jvmView = true, includeSynthetic = true),
+        )
+        shown.methods.map { it.member.name }.toSet() shouldBe
+            setOf("getName", "setName", "renamedForJvm", "\$default")
+    }
+
+    /** A Kotlin-shaped class: a folded `var name` plus a `@JvmName`-renamed method. */
+    private fun kotlinishClass(): ClassInfo = testClass(
+        binary = "t.Kotlin",
+        superclass = "java.lang.Object",
+        fields = listOf(publicField("name", "Ljava/lang/String;")),
+        methods = listOf(
+            publicMethod("getName", "()Ljava/lang/String;"),
+            publicMethod("setName", "(Ljava/lang/String;)V"),
+            publicMethod("renamedForJvm", "(I)I"),
+        ),
+    ).copy(
+        kotlinMethodViews = mapOf(
+            kotlinViewKey("renamedForJvm", "(I)I") to KotlinMethodView(displayName = "originalName"),
+        ),
+        kotlinProperties = mapOf(
+            "name" to KotlinPropertyView(
+                propertyName = "name",
+                isVar = true,
+                displayType = "java.lang.String",
+            ),
+        ),
+        kotlinHiddenMethods = setOf(
+            kotlinViewKey("getName", "()Ljava/lang/String;"),
+            kotlinViewKey("setName", "(Ljava/lang/String;)V"),
+        ),
+        kotlinHiddenFields = setOf("name"),
+    )
 }

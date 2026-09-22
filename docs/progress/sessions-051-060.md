@@ -5,6 +5,98 @@ Append-only (D-023): 10 sessions per shard, newest first. Template and rules in
 
 ---
 
+## Session 60 — 2026-09-22 — `--view jvm` forcing the JVM projection (T-037)
+**Agent/Author:** Muse Spark 1.3 (opencode) · **Commits:** `e956713` (claim) + implementation (this session)
+
+### Goal
+Implement T-037, the last T-036 slice: `--view kotlin|jvm` on
+`members`/`outline`/`signature` forcing the raw JVM projection (PROPOSAL.md
+§12.1 — calling Kotlin from Java, reading a stack trace), and re-include
+Kotlin classes in the `javap` differential via that projection.
+
+### What I did
+- Claimed T-037 (filed the parked one-liner as a `WIP` detail block) and
+  committed the claim before coding.
+- `core` (test-first, `MemberResolverTest` +3): `MemberResolutionOptions.jvmView`
+  (default `false`) — folded accessors/backing fields stay visible as plain
+  members, no `kotlinView` attaches, no `ResolvedProperty` synthesises, while
+  real synthetics still honour `includeSynthetic`. Generating family:
+  `jvmView on view-less graphs is identity` (1,000 graphs — the bypass flag
+  changes nothing for Java).
+- `index/.../service/JdxService.kt`: `MemberView` (`KOTLIN`/`JVM`, mirroring
+  `KindFilter`) rides `MemberFilters.view` + `SignatureOptions.view` (both
+  default `KOTLIN`, so thin-adapter arities stay stable per D-004);
+  `matchBytecodeMembers`/`kotlinViewOf`/`orderedMemberRefs`/
+  `canonicalMemberRefs`/`suggestSimilarMember` take `jvmView = false` —
+  JVM-exact matching only (no property/Kotlin aliases), JVM refs, JVM-only
+  suggestions. Kotlin spellings in JVM view exit 1; `KotlinData#name` renders
+  the private backing field `javap` shows (exit 0, honest projection).
+- `cli`: `--view kotlin|jvm` on `MembersCommand`/`OutlineCommand`/
+  `SignatureCommand` (Clikt `choice`, invalid exits 3) via `viewOf`; tier-1
+  flag-reaches-service tests + `viewOf` mapping test.
+- Differential: `ServiceDifferential.compare` queries Kotlin classes with the
+  JVM projection instead of skipping (`Compared.jvmView` marks the path);
+  tier-2 `JavapDifferentialTest` asserts the path fired. New
+  `KotlinJvmViewGoldenTest` (`golden/jvm-view/`, read every hunk): JVM names,
+  `Continuation` params, mangled `internal`, unfolded accessors, no `= ...`,
+  no `property` rows, JVM JSON refs. `KotlinViewsServiceTest` +12 (JVM names,
+  Continuation, mangling, unfolding, no defaults, outline, signature
+  JVM-only matching, backing-field property resolution, JVM did-you-mean,
+  Java identity across views). Two first-run expectations were wrong, not the
+  implementation (backing-field resolution; bare not-found with no near JVM
+  name) — fixed in the tests.
+- `check -x verifyTier1Budget` green (tiers 1+2 + JaCoCo). Tier-3
+  `JavapCorpusSoakTest`: 112 compared, zero Kotlin mismatches, single failure
+  is the known pre-existing `JrtDirectoryStream` drift (`javap=7 jdx=9`,
+  stashed-clean-proven sessions 53/55/56/58). `verifyTier1Budget` not run
+  (red on this machine pre-existing).
+- Live proof below. Docs: D-052 (new shard section), L-091, T-037 DONE
+  (T-036 stays WIP), CURRENT STATE (next: T-038/T-039), Appendix B `--view`
+  entries, README Kotlin bullet.
+
+### Decisions made
+D-052 (view flag not mode; JVM view ignores every view end to end; Kotlin
+spellings in JVM view are misses; differential re-inclusion; JVM goldens).
+
+### Tasks moved
+T-037: WIP → DONE. T-036 stays WIP (T-038/T-039 PSI/bodies next).
+
+### Lessons distilled
+L-091 (bypass-flag identity law: a projection flag ships with an identity
+property over the unaffected population, not just examples of the affected).
+
+### What works now (and how to verify it yourself)
+```bash
+./gradlew check -x verifyTier1Budget   # tiers 1+2 + JaCoCo gates, green
+./gradlew :app:installDist -x verifyTier1Budget
+J=testfixtures/build/libs/testfixtures-0.1.0-SNAPSHOT.jar
+app/build/jdx members 'dev.jdx.fixtures.KotlinMembers' --jars $J --no-jdk --view jvm   # renamedForJvm, Continuation, internalHelper$testfixtures
+app/build/jdx members 'dev.jdx.fixtures.KotlinData' --jars $J --no-jdk --view jvm       # getName/setName, no property rows
+app/build/jdx signature 'dev.jdx.fixtures.KotlinMembers#renamedForJvm' --jars $J --no-jdk --view jvm
+app/build/jdx signature 'dev.jdx.fixtures.KotlinMembers#originalName' --jars $J --no-jdk --view jvm; echo "exit=$?"  # exit 1
+app/build/jdx members 'dev.jdx.fixtures.TrafficLight' --jars $J --no-jdk --view jvm     # byte-identical to kotlin view
+```
+
+### What is broken / half-done
+- `verifyTier1Budget` stays red on this machine (pre-existing variance, 0 test
+  failures). Nothing from this task.
+- `JavapCorpusSoakTest` reds only on the pre-existing JDK-internal synthetic
+  drift (identical signature, proven stashed-clean family). Nothing from this
+  task — Kotlin re-inclusion contributed zero mismatches over 112 classes.
+- No file-facade views (already JVM, no carrier), no `ktmeta` persistence, no
+  general nullability, no property-aware `body`/`doc` (T-039), no `--view` on
+  `usages`/`callers`/`samples` (already JVM-spelled). T-038/T-039 (PSI + Kotlin
+  bodies) are the remaining T-036 work.
+
+### Open questions / blockers
+None.
+
+### Next action
+M5 T-038/T-039 (Kotlin PSI source parsing + Kotlin bodies; file detail blocks
+when starting; T-074/T-075 stay deferred per the lowest-numbered-TODO rule).
+
+---
+
 ## Session 59 — 2026-09-22 — property folding + default-arg annotation (T-078)
 **Agent/Author:** Muse Spark 1.3 (opencode) · **Commits:** `8b9ca57` (claim) + implementation (this session)
 
