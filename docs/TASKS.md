@@ -685,7 +685,7 @@ source snippets when paired sources exist.)*
 T-075 (`usages` graph-enrichment remainder). Full notes in git history +
 session log.*
 
-### T-075 — `usages` graph enrichment: `--kind new|throw|annotation` + `--context` · `TODO`
+### T-075 — `usages` graph enrichment: `--kind new|throw|annotation` + `--context` · `WIP` (session 63)
 
 **Depends:** T-030 (usages live-scan), T-034 (`samples` source rendering) ·
 **Files:** `index/.../service/JdxService.kt` (`usages`), `cli/.../commands/UsagesCommand.kt`
