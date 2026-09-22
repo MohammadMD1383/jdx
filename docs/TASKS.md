@@ -971,7 +971,7 @@ before any JavaParser/Kotlin-PSI parsing happens.
 
 *Closed in session 39. Full notes in git history + session log.*
 
-### T-074 — `srcmap`: same-file top-level siblings (T-020 remainder) · `TODO`
+### T-074 — `srcmap`: same-file top-level siblings (T-020 remainder) · `WIP`
 
 **Depends:** T-071 (`SourceRoot`), T-021 (`listJavaMembers` seam) · **Files:** `sources/.../SourceRoot.kt`, `sources/.../JavaBodies.kt`
 *(Split out of T-028 in session 47: same-file top-level siblings (`Matrix`/`Tag` in `Annos.java`)
