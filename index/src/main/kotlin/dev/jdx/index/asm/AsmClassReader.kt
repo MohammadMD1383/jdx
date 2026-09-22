@@ -166,6 +166,8 @@ public object AsmClassReader {
         val kotlinMetadata = KotlinMetadataReader.read(node.visibleAnnotations, node.invisibleAnnotations)
         val kind = refineKind(mapKind(access), kotlinMetadata)
         val superclass = mapSuperclass(kind, internalName, node.superName)
+        val methods = (node.methods ?: emptyList()).map { mapMethod(it) }
+        val foldedProperties = kotlinPropertiesOf(kotlinMetadata, methods)
         return ClassInfo(
             name = mapInternalName(internalName),
             kind = kind,
@@ -178,13 +180,16 @@ public object AsmClassReader {
             // `ArrayList<String>` edge). Malformed degrades to null, never throws.
             genericSignature = node.signature?.let { GenericSignature.parseClass(it) },
             fields = (node.fields ?: emptyList()).map { mapField(it) },
-            methods = (node.methods ?: emptyList()).map { mapMethod(it) },
+            methods = methods,
             annotations = annotations,
             outerClass = mapOuterClass(node),
             sourceFileName = node.sourceFile,
             deprecated = deprecated,
             isKotlin = kotlinMetadata != null,
             kotlinMethodViews = kotlinViewsOf(kotlinMetadata),
+            kotlinProperties = foldedProperties.properties,
+            kotlinHiddenMethods = foldedProperties.hiddenMethods,
+            kotlinHiddenFields = foldedProperties.hiddenFields,
         )
     }
 
@@ -203,6 +208,58 @@ public object AsmClassReader {
         } catch (_: Exception) {
             emptyMap()
         }
+    }
+
+    /**
+     * Builds the T-078 folded properties from the decoded carrier (getter/setter
+     * hiding + `val`/`var` views). Never throws: hostile metadata degrades to
+     * no properties. The getter's JVM access is attached per property so rows
+     * render real modifiers without a second lookup.
+     */
+    private fun kotlinPropertiesOf(
+        metadata: dev.jdx.index.kotlin.KotlinMetadata?,
+        methods: List<MethodInfo>,
+    ): KotlinMembers.KotlinProperties {
+        val kmClass = metadata?.kmClass ?: return KotlinMembers.KotlinProperties(emptyMap(), emptySet(), emptySet())
+        return try {
+            val folded = KotlinMembers.propertiesFor(kmClass)
+            if (folded.properties.isEmpty()) return folded
+            // Attach each property's getter access (fall back to public-final).
+            val byKey = methods.associateBy { dev.jdx.core.model.kotlinViewKey(it.name, it.descriptor.descriptor) }
+            val withAccess = folded.properties.mapValues { (_, view) ->
+                val getterAccess = folded.hiddenMethods
+                    .mapNotNull { byKey[it] }
+                    .firstOrNull { matchesPropertyAccessor(it.name, view.propertyName) }
+                    ?.access ?: view.access
+                // Refine the display type from the getter's JVM return when the
+                // metadata type has no Java spelling (e.g. type variables erase
+                // to Object — keep the JVM text rather than a bare Object).
+                val refinedType = view.displayType ?: folded.hiddenMethods
+                    .mapNotNull { byKey[it] }
+                    .firstOrNull { matchesPropertyAccessor(it.name, view.propertyName) }
+                    ?.let { dev.jdx.core.render.SignatureLines.renderTypeName(it.descriptor.returnType) }
+                view.copy(access = getterAccess, displayType = refinedType ?: view.displayType)
+            }
+            // Keep only properties with at least one accessor present in the class
+            // file (a metadata-only property with no bytecode is not foldable).
+            val present = withAccess.filter { (_, view) ->
+                folded.hiddenMethods.any { key ->
+                    byKey[key]?.let { matchesPropertyAccessor(it.name, view.propertyName) } == true
+                }
+            }
+            val keptHiddenMethods = folded.hiddenMethods.filter { it in byKey }.toSet()
+            val keptHiddenFields = folded.hiddenFields
+            KotlinMembers.KotlinProperties(present, keptHiddenMethods, keptHiddenFields)
+        } catch (_: Exception) {
+            KotlinMembers.KotlinProperties(emptyMap(), emptySet(), emptySet())
+        }
+    }
+
+    private fun matchesPropertyAccessor(methodName: String, propertyName: String): Boolean {
+        if (propertyName.isEmpty()) return false
+        val capitalised = propertyName.replaceFirstChar { it.uppercaseChar() }
+        return methodName == "get$capitalised" || methodName == "is$capitalised" ||
+            methodName == "set$capitalised"
     }
 
     private fun mapKind(access: Int): TypeKind = when {

@@ -138,14 +138,64 @@ class KotlinViewsServiceTest {
     }
 
     @Test
-    fun `a kotlin data class without T-077 shapes keeps its JVM members`() {
-        // `KotlinData` members are properties/`$default`/`componentN` (T-078):
-        // T-077 maps nothing there, so getters stay getters and no `val`
-        // folding appears.
+    fun `a kotlin data class folds properties and annotates copy defaults`() {
+        // T-078 owns properties/`$default`: getters hide, `val`/`var` rows appear,
+        // and `copy` (all-defaulted in Kotlin) annotates `= ...` per param.
         val outcome = JdxService.members("dev.jdx.fixtures.KotlinData", fixtureRoots(), MemberFilters())
         outcome.exitCode shouldBe 0
         val text = textOf(outcome)
+        text shouldContain "property public final val java.lang.String name"
+        text shouldContain "property public final var int count"
+        text shouldContain "copy(java.lang.String name = ..., int count = ...)"
+        text shouldNotContain "getName()"
+        text shouldNotContain "setCount("
+    }
+
+    @Test
+    fun `signature resolves a property by its Kotlin name`() {
+        val outcome = JdxService.signature("dev.jdx.fixtures.KotlinData#name", fixtureRoots())
+        outcome.exitCode shouldBe 0
+        textOf(outcome) shouldContain "val java.lang.String name"
+    }
+
+    @Test
+    fun `signature still resolves the JVM getter spelling`() {
+        val outcome = JdxService.signature("dev.jdx.fixtures.KotlinData#getName", fixtureRoots())
+        outcome.exitCode shouldBe 0
+        textOf(outcome) shouldContain "getName()"
+    }
+
+    @Test
+    fun `members annotates default args with equals-dotdotdot`() {
+        val outcome = JdxService.members("dev.jdx.fixtures.KotlinMembers", fixtureRoots(), MemberFilters())
+        outcome.exitCode shouldBe 0
+        textOf(outcome) shouldContain "withDefault(int first, java.lang.String second = ...)"
+    }
+
+    @Test
+    fun `include-synthetic reveals the folded accessors`() {
+        val outcome = JdxService.members(
+            "dev.jdx.fixtures.KotlinData",
+            fixtureRoots(),
+            MemberFilters(),
+            includeSynthetic = true,
+        )
+        outcome.exitCode shouldBe 0
+        val text = textOf(outcome)
         text shouldContain "getName()"
-        text shouldNotContain "val name"
+        text shouldContain "property public final val java.lang.String name"
+    }
+
+    @Test
+    fun `kind property lists only properties`() {
+        val outcome = JdxService.members(
+            "dev.jdx.fixtures.KotlinData",
+            fixtureRoots(),
+            MemberFilters(kind = JdxService.KindFilter.PROPERTY),
+        )
+        outcome.exitCode shouldBe 0
+        val text = textOf(outcome)
+        text shouldContain "property public final val"
+        text shouldNotContain "method "
     }
 }

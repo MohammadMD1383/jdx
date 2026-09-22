@@ -12,6 +12,7 @@ import kotlin.metadata.KmFunction
 import kotlin.metadata.KmType
 import kotlin.metadata.isSuspend
 import kotlin.metadata.jvm.JvmMethodSignature
+import kotlin.metadata.jvm.getterSignature
 import kotlin.metadata.jvm.signature
 import kotlinx.coroutines.runBlocking
 import org.junit.jupiter.api.Test
@@ -84,6 +85,25 @@ class KotlinMembersPropertyTest {
                 )
             }
             KotlinMembers.viewsFor(first) shouldBe KotlinMembers.viewsFor(second)
+        }
+    }
+
+    @Test
+    fun `properties mapping never throws on arbitrary names`() = runBlocking<Unit> {
+        checkAll(1_000, Arb.list(nameArb, 0..8)) { names ->
+            val kmClass = KmClass().apply {
+                properties.addAll(
+                    names.map { name ->
+                        kotlin.metadata.KmProperty(name).apply {
+                            if (name.isNotEmpty()) {
+                                getterSignature = JvmMethodSignature("get$name", "()V")
+                            }
+                        }
+                    },
+                )
+            }
+            // The assertion is the absence of a throw: any map is fine.
+            KotlinMembers.propertiesFor(kmClass).properties.size
         }
     }
 }

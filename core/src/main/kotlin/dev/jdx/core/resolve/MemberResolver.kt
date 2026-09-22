@@ -8,6 +8,7 @@ import dev.jdx.core.model.ClassTypeSignature
 import dev.jdx.core.model.FieldInfo
 import dev.jdx.core.model.FieldSignature
 import dev.jdx.core.model.KotlinMethodView
+import dev.jdx.core.model.KotlinPropertyView
 import dev.jdx.core.model.MethodInfo
 import dev.jdx.core.model.MethodSignature
 import dev.jdx.core.model.ReferenceTypeSignature
@@ -50,6 +51,7 @@ public object MemberResolver {
         val targetPackage = target.name.packageName
         val seenMethods = LinkedHashMap<MethodKey, ResolvedMethod>()
         val seenFields = LinkedHashMap<String, ResolvedField>()
+        val seenProperties = LinkedHashMap<String, ResolvedProperty>()
         val missing = sortedSetOf<String>()
 
         for (node in linearisation) {
@@ -65,6 +67,8 @@ public object MemberResolver {
             val declaringPackage = declaring.name.packageName
 
             for (field in declaring.fields) {
+                // T-078 folded backing fields hide with the accessors (unless synthetic shown).
+                if (!options.includeSynthetic && field.name in declaring.kotlinHiddenFields) continue
                 if (!options.includeSynthetic && isSyntheticField(field)) continue
                 if (!isTarget && !isVisible(fieldAccess(field), declaringPackage, targetPackage)) {
                     continue
@@ -92,6 +96,12 @@ public object MemberResolver {
             for (method in declaring.methods) {
                 if (method.name == "<clinit>") continue // never a callable member
                 if (!isTarget && method.name == "<init>") continue // constructors are not inherited
+                // T-078 folded accessors hide with synthetics (unless shown explicitly).
+                if (!options.includeSynthetic &&
+                    kotlinViewKey(method.name, method.descriptor.descriptor) in declaring.kotlinHiddenMethods
+                ) {
+                    continue
+                }
                 if (!options.includeSynthetic && isSyntheticMethod(method)) continue
                 if (!isTarget && !isVisible(method.access.visibility, declaringPackage, targetPackage)) {
                     continue
@@ -117,12 +127,30 @@ public object MemberResolver {
                     )
                 }
             }
+
+            // T-078 properties: one folded row per Kotlin declaration, nearer wins by name.
+            for ((propertyName, view) in declaring.kotlinProperties) {
+                if (propertyName in seenProperties) {
+                    val existing = seenProperties.getValue(propertyName)
+                    seenProperties[propertyName] = existing.copy(
+                        overriddenTypes = existing.overriddenTypes + declaring.name,
+                    )
+                } else {
+                    seenProperties[propertyName] = ResolvedProperty(
+                        declaringType = declaring.name,
+                        depth = node.depth,
+                        property = view,
+                        overriddenTypes = emptyList(),
+                    )
+                }
+            }
         }
 
         val ordered = linearisation.map { SupertypeNode(it.type, it.depth) }
         return ResolvedMembers(
             methods = seenMethods.values.toList(),
             fields = seenFields.values.toList(),
+            properties = seenProperties.values.toList(),
             linearization = ordered,
             missingSupertypes = missing.map { binaryToType(it) },
         )
@@ -498,6 +526,18 @@ public data class ResolvedField(
 )
 
 /**
+ * A resolved Kotlin property (T-078): the folded `val`/`var` row replacing its
+ * JVM getter/setter pair. Produced from [ClassInfo.kotlinProperties] at resolve
+ * time; nearer declarations win by property name, like fields.
+ */
+public data class ResolvedProperty(
+    public val declaringType: TypeName.ClassType,
+    public val depth: Int,
+    public val property: KotlinPropertyView,
+    public val overriddenTypes: List<TypeName.ClassType>,
+)
+
+/**
  * The full answer: inherited + declared members, the linearisation that produced them
  * (target first, `java.lang.Object` last), and supertypes the [lookup] could not
  * provide — skipped gracefully, never fatal.
@@ -505,6 +545,7 @@ public data class ResolvedField(
 public data class ResolvedMembers(
     public val methods: List<ResolvedMethod>,
     public val fields: List<ResolvedField>,
+    public val properties: List<ResolvedProperty> = emptyList(),
     public val linearization: List<SupertypeNode>,
     public val missingSupertypes: List<TypeName>,
 )

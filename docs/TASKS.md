@@ -53,10 +53,11 @@ be fiction.
 
 **DONE: T-001…T-035** (M0–M2 in full; M3 via the T-020 umbrella's slices —
 T-071 + T-021…T-028 + T-072/T-073; M4 via T-029…T-034; M5 opened with T-035) **plus T-053…T-073
-plus T-076** (first T-036 slice) **plus T-077** (second T-036 slice). DONE entries below are
+plus T-076** (first T-036 slice) **plus T-077** (second T-036 slice) **plus T-078** (third T-036 slice).
+DONE entries below are
 compressed to a summary + pointers; full notes live in git history and the
 session log. **TODO: T-075** (`usages` graph enrichment), **T-074** (T-020 `srcmap`
-remainder, see below), **WIP: T-036** (member mapping, T-077 DONE session 58, T-078 WIP session 59),
+remainder, see below), **WIP: T-036** (member mapping, T-078 DONE session 59, T-037 `--view jvm` next),
 **plus M5–M7** (coarse; T-060 already DONE).
 
 ---
@@ -810,7 +811,7 @@ method, keyed by the metadata `jvmSignature` (name + descriptor):
 *Closed in session 58. Decisions: D-050. Lessons: L-089. Full notes in git history +
 session log.*
 
-### T-078 — property folding + default-arg annotation (third T-036 slice) · `WIP` (session 59)
+### T-078 — property folding + default-arg annotation (third T-036 slice) · `DONE` (session 59)
 
 **Depends:** T-076 (carrier), T-077 (method-view pattern) · **Files:** `core/.../model/ClassInfo.kt`
 (`kotlinProperties`, `kotlinHiddenAccessors`), `core/.../model/KotlinView.kt`
@@ -832,6 +833,9 @@ Fold the two remaining JVM-projection lies over the T-076 carrier (PROPOSAL.md �
 - Scope: `CLASS`-kind only, live roots only (D-043 precedent, no `ktmeta` blob, no migration —
   views ride `ClassInfo` with defaults). File facades stay JVM; `--view jvm` stays parked (T-037);
   `body`/`doc` stay JVM-spelled (property-aware bodies await T-039 PSI).
+
+*Closed in session 59. Decisions: D-051. Lessons: L-090. Full notes in git history +
+session log.*
 
 # M6 — Serving
 ### T-040 `JdxService` RPC protocol · **T-041** daemon + unix socket + 5-min idle shutdown (D-004) · **T-042** transparent CLI daemon client + `--no-daemon` · **T-043** MCP stdio server with generated schemas · **T-044** HTTP/JSON server on `com.sun.net.httpserver` · **T-045** `jdx batch` · **T-046** adapter parity test (CLI/HTTP/MCP byte-identical payloads)

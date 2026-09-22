@@ -34,6 +34,7 @@ log.
 | Contracts (storage, ref syntax, exit codes, ambiguity, read-only) | D-013…D-017, D-025 |
 | Process (docs gate, testing, cadence, sharding, lessons) | D-019…D-024 |
 | Command semantics (launcher → hierarchy, in task order) | D-026…D-048 |
+| Kotlin member mapping (carrier → suspend → properties) | D-049…D-051 |
 
 ## Index
 
@@ -89,3 +90,4 @@ log.
 | D-048 | `@Metadata` decoding and Kotlin marking semantics (T-035) | proposed-by-implementer | `D-026-050.md` |
 | D-049 | Kotlin `KmClass` carrier semantics (T-076) | proposed-by-implementer | `D-026-050.md` |
 | D-050 | Kotlin suspend/`@JvmName`/`internal` signature repair semantics (T-077) | proposed-by-implementer | `D-026-050.md` |
+| D-051 | Kotlin property folding + default-arg annotation semantics (T-078) | proposed-by-implementer | `D-051-075.md` |

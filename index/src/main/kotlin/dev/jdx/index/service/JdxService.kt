@@ -172,6 +172,7 @@ public object JdxService {
         METHOD("method"),
         FIELD("field"),
         CTOR("ctor"),
+        PROPERTY("property"),
     }
 
     /**
@@ -1262,7 +1263,7 @@ public object JdxService {
     ): ResolvedMembers {
         val access = filters.access ?: MemberFilters.DEFAULT_ACCESS
         val methods = resolved.methods.filter { method ->
-            if (filters.kind == KindFilter.FIELD) return@filter false
+            if (filters.kind == KindFilter.FIELD || filters.kind == KindFilter.PROPERTY) return@filter false
             val isCtor = method.member.name == "<init>"
             if (filters.kind == KindFilter.CTOR && !isCtor) return@filter false
             if (filters.kind == KindFilter.METHOD && isCtor) return@filter false
@@ -1277,7 +1278,11 @@ public object JdxService {
             true
         }
         val fields = resolved.fields.filter { field ->
-            if (filters.kind == KindFilter.METHOD || filters.kind == KindFilter.CTOR) return@filter false
+            if (filters.kind == KindFilter.METHOD || filters.kind == KindFilter.CTOR ||
+                filters.kind == KindFilter.PROPERTY
+            ) {
+                return@filter false
+            }
             if (field.member.access.visibility !in access) return@filter false
             if (filters.staticOnly != null &&
                 field.member.access.has(AccessFlag.STATIC) != filters.staticOnly
@@ -1288,7 +1293,25 @@ public object JdxService {
             if (filters.grep != null && !filters.grep.containsMatchIn(field.member.name)) return@filter false
             true
         }
-        return resolved.copy(methods = methods, fields = fields)
+        val properties = resolved.properties.filter { property ->
+            if (filters.kind == KindFilter.METHOD || filters.kind == KindFilter.CTOR ||
+                filters.kind == KindFilter.FIELD
+            ) {
+                return@filter false
+            }
+            if (property.property.access.visibility !in access) return@filter false
+            if (filters.staticOnly != null &&
+                property.property.access.has(AccessFlag.STATIC) != filters.staticOnly
+            ) {
+                return@filter false
+            }
+            if (fromBinary != null && property.declaringType.binaryName != fromBinary) return@filter false
+            if (filters.grep != null && !filters.grep.containsMatchIn(property.property.propertyName)) {
+                return@filter false
+            }
+            true
+        }
+        return resolved.copy(methods = methods, fields = fields, properties = properties)
     }
 
     // -- search / resolve / ls / tree (T-017) ------------------------------------
@@ -3789,6 +3812,18 @@ public object JdxService {
                         signature = SignatureLines.fieldLine(match.info),
                         declaringType = binary,
                     )
+                    // T-078 folded property: `property public final val T name`.
+                    is BytecodeMember.Property -> SignatureEntry(
+                        canonicalRef = ref,
+                        kind = MemberKind.PROPERTY,
+                        signature = SignatureLines.propertyLine(
+                            access = match.view.access,
+                            isVar = match.view.isVar,
+                            typeText = match.view.displayType ?: "java.lang.Object",
+                            propertyName = match.view.propertyName,
+                        ),
+                        declaringType = binary,
+                    )
                 }
             }
             val header = SymbolRefPrinter.print(MemberSymbolRef(target.name, memberRef.name))
@@ -3823,6 +3858,8 @@ public object JdxService {
             match.info.access.has(AccessFlag.SYNTHETIC) || match.info.access.has(AccessFlag.BRIDGE)
         is BytecodeMember.Field ->
             match.info.access.has(AccessFlag.SYNTHETIC)
+        // T-078 properties are source API, never synthetic.
+        is BytecodeMember.Property -> false
     }
 
     // -- doc execution (T-025) -------------------------------------------------------
@@ -3933,6 +3970,19 @@ public object JdxService {
         }
         if (specified && bytecodeMatches.size > 1 && memberRef.returnType == null) {
             return ServiceOutcome.Failure(ErrorResult.ambiguous(rawRef, matchRefs))
+        }
+        // T-078 properties have no KDoc path yet (T-039 owns Kotlin sources):
+        // name the task instead of probing Java sources for a Kotlin accessor.
+        if (bytecodeMatches.singleOrNull() is BytecodeMember.Property) {
+            val property = (bytecodeMatches.single() as BytecodeMember.Property).view
+            return ServiceOutcome.Failure(
+                ErrorResult.notFound(
+                    rawRef,
+                    detail = "no documentation for property '${property.propertyName}' " +
+                        "in ${rootLabel(opened[providers.getValue(binary).first()], binary)} " +
+                        "(Kotlin KDoc: T-039)",
+                ),
+            )
         }
         // Only real methods inherit docs (D-037): the first non-synthetic one
         // (bridge pairs share one source declaration — either spelling walks).
@@ -4535,6 +4585,14 @@ public object JdxService {
                         kotlinView = kotlinViewOf(target, match.info),
                     )
                     is BytecodeMember.Field -> SignatureLines.fieldLine(match.info)
+                    // T-078 properties have no body slice yet (T-039 owns Kotlin
+                    // bodies): the header still spells the folded property.
+                    is BytecodeMember.Property -> SignatureLines.propertyLine(
+                        access = match.view.access,
+                        isVar = match.view.isVar,
+                        typeText = match.view.displayType ?: "java.lang.Object",
+                        propertyName = match.view.propertyName,
+                    )
                 }
             } else {
                 null
@@ -4548,6 +4606,19 @@ public object JdxService {
             // authority (the match above already proved the member); these are
             // just the keys the T-021 narrowing understands.
             val singleMatch = bytecodeMatches.singleOrNull()
+            // T-078 properties have no body slice yet (T-039 owns Kotlin bodies):
+            // the getter's JVM body would mislead (synthetic accessor), so name
+            // the Kotlin task instead of slicing.
+            if (singleMatch is BytecodeMember.Property) {
+                return ServiceOutcome.Failure(
+                    ErrorResult.notFound(
+                        rawRef,
+                        detail = "no body for property '${singleMatch.view.propertyName}' " +
+                            "in ${rootLabel(opened[winner], binary)} " +
+                            "(Kotlin property bodies: T-039)",
+                    ),
+                )
+            }
             val lookupRefs = listOf(effectiveRef) +
                 (singleMatch?.let { genericSpelledRef(target, it) }?.takeIf { it != effectiveRef }?.let(::listOf).orEmpty())
             val label = rootLabel(opened[winner], binary)
@@ -5112,6 +5183,9 @@ public object JdxService {
     private fun javapDescriptorOf(match: BytecodeMember): String = when (match) {
         is BytecodeMember.Method -> match.info.descriptor.descriptor
         is BytecodeMember.Field -> match.info.type.descriptor
+        // T-078 properties have no javap section (T-039 owns bodies): callers
+        // filter properties before reaching here; this branch never fires.
+        is BytecodeMember.Property -> ""
     }
 
     /**
@@ -5121,6 +5195,7 @@ public object JdxService {
     private fun javapNameOf(match: BytecodeMember): String = when (match) {
         is BytecodeMember.Method -> match.info.name
         is BytecodeMember.Field -> match.info.name
+        is BytecodeMember.Property -> match.view.propertyName
     }
 
     /**
@@ -5801,6 +5876,13 @@ public object JdxService {
             return ctors.filter { it.descriptor.parameters.size == wanted.size && paramsMatch(it, wanted) }
                 .map { BytecodeMember.Method(it) }
         }
+        // T-078 property alias: a bare `Owner#name` naming a folded Kotlin property
+        // resolves to the property view (JVM exact first — accessors still match
+        // below when the query spells `getX`; property alias second).
+        if (wanted == null && ref.returnType == null && ref.name in target.kotlinProperties) {
+            val view = target.kotlinProperties.getValue(ref.name)
+            return listOf(BytecodeMember.Property(view))
+        }
         // Kotlin aliases (T-077): a query may spell the Kotlin declaration name
         // (`originalName`) or the JVM name (`renamedForJvm`) — the match always
         // returns the JVM-truthful member; only selection is alias-aware.
@@ -5836,6 +5918,7 @@ public object JdxService {
     private sealed interface BytecodeMember {
         data class Method(val info: MethodInfo) : BytecodeMember
         data class Field(val info: FieldInfo) : BytecodeMember
+        data class Property(val view: dev.jdx.core.model.KotlinPropertyView) : BytecodeMember
     }
 
     /**
@@ -5955,6 +6038,9 @@ public object JdxService {
                 }
                 is BytecodeMember.Field ->
                     SymbolRefPrinter.print(MemberSymbolRef(target.name, match.info.name))
+                // T-078 properties spell `Owner#name` (no params — properties never overload).
+                is BytecodeMember.Property ->
+                    SymbolRefPrinter.print(MemberSymbolRef(target.name, match.view.propertyName))
             }
         }
     }
@@ -5963,8 +6049,9 @@ public object JdxService {
     private fun suggestSimilarMember(target: ClassInfo, missed: String, cap: Int = 5): List<String> {
         // Kotlin declaration names join the pool (T-077): a mistyped
         // `originalName` should suggest the Kotlin spelling, not the JVM one.
+        // T-078 property names join too.
         val names = (target.methods.map { it.name } + target.methods.mapNotNull { kotlinViewOf(target, it)?.displayName } +
-            target.fields.map { it.name })
+            target.fields.map { it.name } + target.kotlinProperties.keys)
             .filter { it != "<clinit>" }.distinct()
         val near = names.filter { levenshtein(it, missed) <= 2 }.sorted()
             .ifEmpty { return emptyList() }
@@ -5990,6 +6077,10 @@ public object JdxService {
             }
             for (field in target.fields.filter { it.name == name }) {
                 refs.add(SymbolRefPrinter.print(MemberSymbolRef(target.name, field.name)))
+            }
+            // T-078 property hits spell `Owner#name`.
+            if (name in target.kotlinProperties) {
+                refs.add(SymbolRefPrinter.print(MemberSymbolRef(target.name, name)))
             }
             if (refs.size >= cap) break
         }

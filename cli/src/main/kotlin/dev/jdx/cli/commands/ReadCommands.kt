@@ -54,8 +54,8 @@ class MembersCommand(
 
     private val kind by option(
         "--kind",
-        help = "Member kind to list: method, field, ctor or all.",
-    ).choice("all", "method", "field", "ctor", ignoreCase = true).default("all")
+        help = "Member kind to list: method, field, ctor, property or all.",
+    ).choice("all", "method", "field", "ctor", "property", ignoreCase = true).default("all")
 
     private val access by option(
         "--access",
@@ -230,8 +230,8 @@ class OutlineCommand(
 
     private val kind by option(
         "--kind",
-        help = "Member kind to list: method, field, ctor or all.",
-    ).choice("all", "method", "field", "ctor", ignoreCase = true).default("all")
+        help = "Member kind to list: method, field, ctor, property or all.",
+    ).choice("all", "method", "field", "ctor", "property", ignoreCase = true).default("all")
 
     private val access by option(
         "--access",

@@ -8,9 +8,12 @@ import kotlin.metadata.KmFunction
 import kotlin.metadata.KmType
 import kotlin.metadata.KmTypeProjection
 import kotlin.metadata.KmVariance
+import kotlin.metadata.declaresDefaultValue
 import kotlin.metadata.isNullable
 import kotlin.metadata.isSuspend
 import kotlin.metadata.jvm.JvmMethodSignature
+import kotlin.metadata.jvm.getterSignature
+import kotlin.metadata.jvm.setterSignature
 import kotlin.metadata.jvm.signature
 import org.junit.jupiter.api.Test
 
@@ -193,5 +196,62 @@ class KotlinMembersTest {
             classifier = KmClassifier.TypeParameter(0)
         }
         KotlinMembers.renderType(variable) shouldBe null
+    }
+
+    @Test
+    fun `default indices mark only declaresDefaultValue params`() {
+        val function = kmFunction("withDefault", "withDefault", "(ILjava/lang/String;)Ljava/lang/String;")
+        function.valueParameters.add(
+            kotlin.metadata.KmValueParameter("first").apply {
+                type = kmType("kotlin/Int")
+            },
+        )
+        function.valueParameters.add(
+            kotlin.metadata.KmValueParameter("second").apply {
+                type = kmType("kotlin/String")
+                declaresDefaultValue = true
+            },
+        )
+        KotlinMembers.defaultArgIndices(function) shouldBe setOf(1)
+    }
+
+    @Test
+    fun `a function without defaults marks nothing`() {
+        val function = kmFunction("nullable", "nullable", "(Ljava/lang/String;)Ljava/lang/Integer;")
+        KotlinMembers.defaultArgIndices(function) shouldBe emptySet()
+    }
+
+    @Test
+    fun `a property with getter and setter folds to var with hidden accessors`() {
+        val property = kotlin.metadata.KmProperty("count").apply {
+            getterSignature = kotlin.metadata.jvm.JvmMethodSignature("getCount", "()I")
+            setterSignature = kotlin.metadata.jvm.JvmMethodSignature("setCount", "(I)V")
+            returnType = kmType("kotlin/Int")
+        }
+        val kmClass = KmClass().apply { properties.add(property) }
+        val folded = KotlinMembers.propertiesFor(kmClass)
+        val view = folded.properties["count"]!!
+        view.isVar shouldBe true
+        view.displayType shouldBe "int"
+        folded.hiddenMethods shouldBe setOf("getCount()I", "setCount(I)V")
+    }
+
+    @Test
+    fun `a val property without a setter folds to val`() {
+        val property = kotlin.metadata.KmProperty("name").apply {
+            getterSignature = kotlin.metadata.jvm.JvmMethodSignature("getName", "()Ljava/lang/String;")
+            returnType = kmType("kotlin/String")
+        }
+        val kmClass = KmClass().apply { properties.add(property) }
+        val folded = KotlinMembers.propertiesFor(kmClass)
+        folded.properties["name"]?.isVar shouldBe false
+    }
+
+    @Test
+    fun `a property without JVM signatures maps to nothing`() {
+        val kmClass = KmClass().apply { properties.add(kotlin.metadata.KmProperty("orphan")) }
+        val folded = KotlinMembers.propertiesFor(kmClass)
+        folded.properties shouldBe emptyMap()
+        folded.hiddenMethods shouldBe emptySet()
     }
 }

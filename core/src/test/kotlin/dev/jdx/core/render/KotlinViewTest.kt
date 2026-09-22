@@ -119,4 +119,44 @@ class KotlinViewTest {
         methodRefString(declaring, member, view, disambiguateReturn = true) shouldBe
             "dev.jdx.fixtures.KotlinMembers#originalName(int):int"
     }
+
+    @Test
+    fun `a default-arg view suffixes defaulted params with equals-dotdotdot`() {
+        val member = publicMethod(
+            "withDefault",
+            "(ILjava/lang/String;)Ljava/lang/String;",
+        ).copy(parameterNames = listOf("first", "second"))
+        val view = KotlinMethodView(displayName = "withDefault", defaultArgIndices = setOf(1))
+        SignatureLines.methodLine(member, kotlinView = view) shouldBe
+            "public java.lang.String withDefault(int first, java.lang.String second = ...)"
+    }
+
+    @Test
+    fun `out-of-range default indices never throw and never mark`() {
+        val member = publicMethod("withDefault", "(I)Ljava/lang/String;")
+            .copy(parameterNames = listOf("first"))
+        val view = KotlinMethodView(displayName = "withDefault", defaultArgIndices = setOf(5))
+        SignatureLines.methodLine(member, kotlinView = view) shouldBe
+            "public java.lang.String withDefault(int first)"
+    }
+
+    @Test
+    fun `a property renders val with its type and name`() {
+        SignatureLines.propertyLine(
+            access = dev.jdx.core.model.Access(0x0001 or 0x0010),
+            isVar = false,
+            typeText = "java.lang.String",
+            propertyName = "name",
+        ) shouldBe "public final val java.lang.String name"
+    }
+
+    @Test
+    fun `a var property renders var`() {
+        SignatureLines.propertyLine(
+            access = dev.jdx.core.model.Access(0x0001 or 0x0010),
+            isVar = true,
+            typeText = "int",
+            propertyName = "count",
+        ) shouldBe "public final var int count"
+    }
 }

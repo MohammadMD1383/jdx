@@ -331,6 +331,7 @@ internal object ReadCommandSupport {
         "method" -> JdxService.KindFilter.METHOD
         "field" -> JdxService.KindFilter.FIELD
         "ctor" -> JdxService.KindFilter.CTOR
+        "property" -> JdxService.KindFilter.PROPERTY
         else -> JdxService.KindFilter.ALL
     }
 

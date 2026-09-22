@@ -85,6 +85,8 @@ public data class ClassCard(
 /**
  * Builds the card from a resolved [ClassInfo]: declared constructors, methods
  * and fields counted separately (`<init>` is a constructor, never a method).
+ * T-078 Kotlin properties count separately (folded `val`/`var` rows); Java
+ * cards keep `properties = 0` so text/JSON stay byte-identical.
  */
 public fun buildClassCard(
     target: ClassInfo,
@@ -99,6 +101,7 @@ public fun buildClassCard(
             constructors = constructors,
             methods = methods,
             fields = target.fields.size,
+            properties = target.kotlinProperties.size,
         ),
         warnings = warnings,
         provenance = provenance,
@@ -153,11 +156,14 @@ private fun interfacesLine(info: ClassInfo): String? {
 }
 
 private fun countLine(counts: MemberCounts): String {
-    fun plural(count: Int, singular: String): String =
-        "$count $singular" + if (count == 1) "" else "s"
-    return "members: " + listOf(
+    fun plural(count: Int, singular: String, plural: String? = null): String =
+        "$count " + if (count == 1) singular else (plural ?: singular + "s")
+    val parts = mutableListOf(
         plural(counts.constructors, "constructor"),
         plural(counts.methods, "method"),
         plural(counts.fields, "field"),
-    ).joinToString(", ")
+    )
+    // T-078: properties appear only when present, so Java cards stay byte-identical.
+    if (counts.properties > 0) parts.add(plural(counts.properties, "property", "properties"))
+    return "members: " + parts.joinToString(", ")
 }

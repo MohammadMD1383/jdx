@@ -2,6 +2,6 @@ class dev.jdx.fixtures.KotlinSealed$Sub
   public final class Sub
   extends dev.jdx.fixtures.KotlinSealed
   kotlin
-  members: 1 constructor, 7 methods, 1 field
+  members: 1 constructor, 7 methods, 1 field, 1 property
 source: fixture-corpus.jar (bytecode)
 next: jdx members dev.jdx.fixtures.KotlinSealed$Sub --inherited

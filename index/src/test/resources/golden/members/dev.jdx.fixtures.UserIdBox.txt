@@ -1,7 +1,6 @@
 members of dev.jdx.fixtures.UserIdBox
 methods declared on dev.jdx.fixtures.UserIdBox:
   method public boolean equals(java.lang.Object other)
-  method public final java.lang.String getId()
   method public int hashCode()
   method public java.lang.String toString()
   method public static boolean equals(java.lang.String arg0, java.lang.Object other)
@@ -9,6 +8,6 @@ methods declared on dev.jdx.fixtures.UserIdBox:
   method public static int hashCode(java.lang.String arg0)
   method public static java.lang.String constructor-impl(java.lang.String id)
   method public static java.lang.String toString(java.lang.String arg0)
-fields declared on dev.jdx.fixtures.UserIdBox:
-  field private final java.lang.String id
+properties declared on dev.jdx.fixtures.UserIdBox:
+  property public final val java.lang.String id
 source: fixture-corpus.jar (bytecode)

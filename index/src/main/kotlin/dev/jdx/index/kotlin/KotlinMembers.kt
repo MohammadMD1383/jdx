@@ -1,15 +1,25 @@
 package dev.jdx.index.kotlin
 
+import dev.jdx.core.model.Access
 import dev.jdx.core.model.KotlinMethodView
+import dev.jdx.core.model.KotlinPropertyView
 import dev.jdx.core.model.kotlinViewKey
 import kotlin.metadata.KmClass
 import kotlin.metadata.KmClassifier
 import kotlin.metadata.KmFunction
+import kotlin.metadata.KmProperty
 import kotlin.metadata.KmType
 import kotlin.metadata.KmTypeProjection
+import kotlin.metadata.KmValueParameter
 import kotlin.metadata.KmVariance
+import kotlin.metadata.declaresDefaultValue
 import kotlin.metadata.isNullable
 import kotlin.metadata.isSuspend
+import kotlin.metadata.isVar
+import kotlin.metadata.jvm.JvmFieldSignature
+import kotlin.metadata.jvm.fieldSignature
+import kotlin.metadata.jvm.getterSignature
+import kotlin.metadata.jvm.setterSignature
 import kotlin.metadata.jvm.signature
 
 /**
@@ -32,13 +42,29 @@ public object KotlinMembers {
     public const val CONTINUATION_BINARY_NAME: String = "kotlin.coroutines.Continuation"
 
     /**
+     * The folded property set for a `CLASS` [KmClass] (T-078): properties with
+     * their hidden JVM accessor/field keys.
+     *
+     * [properties] maps the Kotlin property name to its view; [hiddenMethods]
+     * holds the JVM keys ([kotlinViewKey]) of folded getters/setters;
+     * [hiddenFields] holds backing-field names. All three are empty when the
+     * class declares no mappable properties. Never throws.
+     */
+    public data class KotlinProperties(
+        public val properties: Map<String, KotlinPropertyView>,
+        public val hiddenMethods: Set<String>,
+        public val hiddenFields: Set<String>,
+    )
+
+    /**
      * Builds the per-method Kotlin views for a `CLASS` [KmClass], keyed by
      * [kotlinViewKey] (JVM name + descriptor) for lookup from `ClassInfo`.
      *
      * Only methods whose Kotlin view differs from the JVM projection are
-     * present: renames (`@JvmName`, mangled `internal`) and `suspend`
-     * functions (stripped `Continuation`, `suspend` keyword, metadata return).
-     * Same-name non-suspend functions, constructors (which live on
+     * present: renames (`@JvmName`, mangled `internal`), `suspend`
+     * functions (stripped `Continuation`, `suspend` keyword, metadata return)
+     * and functions with default args (T-078 `= ...` markers).
+     * Same-name non-suspend functions without defaults, constructors (which live on
      * [KmClass.constructors], never [KmClass.functions]) and `$default` stubs
      * (synthetic, no metadata entry) map to nothing.
      */
@@ -50,16 +76,92 @@ public object KotlinMembers {
             val strip = suspend && isContinuationTail(jvm.descriptor)
             val displayReturn = if (suspend) renderType(function.returnType) else null
             val renamed = function.name != jvm.name
-            if (!renamed && !strip && displayReturn == null && !suspend) continue
+            val defaults = defaultArgIndices(function)
+            if (!renamed && !strip && displayReturn == null && !suspend && defaults.isEmpty()) continue
             // A `suspend` whose return survives erasure unchanged still marks.
             views[kotlinViewKey(jvm.name, jvm.descriptor)] = KotlinMethodView(
                 displayName = function.name,
                 stripTrailingContinuation = strip,
                 displayReturn = displayReturn,
                 markSuspend = suspend,
+                defaultArgIndices = defaults,
             )
         }
         return views
+    }
+
+    /**
+     * Builds the folded properties for a `CLASS` [KmClass] (T-078).
+     *
+     * Each [KmProperty] contributes its getter/setter JVM keys (via
+     * `getterSignature`/`setterSignature`) to [KotlinProperties.hiddenMethods]
+     * and its backing-field name (via `fieldSignature`) to `hiddenFields`;
+     * the property itself lands in `properties` with its `val`/`var` shape and
+     * metadata type. A property with no JVM signatures maps to nothing (it has
+     * no projection to fold). Never throws: hostile metadata degrades to empty.
+     */
+    public fun propertiesFor(kmClass: KmClass): KotlinProperties {
+        val properties = linkedMapOf<String, KotlinPropertyView>()
+        val hiddenMethods = linkedSetOf<String>()
+        val hiddenFields = linkedSetOf<String>()
+        for (property in kmClass.properties) {
+            try {
+                val getter = property.getterSignature
+                val setter = property.setterSignature
+                if (getter == null && setter == null) continue
+                // Skip synthetic/delegated shapes without a real accessor name.
+                val getterKey = getter?.let { kotlinViewKey(it.name, it.descriptor) }
+                val setterKey = setter?.let { kotlinViewKey(it.name, it.descriptor) }
+                if (getterKey != null) hiddenMethods.add(getterKey)
+                if (setterKey != null) hiddenMethods.add(setterKey)
+                try {
+                    property.fieldSignature?.let { field ->
+                        // JvmFieldSignature carries name + descriptor; hide by name
+                        // (fields are unique by name in ClassInfo lookups).
+                        hiddenFields.add(field.name)
+                    }
+                } catch (_: Exception) {
+                    // No field signature — accessors still fold.
+                }
+                val isVar = try {
+                    property.isVar || setter != null
+                } catch (_: Exception) {
+                    setter != null
+                }
+                val displayType = try {
+                    renderType(property.returnType)
+                } catch (_: Exception) {
+                    null
+                }
+                properties[property.name] = KotlinPropertyView(
+                    propertyName = property.name,
+                    isVar = isVar,
+                    displayType = displayType,
+                )
+            } catch (_: Exception) {
+                continue
+            }
+        }
+        return KotlinProperties(properties, hiddenMethods, hiddenFields)
+    }
+
+    /**
+     * Zero-based Kotlin parameter positions declaring a default value
+     * (T-078): `KmValueParameter.declaresDefaultValue` per value parameter.
+     * Empty when none default. Never throws.
+     */
+    public fun defaultArgIndices(function: KmFunction): Set<Int> {
+        return try {
+            function.valueParameters.mapIndexedNotNull { index, parameter ->
+                try {
+                    if (parameter.declaresDefaultValue) index else null
+                } catch (_: Exception) {
+                    null
+                }
+            }.toSet()
+        } catch (_: Exception) {
+            emptySet()
+        }
     }
 
     /**

@@ -5,6 +5,105 @@ Append-only (D-023): 10 sessions per shard, newest first. Template and rules in
 
 ---
 
+## Session 59 — 2026-09-22 — property folding + default-arg annotation (T-078)
+**Agent/Author:** Muse Spark 1.3 (opencode) · **Commits:** `8b9ca57` (claim) + implementation (this session)
+
+### Goal
+Implement T-078, the third T-036 slice filed when T-036 proved too big for
+one sitting: fold Kotlin properties (`getX`/`setX` → `val`/`var` rows, backing
+fields hidden) and annotate default args (`= ...` on defaulted params) over the
+T-076 `KmClass` carrier, in `members`/`outline`/`signature` with both-spellings
+matching.
+
+### What I did
+- Claimed T-078 (`TODO`→`WIP` detail block naming scope/acceptance) and
+  committed the claim before coding.
+- `core` (test-first, `KotlinViewTest` +4): `KotlinMethodView.defaultArgIndices`
+  (default empty); new `KotlinPropertyView` (name/isVar/displayType/access);
+  `ClassInfo` gains `kotlinProperties`/`kotlinHiddenMethods`/`kotlinHiddenFields`
+  (all defaulted); `MemberKind.PROPERTY` (after `FIELD`, ordinals stable);
+  `MemberCounts.properties` (default 0, JSON/text conditional so Java goldens
+  stay byte-identical); `SignatureLines.propertyLine` + `= ...` default markers;
+  `MemberResolver` synthesises `ResolvedProperty` (nearer-wins by name) and hides
+  folded accessors/backing fields unless `includeSynthetic`; `ClassCard` counts
+  properties.
+- `index/.../kotlin/KotlinMembers.kt`: `propertiesFor` (`getterSignature`/
+  `setterSignature` → hidden keys, `fieldSignature` → hidden field, `isVar`
+  as `flag || setter != null`, metadata type via the T-077 renderer) +
+  `defaultArgIndices` (`declaresDefaultValue` per value param). Tier-1
+  `KotlinMembersTest` (+5) + `KotlinMembersPropertyTest` (+1 never-throws —
+  the generating family).
+- `AsmClassReader` populates all three from the same single `@Metadata` decode
+  (never throws; keeps only accessors present in the class file; refines the
+  display type from the getter's JVM return when metadata has no Java spelling).
+- `JdxService`: `KindFilter.PROPERTY` + `applyFilters` (`--kind property`,
+  visibility/grep/from/static); `matchBytecodeMembers` returns a `Property`
+  match for bare `Owner#name` (JVM first, property alias second);
+  `signature` renders it; did-you-mean suggests property names;
+  `body`/`doc` on a property name exit 1 naming T-039 (getter slices would
+  mislead); `callers`/`calls`/`usages` stay JVM-spelled. CLI `--kind`
+  gains `property`.
+- Reconciled oracles: store round-trips pin the new views drop explicitly
+  (`ArtifactIndexerTest`, `IndexStoreTest`); command-level `javap`
+  differential already skips Kotlin (T-077, re-include under `--view jvm`
+  with T-037). Tier-2 `KotlinViewsServiceTest` (+5: data-class folding, property
+  signature both spellings, default annotation, `--include-synthetic` reveal,
+  `--kind property`).
+- Goldens updated via `-Pgolden.update=true` **after reading every hunk**:
+  only Kotlin fixtures churn (`KotlinData` getters→properties + `copy` defaults,
+  `KotlinMembers.withDefault` second-param default, `UserIdBox.getId`→`val id`,
+  `Sealed$Sub.getX`→`val x` + `copy` default, `show` counts gain `N properties`);
+  no Java golden touched. Fixed the `4 propertys` plural on sight
+  (`property`→`properties`).
+- `check -x verifyTier1Budget` green (tiers 1+2 + JaCoCo). `verifyTier1Budget`
+  not run (red on this machine pre-existing). Live proof below.
+- Docs: D-051 (new shard `D-051-075.md`), L-090, T-078 DONE (T-036 stays WIP),
+  CURRENT STATE (next: T-037 `--view jvm`).
+
+### Decisions made
+D-051 (properties are a fourth row kind with Java-style `val`/`var` rows;
+accessors/backing fields hide unless `--include-synthetic`; defaults annotate
+with `= ...` while `@JvmOverloads` overloads stay; property-name matching with
+JVM bodies/docs deferred to T-039; store drops views).
+
+### Tasks moved
+T-078 (new): filed as WIP → DONE. T-036 stays WIP (T-037 `--view jvm` next).
+
+### Lessons distilled
+L-090 (`KmProperty.isVar` defaults false on hand-built containers; infer `var`
+from the setter — the L-088 family).
+
+### What works now (and how to verify it yourself)
+```bash
+./gradlew check -x verifyTier1Budget   # tiers 1+2 + JaCoCo gates, green
+./gradlew :app:installDist -x verifyTier1Budget
+J=testfixtures/build/libs/testfixtures-0.1.0-SNAPSHOT.jar
+app/build/jdx members 'dev.jdx.fixtures.KotlinData' --jars $J --no-jdk            # val name, var count/nickname, copy = ...
+app/build/jdx signature 'dev.jdx.fixtures.KotlinData#name' --jars $J --no-jdk     # property val
+app/build/jdx signature 'dev.jdx.fixtures.KotlinData#getName' --jars $J --no-jdk  # JVM spelling still works
+app/build/jdx members 'dev.jdx.fixtures.KotlinMembers' --jars $J --no-jdk         # withDefault second = ...
+app/build/jdx members 'dev.jdx.fixtures.TrafficLight' --jars $J --no-jdk          # Java byte-identical
+```
+
+### What is broken / half-done
+- `verifyTier1Budget` stays red on this machine (pre-existing variance, 0 test
+  failures). Nothing from this task.
+- `JavapCorpusSoakTest` reds on JDK-internal synthetic members (proven
+  stashed-clean corpus drift, same family as sessions 53/55/56/58). Nothing from
+  this task (Kotlin classes already skip the command differential).
+- No `--view jvm` (T-037), no file-facade views, no `ktmeta` persistence, no
+  property-aware `body`/`doc` (exit 1 naming T-039), no general nullability.
+  `callers`/`calls`/`usages` stay JVM-spelled (use `getX`).
+
+### Open questions / blockers
+None.
+
+### Next action
+M5 T-037 (`--view jvm` forcing the JVM projection; file the detail block when
+starting).
+
+---
+
 ## Session 58 — 2026-09-22 — suspend + `@JvmName` + mangled-`internal` repair (T-077)
 **Agent/Author:** Muse Spark 1.3 (opencode) · **Commits:** `856ddfd` (claim) + implementation (this session)
 

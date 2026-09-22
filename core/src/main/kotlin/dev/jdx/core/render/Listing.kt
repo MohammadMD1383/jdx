@@ -19,11 +19,12 @@ public const val DEFAULT_MEMBER_LIMIT: Int = 50
 /** Binary name of the type whose members collapse onto one summary line. */
 public const val OBJECT_BINARY_NAME: String = "java.lang.Object"
 
-/** The three row kinds, in listing order: constructors, then methods, then fields. */
+/** The four row kinds, in listing order: constructors, then methods, then fields, then properties. */
 public enum class MemberKind(public val word: String, public val plural: String) {
     CONSTRUCTOR("constructor", "constructors"),
     METHOD("method", "methods"),
     FIELD("field", "fields"),
+    PROPERTY("property", "properties"),
 }
 
 /**
@@ -98,9 +99,14 @@ public data class MemberCounts(
     public val constructors: Int,
     public val methods: Int,
     public val fields: Int,
+    public val properties: Int = 0,
 ) {
-    public fun toJson(): String =
-        "{\"constructors\":$constructors,\"methods\":$methods,\"fields\":$fields}"
+    public fun toJson(): String = buildString {
+        append("{\"constructors\":$constructors,\"methods\":$methods,\"fields\":$fields")
+        // T-078: properties appear only when present, so Java goldens stay byte-identical.
+        if (properties > 0) append(",\"properties\":$properties")
+        append("}")
+    }
 }
 
 /** Collapsed `java.lang.Object` members: one summary line, expandable via `--from`. */
@@ -271,8 +277,11 @@ public fun buildMemberListing(
     val fieldRows = resolved.fields.filter { showDepth(it.depth) }.map { resolvedField ->
         toFieldRow(resolvedField)
     }
+    val propertyRows = resolved.properties.filter { showDepth(it.depth) }.map { resolvedProperty ->
+        toPropertyRow(resolvedProperty)
+    }
 
-    val allRows = methodRows + fieldRows
+    val allRows = methodRows + fieldRows + propertyRows
     val collapsing = options.collapseObjectMembers && !options.declaredOnly
     val objectRows = if (collapsing) allRows.filter { it.declaringType.binaryName == OBJECT_BINARY_NAME } else emptyList()
     val objectSet = objectRows.map { it.canonicalRef }.toSet()
@@ -294,6 +303,7 @@ public fun buildMemberListing(
         constructors = allRows.count { it.kind == MemberKind.CONSTRUCTOR },
         methods = allRows.count { it.kind == MemberKind.METHOD },
         fields = allRows.count { it.kind == MemberKind.FIELD },
+        properties = allRows.count { it.kind == MemberKind.PROPERTY },
     )
     val (keptGroups, truncation) = truncateGroups(groups, options.maxMembers, allRows.size)
 
@@ -382,6 +392,37 @@ private fun toFieldRow(resolved: ResolvedField): MemberRow = MemberRow(
     hiddenTypes = resolved.hiddenTypes,
     memberName = resolved.member.name,
 )
+
+/**
+ * One folded Kotlin property row (T-078): `property public final val T name`.
+ * The access rides the view (the getter's JVM access, populated by `index`);
+ * the type is the metadata display or the getter's JVM return when `null`
+ * (here defaulting to `java.lang.Object` — the service refines it when the
+ * getter is retained; listings never throw on a missing type).
+ */
+private fun toPropertyRow(
+    resolved: dev.jdx.core.resolve.ResolvedProperty,
+): MemberRow {
+    val typeText = resolved.property.displayType ?: "java.lang.Object"
+    return MemberRow(
+        canonicalRef = SymbolRefPrinter.print(
+            MemberSymbolRef(resolved.declaringType, resolved.property.propertyName),
+        ),
+        kind = MemberKind.PROPERTY,
+        signature = SignatureLines.propertyLine(
+            access = resolved.property.access,
+            isVar = resolved.property.isVar,
+            typeText = typeText,
+            propertyName = resolved.property.propertyName,
+        ),
+        declaringType = resolved.declaringType,
+        depth = resolved.depth,
+        deprecated = false,
+        overriddenTypes = resolved.overriddenTypes,
+        hiddenTypes = emptyList(),
+        memberName = resolved.property.propertyName,
+    )
+}
 
 /**
  * The default (T-010) layout, preserved byte-identically: groups in

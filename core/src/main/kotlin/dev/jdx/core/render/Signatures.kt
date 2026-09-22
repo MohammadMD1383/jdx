@@ -43,7 +43,7 @@ public object SignatureLines {
      * projection: the metadata name, the `suspend` keyword, the metadata return
      * type, and the parameter list without the hidden `Continuation`. `null`
      * (Java, unmapped Kotlin) renders exactly as before. Views never apply to
-     * constructors.
+     * constructors. T-078 default args suffix defaulted params with `= ...`.
      */
     public fun methodLine(
         member: MethodInfo,
@@ -80,6 +80,26 @@ public object SignatureLines {
         append(' ')
         append(member.name)
         member.constantValue?.let { append(" = ").append(it) }
+    }
+
+    /**
+     * Renders one folded Kotlin property (T-078), e.g.
+     * `public final val java.lang.String name` or `public final var int count`.
+     * Java-style modifiers (from the getter's access) plus the `val`/`var`
+     * keyword, then the metadata type ([displayType]) or the getter's JVM
+     * return when `null`, then the Kotlin property name.
+     */
+    public fun propertyLine(
+        access: Access,
+        isVar: Boolean,
+        typeText: String,
+        propertyName: String,
+    ): String = buildString {
+        appendModifiers(access, forMethod = true)
+        append(if (isVar) "var " else "val ")
+        append(typeText)
+        append(' ')
+        append(propertyName)
     }
 
     /** Source-style text for an erased type: `$`-joined classes, `[]` per dimension. */
@@ -173,11 +193,15 @@ public object SignatureLines {
                 val erased = member.descriptor.parameters[index]
                 val generic = signature?.parameters?.getOrNull(index)
                 val name = member.parameterNames.getOrNull(index) ?: "arg$index"
-                if (varargs && index == count - 1) {
+                val base = if (varargs && index == count - 1) {
                     appendVarargsElement(generic, erased) + "... " + name
                 } else {
                     (if (generic != null) renderTypeSignature(generic) else renderTypeName(erased)) + " " + name
                 }
+                // T-078 default args: Kotlin positions (post-strip) carrying a
+                // metadata default render `= ...` (the value lives in bytecode,
+                // not metadata — the marker is honesty, not a guess).
+                if (kotlinView?.defaultArgIndices?.contains(index) == true) "$base = ..." else base
             },
         )
     }

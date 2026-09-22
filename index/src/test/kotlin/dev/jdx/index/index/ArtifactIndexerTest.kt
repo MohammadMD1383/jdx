@@ -59,8 +59,14 @@ class ArtifactIndexerTest {
                     val bytes = root.openClass(entry).use { it.readBytes() }
                     val expected = (AsmClassReader.read(bytes, binary) as ClassReadResult.Ok).info
                     val stored = store.loadClass(id, binary)
-                    stored shouldBe expected.copy(kotlinMethodViews = emptyMap())
+                    stored shouldBe expected.copy(
+                        kotlinMethodViews = emptyMap(),
+                        kotlinProperties = emptyMap(),
+                        kotlinHiddenMethods = emptySet(),
+                        kotlinHiddenFields = emptySet(),
+                    )
                     stored?.kotlinMethodViews shouldBe emptyMap()
+                    stored?.kotlinProperties shouldBe emptyMap()
                 }
             }
         }

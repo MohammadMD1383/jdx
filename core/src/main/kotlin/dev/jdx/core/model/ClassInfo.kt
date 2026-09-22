@@ -45,6 +45,13 @@ public data class AnnotationInfo(
  * at read time; empty for Java classes and for every unmapped member, which
  * keeps the JVM projection. Never persisted (like the T-076 carrier, the
  * first consumer reads live roots).
+ *
+ * [kotlinProperties] maps Kotlin property names to their folded view (T-078):
+ * populated by `index` from `KmProperty` getter/setter signatures; empty for
+ * Java and unmapped Kotlin. [kotlinHiddenMethods] holds the JVM keys
+ * ([kotlinViewKey]) of folded getters/setters, [kotlinHiddenFields] the names
+ * of folded backing fields — hidden from listings unless `--include-synthetic`.
+ * Never persisted, like the method views.
  */
 public data class ClassInfo(
     public val name: TypeName.ClassType,
@@ -61,6 +68,9 @@ public data class ClassInfo(
     public val deprecated: Boolean = false,
     public val isKotlin: Boolean = false,
     public val kotlinMethodViews: Map<String, KotlinMethodView> = emptyMap(),
+    public val kotlinProperties: Map<String, KotlinPropertyView> = emptyMap(),
+    public val kotlinHiddenMethods: Set<String> = emptySet(),
+    public val kotlinHiddenFields: Set<String> = emptySet(),
 ) {
     /** Fields then methods, in declaration order — the order renderers print. */
     public val members: List<MemberInfo>

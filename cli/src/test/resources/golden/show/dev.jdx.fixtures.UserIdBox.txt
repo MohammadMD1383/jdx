@@ -2,6 +2,6 @@ class dev.jdx.fixtures.UserIdBox
   public final class UserIdBox
   extends java.lang.Object
   kotlin
-  members: 1 constructor, 11 methods, 1 field
+  members: 1 constructor, 11 methods, 1 field, 1 property
 source: fixture-corpus.jar (bytecode)
 next: jdx members dev.jdx.fixtures.UserIdBox --inherited
