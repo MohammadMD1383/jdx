@@ -5,6 +5,102 @@ Append-only (D-023): 10 sessions per shard, newest first. Template and rules in
 
 ---
 
+## Session 66 — 2026-09-22 — T-040 RPC v1 wire contract done (M6 opened)
+**Agent/Author:** Claude Opus 5 (1M context) · **Commits:** `74b3b5b` (claim, previous
+session) + closing commit (this session)
+
+### Goal
+T-040, the first M6 slice: fix the `JdxService` RPC wire contract in `core` — the
+codec only, no socket, no server, no client. T-041…T-046 implement transports
+against it.
+
+### What I did
+- **`core/src/main/kotlin/dev/jdx/core/rpc/RpcProtocol.kt`** (new, the only
+  production file this session): `RPC_VERSION = 1` mirroring `ENVELOPE_VERSION`,
+  `REQUEST_TERMINATOR`, `RpcCommand` (17 read-only queries + `version`/`doctor`/
+  `health`, each with a stable `wire` name and a `requiresQuery` flag), and
+  `RpcRequest(command, query, params)` with `encode()`/`frame()`/`decode()`.
+  Encoding is fixed-key-order, params sorted by key, always one line. Decoding is
+  a small recursive-descent JSON reader, private to the file, because `core` takes
+  no dependencies (D-028).
+- **Responses are not defined anywhere new.** A response is the existing
+  `ServiceOutcome.toJson(command)` envelope verbatim — that is what makes T-046
+  parity structural instead of a pile of per-adapter goldens. Said so in the file
+  KDoc so nobody invents a second shape.
+- **Tests, written first** (`core` is test-first): `RpcProtocolTest` (30 pinned
+  vectors — byte-level encodings, sorted-params determinism, framing, generous
+  accepts, every refusal path, the command table itself) and
+  `RpcProtocolPropertyTest` (7 properties, 1,000 cases each — round-trip,
+  framed round-trip, determinism under shuffled params, one-line invariant,
+  never-throws on hostile strings, never-throws on *mutated valid encodings*,
+  and every proper prefix refused). The character pool is deliberately hostile:
+  quotes, backslashes, raw control characters, JSON punctuation, U+2028/9.
+- **Docs:** PROPOSAL.md gained **§14.5** (the shared wire contract — §14 described
+  four interfaces but never the bytes they share). D-056 records the seven
+  semantic choices; L-096/L-097 record what the mutation run taught.
+
+### Findings that surprised me
+- The mutation run was the useful reviewer, not the test count. First measurement
+  was **81 %** with 4 uncovered mutants, and the survivors were honest: no test
+  sent a `false` param, none sent whitespace *inside* a container, none nested an
+  object, none exercised `+` in an exponent. Closing those gaps took it to
+  **94 %** with 100 % line coverage.
+- Six of the survivors could not be killed at all: I had validated `\uXXXX`
+  digits twice (an explicit hex predicate *and* `toIntOrNull(16)`). Redundant
+  validation reads as thoroughness and measures as a gap — see L-096. Replacing
+  both with one `digitToIntOrNull` accumulation removed 8 mutants and simplified
+  the function.
+- `char in "+-.eE"` compiles to `indexOf(...) >= 0`, so PIT's boundary mutator
+  quietly drops the set's *first* member (L-097).
+
+### Decisions made
+- **D-056** — RPC v1 wire contract: NDJSON requests + the existing envelope as
+  the response; one request shape always (params emitted even when empty); param
+  values are text with numbers/booleans canonicalised; the wire is **read-only**
+  in v1 (`ws`/`cache` deliberately absent, so one daemon client cannot
+  reconfigure the others); generous-where-safe / strict-where-a-guess-is-
+  dangerous decoding; `decode` never throws and nesting is bounded at 32;
+  `requiresQuery` lives in the enum so adapters stay thin.
+
+### Tasks moved
+- T-040: WIP → DONE. M6: TODO → IN PROGRESS. Next is **T-041** (daemon + unix
+  socket). T-041…T-046 detail blocks were already expanded in session 66's claim
+  commit and are unchanged.
+
+### Lessons distilled
+- **L-096** — two guards that reject the same input are an unkillable mutant, not
+  defence in depth.
+- **L-097** — PIT's boundary mutator on `c in "chars"` drops the set's first
+  character.
+
+### What works now (and how to verify it yourself)
+```bash
+./gradlew :core:test --tests 'dev.jdx.core.rpc.*' -x verifyTier1Budget   # 37 tests green
+./gradlew check -x verifyTier1Budget                                     # tiers 1-2 green, incl. coverage gates
+./gradlew :core:pitest -PpitestScope='dev.jdx.core.rpc.*'                # 133/141 killed (94%), line 179/179
+```
+Nothing user-visible changed: T-040 adds no command and no CLI flag, so `jdx`
+behaves exactly as it did after session 65. The contract is consumed by T-041+.
+
+**Caveats, unchanged and pre-existing:**
+- `verifyTier1Budget` is red on this machine (251 s vs the 30 s budget, 0 test
+  failures — machine variance, same as sessions 53/55/56/58/65). The two new
+  suites contribute **0.67 s** of that total, so they are not the cause; the
+  slowest entries are `JavaBodiesTest` (32 s) and `DoctorEnvironmentTest` (14 s).
+- Tier 3 not run: T-040 is pure strings, touches no jar, no indexing and no
+  rendering, so the `docs/TESTING.md` §13 trigger for tier 3 does not fire. The
+  stale `JavapCorpusSoakTest` red in `index/build/test-results/soakTest/` is the
+  known JDK-internal synthetic `access$` drift from session 65, not this work.
+- 8 mutants survive in the rpc package and are equivalent or reachable only by
+  damaged input that cannot change the outcome: the `position + 4` guard (a
+  `\uXXXX` ending at EOF leaves the string unterminated either way), three
+  `readString` early-returns whose leftover text breaks the enclosing object
+  regardless, `readEscape` on a trailing backslash, and `forEachIndexed`'s
+  `throwIndexOverflow` (needs 2^31 params — the same class of mutant the build
+  already excludes for `Intrinsics`).
+
+---
+
 ## Session 65 — 2026-09-22 — T-039 Kotlin bodies/KDoc done (M5 closed)
 **Agent/Author:** Muse Spark 1.3 Free · **Commits:** `a1e3a8b` (claim) + closing commit (this session)
 

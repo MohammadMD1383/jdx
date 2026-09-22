@@ -48,7 +48,7 @@ be fiction.
 | **M3** | Bodies: sources, JavaParser, Vineflower, `body`/`source`/`doc` | DONE |
 | **M4** | Graph: `usages`/`hierarchy`/`callers`/`calls`/`samples` | DONE (T-029…T-034) |
 | **M5** | Kotlin: `@Metadata` + PSI source parsing | DONE (T-035…T-039) |
-| **M6** | Serving: daemon, MCP, HTTP, `batch` | TODO |
+| **M6** | Serving: daemon, MCP, HTTP, `batch` | IN PROGRESS (T-040 DONE; T-041 next) |
 | **M7** | Polish: token budgets, AppCDS, mutation gates, docs, install | TODO (T-060 done early) |
 
 **DONE: T-001…T-035** (M0–M2 in full; M3 via the T-020 umbrella's slices —
@@ -57,11 +57,13 @@ plus T-076** (first T-036 slice) **plus T-077** (second T-036 slice) **plus T-07
 **plus T-037** (`--view jvm`, last T-036 slice) **plus T-074** (T-020 `srcmap`
 remainder) **plus T-079** (annotation-element matching) **plus T-075** (`usages`
 graph enrichment) **plus T-038** (PSI loader seam) **plus T-039** (Kotlin
-bodies/KDoc, last T-036 slice) **plus T-036** (member-mapping umbrella).
+bodies/KDoc, last T-036 slice) **plus T-036** (member-mapping umbrella)
+**plus T-040** (M6 RPC wire contract).
 DONE entries below are
 compressed to a summary + pointers; full notes live in git history and the
-session log. **WIP: T-040** (M6 opened session 66),
-**plus M6–M7** (coarse; T-060 already DONE).
+session log. **Next: T-041** (daemon + unix socket; the remaining M6 slices
+T-041…T-046 were expanded into detail blocks in session 66),
+**plus M7** (coarse; T-060 already DONE).
 
 ---
 
@@ -960,7 +962,7 @@ HTTP and `batch` as thin adapters over one wire contract, with byte-identical
 payloads. Expanded into detail blocks session 66 (board rule: coarse until
 started).
 
-### T-040 — `JdxService` RPC protocol (v1 wire contract) · `WIP` (session 66)
+### T-040 — `JdxService` RPC protocol (v1 wire contract) · `DONE` (session 66)
 
 **Depends:** T-010 (JSON envelope) · **Files:** `core/.../rpc/RpcProtocol.kt`
 
@@ -986,6 +988,11 @@ dependency-free codec plus docs.)*
   determinism, unknown-command/garbage/empty → `null`, escaping) + property
   (round-trip, determinism, never-throws on hostile strings — the generating
   family). No tier-3 touch (pure strings, no jars).
+
+*Closed in session 66. `core/.../rpc/RpcProtocol.kt` + `RpcProtocolTest` (30
+vectors) + `RpcProtocolPropertyTest` (7 properties). Decisions: D-056. Lessons:
+L-096, L-097. Spec summary: PROPOSAL.md §14.5. The acceptance list above is left
+in full on purpose — T-041…T-046 implement against it.*
 
 ### T-041 — daemon + unix socket + 5-min idle shutdown · `TODO`
 

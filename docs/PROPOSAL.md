@@ -816,6 +816,34 @@ Serves a different audience from MCP — non-MCP agents, editor plugins, scripts
 and remote use — and shares the exact JSON envelope of `--json`. Separate port/socket from
 the daemon; the two do not interfere.
 
+### 14.5 The shared wire contract (v1)
+All four adapters speak one request format, so a payload is written and parsed in exactly one
+place: `core/.../rpc/RpcProtocol.kt` is normative, this section is the summary.
+
+A **request** is one line of JSON, newline-terminated (`\n`). Keys are in fixed order and
+`params` is sorted by key, so equal requests are byte-equal:
+
+```json
+{"jdx":1,"command":"members","query":"com.google.gson.Gson","params":{"inherited":"true"}}
+```
+
+- `command` is one of the read-only queries — `show` `members` `outline` `body` `source`
+  `signature` `doc` `search` `resolve` `ls` `tree` `usages` `hierarchy` `implementors`
+  `callers` `calls` `samples` — plus `version`, `doctor` and `health`. The state-changing
+  commands (`ws`, `cache`) are deliberately **not** on the wire in v1: one client of a shared
+  daemon must not be able to reconfigure the others.
+- `params` values are text, the same spelling the CLI flags use. Typed clients (MCP schemas,
+  HTTP query strings) may send JSON numbers and booleans; the decoder canonicalises them.
+- Decoding is generous where it is safe — surrounding whitespace, a trailing `\r\n`, absent
+  `jdx`/`query`/`params`, and unknown keys (so a later version may add fields) are all
+  accepted — and strict where a guess would be dangerous: an unknown command, a version it
+  does not speak, a wrongly-typed field, a truncated line or trailing content are refused
+  outright rather than half-understood. Decoding never throws, on any input.
+
+A **response** is not a new shape: it is the `--json` envelope of §8.2 verbatim, one per line.
+That is what makes the adapter-parity guarantee (`docs/TESTING.md` §9) structural rather than
+a per-adapter pile of goldens.
+
 ---
 
 ## 15. Performance plan

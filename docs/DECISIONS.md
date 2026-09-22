@@ -35,6 +35,7 @@ log.
 | Process (docs gate, testing, cadence, sharding, lessons) | D-019…D-024 |
 | Command semantics (launcher → hierarchy, in task order) | D-026…D-048 |
 | Kotlin member mapping (carrier → suspend → properties) | D-049…D-051 |
+| Serving (M6 wire contract) | D-056 |
 
 ## Index
 
@@ -95,3 +96,4 @@ log.
 | D-053 | `usages` graph-enrichment semantics (T-075) | proposed-by-implementer | `D-051-075.md` |
 | D-054 | Kotlin PSI side-load seam: versioned sidecar + presence-vs-usability split (T-038) | proposed-by-implementer | `D-051-075.md` |
 | D-055 | Kotlin bodies/KDoc over the side-loaded PSI seam (T-039) | proposed-by-implementer | `D-051-075.md` |
+| D-056 | `JdxService` RPC v1 wire contract (T-040) | proposed-by-implementer | `D-051-075.md` |
