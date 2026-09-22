@@ -56,7 +56,7 @@ T-071 + T-021…T-028 + T-072/T-073; M4 via T-029…T-034; M5 opened with T-035)
 plus T-076** (first T-036 slice). DONE entries below are
 compressed to a summary + pointers; full notes live in git history and the
 session log. **TODO: T-075** (`usages` graph enrichment), **T-074** (T-020 `srcmap`
-remainder, see below), **WIP: T-036** (member mapping, via T-077/T-078 next),
+remainder, see below), **WIP: T-036** (member mapping, T-077 WIP session 58, T-078 next),
 **plus M5–M7** (coarse; T-060 already DONE).
 
 ---
@@ -780,6 +780,32 @@ golden change: `isKotlin` and kinds are byte-identical.
 
 *Closed in session 57. Decisions: D-049. Lessons: L-088. Full notes in git history +
 session log.*
+
+### T-077 — suspend + `@JvmName` + mangled-`internal` signature repair (second T-036 slice) · `WIP` (session 58)
+
+**Depends:** T-076 (carrier) · **Files:** `core/.../model/ClassInfo.kt`
+(`kotlinMethodViews`), `core/.../model/KotlinView.kt` (new),
+`core/.../render/Signatures.kt`, `core/.../render/Listing.kt`,
+`core/.../resolve/MemberResolver.kt`, `index/.../kotlin/KotlinMembers.kt` (new),
+`index/.../asm/AsmClassReader.kt`, `index/.../service/JdxService.kt`
+
+Repair the three JVM-projection lies that need no property model, over the
+T-076 carrier (PROPOSAL.md §12.1, §9.3 step 7). One `KmFunction` ↔ one JVM
+method, keyed by the metadata `jvmSignature` (name + descriptor):
+
+- `@JvmName`: display the Kotlin name (`renamedForJvm` → `originalName`).
+- Mangled `internal`: strip the `$module` suffix (`internalHelper$testfixtures`
+  → `internalHelper`).
+- `suspend`: drop the trailing `Continuation` parameter, add the `suspend`
+  keyword, render the `KmType` return (suspend erases it to `Object`).
+- Matching accepts both spellings everywhere (JVM exact first, Kotlin alias
+  second, incl. stripped-Continuation arity); canonical refs use Kotlin names;
+  did-you-mean suggests Kotlin names.
+- Scope: `CLASS`-kind methods only, live roots only (D-043 precedent, no
+  `ktmeta` blob, no store migration — views ride `ClassInfo` with defaults).
+  Properties/`$default` stay on T-078; file facades stay JVM (no carrier);
+  `--view jvm` stays parked (T-037); full nullability stays deferred
+  (suspend returns excepted).
 
 # M6 — Serving
 ### T-040 `JdxService` RPC protocol · **T-041** daemon + unix socket + 5-min idle shutdown (D-004) · **T-042** transparent CLI daemon client + `--no-daemon` · **T-043** MCP stdio server with generated schemas · **T-044** HTTP/JSON server on `com.sun.net.httpserver` · **T-045** `jdx batch` · **T-046** adapter parity test (CLI/HTTP/MCP byte-identical payloads)
