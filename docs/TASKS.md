@@ -60,7 +60,7 @@ graph enrichment) **plus T-038** (PSI loader seam) **plus T-039** (Kotlin
 bodies/KDoc, last T-036 slice) **plus T-036** (member-mapping umbrella).
 DONE entries below are
 compressed to a summary + pointers; full notes live in git history and the
-session log. **WIP: none** (T-036 closed session 65),
+session log. **WIP: T-040** (M6 opened session 66),
 **plus M6–M7** (coarse; T-060 already DONE).
 
 ---
@@ -954,7 +954,106 @@ defaulted overloads and data/value synthetics) so stale Kotlin sources still
 warn. Unblocked but low priority: M6 (T-040+) stays next.)*
 
 # M6 — Serving
-### T-040 `JdxService` RPC protocol · **T-041** daemon + unix socket + 5-min idle shutdown (D-004) · **T-042** transparent CLI daemon client + `--no-daemon` · **T-043** MCP stdio server with generated schemas · **T-044** HTTP/JSON server on `com.sun.net.httpserver` · **T-045** `jdx batch` · **T-046** adapter parity test (CLI/HTTP/MCP byte-identical payloads)
+
+Goal: every `JdxService` answer reachable without a cold JVM — daemon, MCP,
+HTTP and `batch` as thin adapters over one wire contract, with byte-identical
+payloads. Expanded into detail blocks session 66 (board rule: coarse until
+started).
+
+### T-040 — `JdxService` RPC protocol (v1 wire contract) · `WIP` (session 66)
+
+**Depends:** T-010 (JSON envelope) · **Files:** `core/.../rpc/RpcProtocol.kt`
+
+*(First M6 slice: the contract only — no socket, no server, no client. T-041
+owns the daemon transport, T-042 the CLI client, T-043 MCP, T-044 HTTP, T-045
+`batch`, T-046 the parity proof. Keeps the one-sitting rule: a pure-`core`,
+dependency-free codec plus docs.)*
+
+- New `core/.../rpc/RpcProtocol.kt` (explicit API, no IO, no new dependencies —
+  `core` stays dependency-free so JSON is hand-rolled via `JsonEscape`, D-028):
+  `RPC_VERSION = 1` (mirrors `ENVELOPE_VERSION`); `RpcCommand` enum with stable
+  wire names for every `JdxService` query (`show`, `members`, `outline`,
+  `body`, `source`, `signature`, `doc`, `search`, `resolve`, `ls`, `tree`,
+  `usages`, `hierarchy`, `implementors`, `callers`, `calls`, `samples`) plus
+  `version`/`doctor`/`health`; `RpcRequest(command, query, params)` with
+  deterministic `encode()` (params sorted by key, fixed key order) and
+  `decode(text): RpcRequest?` that never throws (malformed/unknown → `null`).
+- Framing: newline-delimited JSON (one request per line, `\n`-terminated;
+  encoded bytes never contain a raw newline). Response bytes **are** the
+  existing `toJson(command)` envelope — no second shape, so T-046 parity is
+  structural (PROPOSAL.md §8.2/§14).
+- Tests (test-first): tier-1 `RpcProtocolTest` (known vectors, sorted-params
+  determinism, unknown-command/garbage/empty → `null`, escaping) + property
+  (round-trip, determinism, never-throws on hostile strings — the generating
+  family). No tier-3 touch (pure strings, no jars).
+
+### T-041 — daemon + unix socket + 5-min idle shutdown · `TODO`
+
+**Depends:** T-040 (wire contract) · **Files:** `server/.../Daemon.kt`,
+`app/.../jdx` (spawn), `cli/.../commands/DaemonCommand.kt`
+
+Background JVM holding a hot index, listening on a version-stamped unix-domain
+socket (`$XDG_RUNTIME_DIR/jdx/<workspace-hash>.sock`, PROPOSAL.md §14.3).
+CLI auto-spawns on first use; `ScheduledExecutorService` idle shutdown after
+5 min (`--idle <duration>`, `0` disables); `daemon start|stop|status|restart`
+(status: uptime, workspace, memory, indexed artifacts, query count). Tests:
+tier-2 lifecycle (start/status/stop, idle-shutdown with a short `--idle`,
+version-stamp mismatch refuses) + property (framing round-trip over the
+socket). Live-index acceleration stays out (live roots first, D-043
+precedent) unless the slice fits one sitting — split again if not.
+
+### T-042 — transparent CLI daemon client + `--no-daemon` · `TODO`
+
+**Depends:** T-041 (daemon) · **Files:** `cli/.../DaemonClient.kt`,
+`cli/.../commands/*` (flag plumbing)
+
+One-shot CLI forwards the T-040 request to a running daemon when the socket
+answers, else runs in-process; `--no-daemon` forces in-process (PROPOSAL.md
+§14.1). Failure to reach the daemon degrades to in-process, never an error.
+Tests: tier-2 (daemon up → served warm; daemon down → in-process identical
+bytes; `--no-daemon` bypasses) + parity property (client vs in-process
+byte-identical).
+
+### T-043 — MCP stdio server with generated schemas · `TODO`
+
+**Depends:** T-040 (wire contract) · **Files:** `mcp/.../*`
+
+JSON-RPC over stdio exposing each T-040 command as a typed MCP tool
+(`jdx_show`, `jdx_members`, … per PROPOSAL.md §14.2). Schemas generated from
+the same command metadata the CLI uses — never hand-written twice. Holds the
+index in memory (per-session daemon). Tests: tier-2 tool-listing pin +
+per-tool smoke over the fixture jar + parity (MCP result bytes == CLI
+`--json` bytes, feeds T-046).
+
+### T-044 — HTTP/JSON server on `com.sun.net.httpserver` · `TODO`
+
+**Depends:** T-040 (wire contract) · **Files:** `server/.../HttpServer.kt`,
+`cli/.../commands/ServeCommand.kt`
+
+`jdx serve [--port 7070] [--bind 127.0.0.1]` (PROPOSAL.md §14.4, JDK builtin
+only): `GET /v1/<command>?…`, `POST /v1/batch`, `GET /v1/health`; localhost
+by default; serves the exact `--json` envelope. Separate port/socket from the
+daemon. Tests: tier-2 (health, one query GET, batch POST, bind-default pin) +
+parity (HTTP bytes == CLI `--json` bytes, feeds T-046).
+
+### T-045 — `jdx batch` · `TODO`
+
+**Depends:** T-040 (wire contract) · **Files:** `cli/.../commands/BatchCommand.kt`
+
+Read T-040 requests from stdin (newline-delimited, same framing), one envelope
+per line on stdout; `--json` forced (output already is envelopes); per-query
+failures ride the envelope's `ok:false`, never abort the stream; exit code is
+the max query exit code. Tests: tier-1 framing + tier-2 goldens (mixed
+ok/not-found/ambiguous stream).
+
+### T-046 — adapter parity test (CLI/HTTP/MCP byte-identical payloads) · `TODO`
+
+**Depends:** T-042, T-043, T-044 · **Files:** `*/src/test/.../parity/*`
+
+TESTING.md §9 contract: the same query answered via CLI `--json`, HTTP and
+MCP returns byte-identical `result` payloads (envelope `command`/`query`
+equal by construction; timestamps/paths already banned by CLAUDE.md §2).
+Tier-2, over the fixture jar + a JDK sample. Closes M6.
 
 # M7 — Polish
 ### T-060 — Mutation testing and coverage gates · `DONE` (session 30)
