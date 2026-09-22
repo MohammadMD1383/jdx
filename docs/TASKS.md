@@ -902,7 +902,7 @@ T-039 builds PSI queries on it.)*
 *Closed in session 64. Decisions: D-054. Lessons: L-093. T-036 stays WIP
 (T-039 next). Full notes in git history + session log.*
 
-### T-039 — Kotlin bodies/KDoc over the T-038 seam (last T-036 remainder slice) · `TODO`
+### T-039 — Kotlin bodies/KDoc over the T-038 seam (last T-036 remainder slice) · `WIP` (session 65)
 
 **Depends:** T-038 (loader seam) · **Files:** `sources/.../KotlinBodies.kt` (new),
 `sources/.../JavaBodies.kt`, `sources/.../JavaDocs.kt` (`NotJava` branches),
