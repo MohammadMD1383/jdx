@@ -64,6 +64,7 @@ session-log references keep resolving. Numbers are never reused.)
 | Never-throw metadata/ASM accessors (`lateinit`, `AssertionError`, textual checks) | L-089 |
 | Kotlin `isVar` flag vs setter presence (infer `var` from the setter) | L-090 |
 | Bypass-flag identity law (projection flags are identity on unaffected graphs) | L-091 |
+| Side-loaded artifact seams (stub the presence class; pin the premise) | L-093 |
 
 ## Adding an entry
 

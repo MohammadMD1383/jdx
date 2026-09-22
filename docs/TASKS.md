@@ -59,7 +59,7 @@ remainder) **plus T-079** (annotation-element matching) **plus T-075** (`usages`
 graph enrichment).
 DONE entries below are
 compressed to a summary + pointers; full notes live in git history and the
-session log. **WIP: T-036** (member mapping, T-037 DONE session 60, T-038/T-039 PSI/bodies next),
+session log. **WIP: T-036** (member mapping, T-037 DONE session 60, T-038 DONE session 64, T-039 PSI bodies next),
 **plus M5–M7** (coarse; T-060 already DONE).
 
 ---
@@ -872,7 +872,7 @@ Force the raw JVM projection for agents that genuinely need the JVM truth
 *Closed in session 60. Decisions: D-052. Lessons: L-091. T-036 stays WIP
 (T-038/T-039 next). Full notes in git history + session log.*
 
-### T-038 — Kotlin PSI loader seam (first T-036 remainder slice) · `WIP` (session 64)
+### T-038 — Kotlin PSI loader seam (first T-036 remainder slice) · `DONE` (session 64)
 
 **Depends:** T-035 (decoder) · **Files:** `sources/.../KotlinToolchain.kt` (new),
 `sources/.../KotlinParser.kt` (new), `cli/.../service/DoctorService.kt` (`kotlin` row)
@@ -893,9 +893,14 @@ T-039 builds PSI queries on it.)*
   stays side-loaded, never on the compile classpath, never in the fat jar).
 - `doctor kotlin` reports the real status: OK with version+path when installed,
   WARN with the install hint when absent (replacing the hardcoded WARN).
-- Tests: tier-1 pure path/version laws; tier-2 disk probe (missing/present/
-  directory-at-path/corrupt-jar) + open/close laws; a generating family
-  (hostile-path never-throws/determinism property); doctor present/absent rows.
+- Tests: tier-2 `KotlinToolchainTest` (sidecar-path/version pins, disk probe —
+  missing/present/directory-at-path/empty-file, open/close laws incl. a
+  JDK-compiled presence-stub jar for the Available branch and a classpath-
+  absence pin for the D-008 premise) + doctor present/absent rows; the
+  generating family is a hostile-path never-throws property (200 cases).
+
+*Closed in session 64. Decisions: D-054. Lessons: L-093. T-036 stays WIP
+(T-039 next). Full notes in git history + session log.*
 
 ### T-039 — Kotlin bodies/KDoc over the T-038 seam (last T-036 remainder slice) · `TODO`
 

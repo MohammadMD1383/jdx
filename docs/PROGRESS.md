@@ -14,14 +14,14 @@ or delete a past entry — if one turned out to be wrong, say so in a *new* entr
 
 | | |
 |---|---|
-| **Last updated** | 2026-09-22 (session 63) |
+| **Last updated** | 2026-09-22 (session 64) |
 | **Repository** | <https://github.com/MohammadMD1383/jdx> (public, Apache-2.0) |
-| **Phase** | Design complete; **M0–M4 DONE**, **M5 open** (T-035 DONE, T-076/T-077/T-078/T-037 DONE, T-036 WIP via T-038/T-039 next), M6–M7 TODO |
-| **Next task** | **M5 T-038/T-039** (Kotlin PSI source parsing + Kotlin bodies; file detail blocks when starting) |
+| **Phase** | Design complete; **M0–M4 DONE**, **M5 open** (T-035 DONE, T-076/T-077/T-078/T-037 DONE, T-038 DONE, T-036 WIP via T-039 next), M6–M7 TODO |
+| **Next task** | **M5 T-039** (Kotlin bodies/KDoc over the T-038 seam; detail block in `docs/TASKS.md`) |
 | **Task count** | 79 tasks (T-001…T-079): all DONE except T-036 (WIP) and the coarse M5–M7 one-liners (T-060 done early, T-035/T-037 done) |
 | **Build status** | **Green.** `./gradlew build` passes. Runnable `jdx`: `./gradlew :app:installDist` → `app/build/jdx`. Live commands: `version`, `doctor`, `show`, `members`, `outline`, `search`, `resolve`, `ls`, `tree`, `ws`, `cache`, `body`, `source`, `signature`, `doc`, `usages` (+`--src`), `hierarchy`/`implementors`, `callers`/`calls --depth`, `samples --prefer-sources` — text+JSON, `--coord`/`--fetch`/`--repo`, JDK via `jrt:/` + `src.zip`, workspaces + auto-discovery. `members`/`outline`/`signature` take `--view kotlin\|jvm` (raw JVM projection). |
 | **Test status** | **Tiers 1–2 green** (`check`); **tier 3 green except** `JavapCorpusSoakTest`, which reds only on JDK-internal synthetic `access$` members (proven pre-existing on the stashed-clean tree, same drift family as sessions 53/55/56/58; Kotlin re-inclusion via `--view jvm` contributed zero mismatches over 112 classes); mutation tier 4 green (`core` 91 % vs the 80 gate, last measured session 55). **Caveat:** `verifyTier1Budget` is red on this machine (pre-existing machine variance, 0 test failures — not a test failure). |
-| **Docs** | Sharded append-only logs (D-023): sessions → `docs/progress/` (`sessions-051-060.md` full at 60, `sessions-061-070.md` open at 63), decisions → `docs/decisions/` (shard `D-051-075.md` open at D-053), lessons → `docs/lessons/` (`L-076-100.md` open at L-092). New decisions/lessons go to the newest shard, never into session entries. |
+| **Docs** | Sharded append-only logs (D-023): sessions → `docs/progress/` (`sessions-051-060.md` full at 60, `sessions-061-070.md` open at 64), decisions → `docs/decisions/` (shard `D-051-075.md` open at D-054), lessons → `docs/lessons/` (`L-076-100.md` open at L-093). New decisions/lessons go to the newest shard, never into session entries. |
 | **Blocked on** | Nothing. Unpushed sessions need owner go-ahead per session (D-012). |
 
 **What exists:** see `docs/TASKS.md` status summary + the session log — this file no

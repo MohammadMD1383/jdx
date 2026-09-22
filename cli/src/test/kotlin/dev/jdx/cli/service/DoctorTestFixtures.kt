@@ -47,6 +47,8 @@ internal fun fakeEnvironment(
     workspaces: Map<String, List<String>> = emptyMap(),
     /** `jdx ws use` selection to pre-store (T-015); null means none. */
     activeWorkspace: String? = null,
+    /** A stub sidecar jar standing in for the D-008 compiler (T-038); false means absent. */
+    kotlinSidecarPresent: Boolean = false,
 ): DoctorEnvironment {
     val home = root.resolve("home").also { Files.createDirectories(it) }
     val javaHome = root.resolve("jdk").also { Files.createDirectories(it) }
@@ -63,6 +65,11 @@ internal fun fakeEnvironment(
     }
     val cacheRoot = home.resolve(".cache/jdx").also { Files.createDirectories(it) }
     cacheSetup(cacheRoot)
+    if (kotlinSidecarPresent) {
+        val sidecar = dev.jdx.sources.kotlinSidecarJar(home)
+        Files.createDirectories(sidecar.parent)
+        Files.write(sidecar, ByteArray(64) { 0x50 })
+    }
     if (configPresent) {
         Files.createDirectories(home.resolve(".config/jdx"))
     }

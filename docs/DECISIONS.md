@@ -93,3 +93,4 @@ log.
 | D-051 | Kotlin property folding + default-arg annotation semantics (T-078) | proposed-by-implementer | `D-051-075.md` |
 | D-052 | `--view jvm` projection semantics (T-037) | proposed-by-implementer | `D-051-075.md` |
 | D-053 | `usages` graph-enrichment semantics (T-075) | proposed-by-implementer | `D-051-075.md` |
+| D-054 | Kotlin PSI side-load seam: versioned sidecar + presence-vs-usability split (T-038) | proposed-by-implementer | `D-051-075.md` |

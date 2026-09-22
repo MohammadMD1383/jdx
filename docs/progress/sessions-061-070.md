@@ -5,6 +5,79 @@ Append-only (D-023): 10 sessions per shard, newest first. Template and rules in
 
 ---
 
+## Session 64 — 2026-09-22 — T-038 Kotlin PSI loader seam done
+**Agent/Author:** Muse Spark 1.3 Free · **Commits:** `aafe8bd` (claim) + closing commit (this session)
+
+### Goal
+Implement T-038, the first T-036 remainder slice: the D-008 loading
+infrastructure (versioned sidecar path, isolated side-load, `doctor`
+reporting) with no parsing yet — `body`/`source`/`doc` keep their T-039
+degradations.
+
+### What I did
+- Claimed T-038 first (`docs/TASKS.md` TODO→WIP detail block, committed
+  `aafe8bd` before coding); also filed the T-039 detail block (TODO) so the
+  last T-036 slice is specified.
+- `sources/.../KotlinToolchain.kt` (new): `KOTLIN_COMPILER_VERSION` const
+  (mirrors `libs.versions.toml#kotlinCompiler`), versioned sidecar path
+  (`~/.cache/jdx/kotlin/kotlin-compiler-embeddable-<version>.jar`),
+  `probeKotlinToolchain` returning `Installed`/`Missing` — never throws,
+  deterministic.
+- `sources/.../KotlinParser.kt` (new): `KotlinSourceParser` seam +
+  `openKotlinParser` — present sidecar opens an isolated `URLClassLoader`
+  (platform parent, never the app loader) with a load-without-initialise
+  `KotlinCoreEnvironment` presence check; absent/corrupt reads as an
+  unavailable value with an install hint, never a throw. Compiler names exist
+  only as string literals — no compile dependency, nothing in the fat jar.
+- `cli/.../service/DoctorService.kt` (`kotlin` row): reports the real probe —
+  OK with version+path when present, WARN with the install hint when absent
+  (was a hardcoded WARN).
+- Tests: tier-2 `KotlinToolchainTest` (14 tests — path/version pins, probe
+  missing/present/directory/empty, open missing/garbage/non-compiler-zip/
+  presence-stub-compiled-with-the-JDK-compiler, close-idempotence,
+  no-compiler-on-classpath premise pin, 200-case hostile-path never-throws
+  property); `DoctorServiceTest` + `DoctorTestFixtures` (`kotlinSidecarPresent`)
+  pin the OK/WARN rows.
+- Live proof: `./app/build/jdx doctor` prints
+  `kotlin: warn (side-loaded compiler not installed
+  (…/kotlin-compiler-embeddable-2.4.20.jar) — …)` on this machine.
+- Nearly deleted L-092's body with a bad `edit` `oldString` (reused the header
+  as the whole match); caught via `git diff` before committing and restored.
+
+### Decisions made
+- **D-054** — side-load seam semantics: versioned sidecar path, presence (cheap,
+  doctor) vs usability (open-time, degrading) split, platform-parent isolated
+  loader with load-without-initialise presence check, test-pinned
+  no-compile-dependency premise.
+
+### Tasks moved
+- T-038: TODO → WIP (`aafe8bd`) → DONE. T-036 stays WIP (T-039 next).
+
+### Lessons distilled
+- **L-093** — stub the presence class to test an isolated-loader seam (JDK-
+  compile a `KotlinCoreEnvironment` stub, jar it, point the seam at it).
+
+### What works now (and how to verify it yourself)
+```bash
+./gradlew :sources:tier2Test --tests "dev.jdx.sources.KotlinToolchainTest" -x verifyTier1Budget
+./gradlew :cli:test --tests "dev.jdx.cli.service.Doctor*" -x verifyTier1Budget
+./gradlew check -x verifyTier1Budget  # green incl. gates
+./app/build/jdx doctor | grep kotlin
+# warn … not installed (…/kotlin-compiler-embeddable-2.4.20.jar) … (D-008)
+```
+
+### What is broken / half-done
+- Nothing from this task. `doctor kotlin` OK fires on presence only — a corrupt
+  jar at the sidecar path reads OK until first use, where `openKotlinParser`
+  degrades honestly (D-054 §2 accepts this). Full PSI queries land in T-039.
+
+### Open questions / blockers
+- None.
+
+### Next action
+- **M5 T-039** (Kotlin bodies/KDoc over the T-038 seam; detail block already in
+  `docs/TASKS.md`).
+
 ## Session 63 — 2026-09-22 — T-075 usages graph enrichment done
 **Agent/Author:** Muse Spark 1.3 Free · **Commits:** `f7b75cf` (claim) + closing commit (this session)
 

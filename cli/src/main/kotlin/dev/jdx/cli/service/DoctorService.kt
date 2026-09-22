@@ -250,13 +250,23 @@ class DoctorService(private val environment: DoctorEnvironment) {
     }
 
     private fun kotlinCheck(): DoctorCheck {
-        // Side-loading lands in M5 (T-038); the install location is undecided until then, so
-        // this row reports the fact without inventing a path (D-008).
-        return check(
-            "kotlin",
-            DoctorStatus.WARN,
-            "side-loaded compiler not installed (Kotlin sources land in M5, D-008)",
-        )
+        // T-038: the side-loaded compiler (D-008) is a versioned sidecar under the cache
+        // root. Present reads OK; absent is a WARN — Kotlin binaries still render via
+        // @Metadata (T-035), only `.kt` sources need the sidecar (T-039).
+        return when (val status = dev.jdx.sources.probeKotlinToolchain(environment.userHome)) {
+            is dev.jdx.sources.KotlinToolchainStatus.Installed -> check(
+                "kotlin",
+                DoctorStatus.OK,
+                "kotlin-compiler-embeddable ${dev.jdx.sources.KOTLIN_COMPILER_VERSION} " +
+                    "present (${status.jar})",
+            )
+            is dev.jdx.sources.KotlinToolchainStatus.Missing -> check(
+                "kotlin",
+                DoctorStatus.WARN,
+                "side-loaded compiler not installed (${status.jar}) — " +
+                    "Kotlin sources unavailable (D-008)",
+            )
+        }
     }
 
     private fun daemonCheck(): DoctorCheck {

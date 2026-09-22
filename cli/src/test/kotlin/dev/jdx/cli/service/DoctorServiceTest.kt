@@ -307,6 +307,33 @@ class DoctorServiceTest {
     }
 
     @Test
+    fun `a missing kotlin sidecar is a WARN with the install hint`() {
+        val service = DoctorService(fakeEnvironment(tempDir("jdx-doctor-test-")))
+
+        val report = service.probe()
+
+        val kotlin = report.checks.first { it.name == "kotlin" }
+        kotlin.status shouldBe DoctorStatus.WARN
+        kotlin.detail shouldContain "not installed"
+        kotlin.detail shouldContain "D-008"
+        exitCodeFor(report) shouldBe 0
+    }
+
+    @Test
+    fun `a present kotlin sidecar is an OK naming the version`() {
+        val service = DoctorService(
+            fakeEnvironment(tempDir("jdx-doctor-test-"), kotlinSidecarPresent = true),
+        )
+
+        val report = service.probe()
+
+        val kotlin = report.checks.first { it.name == "kotlin" }
+        kotlin.status shouldBe DoctorStatus.OK
+        kotlin.detail shouldContain dev.jdx.sources.KOTLIN_COMPILER_VERSION
+        exitCodeFor(report) shouldBe 0
+    }
+
+    @Test
     fun `exitCodeFor is 0 without failures and 6 with any FAIL`() {
         exitCodeFor(DoctorReport(emptyList())) shouldBe 0
         val warnOnly = DoctorReport(listOf(DoctorCheck("x", DoctorStatus.WARN, "w")))
