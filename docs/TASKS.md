@@ -872,6 +872,42 @@ Force the raw JVM projection for agents that genuinely need the JVM truth
 *Closed in session 60. Decisions: D-052. Lessons: L-091. T-036 stays WIP
 (T-038/T-039 next). Full notes in git history + session log.*
 
+### T-038 — Kotlin PSI loader seam (first T-036 remainder slice) · `WIP` (session 64)
+
+**Depends:** T-035 (decoder) · **Files:** `sources/.../KotlinToolchain.kt` (new),
+`sources/.../KotlinParser.kt` (new), `cli/.../service/DoctorService.kt` (`kotlin` row)
+
+*(M5 fourth slice: the D-008 loading infrastructure. No parsing yet — `body`/
+`source`/`doc` keep their T-039 degradations. Proves the side-load shape before
+T-039 builds PSI queries on it.)*
+
+- New `KotlinToolchain` in `sources`: versioned sidecar path
+  (`~/.cache/jdx/kotlin/kotlin-compiler-embeddable-<version>.jar`, version pinned
+  next to `libs.versions.toml#kotlinCompiler`), `probe(userHome)` returning
+  `Installed`/`Missing` as a value — never throws, deterministic.
+- New `KotlinSourceParser` seam + `openKotlinParser(userHome)`: present sidecar →
+  isolated `URLClassLoader` (platform parent, never the app loader) held open,
+  reflective presence-check of one compiler class; absent/corrupt → unavailable
+  value with an install hint, never a throw. **Nothing outside `sources` imports
+  compiler classes** (D-008 §1); no new `implementation` dependency (the compiler
+  stays side-loaded, never on the compile classpath, never in the fat jar).
+- `doctor kotlin` reports the real status: OK with version+path when installed,
+  WARN with the install hint when absent (replacing the hardcoded WARN).
+- Tests: tier-1 pure path/version laws; tier-2 disk probe (missing/present/
+  directory-at-path/corrupt-jar) + open/close laws; a generating family
+  (hostile-path never-throws/determinism property); doctor present/absent rows.
+
+### T-039 — Kotlin bodies/KDoc over the T-038 seam (last T-036 remainder slice) · `TODO`
+
+**Depends:** T-038 (loader seam) · **Files:** `sources/.../KotlinBodies.kt` (new),
+`sources/.../JavaBodies.kt`, `sources/.../JavaDocs.kt` (`NotJava` branches),
+`index/.../service/JdxService.kt` (T-039 degradations)
+
+*(M5 last slice: serve `.kt` member bodies + KDoc through the T-038 loader with
+real PSI ranges (PROPOSAL.md §12.2). Stays bytecode-authoritative (D-009):
+overload ambiguity decided from bytecode first; property-aware (getter/setter →
+property name); never throws; degrades to decompile/javap where PSI has no node.)*
+
 # M6 — Serving
 ### T-040 `JdxService` RPC protocol · **T-041** daemon + unix socket + 5-min idle shutdown (D-004) · **T-042** transparent CLI daemon client + `--no-daemon` · **T-043** MCP stdio server with generated schemas · **T-044** HTTP/JSON server on `com.sun.net.httpserver` · **T-045** `jdx batch` · **T-046** adapter parity test (CLI/HTTP/MCP byte-identical payloads)
 
