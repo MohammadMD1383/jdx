@@ -83,6 +83,13 @@ class SourceServiceTest {
     }
 
     @Test
+    fun `same-file sibling serves the shared file`() {
+        val outcome = JdxService.source("dev.jdx.fixtures.Tag", fixtureRoots())
+        outcome.exitCode shouldBe 0
+        textOf(outcome) shouldContain "dev/jdx/fixtures/Annos.java:1-"
+    }
+
+    @Test
     fun `nested type serves the outer file`() {
         val outcome = JdxService.source("dev.jdx.fixtures.Nesting\$Inner", fixtureRoots())
         outcome.exitCode shouldBe 0

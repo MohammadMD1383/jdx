@@ -166,6 +166,21 @@ class JavaBodiesSourcesTest {
     }
 
     @Test
+    fun `fixture same-file siblings resolve to Annos dot java`() {
+        JarSourceRoot(fixtureSourcesJar().toPath()).use { root ->
+            findJavaSourcePath(root, "dev.jdx.fixtures.Tag") shouldBe "dev/jdx/fixtures/Annos.java"
+            findJavaSourcePath(root, "dev.jdx.fixtures.Matrix") shouldBe "dev/jdx/fixtures/Annos.java"
+            findJavaSourcePath(root, "dev.jdx.fixtures.Tags") shouldBe "dev/jdx/fixtures/Annos.java"
+            val listed = listJavaMembers(root, "dev.jdx.fixtures.Tag")
+                .shouldBeInstanceOf<JavaMemberList.Listed>().members
+            (listed.map { it.name }.contains("value")) shouldBe true
+            val bodies = foundBodies(root, ref("dev.jdx.fixtures.Annos", "tagged", emptyList()))
+            bodies shouldHaveSize 1
+            bodies.single().file shouldBe "dev/jdx/fixtures/Annos.java"
+        }
+    }
+
+    @Test
     fun `kotlin-only file is NotJava`() {
         JarSourceRoot(fixtureSourcesJar().toPath()).use { root ->
             val ktPath = root.sourcePaths().first { it.endsWith(".kt") }

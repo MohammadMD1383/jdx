@@ -5598,7 +5598,7 @@ public object JdxService {
         if (aroundRaw != null) {
             return aroundOutcome(binary, rawRef, aroundRaw, label, target, sources, options, warnings)
         }
-        val path = sources.findSource(binary)
+        val path = dev.jdx.sources.findJavaSourcePath(sources, binary)
             ?: return noSourceFileOutcome(binary, rawRef, label, sources)
         if (path.endsWith(".kt")) {
             // Kotlin sources need the PSI integration (T-039): served whole,

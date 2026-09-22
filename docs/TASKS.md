@@ -54,11 +54,12 @@ be fiction.
 **DONE: T-001…T-035** (M0–M2 in full; M3 via the T-020 umbrella's slices —
 T-071 + T-021…T-028 + T-072/T-073; M4 via T-029…T-034; M5 opened with T-035) **plus T-053…T-073
 plus T-076** (first T-036 slice) **plus T-077** (second T-036 slice) **plus T-078** (third T-036 slice)
-**plus T-037** (`--view jvm`, last T-036 slice).
+**plus T-037** (`--view jvm`, last T-036 slice) **plus T-074** (T-020 `srcmap`
+remainder).
 DONE entries below are
 compressed to a summary + pointers; full notes live in git history and the
-session log. **TODO: T-075** (`usages` graph enrichment), **T-074** (T-020 `srcmap`
-remainder, see below), **WIP: T-036** (member mapping, T-037 DONE session 60, T-038/T-039 PSI/bodies next),
+session log. **TODO: T-075** (`usages` graph enrichment), **T-079** (annotation-element
+member matching), **WIP: T-036** (member mapping, T-037 DONE session 60, T-038/T-039 PSI/bodies next),
 **plus M5–M7** (coarse; T-060 already DONE).
 
 ---
@@ -971,9 +972,9 @@ before any JavaParser/Kotlin-PSI parsing happens.
 
 *Closed in session 39. Full notes in git history + session log.*
 
-### T-074 — `srcmap`: same-file top-level siblings (T-020 remainder) · `WIP`
+### T-074 — `srcmap`: same-file top-level siblings (T-020 remainder) · `DONE` (session 61)
 
-**Depends:** T-071 (`SourceRoot`), T-021 (`listJavaMembers` seam) · **Files:** `sources/.../SourceRoot.kt`, `sources/.../JavaBodies.kt`
+**Depends:** T-071 (`SourceRoot`), T-021 (`listJavaMembers` seam) · **Files:** `sources/.../SourceSiblings.kt` (new), `sources/.../JavaBodies.kt` (`loadJavaUnit`), `index/.../service/JdxService.kt` (`sourceOutcome`)
 *(Split out of T-028 in session 47: same-file top-level siblings (`Matrix`/`Tag` in `Annos.java`)
 resolve to no source file — `binaryName → source file` maps per top-level name only. Full detail
 in git history (pre-compression T-028 implementation notes) + session 47 log.)*
@@ -981,6 +982,26 @@ in git history (pre-compression T-028 implementation notes) + session 47 log.)*
 Map every top-level type declared in the same `.java` file to that file, so `body`/`source`/`doc`
 find siblings without a full scan. Unblocked but low priority: M5 (T-035) stays the next
 task per the lowest-numbered-TODO rule (T-075 is the `usages` remainder).
+
+*Closed in session 61. Lessons: L-092. Follow-up split to T-079 (annotation-element
+member matching). Full notes in git history + session log.*
+
+### T-079 — Match annotation-element members in the JavaParser seam · `TODO`
+
+**Depends:** T-021 (`matchByName`/`narrowBySignature` seam) · **Files:** `sources/.../JavaBodies.kt` (`matchByName`), `sources/.../JavaDocs.kt` (same matchers)
+*(Split out of T-074 in session 61: the sibling scan resolves `Tag` to `Annos.java`,
+but `body 'dev.jdx.fixtures.Tag#value()'` still reports no source counterpart —
+`matchByName` matches methods/fields/enum entries only, while JavaParser parses
+annotation elements (`String value();`) as `AnnotationMemberDeclaration`, not
+`MethodDeclaration`. Pre-existing T-021 gap, not a T-074 regression: single-file
+annotations miss the same way. `listJavaMembers` already lists them via
+`declaredMembersOf`, so the T-028 comparison sees them — only `body`/`doc`
+member matching drops them.)*
+
+Teach `matchByName` (and thus `narrowBySignature`, `findJavaBodies`,
+`findMemberDocs`) the `AnnotationMemberDeclaration` branch, mirroring the
+`declaredMembersOf` handling: name match on the element name, zero-arity.
+Unblocked but low priority alongside T-074/T-075: M5 (T-038/T-039) stays next.
 
 ## Open questions
 

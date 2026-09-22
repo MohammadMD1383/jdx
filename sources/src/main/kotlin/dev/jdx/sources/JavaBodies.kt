@@ -145,9 +145,10 @@ public fun listJavaMembers(root: SourceRoot, binaryName: String): JavaMemberList
 
 /**
  * The `binaryName → parsed `.java`` step shared by both queries: resolve the
- * source file through [SourceRoot.findSource] (`.java` wins by construction),
- * read it, and parse it. `.kt`-only hits stop at [JavaUnit.NotJava] — this
- * slice never attempts Kotlin (T-039).
+ * source file through [findJavaSourcePath] (direct outer file, else a
+ * same-file top-level sibling from the T-074 package-scoped scan; `.java`
+ * wins by construction), read it, and parse it. `.kt`-only hits stop at
+ * [JavaUnit.NotJava] — this slice never attempts Kotlin (T-039).
  */
 internal sealed interface JavaUnit {
     public data class Unit(
@@ -164,7 +165,7 @@ internal sealed interface JavaUnit {
 internal fun loadJavaUnit(root: SourceRoot, binaryName: String): JavaUnit {
     if (binaryName.isBlank()) return JavaUnit.NoSource
     val path = try {
-        root.findSource(binaryName)
+        findJavaSourcePath(root, binaryName)
     } catch (e: Exception) {
         return JavaUnit.ParseError(
             "source read error: cannot list ${root.displayName}: ${e.message}",
