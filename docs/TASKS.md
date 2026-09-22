@@ -837,6 +837,33 @@ Fold the two remaining JVM-projection lies over the T-076 carrier (PROPOSAL.md �
 *Closed in session 59. Decisions: D-051. Lessons: L-090. Full notes in git history +
 session log.*
 
+### T-037 — `--view jvm` forcing the JVM projection (last T-036 slice) · `WIP` (session 60)
+
+**Depends:** T-078 (Kotlin view to escape from) · **Files:** `core/.../resolve/MemberResolver.kt`
+(`MemberResolutionOptions.jvmView`), `index/.../service/JdxService.kt` (`MemberView`,
+`MemberFilters.view`, `SignatureOptions.view`, JVM-only matching/refs/suggestions),
+`cli/.../commands/ReadCommands.kt`, `SignatureCommand.kt` (`--view kotlin|jvm`),
+`index/.../differential/ServiceDifferential.kt` (re-include Kotlin via JVM view)
+
+Force the raw JVM projection for agents that genuinely need the JVM truth
+(PROPOSAL.md §12.1: calling Kotlin from Java, reading a stack trace):
+
+- `members`/`outline`/`signature` gain `--view kotlin|jvm` (default `kotlin`,
+  invalid exits 3 via the choice). JVM view: JVM method/field names (incl.
+  mangled `internal`, `@JvmName` JVM spellings), full JVM params (incl. the
+  hidden `Continuation`), unfolded getters/setters + backing fields, `$default`
+  stubs per synthetic rules, no `= ...` defaults, no `property` rows, JVM
+  canonical refs, JVM-only did-you-mean. Matching is JVM-exact only (true
+  `javap` parity); Kotlin spellings exit 1 with JVM suggestions.
+- `show`/`body`/`source`/`doc`/`usages`/`hierarchy`/`callers`/`calls`/`samples`:
+  unchanged (body/doc/usages/callers already JVM-spelled per D-051).
+- Scope: `CLASS`-kind live roots only (D-043 precedent); file facades already
+  JVM; no store change. Differential re-includes Kotlin classes via JVM view.
+- Tests: core `MemberResolverTest` jvmView cases (test-first) + a generating
+  family law; index tier-2 JVM-view service tests; CLI tier-1 flag + tier-2
+  end-to-end; JVM goldens for the Kotlin fixtures; differential Kotlin
+  re-inclusion.
+
 # M6 — Serving
 ### T-040 `JdxService` RPC protocol · **T-041** daemon + unix socket + 5-min idle shutdown (D-004) · **T-042** transparent CLI daemon client + `--no-daemon` · **T-043** MCP stdio server with generated schemas · **T-044** HTTP/JSON server on `com.sun.net.httpserver` · **T-045** `jdx batch` · **T-046** adapter parity test (CLI/HTTP/MCP byte-identical payloads)
 
