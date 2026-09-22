@@ -986,7 +986,7 @@ task per the lowest-numbered-TODO rule (T-075 is the `usages` remainder).
 *Closed in session 61. Lessons: L-092. Follow-up split to T-079 (annotation-element
 member matching). Full notes in git history + session log.*
 
-### T-079 — Match annotation-element members in the JavaParser seam · `TODO`
+### T-079 — Match annotation-element members in the JavaParser seam · `WIP`
 
 **Depends:** T-021 (`matchByName`/`narrowBySignature` seam) · **Files:** `sources/.../JavaBodies.kt` (`matchByName`), `sources/.../JavaDocs.kt` (same matchers)
 *(Split out of T-074 in session 61: the sibling scan resolves `Tag` to `Annos.java`,
