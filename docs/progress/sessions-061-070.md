@@ -5,6 +5,65 @@ Append-only (D-023): 10 sessions per shard, newest first. Template and rules in
 
 ---
 
+## Session 63 — 2026-09-22 — T-075 usages graph enrichment done
+**Agent/Author:** Muse Spark 1.3 Free · **Commits:** `f7b75cf` (claim) + closing commit (this session)
+
+### Goal
+Implement T-075, the last fully-specified TODO on the board: `usages --kind
+new|throw|annotation` (parked since T-034) plus the `--context` decision.
+
+### What I did
+- Claimed T-075 first (`docs/TASKS.md` TODO→WIP, committed `f7b75cf` before coding).
+- `index/.../service/JdxService.kt` (`usages`/`executeUsages`): `new` filters
+  the T-029 vocabulary to `METHOD_CALL`→`<init>` edges (kind word `new`);
+  `throw`/`annotation` scan `ClassInfo` metadata (`throws` declarations,
+  class+member annotation uses) over the same live-roots scan; `all` is edges
+  plus the two metadata kinds. Metadata kinds are type-level (member refs
+  report no usages, exit 1); source-dir mentions stay `ref`-only;
+  `--context` keeps its exit-3 `samples` redirect. No extractor or store
+  change (D-053).
+- `cli/.../commands/UsagesCommand.kt`: `--help`/`--kind` text names the live
+  kinds.
+- Tests: tier-2 `UsagesCaseJars.kt` gains `u.Widget`/`u.Factory` (ctor),
+  `u.Boom` (`throws`), `u.Mark` (class+method annotations) plus a
+  `ClassBuilder.annotate` helper; `UsagesServiceTest` pins all three kinds,
+  `all`-inclusion and member-ref emptiness (replacing the exit-3 test);
+  `UsagesPropertyTest` generates the three new kind words; CLI passthrough
+  comment updated.
+- Docs: D-053 (enrichment semantics), `docs/DECISIONS.md` index row,
+  T-075 DONE, CURRENT STATE.
+
+### Decisions made
+- **D-053** — `usages` graph-enrichment semantics (T-075): filtered-view
+  `new`, declaration-based `throw` (no `athrow` data-flow in v1), metadata
+  `annotation`, type-level-only, `--context` stays a redirect, no store change.
+
+### Tasks moved
+- T-075: TODO → WIP (`f7b75cf`) → DONE. T-036 stays WIP (T-038/T-039 next).
+
+### Lessons distilled
+- None (no new toolchain/spec gotcha; the metadata-over-edges shape fell out
+  of D-042/D-043 directly).
+
+### What works now (and how to verify it yourself)
+```bash
+./gradlew :index:tier2Test --tests "dev.jdx.index.service.UsagesServiceTest" -x verifyTier1Budget
+./gradlew :core:test --tests "dev.jdx.core.render.Usages*" :cli:test --tests "dev.jdx.cli.commands.Usages*" -x verifyTier1Budget
+./gradlew check -x verifyTier1Budget  # green incl. gates
+```
+
+### What is broken / half-done
+- Nothing from this task. `ATHROW` throw *sites* are not attributed in v1
+  (D-053 §2 documents the limit); indexed acceleration still lands with the
+  daemon/`jdx index` work.
+
+### Open questions / blockers
+- None.
+
+### Next action
+- **M5 T-038/T-039** (Kotlin PSI source parsing + Kotlin bodies; file detail
+  blocks when starting).
+
 ## Session 62 — 2026-09-22 — T-079 annotation-element matching done
 **Agent/Author:** Muse Spark 1.3 Free · **Commits:** `d97c74f` (claim) + closing commit (this session)
 

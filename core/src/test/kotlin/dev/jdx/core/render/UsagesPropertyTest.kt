@@ -15,7 +15,7 @@ import org.junit.jupiter.api.Test
  */
 class UsagesPropertyTest {
 
-    private val kinds: List<String> = listOf("call", "read", "write", "ref")
+    private val kinds: List<String> = listOf("call", "read", "write", "ref", "new", "throw", "annotation")
 
     private fun arbHit(): Arb<UsageHit> = Arb.of(kinds).map { kind ->
         UsageHit(

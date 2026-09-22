@@ -103,13 +103,67 @@ class UsagesServiceTest {
     }
 
     @Test
-    fun `deferred kinds name their owning task`() {
+    fun `impl and override still name hierarchy`() {
         val impl = JdxService.usages("u.Lib", caseRoots(), UsageOptions(kind = UsageKindFilter.IMPL))
         impl.exitCode shouldBe 3
         textOf(impl) shouldContain "jdx hierarchy"
-        val thrown = JdxService.usages("u.Lib", caseRoots(), UsageOptions(kind = UsageKindFilter.THROW))
-        thrown.exitCode shouldBe 3
-        textOf(thrown) shouldContain "T-075"
+        val override = JdxService.usages("u.Lib", caseRoots(), UsageOptions(kind = UsageKindFilter.OVERRIDE))
+        override.exitCode shouldBe 3
+        textOf(override) shouldContain "jdx hierarchy"
+    }
+
+    @Test
+    fun `kind new shows constructor call sites`() {
+        val outcome = JdxService.usages("u.Widget", caseRoots(), UsageOptions(kind = UsageKindFilter.NEW))
+        outcome.exitCode shouldBe 0
+        val listing = usageListOf(outcome)
+        listing.hits.map { it.kind + " " + it.fromRef } shouldBe listOf("new u.Factory#create()")
+        textOf(outcome) shouldContain "new u.Factory#create() -> #<init>()"
+    }
+
+    @Test
+    fun `kind new on a non-constructor member is empty`() {
+        val outcome = JdxService.usages("u.Lib#greet", caseRoots(), UsageOptions(kind = UsageKindFilter.NEW))
+        outcome.exitCode shouldBe 1
+        textOf(outcome) shouldContain "no usages"
+    }
+
+    @Test
+    fun `kind throw shows throws declarations`() {
+        val outcome = JdxService.usages("u.Boom", caseRoots(), UsageOptions(kind = UsageKindFilter.THROW))
+        outcome.exitCode shouldBe 0
+        val listing = usageListOf(outcome)
+        listing.hits.map { it.kind + " " + it.fromRef } shouldBe listOf("throw u.App#risky()")
+    }
+
+    @Test
+    fun `kind annotation shows annotated classes and members`() {
+        val outcome = JdxService.usages("u.Mark", caseRoots(), UsageOptions(kind = UsageKindFilter.ANNOTATION))
+        outcome.exitCode shouldBe 0
+        val listing = usageListOf(outcome)
+        listing.hits.map { it.kind + " " + it.fromRef }.sorted() shouldBe listOf(
+            "annotation u.Factory",
+            "annotation u.Other#work()",
+        )
+    }
+
+    @Test
+    fun `all includes the metadata rows`() {
+        val thrown = JdxService.usages("u.Boom", caseRoots())
+        thrown.exitCode shouldBe 0
+        textOf(thrown) shouldContain "throw u.App#risky()"
+        val annotated = JdxService.usages("u.Mark", caseRoots())
+        annotated.exitCode shouldBe 0
+        textOf(annotated) shouldContain "annotation u.Factory"
+        textOf(annotated) shouldContain "annotation u.Other#work()"
+    }
+
+    @Test
+    fun `metadata kinds on a member ref are empty`() {
+        val thrown = JdxService.usages("u.App#risky", caseRoots(), UsageOptions(kind = UsageKindFilter.THROW))
+        thrown.exitCode shouldBe 1
+        val annotated = JdxService.usages("u.Other#work", caseRoots(), UsageOptions(kind = UsageKindFilter.ANNOTATION))
+        annotated.exitCode shouldBe 1
     }
 
     @Test

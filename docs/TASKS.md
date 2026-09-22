@@ -55,10 +55,11 @@ be fiction.
 T-071 + T-021…T-028 + T-072/T-073; M4 via T-029…T-034; M5 opened with T-035) **plus T-053…T-073
 plus T-076** (first T-036 slice) **plus T-077** (second T-036 slice) **plus T-078** (third T-036 slice)
 **plus T-037** (`--view jvm`, last T-036 slice) **plus T-074** (T-020 `srcmap`
-remainder) **plus T-079** (annotation-element matching).
+remainder) **plus T-079** (annotation-element matching) **plus T-075** (`usages`
+graph enrichment).
 DONE entries below are
 compressed to a summary + pointers; full notes live in git history and the
-session log. **TODO: T-075** (`usages` graph enrichment), **WIP: T-036** (member mapping, T-037 DONE session 60, T-038/T-039 PSI/bodies next),
+session log. **WIP: T-036** (member mapping, T-037 DONE session 60, T-038/T-039 PSI/bodies next),
 **plus M5–M7** (coarse; T-060 already DONE).
 
 ---
@@ -685,7 +686,7 @@ source snippets when paired sources exist.)*
 T-075 (`usages` graph-enrichment remainder). Full notes in git history +
 session log.*
 
-### T-075 — `usages` graph enrichment: `--kind new|throw|annotation` + `--context` · `WIP` (session 63)
+### T-075 — `usages` graph enrichment: `--kind new|throw|annotation` + `--context` · `DONE` (session 63)
 
 **Depends:** T-030 (usages live-scan), T-034 (`samples` source rendering) ·
 **Files:** `index/.../service/JdxService.kt` (`usages`), `cli/.../commands/UsagesCommand.kt`
@@ -695,8 +696,11 @@ session log.*
 Teach `usages` the three deferred edge kinds over the T-029 vocabulary
 (constructor `new` sites, `throw` sites, annotation uses) and decide whether
 `--context` renders inline snippets (reusing the T-034 slice) or stays a
-`samples` redirect. Unblocked but low priority: M5 (T-035) stays the next
+`samples` redirect. Unblocked but low priority: M5 (T-038/T-039) stays the next
 task per the lowest-numbered-TODO rule.
+
+*Closed in session 63. Decisions: D-053. Full notes in git history +
+session log.*
 
 # M5 — Kotlin
 ### T-035 — `@Metadata` decoding (live-roots + `show` + stored `is_kotlin`) · `DONE` (session 56)

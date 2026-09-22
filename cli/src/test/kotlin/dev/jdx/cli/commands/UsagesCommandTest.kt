@@ -105,8 +105,8 @@ class UsagesCommandTest {
 
     @Test
     fun `every kind value reaches the service for it to accept or reject`() {
-        // Deferred kinds (impl/override/new/throw/annotation) exit 3 in the
-        // service naming their task — the adapter passes them through.
+        // Only impl/override stay deferred (exit 3 naming hierarchy) — the
+        // adapter passes every other kind through for the service to answer.
         for (kind in listOf("all", "call", "read", "write", "ref", "impl", "override", "new", "throw", "annotation")) {
             val run = run(listOf("com.example.Lib", "--kind", kind))
             run.exit shouldBe 0

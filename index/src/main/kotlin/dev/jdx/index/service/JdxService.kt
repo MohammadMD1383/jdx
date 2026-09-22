@@ -2037,9 +2037,12 @@ public object JdxService {
 
     /**
      * `--kind` values for `usages` (PROPOSAL.md §7.3). The five T-030 kinds map
-     * onto the closed [ReferenceKind] vocabulary (D-042); the rest are parsed
-     * here so `--help` shows the full proposal vocabulary, but rejected in
-     * [executeUsages] naming the task that will add them.
+     * onto the closed [ReferenceKind] vocabulary (D-042); `impl`/`override`
+     * are parsed here so `--help` shows the full proposal vocabulary, but
+     * rejected naming the hierarchy commands. `new` filters the vocabulary to
+     * constructor `<init>` calls; `throw`/`annotation` read `ClassInfo`
+     * metadata (`throws`, annotations) over the same live-roots scan (T-075,
+     * D-053).
      */
     public enum class UsageKindFilter(public val flag: String) {
         ALL("all"),
@@ -2108,13 +2111,9 @@ public object JdxService {
                     "usage error: --kind ${options.kind.flag} is not supported for usages yet " +
                         "(type hierarchy: jdx hierarchy, implementors: jdx implementors)",
                 )
-            UsageKindFilter.NEW, UsageKindFilter.THROW, UsageKindFilter.ANNOTATION ->
-                return failure(
-                    3,
-                    rawRef,
-                    "usage error: --kind ${options.kind.flag} is not supported for usages yet " +
-                        "(graph enrichment: T-075)",
-                )
+            // T-075: NEW/THROW/ANNOTATION are live (graph enrichment over the
+            // T-029 vocabulary + ClassInfo metadata); --context stays a
+            // `samples` redirect (D-053).
             else -> Unit
         }
         val parsed = SymbolRefParser.parse(rawRef)
@@ -2279,13 +2278,42 @@ public object JdxService {
                 canonicalTarget = binary
             }
 
-            val wantKinds = when (options.kind) {
-                UsageKindFilter.ALL -> ReferenceKind.entries.toSet()
-                UsageKindFilter.CALL -> setOf(ReferenceKind.METHOD_CALL)
-                UsageKindFilter.READ -> setOf(ReferenceKind.FIELD_READ)
-                UsageKindFilter.WRITE -> setOf(ReferenceKind.FIELD_WRITE)
-                UsageKindFilter.REF -> setOf(ReferenceKind.TYPE_REFERENCE)
-                // Deferred kinds exit 3 in usages() before any scan reaches here.
+            // T-075 graph enrichment (D-053): `new` is a filtered view over
+            // the T-029 vocabulary (METHOD_CALL to `<init>`); `throw` reads
+            // `throws` declarations and `annotation` reads annotation uses
+            // from ClassInfo metadata over the same live-roots scan. `all`
+            // is edges plus the two metadata kinds (constructors stay under
+            // their `call`/`ref` rows there, so nothing double-counts).
+            // Metadata kinds are type-level: a member ref with `throw` or
+            // `annotation` scans nothing and reports no usages (exit 1).
+            val isTypeQuery = ref is TypeSymbolRef
+            val edgeKinds: Set<ReferenceKind>
+            var newOnly = false
+            var wantThrows = false
+            var wantAnnotations = false
+            when (options.kind) {
+                UsageKindFilter.ALL -> {
+                    edgeKinds = ReferenceKind.entries.toSet()
+                    wantThrows = isTypeQuery
+                    wantAnnotations = isTypeQuery
+                }
+                UsageKindFilter.CALL -> edgeKinds = setOf(ReferenceKind.METHOD_CALL)
+                UsageKindFilter.READ -> edgeKinds = setOf(ReferenceKind.FIELD_READ)
+                UsageKindFilter.WRITE -> edgeKinds = setOf(ReferenceKind.FIELD_WRITE)
+                UsageKindFilter.REF -> edgeKinds = setOf(ReferenceKind.TYPE_REFERENCE)
+                UsageKindFilter.NEW -> {
+                    edgeKinds = setOf(ReferenceKind.METHOD_CALL)
+                    newOnly = true
+                }
+                UsageKindFilter.THROW -> {
+                    edgeKinds = emptySet()
+                    wantThrows = isTypeQuery
+                }
+                UsageKindFilter.ANNOTATION -> {
+                    edgeKinds = emptySet()
+                    wantAnnotations = isTypeQuery
+                }
+                // impl/override exit 3 in usages() before any scan reaches here.
                 else -> return failure(3, rawRef, "usage error: --kind ${options.kind.flag} is not supported yet")
             }
 
@@ -2318,27 +2346,33 @@ public object JdxService {
                         }
                         continue
                     }
-                    for (edge in ReferenceExtractor.extract(bytes)) {
-                        if (edge.toOwner != binary) continue
-                        if (edge.kind !in wantKinds) continue
-                        if (memberName != null) {
-                            if (edge.toMember != memberName) continue
-                            val edgeDescriptor = edge.toDescriptor
-                            if (memberDescriptors != null) {
-                                if (edgeDescriptor == null || edgeDescriptor !in memberDescriptors) continue
-                            } else if (!wantFieldEdges && edgeDescriptor != null && !edgeDescriptor.startsWith("(")) {
-                                // A return-qualified ref names a method, never a field.
-                                continue
+                    if (edgeKinds.isNotEmpty()) {
+                        for (edge in ReferenceExtractor.extract(bytes)) {
+                            if (edge.toOwner != binary) continue
+                            if (edge.kind !in edgeKinds) continue
+                            if (newOnly && edge.toMember != "<init>") continue
+                            if (memberName != null) {
+                                if (edge.toMember != memberName) continue
+                                val edgeDescriptor = edge.toDescriptor
+                                if (memberDescriptors != null) {
+                                    if (edgeDescriptor == null || edgeDescriptor !in memberDescriptors) continue
+                                } else if (!wantFieldEdges && edgeDescriptor != null && !edgeDescriptor.startsWith("(")) {
+                                    // A return-qualified ref names a method, never a field.
+                                    continue
+                                }
                             }
+                            hits.add(
+                                UsageHit(
+                                    fromRef = canonicalFromRef(edge.fromClass, edge.fromMember, edge.fromDescriptor),
+                                    artifact = label,
+                                    kind = if (newOnly) "new" else usageKindWord(edge.kind),
+                                    targetRef = edgeTargetRef(edge),
+                                ),
+                            )
                         }
-                        hits.add(
-                            UsageHit(
-                                fromRef = canonicalFromRef(edge.fromClass, edge.fromMember, edge.fromDescriptor),
-                                artifact = label,
-                                kind = usageKindWord(edge.kind),
-                                targetRef = edgeTargetRef(edge),
-                            ),
-                        )
+                    }
+                    if (wantThrows || wantAnnotations) {
+                        collectMetadataUsages(bytes, fromBinary, label, binary, wantThrows, wantAnnotations, reported, warnings, hits)
                     }
                 }
             }
@@ -2349,7 +2383,7 @@ public object JdxService {
             // `--kind all|ref` adds these rows. Missing dirs fail (exit 5,
             // like missing `--jars`); unreadable files read as no mentions
             // inside the scanner (never abort the scan).
-            if (ReferenceKind.TYPE_REFERENCE in wantKinds) {
+            if (ReferenceKind.TYPE_REFERENCE in edgeKinds) {
                 val wanted = if (memberName != null && memberName != "<init>") memberName else declaring.simpleName
                 val seenDirs = LinkedHashSet<String>()
                 for (spec in roots.srcSpecs) {
@@ -2406,14 +2440,107 @@ public object JdxService {
 
     /**
      * The kind word an edge renders as: `call` (method invocation), `read` /
-     * `write` (field access), `ref` (any other mention of the type — `new`,
-     * `checkcast`, `instanceof`, class constants). The D-042 vocabulary.
+     * `write` (field access), `ref` (any other mention of the type —
+     * `checkcast`, `instanceof`, class constants). Constructor invocations
+     * render as `new` only under `--kind new` (a filtered view, T-075); under
+     * `all` they keep their `call` row plus the `NEW` instruction's `ref`
+     * row, so nothing double-counts. The D-042 vocabulary.
      */
     private fun usageKindWord(kind: ReferenceKind): String = when (kind) {
         ReferenceKind.METHOD_CALL -> "call"
         ReferenceKind.FIELD_READ -> "read"
         ReferenceKind.FIELD_WRITE -> "write"
         ReferenceKind.TYPE_REFERENCE -> "ref"
+    }
+
+    /**
+     * Collects the T-075 metadata hits for one class file: `throw` rows for
+     * every method whose `throws` declares [targetBinary], `annotation` rows
+     * for the class and each member annotated with it. One row per declaring
+     * method / annotated element, kind-led like the edge rows. Never throws:
+     * unparseable bytes warn once via [reported] and read as no hits (D-017).
+     */
+    private fun collectMetadataUsages(
+        bytes: ByteArray,
+        fromBinary: String,
+        label: String,
+        targetBinary: String,
+        wantThrows: Boolean,
+        wantAnnotations: Boolean,
+        reported: MutableSet<String>,
+        warnings: MutableList<Warning>,
+        hits: MutableList<UsageHit>,
+    ) {
+        val info = when (val read = AsmClassReader.read(bytes, fromBinary)) {
+            is ClassReadResult.Ok -> read.info
+            is ClassReadResult.UnsupportedVersion -> {
+                if (reported.add(fromBinary)) warnings.add(read.warning.copy(subject = fromBinary))
+                return
+            }
+            is ClassReadResult.Corrupt -> {
+                if (reported.add(fromBinary)) warnings.add(read.warning.copy(subject = fromBinary))
+                return
+            }
+        }
+        // The target itself never reports itself: `throws Foo` on Foo's own
+        // method or `@Foo` on Foo is a declaration, not a usage.
+        val hostBinary = info.name.binaryName
+        if (hostBinary == targetBinary) return
+        val canonicalTarget = targetBinary
+        if (wantThrows) {
+            for (method in info.methods) {
+                if (method.throwsTypes.any { (it as? TypeName.ClassType)?.binaryName == targetBinary }) {
+                    hits.add(
+                        UsageHit(
+                            fromRef = SymbolRefPrinter.print(
+                                MemberSymbolRef(
+                                    declaringType = info.name,
+                                    name = method.name,
+                                    parameterTypes = method.descriptor.parameters,
+                                ),
+                            ),
+                            artifact = label,
+                            kind = "throw",
+                            targetRef = canonicalTarget,
+                        ),
+                    )
+                }
+            }
+        }
+        if (wantAnnotations) {
+            if (info.annotations.any { (it.type as? TypeName.ClassType)?.binaryName == targetBinary }) {
+                hits.add(
+                    UsageHit(
+                        fromRef = hostBinary,
+                        artifact = label,
+                        kind = "annotation",
+                        targetRef = canonicalTarget,
+                    ),
+                )
+            }
+            for (member in info.members) {
+                if (member.annotations.any { (it.type as? TypeName.ClassType)?.binaryName == targetBinary }) {
+                    val fromRef = when (member) {
+                        is MethodInfo -> SymbolRefPrinter.print(
+                            MemberSymbolRef(
+                                declaringType = info.name,
+                                name = member.name,
+                                parameterTypes = member.descriptor.parameters,
+                            ),
+                        )
+                        else -> "$hostBinary#${member.name}"
+                    }
+                    hits.add(
+                        UsageHit(
+                            fromRef = fromRef,
+                            artifact = label,
+                            kind = "annotation",
+                            targetRef = canonicalTarget,
+                        ),
+                    )
+                }
+            }
+        }
     }
 
     /**

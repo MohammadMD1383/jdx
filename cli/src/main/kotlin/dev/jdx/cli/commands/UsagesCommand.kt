@@ -39,10 +39,12 @@ class UsagesCommand(
         "Find usages of a type or member across the workspace's bytecode roots plus " +
             "project source dirs: one row per referencing method (bytecode) or mentioning " +
             "line (source dirs, ref kind). " +
-            "--kind narrows to call|read|write|ref (default: all); source-dir hits are " +
-            "textual mentions (ref only), so call|read|write show bytecode edges alone. " +
-            "impl|override land with hierarchy (jdx hierarchy, jdx implementors), " +
-            "new|throw|annotation with graph enrichment (T-075). " +
+            "--kind narrows to call|read|write|ref|new|throw|annotation (default: all); " +
+            "new shows constructor <init> call sites, throw shows methods declaring " +
+            "the type in throws, annotation shows annotated classes and members; " +
+            "source-dir hits are textual mentions (ref only), so call|read|write|new|throw|annotation " +
+            "show bytecode-backed edges alone. " +
+            "impl|override land with hierarchy (jdx hierarchy, jdx implementors). " +
             "--in/--exclude filter by artifact label (jar file, JDK module or source-dir name). " +
             "--src adds a source dir root (repeatable; stored via jdx ws create --src). " +
             "Exits 1 when the symbol is unknown or unused, 2 on an ambiguous short name."
@@ -51,9 +53,8 @@ class UsagesCommand(
 
     private val kind by option(
         "--kind",
-        help = "Edge kind: call, read, write, ref or all (default all). " +
-            "impl|override land with hierarchy (jdx hierarchy, jdx implementors); " +
-            "new|throw|annotation (T-075) are rejected for now.",
+        help = "Edge kind: call, read, write, ref, new, throw, annotation or all (default all). " +
+            "impl|override land with hierarchy (jdx hierarchy, jdx implementors).",
     ).choice(
         "all", "call", "read", "write", "ref",
         "impl", "override", "new", "throw", "annotation",

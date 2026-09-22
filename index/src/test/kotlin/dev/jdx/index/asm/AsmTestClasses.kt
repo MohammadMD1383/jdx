@@ -41,6 +41,9 @@ internal class ClassBuilder(private val node: ClassNode) {
         node.visitSource(name, null)
     }
 
+    fun annotate(descriptor: String, visible: Boolean): AnnotationVisitor =
+        node.visitAnnotation(descriptor, visible)
+
     fun inner(name: String, outerName: String, innerName: String, access: Int): Unit {
         node.visitInnerClass(name, outerName, innerName, access)
     }
