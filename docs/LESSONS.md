@@ -61,6 +61,7 @@ session-log references keep resolving. Numbers are never reused.)
 | Symbol reference grammar (package globs) | L-086 |
 | Kotlin `@Metadata` reading (`Metadata(...)` helper, not `KotlinClassHeader`) | L-087 |
 | Kotlin `KmClass` equality (compare contents, never carriers) | L-088 |
+| Never-throw metadata/ASM accessors (`lateinit`, `AssertionError`, textual checks) | L-089 |
 
 ## Adding an entry
 

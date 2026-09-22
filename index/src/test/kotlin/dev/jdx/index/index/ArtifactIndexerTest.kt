@@ -49,13 +49,18 @@ class ArtifactIndexerTest {
             val id = result.artifactId!!
             store.classCount(id) shouldBe result.classCount
             // Every stored class is byte-identical to a live ASM read — the store
-            // adds no interpretation of its own.
+            // adds no interpretation of its own. Kotlin member views (T-077) are
+            // the exception: they ride `ClassInfo` for the live-root queries
+            // but are never persisted (no `ktmeta` blob writer yet, D-050), so
+            // both sides drop them before comparing.
             ArtifactLoader.openJar(binaryJar.toPath()).use { root ->
                 for (entry in root.classEntryPaths()) {
                     val binary = entryToBinary(entry)
                     val bytes = root.openClass(entry).use { it.readBytes() }
                     val expected = (AsmClassReader.read(bytes, binary) as ClassReadResult.Ok).info
-                    store.loadClass(id, binary) shouldBe expected
+                    val stored = store.loadClass(id, binary)
+                    stored shouldBe expected.copy(kotlinMethodViews = emptyMap())
+                    stored?.kotlinMethodViews shouldBe emptyMap()
                 }
             }
         }

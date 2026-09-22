@@ -38,6 +38,13 @@ public data class AnnotationInfo(
  * [isKotlin] is true when the class file carries a Kotlin `@Metadata` annotation
  * (T-035 decodes it in `index`; file facades count — they are Kotlin declarations
  * whose JVM projection is a static utility class).
+ *
+ * [kotlinMethodViews] maps JVM methods to their Kotlin view (T-077): the key is
+ * the JVM name plus the descriptor string ([kotlinViewKey]), the value the
+ * declaration name and `suspend` repair from `@Metadata`. Populated by `index`
+ * at read time; empty for Java classes and for every unmapped member, which
+ * keeps the JVM projection. Never persisted (like the T-076 carrier, the
+ * first consumer reads live roots).
  */
 public data class ClassInfo(
     public val name: TypeName.ClassType,
@@ -53,6 +60,7 @@ public data class ClassInfo(
     public val sourceFileName: String? = null,
     public val deprecated: Boolean = false,
     public val isKotlin: Boolean = false,
+    public val kotlinMethodViews: Map<String, KotlinMethodView> = emptyMap(),
 ) {
     /** Fields then methods, in declaration order — the order renderers print. */
     public val members: List<MemberInfo>

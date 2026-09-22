@@ -7,6 +7,7 @@ import dev.jdx.core.model.ClassInfo
 import dev.jdx.core.model.ClassTypeSignature
 import dev.jdx.core.model.FieldInfo
 import dev.jdx.core.model.FieldSignature
+import dev.jdx.core.model.KotlinMethodView
 import dev.jdx.core.model.MethodInfo
 import dev.jdx.core.model.MethodSignature
 import dev.jdx.core.model.ReferenceTypeSignature
@@ -17,6 +18,7 @@ import dev.jdx.core.model.TypeSignature
 import dev.jdx.core.model.TypeVariableSignature
 import dev.jdx.core.model.Visibility
 import dev.jdx.core.model.VoidSignature
+import dev.jdx.core.model.kotlinViewKey
 
 /**
  * Member resolution with inheritance and generic substitution (PROPOSAL.md §9.3, T-009).
@@ -105,6 +107,7 @@ public object MemberResolver {
                             substituteMethod(it, node.environment)
                         },
                         overriddenTypes = emptyList(),
+                        kotlinView = declaring.kotlinMethodViews[kotlinViewKey(method.name, method.descriptor.descriptor)],
                     )
                 } else {
                     // Override collapse (spec step 5): same name + erased descriptor means
@@ -467,6 +470,10 @@ public data class SupertypeNode(
  * A resolved method: the declaration, where it was declared, how deep below the target,
  * its generic signature substituted into the target's context (`null` when the method is
  * not generic), and the supertypes whose same-signature declarations it overrode.
+ *
+ * [kotlinView] is the declaring class's `@Metadata` view of this method (T-077),
+ * looked up from [ClassInfo.kotlinMethodViews] at resolve time; `null` renders
+ * the JVM projection.
  */
 public data class ResolvedMethod(
     public val declaringType: TypeName.ClassType,
@@ -474,6 +481,7 @@ public data class ResolvedMethod(
     public val member: MethodInfo,
     public val substitutedSignature: MethodSignature?,
     public val overriddenTypes: List<TypeName.ClassType>,
+    public val kotlinView: KotlinMethodView? = null,
 )
 
 /**

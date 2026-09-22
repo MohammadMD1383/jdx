@@ -5,6 +5,103 @@ Append-only (D-023): 10 sessions per shard, newest first. Template and rules in
 
 ---
 
+## Session 58 — 2026-09-22 — suspend + `@JvmName` + mangled-`internal` repair (T-077)
+**Agent/Author:** Muse Spark 1.3 (opencode) · **Commits:** `856ddfd` (claim) + implementation (this session)
+
+### Goal
+Implement T-077, the second T-036 slice filed when T-036 proved too big for
+one sitting: repair the three JVM-projection lies that need no property model
+— `@JvmName` renames, mangled `internal` names, `suspend` (`Continuation`
+stripping + keyword + metadata return) — over the T-076 `KmClass` carrier, in
+`members`/`outline`/`signature` with both-spellings matching everywhere.
+
+### What I did
+- Claimed T-077 (`TODO`→`WIP` detail block naming scope/acceptance) and
+  committed the claim before coding.
+- `core` (test-first, `KotlinViewTest` 10/10): new `KotlinMethodView`
+  (displayName/strip/displayReturn/markSuspend) + `kotlinViewKey`;
+  `ClassInfo.kotlinMethodViews` (default `emptyMap`); `methodLine` renders the
+  view (`suspend` keyword, stripped params, metadata return; ctors immune);
+  `methodRefString` builds Kotlin-view canonical refs (shared by listings and
+  the service matchers); `ResolvedMethod.kotlinView` attached at resolve time
+  from the declaring `ClassInfo`.
+- `index/.../kotlin/KotlinMembers.kt` (new pure mapping): `KmFunction`
+  ↔ JVM method keyed by metadata `jvmSignature`; minimal maps (only
+  differing methods); `KmType` renderer (kotlin mappings, variance, stars,
+  `?`, JVM fallback); textual `isContinuationTail` (no ASM parsing).
+  Tier-1 `KotlinMembersTest` (12) + `KotlinMembersPropertyTest` (4:
+  never-throws, key law, render-never-throws, determinism — the generating
+  family).
+- `AsmClassReader` populates views from the same single `@Metadata` decode
+  (never throws — hostile metadata degrades to no views, never `CORRUPT`).
+- `JdxService`: `matchBytecodeMembers` accepts JVM and Kotlin spellings
+  (exact first, alias second, incl. stripped-`Continuation` arity) across all
+  member commands; `signature` + `body --with-signature` render views;
+  did-you-mean suggests Kotlin names.
+- Reconciled oracles: store round-trips pin the views drop explicitly
+  (`ArtifactIndexerTest`, `IndexStoreTest` — views are live-root-only per
+  D-049 §3/D-050, like the T-076 carrier); command-level `javap`
+  differential skips Kotlin classes with a counted `kotlin-view` reason
+  (reader-level differential still covers every class; re-include under
+  `--view jvm` with T-037). Tier-2 `KotlinViewsServiceTest` (13) pins the
+  behaviour.
+- Goldens updated via `-Pgolden.update=true` **after reading every hunk**:
+  only `KotlinMembers` (3 repairs) + `UserIdBox` (`-impl` → Kotlin names)
+  members/outline/sort pairs churn (same row counts); no Java golden touched.
+- `check -x verifyTier1Budget` green (tiers 1+2 + JaCoCo). `soak`:
+  `CorpusSoakTest` green; `JavapCorpusSoakTest` red on
+  `JrtDirectoryStream` synthetic `access$000`/`access$100` — proven
+  pre-existing by rerunning on the stashed-clean tree (identical
+  `javap=7 jdx=9` signature; same drift family as sessions 53/55/56).
+  `verifyTier1Budget` not run (red on this machine pre-existing).
+- Live proof: `members`/`signature` show `originalName`,
+  `suspend String fetch(String)`, `internalHelper()`; JVM spellings still
+  resolve; did-you-mean suggests the Kotlin ref.
+- Docs: D-050, L-089, T-077 DONE (T-036 stays WIP), CURRENT STATE (next: T-078).
+
+### Decisions made
+D-050 (views ride `ClassInfo` as plain data; Kotlin-view refs with
+both-spellings matching; Java-style `suspend` lines; store drops views;
+command differential skips Kotlin; T-078/T-037 split).
+
+### Tasks moved
+T-077 (new): filed as WIP → DONE. T-036 stays WIP (T-078 next).
+
+### Lessons distilled
+L-089 (never-throw metadata/ASM accessors: `lateinit` classifier,
+`AssertionError` from ASM, textual descriptor checks — all three caught by
+the property suite, none by hand-written tests).
+
+### What works now (and how to verify it yourself)
+```bash
+./gradlew check -x verifyTier1Budget   # tiers 1+2 + JaCoCo gates, green
+./gradlew :app:installDist -x verifyTier1Budget
+J=testfixtures/build/libs/testfixtures-0.1.0-SNAPSHOT.jar
+app/build/jdx members 'dev.jdx.fixtures.KotlinMembers' --jars $J --no-jdk         # originalName, suspend fetch, internalHelper
+app/build/jdx signature 'dev.jdx.fixtures.KotlinMembers#fetch(java.lang.String)' --jars $J --no-jdk  # Kotlin arity
+app/build/jdx signature 'dev.jdx.fixtures.KotlinMembers#renamedForJvm' --jars $J --no-jdk            # JVM spelling still works
+app/build/jdx members 'dev.jdx.fixtures.TrafficLight' --jars $J --no-jdk          # Java byte-identical
+```
+
+### What is broken / half-done
+- `verifyTier1Budget` stays red on this machine (pre-existing variance, 0 test
+  failures). Nothing from this task.
+- `JavapCorpusSoakTest` reds on JDK-internal synthetic members (proven
+  stashed-clean corpus drift, identical signature). Nothing from this task.
+- No property folding / `$default` annotation (T-078), no file-facade views,
+  no `--view jvm` (T-037), no `ktmeta` persistence, no general nullability.
+  `IndexStoreTest` spot-checks (`shouldBe` on first/middle/last) were made
+  views-agnostic so T-078's new views cannot trip them latently.
+
+### Open questions / blockers
+None.
+
+### Next action
+M5 T-078 (property folding `getX`/`setX` → `val`/`var` + default-arg
+annotation over the T-076 carrier; file the detail block when starting).
+
+---
+
 ## Session 57 — 2026-09-21 — Kotlin `KmClass` carrier (T-076)
 **Agent/Author:** Muse Spark 1.3 (opencode) · **Commits:** `4a37de2` (claim) + implementation (this session)
 

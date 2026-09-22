@@ -6,6 +6,9 @@ import dev.jdx.core.model.TypeName
 import dev.jdx.core.model.Visibility
 import dev.jdx.core.model.typeNameFromBinaryName
 import dev.jdx.core.ref.SymbolRefPrinter
+import dev.jdx.index.artifact.ArtifactLoader
+import dev.jdx.index.asm.AsmClassReader
+import dev.jdx.index.asm.ClassReadResult
 import dev.jdx.index.service.JdxService
 import java.io.File
 
@@ -93,6 +96,16 @@ internal object ServiceDifferential {
         // routing the whole family to Skipped keeps corpus drift out of the red.
         if (binaryName.contains("$$")) {
             return Comparison.Skipped(binaryName, "binary name is not a modellable type: $binaryName")
+        }
+        // T-077: Kotlin classes render declarations (`originalName`,
+        // `suspend`, demangled `internal`), not `javap` names — comparing
+        // their refs against `javap` would pin the old projection. Reader-level
+        // JVM fidelity for every class (Kotlin included) stays owned by
+        // `AsmClassReaderDifferentialTest`; the Kotlin command view is pinned
+        // by `KotlinViewsServiceTest` plus goldens. Re-include Kotlin here
+        // under `--view jvm` when T-037 lands.
+        if (isKotlinClass(jar, binaryName)) {
+            return Comparison.Skipped(binaryName, "kotlin-view: $binaryName renders Kotlin declarations (T-077)")
         }
         val outcome = JdxService.members(
             binaryName,
@@ -197,6 +210,23 @@ internal object ServiceDifferential {
             jsonGaps = jsonGaps,
             quirksApplied = quirks.applied,
         )
+    }
+
+    /**
+     * Reads one class file for its Kotlin flag only. `null` (unreadable,
+     * unparseable, unnameable) means "not proven Kotlin" — the normal path
+     * below reports it in its own terms; this check never hides a failure.
+     */
+    private fun isKotlinClass(jar: File, binaryName: String): Boolean {
+        return try {
+            ArtifactLoader.openJar(jar.toPath()).use { root ->
+                val entry = binaryName.replace('.', '/') + ".class"
+                val bytes = root.openClass(entry).use { it.readBytes() }
+                (AsmClassReader.read(bytes, entry) as? ClassReadResult.Ok)?.info?.isKotlin == true
+            }
+        } catch (_: Exception) {
+            false
+        }
     }
 
     /**

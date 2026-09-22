@@ -6,10 +6,10 @@ fields declared on dev.jdx.fixtures.KotlinMembers:
   field public static final int VERSION = 1
 methods declared on dev.jdx.fixtures.KotlinMembers:
   method public static final dev.jdx.fixtures.KotlinMembers create()
-  method public final java.lang.Object fetch(java.lang.String id, kotlin.coroutines.Continuation<? super java.lang.String> $completion)
-  method public final void internalHelper$testfixtures()
+  method public final suspend java.lang.String fetch(java.lang.String id)
+  method public final void internalHelper()
   method public final java.lang.Integer nullable(java.lang.String input)
-  method public final int renamedForJvm(int value)
+  method public final int originalName(int value)
   method public final java.lang.String withDefault(int first)
   method public final java.lang.String withDefault(int first, java.lang.String second)
 warning UNRESOLVED_SUPERTYPE: supertype java.lang.Object is not in the workspace — members inherited from it are missing

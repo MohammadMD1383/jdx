@@ -1,7 +1,9 @@
 package dev.jdx.core.render
 
 import dev.jdx.core.model.ClassInfo
+import dev.jdx.core.model.KotlinMethodView
 import dev.jdx.core.model.MemberSymbolRef
+import dev.jdx.core.model.MethodInfo
 import dev.jdx.core.model.Provenance
 import dev.jdx.core.model.TypeName
 import dev.jdx.core.model.Warning
@@ -307,21 +309,48 @@ public fun buildMemberListing(
     )
 }
 
-private fun toMethodRow(resolved: ResolvedMethod, target: ClassInfo, disambiguateReturn: Boolean): MemberRow {
-    val kind = if (resolved.member.name == "<init>") MemberKind.CONSTRUCTOR else MemberKind.METHOD
-    val baseRef = SymbolRefPrinter.print(
+/**
+ * Canonical ref for one method under a Kotlin view (T-077): the Kotlin name
+ * with Kotlin-view parameters (the hidden `Continuation` stripped), `:return`
+ * suffixed only when sibling rows share name and erased parameters
+ * (bridge/covariant overloads, PROPOSAL.md §6) — the same rule
+ * [buildMemberListing] uses, with the display return in the suffix. A `null`
+ * view renders the JVM ref exactly as before; views never apply to
+ * constructors. Shared by [buildMemberListing] and the `signature`/`body`/
+ * `doc` member matchers so every command spells one method one way.
+ */
+public fun methodRefString(
+    declaring: TypeName.ClassType,
+    member: MethodInfo,
+    view: KotlinMethodView?,
+    disambiguateReturn: Boolean,
+): String {
+    val parameters = if (view?.stripAppliesTo(member.descriptor.parameters) == true) {
+        member.descriptor.parameters.dropLast(1)
+    } else {
+        member.descriptor.parameters
+    }
+    val base = SymbolRefPrinter.print(
         MemberSymbolRef(
-            declaringType = resolved.declaringType,
-            name = resolved.member.name,
-            parameterTypes = resolved.member.descriptor.parameters,
+            declaringType = declaring,
+            name = if (member.name == "<init>") member.name else (view?.displayName ?: member.name),
+            parameterTypes = parameters,
         ),
     )
+    if (!disambiguateReturn || member.name == "<init>") return base
+    return base + ":" + (view?.displayReturn ?: SignatureLines.renderTypeName(member.descriptor.returnType))
+}
+
+private fun toMethodRow(resolved: ResolvedMethod, target: ClassInfo, disambiguateReturn: Boolean): MemberRow {
+    val kind = if (resolved.member.name == "<init>") MemberKind.CONSTRUCTOR else MemberKind.METHOD
     // Constructors cannot overload on return type; bridges are always methods.
-    val canonicalRef = if (disambiguateReturn && kind == MemberKind.METHOD) {
-        baseRef + ":" + SignatureLines.renderTypeName(resolved.member.descriptor.returnType)
-    } else {
-        baseRef
-    }
+    val canonicalRef = methodRefString(
+        declaring = resolved.declaringType,
+        member = resolved.member,
+        view = resolved.kotlinView,
+        disambiguateReturn = disambiguateReturn && kind == MemberKind.METHOD,
+    )
+    val view = resolved.kotlinView
     return MemberRow(
         canonicalRef = canonicalRef,
         kind = kind,
@@ -329,13 +358,14 @@ private fun toMethodRow(resolved: ResolvedMethod, target: ClassInfo, disambiguat
             member = resolved.member,
             substituted = resolved.substitutedSignature,
             declaringSimpleName = target.name.simpleName,
+            kotlinView = view,
         ),
         declaringType = resolved.declaringType,
         depth = resolved.depth,
         deprecated = resolved.member.deprecated,
         overriddenTypes = resolved.overriddenTypes,
         hiddenTypes = emptyList(),
-        memberName = resolved.member.name,
+        memberName = if (resolved.member.name == "<init>") "<init>" else (view?.displayName ?: resolved.member.name),
     )
 }
 

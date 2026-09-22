@@ -9,6 +9,7 @@ import dev.jdx.core.model.FieldInfo
 import dev.jdx.core.model.FieldSignature
 import dev.jdx.core.model.FormalTypeParameter
 import dev.jdx.core.model.JvmPrimitive
+import dev.jdx.core.model.KotlinMethodView
 import dev.jdx.core.model.MethodInfo
 import dev.jdx.core.model.MethodSignature
 import dev.jdx.core.model.ReferenceTypeSignature
@@ -37,24 +38,35 @@ public object SignatureLines {
      * `public <T> T fromJson(java.lang.String arg0, java.lang.Class<T> arg1)`.
      * Constructors print under [declaringSimpleName] (`<init>` is never user-facing).
      * A `null` parameter name degrades to `argN` per the proposal's ladder (§16).
+     *
+     * [kotlinView] (T-077) renders the Kotlin declaration instead of the JVM
+     * projection: the metadata name, the `suspend` keyword, the metadata return
+     * type, and the parameter list without the hidden `Continuation`. `null`
+     * (Java, unmapped Kotlin) renders exactly as before. Views never apply to
+     * constructors.
      */
     public fun methodLine(
         member: MethodInfo,
         substituted: MethodSignature? = null,
         declaringSimpleName: String? = null,
+        kotlinView: KotlinMethodView? = null,
     ): String = buildString {
         appendModifiers(member.access, forMethod = true)
+        val view = if (member.name == "<init>") null else kotlinView
+        if (view?.markSuspend == true) append("suspend ")
         val signature = substituted ?: member.genericSignature
         appendTypeParameters(signature?.typeParameters ?: emptyList())
         if (member.name == "<init>") {
             append(declaringSimpleName ?: "<init>")
         } else {
-            appendReturnType(signature?.returnType, member.descriptor.returnType)
+            val displayReturn = view?.displayReturn
+            if (displayReturn != null) append(displayReturn)
+            else appendReturnType(signature?.returnType, member.descriptor.returnType)
             append(' ')
-            append(member.name)
+            append(view?.displayName ?: member.name)
         }
         append('(')
-        appendParameters(member, signature)
+        appendParameters(member, signature, view)
         append(')')
         appendThrows(signature, member)
         member.annotationDefault?.let { append(" default ").append(it) }
@@ -146,8 +158,15 @@ public object SignatureLines {
         else append(renderTypeName(erased))
     }
 
-    private fun StringBuilder.appendParameters(member: MethodInfo, signature: MethodSignature?) {
-        val count = member.descriptor.parameters.size
+    private fun StringBuilder.appendParameters(
+        member: MethodInfo,
+        signature: MethodSignature?,
+        kotlinView: KotlinMethodView? = null,
+    ) {
+        val all = member.descriptor.parameters.size
+        // A `suspend` view drops the hidden trailing `Continuation`; anything else
+        // keeps the JVM list (the view itself guards on the tail type).
+        val count = if (kotlinView?.stripAppliesTo(member.descriptor.parameters) == true) all - 1 else all
         val varargs = member.access.has(AccessFlag.VARARGS) && count > 0
         append(
             (0 until count).joinToString(", ") { index ->

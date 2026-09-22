@@ -4,6 +4,7 @@ import dev.jdx.core.model.AccessFlag
 import dev.jdx.core.model.ClassInfo
 import dev.jdx.core.model.FieldInfo
 import dev.jdx.core.model.JvmDescriptor
+import dev.jdx.core.model.KotlinMethodView
 import dev.jdx.core.model.MemberSymbolRef
 import dev.jdx.core.model.MethodInfo
 import dev.jdx.core.model.ModuleSymbolRef
@@ -17,6 +18,7 @@ import dev.jdx.core.model.TypeKind
 import dev.jdx.core.model.TypeName
 import dev.jdx.core.model.TypeSymbolRef
 import dev.jdx.core.model.Visibility
+import dev.jdx.core.model.kotlinViewKey
 import dev.jdx.core.model.Warning
 import dev.jdx.core.model.WarningCode
 import dev.jdx.core.model.arrayTypeName
@@ -64,6 +66,7 @@ import dev.jdx.core.render.OBJECT_BINARY_NAME
 import dev.jdx.core.render.PackageEntry
 import dev.jdx.core.render.SearchHit
 import dev.jdx.core.render.SearchListing
+import dev.jdx.core.render.methodRefString
 import dev.jdx.core.render.SampleHit
 import dev.jdx.core.render.SampleListing
 import dev.jdx.core.render.SampleSnippet
@@ -3776,6 +3779,7 @@ public object JdxService {
                         signature = SignatureLines.methodLine(
                             member = match.info,
                             declaringSimpleName = target.name.simpleName,
+                            kotlinView = kotlinViewOf(target, match.info),
                         ),
                         declaringType = binary,
                     )
@@ -4528,6 +4532,7 @@ public object JdxService {
                     is BytecodeMember.Method -> SignatureLines.methodLine(
                         member = match.info,
                         declaringSimpleName = target.name.simpleName,
+                        kotlinView = kotlinViewOf(target, match.info),
                     )
                     is BytecodeMember.Field -> SignatureLines.fieldLine(match.info)
                 }
@@ -5796,7 +5801,11 @@ public object JdxService {
             return ctors.filter { it.descriptor.parameters.size == wanted.size && paramsMatch(it, wanted) }
                 .map { BytecodeMember.Method(it) }
         }
-        val methods = target.methods.filter { it.name == ref.name && it.name != "<clinit>" }
+        // Kotlin aliases (T-077): a query may spell the Kotlin declaration name
+        // (`originalName`) or the JVM name (`renamedForJvm`) — the match always
+        // returns the JVM-truthful member; only selection is alias-aware.
+        val views = target.kotlinMethodViews
+        val methods = target.methods.filter { it.name != "<clinit>" && methodNameMatches(it, ref.name, views) }
         val fields = if (wanted == null && ref.returnType == null) {
             target.fields.filter { it.name == ref.name }.map { BytecodeMember.Field(it) }
         } else if (wanted == null) {
@@ -5808,7 +5817,7 @@ public object JdxService {
         val methodCandidates = if (wanted == null) {
             methods.map { BytecodeMember.Method(it) }
         } else {
-            methods.filter { it.descriptor.parameters.size == wanted.size && paramsMatch(it, wanted) }
+            methods.filter { methodMatchesParams(it, wanted, views) }
                 .map { BytecodeMember.Method(it) }
         }
         val all = methodCandidates + fields
@@ -5829,12 +5838,57 @@ public object JdxService {
         data class Field(val info: FieldInfo) : BytecodeMember
     }
 
-    private fun paramsMatch(method: MethodInfo, wanted: List<TypeName>): Boolean {
-        val generic = method.genericSignature?.parameters
-        return method.descriptor.parameters.zip(wanted).withIndex().all { (index, pair) ->
-            val (have, want) = pair
+    /**
+     * A Kotlin view of one JVM method for display and alias matching (T-077):
+     * the declaring class's `@Metadata` entry for [method], or `null` for
+     * Java and unmapped Kotlin members (the JVM projection).
+     */
+    private fun kotlinViewOf(target: ClassInfo, method: MethodInfo): KotlinMethodView? =
+        target.kotlinMethodViews[kotlinViewKey(method.name, method.descriptor.descriptor)]
+
+    /** JVM-name or Kotlin-alias name match (T-077); `<clinit>` never matches. */
+    private fun methodNameMatches(
+        method: MethodInfo,
+        wanted: String,
+        views: Map<String, KotlinMethodView>,
+    ): Boolean {
+        if (method.name == wanted) return true
+        return views[kotlinViewKey(method.name, method.descriptor.descriptor)]?.displayName == wanted
+    }
+
+    /**
+     * JVM-arity match, or Kotlin-arity match for a `suspend` method queried
+     * without its hidden `Continuation` (T-077): the JVM tail strips to
+     * exactly the wanted list.
+     */
+    private fun methodMatchesParams(
+        method: MethodInfo,
+        wanted: List<TypeName>,
+        views: Map<String, KotlinMethodView>,
+    ): Boolean {
+        if (matchParameters(method.descriptor.parameters, method.genericSignature?.parameters, wanted)) return true
+        val view = views[kotlinViewKey(method.name, method.descriptor.descriptor)]
+        if (view?.stripAppliesTo(method.descriptor.parameters) != true) return false
+        return matchParameters(
+            method.descriptor.parameters.dropLast(1),
+            method.genericSignature?.parameters,
+            wanted,
+        )
+    }
+
+    private fun paramsMatch(method: MethodInfo, wanted: List<TypeName>): Boolean =
+        matchParameters(method.descriptor.parameters, method.genericSignature?.parameters, wanted)
+
+    private fun matchParameters(
+        have: List<TypeName>,
+        generic: List<dev.jdx.core.model.TypeSignature>?,
+        wanted: List<TypeName>,
+    ): Boolean {
+        if (have.size != wanted.size) return false
+        return have.zip(wanted).withIndex().all { (index, pair) ->
+            val (haveOne, want) = pair
             val wantKey = bodyTypeKey(want)
-            if (bodyTypeKey(have) == wantKey) true
+            if (bodyTypeKey(haveOne) == wantKey) true
             // Generic methods erase type variables (`U identity(U)` is `(Object)Object`
             // in the descriptor): the generic signature still names `U` (D-009 —
             // bytecode stays the authority, both spellings are its own words).
@@ -5888,22 +5942,16 @@ public object JdxService {
         return matches.map { match ->
             when (match) {
                 is BytecodeMember.Method -> {
-                    val base = SymbolRefPrinter.print(
-                        MemberSymbolRef(
-                            declaringType = target.name,
-                            name = match.info.name,
-                            parameterTypes = match.info.descriptor.parameters,
-                        ),
-                    )
+                    // Sibling detection stays JVM-keyed (stable under renames);
+                    // the ref itself spells the Kotlin view (T-077).
                     val key = match.info.name to
                         match.info.descriptor.parameters.joinToString("") { parameter -> parameter.descriptor }
-                    if ((siblingCounts[key] ?: 0) > 1 && match.info.name != "<init>") {
-                        base + ":" + dev.jdx.core.render.SignatureLines.renderTypeName(
-                            match.info.descriptor.returnType,
-                        )
-                    } else {
-                        base
-                    }
+                    methodRefString(
+                        declaring = target.name,
+                        member = match.info,
+                        view = kotlinViewOf(target, match.info),
+                        disambiguateReturn = (siblingCounts[key] ?: 0) > 1 && match.info.name != "<init>",
+                    )
                 }
                 is BytecodeMember.Field ->
                     SymbolRefPrinter.print(MemberSymbolRef(target.name, match.info.name))
@@ -5913,7 +5961,10 @@ public object JdxService {
 
     /** Did-you-mean refs for a missed member: name-near members of the same type. */
     private fun suggestSimilarMember(target: ClassInfo, missed: String, cap: Int = 5): List<String> {
-        val names = (target.methods.map { it.name } + target.fields.map { it.name })
+        // Kotlin declaration names join the pool (T-077): a mistyped
+        // `originalName` should suggest the Kotlin spelling, not the JVM one.
+        val names = (target.methods.map { it.name } + target.methods.mapNotNull { kotlinViewOf(target, it)?.displayName } +
+            target.fields.map { it.name })
             .filter { it != "<clinit>" }.distinct()
         val near = names.filter { levenshtein(it, missed) <= 2 }.sorted()
             .ifEmpty { return emptyList() }
@@ -5929,6 +5980,13 @@ public object JdxService {
                         ),
                     ),
                 )
+            }
+            // Alias hits spell the Kotlin ref (T-077): the JVM loop above
+            // found nothing under a Kotlin name, so emit the view spelling.
+            for (method in target.methods.filter {
+                it.name != name && kotlinViewOf(target, it)?.displayName == name
+            }) {
+                refs.add(methodRefString(target.name, method, kotlinViewOf(target, method), false))
             }
             for (field in target.fields.filter { it.name == name }) {
                 refs.add(SymbolRefPrinter.print(MemberSymbolRef(target.name, field.name)))

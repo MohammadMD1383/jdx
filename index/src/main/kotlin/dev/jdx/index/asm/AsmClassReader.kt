@@ -15,6 +15,7 @@ import dev.jdx.core.model.Warning
 import dev.jdx.core.model.WarningCode
 import dev.jdx.core.model.typeNameFromBinaryName
 import dev.jdx.index.kotlin.KotlinMetadataKind
+import dev.jdx.index.kotlin.KotlinMembers
 import dev.jdx.index.kotlin.KotlinMetadataReader
 import java.io.InputStream
 import kotlin.metadata.ClassKind
@@ -159,8 +160,9 @@ public object AsmClassReader {
         val access = node.access
         val annotations = readAnnotations(node.visibleAnnotations, node.invisibleAnnotations)
         val deprecated = isDeprecated(access, annotations)
-        // One `@Metadata` decode per class: the flag and the kind refinement share it.
-        // Absent or corrupt metadata is `null` — the class stays a JVM-view class (D-009).
+        // One `@Metadata` decode per class: the flag, the kind refinement and
+        // the T-077 member views share it. Absent or corrupt metadata is `null`
+        // — the class stays a JVM-view class (D-009).
         val kotlinMetadata = KotlinMetadataReader.read(node.visibleAnnotations, node.invisibleAnnotations)
         val kind = refineKind(mapKind(access), kotlinMetadata)
         val superclass = mapSuperclass(kind, internalName, node.superName)
@@ -182,7 +184,25 @@ public object AsmClassReader {
             sourceFileName = node.sourceFile,
             deprecated = deprecated,
             isKotlin = kotlinMetadata != null,
+            kotlinMethodViews = kotlinViewsOf(kotlinMetadata),
         )
+    }
+
+    /**
+     * Builds the T-077 Kotlin member views from the decoded carrier. Never
+     * throws: a hostile-yet-parseable metadata shape degrades to the JVM
+     * projection (no views) rather than corrupting the class — the reader's
+     * contract is values, never exceptions.
+     */
+    private fun kotlinViewsOf(
+        metadata: dev.jdx.index.kotlin.KotlinMetadata?,
+    ): Map<String, dev.jdx.core.model.KotlinMethodView> {
+        val kmClass = metadata?.kmClass ?: return emptyMap()
+        return try {
+            KotlinMembers.viewsFor(kmClass)
+        } catch (_: Exception) {
+            emptyMap()
+        }
     }
 
     private fun mapKind(access: Int): TypeKind = when {

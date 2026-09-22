@@ -2,12 +2,12 @@ members of dev.jdx.fixtures.KotlinMembers
 constructors declared on dev.jdx.fixtures.KotlinMembers:
   constructor public KotlinMembers()
 methods declared on dev.jdx.fixtures.KotlinMembers:
-  method public final int renamedForJvm(int value)
+  method public final int originalName(int value)
   method public final java.lang.Integer nullable(java.lang.String input)
-  method public final java.lang.Object fetch(java.lang.String id, kotlin.coroutines.Continuation<? super java.lang.String> $completion)
   method public final java.lang.String withDefault(int first)
   method public final java.lang.String withDefault(int first, java.lang.String second)
-  method public final void internalHelper$testfixtures()
+  method public final suspend java.lang.String fetch(java.lang.String id)
+  method public final void internalHelper()
   method public static final dev.jdx.fixtures.KotlinMembers create()
 fields declared on dev.jdx.fixtures.KotlinMembers:
   field public static final dev.jdx.fixtures.KotlinMembers$Companion Companion
