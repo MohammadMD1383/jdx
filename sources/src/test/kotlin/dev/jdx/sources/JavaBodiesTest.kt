@@ -363,6 +363,69 @@ class JavaBodiesTest {
         typeKeyOf("com.example.Outer\$Inner") shouldBe "Inner"
     }
 
+    @Test
+    fun `annotation element slices to its declaration as a method`() {
+        val root = MemorySourceRoot(
+            mapOf(
+                "com/example/Anno.java" to
+                    """
+                    package com.example;
+                    public @interface Anno {
+                        String value();
+                        int[] codes() default {};
+                    }
+                    """.trimIndent(),
+            ),
+        )
+        val value = foundBodies(root, ref("com.example.Anno", "value", emptyList()))
+        value shouldHaveSize 1
+        value.single().kind shouldBe SourceBodyKind.METHOD
+        value.single().name shouldBe "value"
+        value.single().parameterTypes shouldBe emptyList()
+        value.single().returnType shouldBe "String"
+        value.single().text shouldContain "String value();"
+
+        // Under-specified refs keep every element (exit-2 set upstream, never a guess).
+        foundBodies(root, ref("com.example.Anno", "codes")) shouldHaveSize 1
+        // Zero-arity explicit refs match; parameterised refs never match an element.
+        foundBodies(root, ref("com.example.Anno", "codes", emptyList())) shouldHaveSize 1
+        findJavaBodies(root, ref("com.example.Anno", "value", listOf("java.lang.String"))) shouldBe
+            JavaBodyResult.MemberNotFound
+        // Return-typed refs narrow like methods (single candidates survive
+        // gracefully even on mismatch — the ref may be erased).
+        val narrowed = foundBodies(
+            root,
+            ref("com.example.Anno", "codes", emptyList(), "[I"),
+        )
+        narrowed shouldHaveSize 1
+        foundBodies(
+            root,
+            ref("com.example.Anno", "codes", emptyList(), "java.lang.String"),
+        ) shouldHaveSize 1
+    }
+
+    @Test
+    fun `annotation element extraction is verbatim and deterministic over generated shapes`() =
+        runBlocking<Unit> {
+            // Generating family for T-079: element names × types × defaults.
+            val names = listOf("value", "names", "codes", "types")
+            val types = listOf("String", "String[]", "int[]", "Class<?>[]", "int")
+            checkAll(200, Arb.of(names), Arb.of(types), Arb.of(true, false)) { name, type, withDefault ->
+                val default = if (withDefault) " default {}" else ""
+                // `int value default {}` would not parse — pin the grammar to
+                // valid shapes so the property owns matching, not parsing.
+                val elementType = if (withDefault && !type.endsWith("[]")) "String[]" else type
+                val text = "package com.example; public @interface Gen { $elementType $name()$default; }"
+                val root = MemorySourceRoot(mapOf("com/example/Gen.java" to text))
+                val first = findJavaBodies(root, ref("com.example.Gen", name, emptyList()))
+                first shouldBe findJavaBodies(root, ref("com.example.Gen", name, emptyList()))
+                val bodies = first.shouldBeInstanceOf<JavaBodyResult.Found>().bodies
+                bodies shouldHaveSize 1
+                bodies.single().kind shouldBe SourceBodyKind.METHOD
+                bodies.single().parameterTypes shouldBe emptyList()
+            }
+        }
+
     private fun arbMemberName(): Arb<String> = Arb.of(
         "add", "greet", "seed", "count", "isStop", "RED", "absent", "<init>", "<clinit>", "",
     )

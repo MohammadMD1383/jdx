@@ -130,7 +130,7 @@ internal fun sliceMemberDoc(loaded: JavaUnit.Unit, member: BodyDeclaration<*>, r
     if (comment.content.isBlank()) return null
     val range = comment.range.orElse(null) ?: member.range.orElse(null) ?: return null
     val kind = when {
-        member.isMethodDeclaration -> SourceDocKind.METHOD
+        member.isMethodDeclaration || member.isAnnotationMemberDeclaration -> SourceDocKind.METHOD
         member.isConstructorDeclaration || member.isCompactConstructorDeclaration -> SourceDocKind.CONSTRUCTOR
         member.isFieldDeclaration -> SourceDocKind.FIELD
         member is EnumConstantDeclaration -> SourceDocKind.ENUM_ENTRY
@@ -150,6 +150,8 @@ internal fun sliceMemberDoc(loaded: JavaUnit.Unit, member: BodyDeclaration<*>, r
 /** The attached javadoc comment of one matched declaration, if any. */
 internal fun docCommentOf(member: BodyDeclaration<*>): JavadocComment? = when {
     member.isMethodDeclaration -> member.asMethodDeclaration().javadocComment.orElse(null)
+    member.isAnnotationMemberDeclaration ->
+        member.asAnnotationMemberDeclaration().javadocComment.orElse(null)
     member.isConstructorDeclaration -> member.asConstructorDeclaration().javadocComment.orElse(null)
     member.isCompactConstructorDeclaration -> member.asCompactConstructorDeclaration().javadocComment.orElse(null)
     member.isFieldDeclaration -> member.asFieldDeclaration().javadocComment.orElse(null)

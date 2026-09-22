@@ -169,6 +169,31 @@ class JavaDocsTest {
     }
 
     @Test
+    fun `annotation element docs resolve as methods`() {
+        val root = MemorySourceRoot(
+            mapOf(
+                "com/example/Anno.java" to
+                    """
+                    package com.example;
+                    public @interface Anno {
+                        /** The value. */
+                        String value();
+                        int[] codes() default {};
+                    }
+                    """.trimIndent(),
+            ),
+        )
+        val documented = findMemberDocs(root, ref("com.example.Anno", "value", emptyList()))
+            .shouldBeInstanceOf<JavaDocResult.Found>()
+        documented.docs.single().kind shouldBe SourceDocKind.METHOD
+        documented.docs.single().rawComment shouldContain "The value."
+        // Undocumented elements fall back to supertypes upstream, so they read
+        // as member-not-found here (mirroring undocumented methods).
+        findMemberDocs(root, ref("com.example.Anno", "codes", emptyList())) shouldBe
+            JavaDocResult.MemberNotFound
+    }
+
+    @Test
     fun `nested type member docs resolve through dollar nesting`() {
         val result = findMemberDocs(shapes, ref("com.example.Outer\$Inner", "deep", listOf()))
         result.shouldBeInstanceOf<JavaDocResult.Found>()

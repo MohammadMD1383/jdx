@@ -177,6 +177,13 @@ class JavaBodiesSourcesTest {
             val bodies = foundBodies(root, ref("dev.jdx.fixtures.Annos", "tagged", emptyList()))
             bodies shouldHaveSize 1
             bodies.single().file shouldBe "dev/jdx/fixtures/Annos.java"
+            // Annotation elements are methods in bytecode but
+            // annotation-member declarations in JavaParser (T-079).
+            val element = foundBodies(root, ref("dev.jdx.fixtures.Tag", "value", emptyList()))
+            element shouldHaveSize 1
+            element.single().kind shouldBe SourceBodyKind.METHOD
+            element.single().file shouldBe "dev/jdx/fixtures/Annos.java"
+            element.single().text shouldContain "String value();"
         }
     }
 

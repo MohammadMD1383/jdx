@@ -229,7 +229,7 @@ internal fun navigateToType(compilationUnit: CompilationUnit, binaryName: String
     return current
 }
 
-/** Name-level match: methods and fields by declared name, `<init>` to every constructor. */
+/** Name-level match: methods, annotation elements and fields by declared name, `<init>` to every constructor. */
 internal fun matchByName(target: TypeDeclaration<*>, ref: MemberSymbolRef): List<BodyDeclaration<*>> {
     if (ref.name == "<init>") {
         return target.members.filter {
@@ -240,6 +240,8 @@ internal fun matchByName(target: TypeDeclaration<*>, ref: MemberSymbolRef): List
     if (ref.name == "<clinit>") return emptyList()
     val found = target.members.filter { member ->
         member.isMethodDeclaration && member.asMethodDeclaration().nameAsString == ref.name ||
+            member.isAnnotationMemberDeclaration &&
+            member.asAnnotationMemberDeclaration().nameAsString == ref.name ||
             member.isFieldDeclaration &&
             member.asFieldDeclaration().variables.any { it.nameAsString == ref.name }
     }.toMutableList<BodyDeclaration<*>>()
@@ -290,6 +292,9 @@ private fun passesArity(member: BodyDeclaration<*>, wantedSize: Int): Boolean = 
     member.isCompactConstructorDeclaration -> true
     member.isMethodDeclaration -> member.asMethodDeclaration().parameters.size == wantedSize
     member.isConstructorDeclaration -> member.asConstructorDeclaration().parameters.size == wantedSize
+    // Annotation elements take no parameters by grammar — only a zero-arity
+    // ref can name one (T-079).
+    member.isAnnotationMemberDeclaration -> wantedSize == 0
     else -> false
 }
 
@@ -297,6 +302,8 @@ private fun memberParamsMatch(member: BodyDeclaration<*>, wanted: List<TypeName>
     // Compact constructors take the record components implicitly: unprovable,
     // so they survive any parameterised `<init>` ref.
     if (member.isCompactConstructorDeclaration) return true
+    // Annotation elements take no parameters by grammar (T-079).
+    if (member.isAnnotationMemberDeclaration) return wanted.isEmpty()
     val declared = when {
         member.isMethodDeclaration -> member.asMethodDeclaration().parameters.map { it.typeAsString }
         member.isConstructorDeclaration -> member.asConstructorDeclaration().parameters.map { it.typeAsString }
@@ -307,8 +314,16 @@ private fun memberParamsMatch(member: BodyDeclaration<*>, wanted: List<TypeName>
 }
 
 private fun memberReturnMatches(member: BodyDeclaration<*>, wantedSimpleName: String): Boolean {
-    if (!member.isMethodDeclaration) return false
-    return sourceTypeKey(member.asMethodDeclaration().typeAsString) == typeKeyOf(wantedSimpleName)
+    if (member.isMethodDeclaration) {
+        return sourceTypeKey(member.asMethodDeclaration().typeAsString) == typeKeyOf(wantedSimpleName)
+    }
+    // Annotation elements are methods in bytecode with a declared return
+    // type, so the same disambiguator applies (T-079).
+    if (member.isAnnotationMemberDeclaration) {
+        return sourceTypeKey(member.asAnnotationMemberDeclaration().typeAsString) ==
+            typeKeyOf(wantedSimpleName)
+    }
+    return false
 }
 
 /**
@@ -425,6 +440,23 @@ internal fun sliceBody(loaded: JavaUnit.Unit, member: BodyDeclaration<*>, ref: M
                 "<init>",
                 ctor.parameters.map { it.typeAsString },
                 null,
+                loaded.path,
+                range.begin.line,
+                range.end.line,
+                text,
+            )
+        }
+        member.isAnnotationMemberDeclaration -> {
+            // Annotation elements (`String value();`) are methods in
+            // bytecode but annotation-member declarations in JavaParser —
+            // without this branch they slice to nothing (T-079). They take
+            // no parameters by grammar; the declared type is the return.
+            val element = member.asAnnotationMemberDeclaration()
+            SourceBody(
+                SourceBodyKind.METHOD,
+                element.nameAsString,
+                emptyList(),
+                element.typeAsString,
                 loaded.path,
                 range.begin.line,
                 range.end.line,
