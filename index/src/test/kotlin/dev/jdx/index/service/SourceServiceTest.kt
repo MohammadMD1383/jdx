@@ -418,8 +418,9 @@ class SourceServiceTest {
     }
 
     @Test
-    fun `kotlin-only type degrades naming T-039`(@TempDir tempDir: Path) {
-        // A binary whose paired sources carry only the `.kt` file: names T-039.
+    fun `kotlin-only type serves the whole Kotlin file`(@TempDir tempDir: Path) {
+        // Whole files need no PSI parse — only the PSI-confirmed path — so a
+        // `.kt` hit serves verbatim even without a sidecar (T-039).
         val binary = tempDir.resolve("case.jar")
         val sources = tempDir.resolve("case-sources.jar")
         val classBytes = ZipFile(FixtureJars.binaryJar()).use { zip ->
@@ -429,8 +430,8 @@ class SourceServiceTest {
         writeJar(sources, mapOf("dev/jdx/fixtures/Generics.kt" to "fun dummy(): Int = 1\n".toByteArray()))
         val roots = RootsSpec(jarSpecs = listOf(binary.toString()), includeJdk = false)
         val outcome = JdxService.source("dev.jdx.fixtures.Generics", roots)
-        outcome.exitCode shouldBe 1
-        textOf(outcome) shouldContain "T-039"
+        outcome.exitCode shouldBe 0
+        textOf(outcome) shouldContain "fun dummy(): Int = 1"
     }
 
     @Test

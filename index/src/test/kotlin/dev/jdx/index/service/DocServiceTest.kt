@@ -266,7 +266,9 @@ class DocServiceTest {
     }
 
     @Test
-    fun `member on kotlin-only sources degrades naming T-039`(@TempDir tempDir: Path) {
+    fun `member on kotlin-only sources without a sidecar names the install hint`(@TempDir tempDir: Path) {
+        // `doc` has no decompiled path, so a missing sidecar is exit 1 with
+        // the `~`-relative hint (T-039) — never an absolute home path.
         val binary = tempDir.resolve("case.jar")
         val sources = tempDir.resolve("case-sources.jar")
         val classBytes = ZipFile(FixtureJars.binaryJar()).use { zip ->
@@ -275,9 +277,16 @@ class DocServiceTest {
         writeDocJar(binary, mapOf("dev/jdx/fixtures/Generics.class" to classBytes))
         writeDocJar(sources, mapOf("dev/jdx/fixtures/Generics.kt" to "fun dummy(): Int = 1\n".toByteArray()))
         val roots = RootsSpec(jarSpecs = listOf(binary.toString()), includeJdk = false)
-        val outcome = JdxService.doc("dev.jdx.fixtures.Generics#identity(U)", roots)
+        // `tempDir` doubles as the Kotlin home: it holds no sidecar, so the
+        // unavailable path pins hermetically even on machines with a real
+        // sidecar installed.
+        val outcome = JdxService.doc(
+            "dev.jdx.fixtures.Generics#identity(U)",
+            roots,
+            DocOptions(kotlinUserHome = tempDir),
+        )
         outcome.exitCode shouldBe 1
-        textOf(outcome) shouldContain "T-039"
+        textOf(outcome) shouldContain "kotlin-compiler-embeddable-2.4.20.jar not installed under ~/.cache/jdx/kotlin"
     }
 
     @Test
@@ -476,7 +485,7 @@ class DocServiceTest {
     }
 
     @Test
-    fun `kotlin-only type degrades naming T-039`(@TempDir tempDir: Path) {
+    fun `kotlin-only type without a sidecar names the install hint`(@TempDir tempDir: Path) {
         val binary = tempDir.resolve("case.jar")
         val sources = tempDir.resolve("case-sources.jar")
         val classBytes = ZipFile(FixtureJars.binaryJar()).use { zip ->
@@ -485,9 +494,16 @@ class DocServiceTest {
         writeDocJar(binary, mapOf("dev/jdx/fixtures/Generics.class" to classBytes))
         writeDocJar(sources, mapOf("dev/jdx/fixtures/Generics.kt" to "fun dummy(): Int = 1\n".toByteArray()))
         val roots = RootsSpec(jarSpecs = listOf(binary.toString()), includeJdk = false)
-        val outcome = JdxService.doc("dev.jdx.fixtures.Generics", roots)
+        // `tempDir` doubles as the Kotlin home: it holds no sidecar, so the
+        // unavailable path pins hermetically even on machines with a real
+        // sidecar installed.
+        val outcome = JdxService.doc(
+            "dev.jdx.fixtures.Generics",
+            roots,
+            DocOptions(kotlinUserHome = tempDir),
+        )
         outcome.exitCode shouldBe 1
-        textOf(outcome) shouldContain "T-039"
+        textOf(outcome) shouldContain "kotlin-compiler-embeddable-2.4.20.jar not installed under ~/.cache/jdx/kotlin"
     }
 
     @Test

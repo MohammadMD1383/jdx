@@ -16,11 +16,25 @@ public const val KOTLIN_COMPILER_JAR: String = "kotlin-compiler-embeddable-2.4.2
 /**
  * Where the side-loaded Kotlin compiler lives (D-008 §3): under the cache
  * root, versioned so an upgrade never talks to a stale jar. Fetched and
- * verified on first use (T-039 wires the fetch); until then its absence is
+ * verified on first use (T-080 wires the fetch); until then its absence is
  * routine, not an error.
  */
 public fun kotlinSidecarJar(userHome: Path): Path =
-    userHome.resolve(".cache").resolve("jdx").resolve("kotlin").resolve(KOTLIN_COMPILER_JAR)
+    kotlinSidecarDir(userHome).resolve(KOTLIN_COMPILER_JAR)
+
+/** The directory holding the sidecar plus its runtime jars (T-039). */
+public fun kotlinSidecarDir(userHome: Path): Path =
+    userHome.resolve(".cache").resolve("jdx").resolve("kotlin")
+
+/**
+ * The user-facing hint naming the missing sidecar without absolute paths
+ * (T-039): error details must stay deterministic and `~`-relative
+ * (CLAUDE.md §2.5), so callers use this instead of the absolute
+ * [KotlinSourceParser.detail].
+ */
+public fun kotlinMissingHint(): String =
+    "$KOTLIN_COMPILER_JAR not installed under ~/.cache/jdx/kotlin " +
+        "(Kotlin sources unavailable — see `jdx doctor`)"
 
 /**
  * Whether the side-loaded Kotlin compiler is installed. A value on every

@@ -189,8 +189,11 @@ class BodyServiceTest {
     }
 
     @Test
-    fun `kotlin-only type degrades naming T-039`(@TempDir tempDir: Path) {
-        // A binary whose paired sources carry only the `.kt` file: names T-039.
+    fun `kotlin-only decoy without a sidecar degrades to reconstruction`(@TempDir tempDir: Path) {
+        // A binary whose paired sources carry only a `.kt` file that does not
+        // even declare the class: without a sidecar the `.kt` flesh is
+        // unavailable, so the ladder reconstructs (T-039). The temp-dir
+        // engine keeps the real user cache untouched.
         val binary = tempDir.resolve("case.jar")
         val sources = tempDir.resolve("case-sources.jar")
         val classBytes = ZipFile(FixtureJars.binaryJar()).use { zip ->
@@ -199,9 +202,13 @@ class BodyServiceTest {
         writeJar(binary, mapOf("dev/jdx/fixtures/Generics.class" to classBytes))
         writeJar(sources, mapOf("dev/jdx/fixtures/Generics.kt" to "fun dummy(): Int = 1\n".toByteArray()))
         val roots = RootsSpec(jarSpecs = listOf(binary.toString()), includeJdk = false)
-        val outcome = JdxService.body("dev.jdx.fixtures.Generics#identity(java.lang.Object)", roots)
-        outcome.exitCode shouldBe 1
-        textOf(outcome) shouldContain "T-039"
+        // `tempDir` doubles as the Kotlin home: it holds no sidecar, so the
+        // unavailable path pins hermetically even on machines with a real
+        // sidecar installed.
+        val options = BodyOptions(decompiler = tempEngine(tempDir), kotlinUserHome = tempDir)
+        val outcome = JdxService.body("dev.jdx.fixtures.Generics#identity(java.lang.Object)", roots, options)
+        outcome.exitCode shouldBe 0
+        textOf(outcome) shouldContain "decompiled by vineflower"
     }
 
     @Test

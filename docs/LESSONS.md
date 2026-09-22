@@ -65,6 +65,8 @@ session-log references keep resolving. Numbers are never reused.)
 | Kotlin `isVar` flag vs setter presence (infer `var` from the setter) | L-090 |
 | Bypass-flag identity law (projection flags are identity on unaffected graphs) | L-091 |
 | Side-loaded artifact seams (stub the presence class; pin the premise) | L-093 |
+| Standalone PSI bootstrap (three steps + sibling runtime jars) | L-094 |
+| KDoc attaches to the following declaration | L-095 |
 
 ## Adding an entry
 

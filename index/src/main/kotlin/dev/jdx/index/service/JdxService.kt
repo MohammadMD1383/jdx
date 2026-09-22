@@ -403,6 +403,13 @@ public object JdxService {
          * temp-dir instances so no test writes to the real cache.
          */
         public val javapDecompiler: DecompilerEngine = JavapDecompiler(),
+        /**
+         * Home directory the Kotlin sidecar is probed under (T-039).
+         * Defaults to the real user home; tests point it at a temp home
+         * with a symlinked compiler set so no test writes to the real
+         * `~/.cache`.
+         */
+        public val kotlinUserHome: Path? = null,
     )
 
     /**
@@ -533,6 +540,13 @@ public object JdxService {
          * temp-dir instances so no test writes to the real cache.
          */
         public val javapDecompiler: DecompilerEngine = JavapDecompiler(),
+        /**
+         * Home directory the Kotlin sidecar is probed under (T-039).
+         * Defaults to the real user home; tests point it at a temp home
+         * with a symlinked compiler set so no test writes to the real
+         * `~/.cache`.
+         */
+        public val kotlinUserHome: Path? = null,
     )
 
     /**
@@ -777,6 +791,13 @@ public object JdxService {
         public val raw: Boolean = false,
         /** Maximum shown doc lines; the rest become a truncation footer (`--max-lines N`). */
         public val maxLines: Int = DEFAULT_DOC_MAX_LINES,
+        /**
+         * Home directory the Kotlin sidecar is probed under (T-039).
+         * Defaults to the real user home; tests point it at a temp home
+         * with a symlinked compiler set so no test writes to the real
+         * `~/.cache`.
+         */
+        public val kotlinUserHome: Path? = null,
     )
 
     /**
@@ -3559,6 +3580,11 @@ public object JdxService {
         // `--prefer-sources` signal (no parsing), the bodies behind them slice
         // only the displayed rows. Every opened root closes here.
         val sourceCache = mutableMapOf<Int, dev.jdx.sources.SourceRoot?>()
+        // One ambient Kotlin parser for the displayed snippets (T-039, best
+        // effort): opened lazily-cheap, parsed only when a `.kt` caller
+        // actually needs a slice. No options seam — snippet-less rows are
+        // the honest degradation either way.
+        val ktParser = openKotlinParserFor(null)
         try {
             val binariesByRoot = opened.map { it.root.classEntryPaths().map(::entryToBinary).toSet() }
             val providers = mutableMapOf<String, MutableList<Int>>()
@@ -3707,7 +3733,7 @@ public object JdxService {
                     artifact = sample.label,
                     targetRef = sample.targetRef,
                     snippet = if (index < effectiveLimit) {
-                        snippetForCaller(sample.fromClass, sample.fromMember, sample.rootIndex, opened, sourceCache)
+                        snippetForCaller(sample.fromClass, sample.fromMember, sample.rootIndex, opened, sourceCache, ktParser)
                     } else {
                         null
                     },
@@ -3731,6 +3757,7 @@ public object JdxService {
             )
         } finally {
             sourceCache.values.forEach { runCatching { it?.close() } }
+            runCatching { ktParser.close() }
             opened.forEach { it.root.close() }
         }
     }
@@ -3833,7 +3860,8 @@ public object JdxService {
      * Slices the caller's enclosing method through its own paired sources
      * (best effort): any miss — no sources root, no file for the class,
      * unparseable member — yields `null` and the row renders snippet-less.
-     * Never throws.
+     * `.kt` callers slice through the shared [ktParser] (T-039); an
+     * unavailable parser reads snippet-less too. Never throws.
      */
     private fun snippetForCaller(
         fromClass: String,
@@ -3841,6 +3869,7 @@ public object JdxService {
         rootIndex: Int?,
         opened: List<OpenRoot>,
         sourceCache: MutableMap<Int, dev.jdx.sources.SourceRoot?>,
+        ktParser: dev.jdx.sources.KotlinSourceParser? = null,
     ): SampleSnippet? {
         if (fromMember == "<clinit>") return null
         if (rootIndex == null) return null
@@ -3851,7 +3880,19 @@ public object JdxService {
                 runCatching { typeNameFromBinaryName(fromClass) }.getOrNull() as? TypeName.ClassType
                 ) ?: return@runCatching null
             val lookup = MemberSymbolRef(declaringType = declaring, name = fromMember)
-            when (val found = dev.jdx.sources.findJavaBodies(sources, lookup)) {
+            val found = when (
+                val java = dev.jdx.sources.findJavaBodies(sources, lookup)
+            ) {
+                is dev.jdx.sources.JavaBodyResult.NoSource,
+                is dev.jdx.sources.JavaBodyResult.NotJava,
+                -> if (ktParser != null) {
+                    dev.jdx.sources.findKotlinBodies(sources, lookup, ktParser)
+                } else {
+                    java
+                }
+                else -> java
+            }
+            when (found) {
                 is dev.jdx.sources.JavaBodyResult.Found -> {
                     val body = found.bodies.firstOrNull() ?: return@runCatching null
                     SampleSnippet(
@@ -4033,6 +4074,9 @@ public object JdxService {
             else -> null
         } ?: return failure(3, rawRef, "usage error: doc takes a class member or type, got '$rawRef'")
         val opened = openRoots(roots)
+        // One Kotlin parser per command (T-039): cheap to open, and the
+        // ~1 s PSI init happens at most once, on the first `.kt` parse.
+        val ktParser = openKotlinParserFor(options.kotlinUserHome)
         try {
             val binariesByRoot = opened.map { it.root.classEntryPaths().map(::entryToBinary).toSet() }
             val providers = mutableMapOf<String, MutableList<Int>>()
@@ -4079,12 +4123,13 @@ public object JdxService {
             }
 
             return if (ref is MemberSymbolRef) {
-                memberDocOutcome(ref, rawRef, binary, target, workspace, opened, providers, warnings, options)
+                memberDocOutcome(ref, rawRef, binary, target, workspace, opened, providers, warnings, options, ktParser)
             } else {
-                typeDocOutcome(binary, rawRef, target, opened, providers, warnings, options)
+                typeDocOutcome(binary, rawRef, target, opened, providers, warnings, options, ktParser)
             }
         } finally {
             opened.forEach { it.root.close() }
+            runCatching { ktParser.close() }
         }
     }
 
@@ -4104,6 +4149,8 @@ public object JdxService {
         providers: Map<String, List<Int>>,
         warnings: List<Warning>,
         options: DocOptions,
+        // Shared Kotlin parser (T-039), opened once per `doc` command.
+        ktParser: dev.jdx.sources.KotlinSourceParser,
     ): ServiceOutcome {
         val bytecodeMatches = matchBytecodeMembers(target, memberRef)
         if (bytecodeMatches.isEmpty()) {
@@ -4122,19 +4169,9 @@ public object JdxService {
         if (specified && bytecodeMatches.size > 1 && memberRef.returnType == null) {
             return ServiceOutcome.Failure(ErrorResult.ambiguous(rawRef, matchRefs))
         }
-        // T-078 properties have no KDoc path yet (T-039 owns Kotlin sources):
-        // name the task instead of probing Java sources for a Kotlin accessor.
-        if (bytecodeMatches.singleOrNull() is BytecodeMember.Property) {
-            val property = (bytecodeMatches.single() as BytecodeMember.Property).view
-            return ServiceOutcome.Failure(
-                ErrorResult.notFound(
-                    rawRef,
-                    detail = "no documentation for property '${property.propertyName}' " +
-                        "in ${rootLabel(opened[providers.getValue(binary).first()], binary)} " +
-                        "(Kotlin KDoc: T-039)",
-                ),
-            )
-        }
+        // Properties read their KDoc off the `KtProperty` declaration (T-039):
+        // the flow below serves them — a JVM-spelled accessor query lands on
+        // the property through the alias mapping, never the synthetic getter.
         // Only real methods inherit docs (D-037): the first non-synthetic one
         // (bridge pairs share one source declaration — either spelling walks).
         val primaryMethod = bytecodeMatches.filterIsInstance<BytecodeMember.Method>()
@@ -4169,8 +4206,19 @@ public object JdxService {
         try {
             var directDoc: dev.jdx.sources.SourceDoc? = null
             var memberNotFound = false
+            val ktAliases = kotlinSourceAliases(target, bytecodeMatches.singleOrNull())
             for (lookupRef in lookupRefs) {
-                when (val found = dev.jdx.sources.findMemberDocs(sources, lookupRef)) {
+                // `.kt` flesh (T-039): same NoSource/NotJava → Kotlin mapping
+                // as the body path.
+                val found = when (
+                    val java = dev.jdx.sources.findMemberDocs(sources, lookupRef)
+                ) {
+                    is dev.jdx.sources.JavaDocResult.NoSource,
+                    is dev.jdx.sources.JavaDocResult.NotJava,
+                    -> dev.jdx.sources.findKotlinMemberDocs(sources, lookupRef, ktParser, ktAliases)
+                    else -> java
+                }
+                when (found) {
                     is dev.jdx.sources.JavaDocResult.Found -> {
                         if (!specified && found.docs.size > 1) {
                             return ServiceOutcome.Failure(ErrorResult.ambiguous(rawRef, matchRefs))
@@ -4197,11 +4245,26 @@ public object JdxService {
                             ),
                         )
                     is dev.jdx.sources.JavaDocResult.NotJava ->
+                        // Unreachable: the mapping above sends every `NotJava`
+                        // through the Kotlin seam, which never emits it —
+                        // kept for exhaustiveness.
+                        return ServiceOutcome.Failure(
+                            ErrorResult.notFound(
+                                rawRef,
+                                detail = "no sources for $binary in $label " +
+                                    "(decompilation not yet implemented, T-026)",
+                            ),
+                        )
+                    is dev.jdx.sources.JavaDocResult.ParserUnavailable ->
+                        // No usable PSI (T-039): `doc` has no decompiled path
+                        // (decompiled text carries no KDoc), so the install
+                        // hint is the honest answer — `~`-relative and
+                        // deterministic, never an absolute home path.
                         return ServiceOutcome.Failure(
                             ErrorResult.notFound(
                                 rawRef,
                                 detail = "$binary only ships Kotlin sources here " +
-                                    "(Kotlin bodies: T-039)",
+                                    "(${dev.jdx.sources.kotlinMissingHint()})",
                             ),
                         )
                     is dev.jdx.sources.JavaDocResult.ParseError ->
@@ -4212,7 +4275,7 @@ public object JdxService {
             // replacement inside the direct doc, and the inherited doc when
             // the direct comment is absent or renders to nothing.
             val inherited = if (options.inherit && primaryMethod != null) {
-                findInheritedMemberDoc(target, memberRef, opened, providers, workspace, options.raw)
+                findInheritedMemberDoc(target, memberRef, opened, providers, workspace, options.raw, ktParser)
             } else {
                 null
             }
@@ -4236,7 +4299,7 @@ public object JdxService {
                 )
             }
             check(memberNotFound || directDoc != null) { "lookup spellings exhausted without a terminal result" }
-            val detail = if (directDoc != null || sourceDeclaresMember(sources, binary, memberRef.name)) {
+            val detail = if (directDoc != null || sourceDeclaresMember(sources, binary, memberRef.name, ktParser)) {
                 "no javadoc comment for '$rawRef' in $label nor any documenting supertype"
             } else {
                 "'$rawRef' has no source counterpart in $label " +
@@ -4261,6 +4324,8 @@ public object JdxService {
         providers: Map<String, List<Int>>,
         warnings: List<Warning>,
         options: DocOptions,
+        // Shared Kotlin parser (T-039), opened once per `doc` command.
+        ktParser: dev.jdx.sources.KotlinSourceParser,
     ): ServiceOutcome {
         val winner = providers.getValue(binary).first()
         val label = rootLabel(opened[winner], binary)
@@ -4274,7 +4339,17 @@ public object JdxService {
                 ),
             )
         try {
-            return when (val found = dev.jdx.sources.findTypeDoc(sources, binary)) {
+            // `.kt` flesh (T-039): same NoSource/NotJava → Kotlin mapping as
+            // members — a Kotlin class in a shared file reports NoSource.
+            val found = when (
+                val java = dev.jdx.sources.findTypeDoc(sources, binary)
+            ) {
+                is dev.jdx.sources.JavaDocResult.NoSource,
+                is dev.jdx.sources.JavaDocResult.NotJava,
+                -> dev.jdx.sources.findKotlinTypeDoc(sources, binary, ktParser)
+                else -> java
+            }
+            return when (found) {
                 is dev.jdx.sources.JavaDocResult.Found -> {
                     val doc = found.docs.single()
                     val lines = docLines(doc, options.raw, inheritDocReplacement = null)
@@ -4318,11 +4393,22 @@ public object JdxService {
                         ),
                     )
                 is dev.jdx.sources.JavaDocResult.NotJava ->
+                    // Unreachable: the mapping above sends every `NotJava`
+                    // through the Kotlin seam, which never emits it — kept
+                    // for exhaustiveness.
+                    ServiceOutcome.Failure(
+                        ErrorResult.notFound(
+                            rawRef,
+                            detail = "no sources for $binary in $label " +
+                                "(decompilation not yet implemented, T-026)",
+                        ),
+                    )
+                is dev.jdx.sources.JavaDocResult.ParserUnavailable ->
                     ServiceOutcome.Failure(
                         ErrorResult.notFound(
                             rawRef,
                             detail = "$binary only ships Kotlin sources here " +
-                                "(Kotlin bodies: T-039)",
+                                "(${dev.jdx.sources.kotlinMissingHint()})",
                         ),
                     )
                 is dev.jdx.sources.JavaDocResult.ParseError ->
@@ -4361,6 +4447,8 @@ public object JdxService {
         providers: Map<String, List<Int>>,
         workspace: Workspace,
         raw: Boolean,
+        // Shared Kotlin parser (T-039), or null to stay Java-only.
+        ktParser: dev.jdx.sources.KotlinSourceParser? = null,
     ): InheritedDoc? {
         for (superInfo in supertypeChain(target, workspace::loadByName)) {
             val superBinary = superInfo.name.binaryName
@@ -4376,7 +4464,21 @@ public object JdxService {
                         ?.takeIf { it != superRef }
                         ?.let(::listOf).orEmpty())
                 for (lookupRef in refs) {
-                    when (val found = dev.jdx.sources.findMemberDocs(superSources, lookupRef)) {
+                    val java = dev.jdx.sources.findMemberDocs(superSources, lookupRef)
+                    val found = if (
+                        (java is dev.jdx.sources.JavaDocResult.NoSource ||
+                            java is dev.jdx.sources.JavaDocResult.NotJava) &&
+                        ktParser != null
+                    ) {
+                        val superAliases = kotlinSourceAliases(
+                            superInfo,
+                            superMatches.singleOrNull(),
+                        )
+                        dev.jdx.sources.findKotlinMemberDocs(superSources, lookupRef, ktParser, superAliases)
+                    } else {
+                        java
+                    }
+                    when (found) {
                         is dev.jdx.sources.JavaDocResult.Found -> {
                             val doc = found.docs.firstOrNull() ?: break
                             val lines = docLines(doc, raw, inheritDocReplacement = null)
@@ -4385,7 +4487,8 @@ public object JdxService {
                         }
                         else -> {
                             // MemberNotFound tries the next spelling; NoSource,
-                            // NotJava and ParseError move to the next supertype.
+                            // NotJava, ParserUnavailable and ParseError move
+                            // to the next supertype.
                             if (found !is dev.jdx.sources.JavaDocResult.MemberNotFound) break
                         }
                     }
@@ -4426,10 +4529,28 @@ public object JdxService {
         sources: dev.jdx.sources.SourceRoot,
         binary: String,
         memberName: String,
+        // Shared Kotlin parser (T-039), or null to stay Java-only.
+        ktParser: dev.jdx.sources.KotlinSourceParser? = null,
     ): Boolean {
-        val listed = dev.jdx.sources.listJavaMembers(sources, binary)
-        return (listed as? dev.jdx.sources.JavaMemberList.Listed)
-            ?.members?.any { it.name == memberName } == true
+        when (val listed = dev.jdx.sources.listJavaMembers(sources, binary)) {
+            is dev.jdx.sources.JavaMemberList.Listed ->
+                return listed.members.any { it.name == memberName }
+            is dev.jdx.sources.JavaMemberList.NotJava,
+            is dev.jdx.sources.JavaMemberList.NoSource,
+            -> {
+                // `.kt` flesh (T-039): a Kotlin class in a shared file
+                // reports NoSource, an exact-name `.kt` hit NotJava — both
+                // pair against the Kotlin declarations, accepting JVM
+                // accessor spellings of properties.
+            }
+            else -> return false
+        }
+        if (ktParser == null) return false
+        val kotlinListed = dev.jdx.sources.listKotlinMembers(sources, binary, ktParser)
+        val members = (kotlinListed as? dev.jdx.sources.JavaMemberList.Listed)?.members ?: return false
+        return members.any {
+            it.name == memberName || memberName in dev.jdx.sources.accessorNames(it.name)
+        }
     }
 
     /**
@@ -4525,23 +4646,40 @@ public object JdxService {
         providers: Map<String, List<Int>>,
         workspace: Workspace,
         sourceCache: MutableMap<Int, dev.jdx.sources.SourceRoot?>,
+        // Shared Kotlin parser (T-039), or null to stay Java-only. Opened
+        // once per command by the caller — enrichment never opens its own.
+        ktParser: dev.jdx.sources.KotlinSourceParser? = null,
     ): List<String>? {
         return try {
             val binary = target.name.binaryName
             val rootIndex = providers[binary]?.firstOrNull() ?: return null
             val sources = sourceCache.getOrPut(rootIndex) { openSourcesFor(opened[rootIndex]) }
                 ?: return null
+            val ktAliases = kotlinSourceAliases(target, bytecodeMatches.singleOrNull())
             var directDoc: dev.jdx.sources.SourceDoc? = null
             for (lookupRef in lookupRefs) {
-                when (val found = dev.jdx.sources.findMemberDocs(sources, lookupRef)) {
+                val java = dev.jdx.sources.findMemberDocs(sources, lookupRef)
+                // `.kt` flesh (T-039): same NoSource/NotJava → Kotlin mapping
+                // as the body path; without a parser the Java answer stands.
+                val found = if (
+                    (java is dev.jdx.sources.JavaDocResult.NoSource ||
+                        java is dev.jdx.sources.JavaDocResult.NotJava) &&
+                    ktParser != null
+                ) {
+                    dev.jdx.sources.findKotlinMemberDocs(sources, lookupRef, ktParser, ktAliases)
+                } else {
+                    java
+                }
+                when (found) {
                     is dev.jdx.sources.JavaDocResult.Found -> {
                         directDoc = found.docs.firstOrNull() ?: return null
                         break
                     }
                     else -> {
                         // MemberNotFound tries the next spelling; NoSource,
-                        // NotJava and ParseError fall through to the inherited
-                        // walk (which skips unreadable supertypes anyway).
+                        // NotJava, ParserUnavailable and ParseError fall
+                        // through to the inherited walk (which skips
+                        // unreadable supertypes anyway).
                         if (found !is dev.jdx.sources.JavaDocResult.MemberNotFound) break
                     }
                 }
@@ -4551,7 +4689,7 @@ public object JdxService {
                 ?: bytecodeMatches.filterIsInstance<BytecodeMember.Method>().firstOrNull { it.info.name != "<init>" }
             val inherited = if (primaryMethod != null) {
                 try {
-                    findInheritedMemberDoc(target, effectiveRef, opened, providers, workspace, raw = false)
+                    findInheritedMemberDoc(target, effectiveRef, opened, providers, workspace, raw = false, ktParser)
                 } catch (e: Exception) {
                     null
                 }
@@ -4581,6 +4719,8 @@ public object JdxService {
         providers: Map<String, List<Int>>,
         workspace: Workspace,
         sourceCache: MutableMap<Int, dev.jdx.sources.SourceRoot?>,
+        // Shared Kotlin parser (T-039), or null to stay Java-only.
+        ktParser: dev.jdx.sources.KotlinSourceParser? = null,
     ): String? {
         return try {
             val parsed = SymbolRefParser.parse(canonicalRef)
@@ -4599,7 +4739,7 @@ public object JdxService {
                     ?.takeIf { it != effectiveRef }?.let(::listOf).orEmpty())
             val lines = withDocLines(
                 declaringInfo, effectiveRef, lookupRefs, matches,
-                opened, providers, workspace, sourceCache,
+                opened, providers, workspace, sourceCache, ktParser,
             ) ?: return null
             dev.jdx.core.render.firstDocSentence(lines)
         } catch (e: Exception) {
@@ -4622,6 +4762,9 @@ public object JdxService {
         workspace: Workspace,
     ): MemberListing {
         val sourceCache = mutableMapOf<Int, dev.jdx.sources.SourceRoot?>()
+        // One ambient Kotlin parser for the whole enrichment (T-039): opened
+        // lazily-cheap, parsed only when a `.kt` row actually needs docs.
+        val ktParser = openKotlinParserFor(null)
         try {
             val groups = listing.groups.map { group ->
                 group.copy(
@@ -4630,7 +4773,7 @@ public object JdxService {
                             row
                         } else {
                             val sentence = try {
-                                withDocSentence(row.canonicalRef, opened, providers, workspace, sourceCache)
+                                withDocSentence(row.canonicalRef, opened, providers, workspace, sourceCache, ktParser)
                             } catch (e: Exception) {
                                 null
                             }
@@ -4644,6 +4787,7 @@ public object JdxService {
             return listing
         } finally {
             sourceCache.values.forEach { runCatching { it?.close() } }
+            runCatching { ktParser.close() }
         }
     }
 
@@ -4659,6 +4803,9 @@ public object JdxService {
         val declaring = memberRef.declaringType as? TypeName.ClassType
             ?: return failure(3, rawRef, "usage error: body takes a class member, got '$rawRef'")
         val opened = openRoots(roots)
+        // One Kotlin parser per command (T-039): cheap to open, and the
+        // ~1 s PSI init happens at most once, on the first `.kt` parse.
+        val ktParser = openKotlinParserFor(options.kotlinUserHome)
         try {
             val binariesByRoot = opened.map { it.root.classEntryPaths().map(::entryToBinary).toSet() }
             val providers = mutableMapOf<String, MutableList<Int>>()
@@ -4736,8 +4883,9 @@ public object JdxService {
                         kotlinView = kotlinViewOf(target, match.info),
                     )
                     is BytecodeMember.Field -> SignatureLines.fieldLine(match.info)
-                    // T-078 properties have no body slice yet (T-039 owns Kotlin
-                    // bodies): the header still spells the folded property.
+                    // Properties have no JVM body of their own: the header
+                    // still spells the folded property (the T-039 slice
+                    // serves the `KtProperty` declaration).
                     is BytecodeMember.Property -> SignatureLines.propertyLine(
                         access = match.view.access,
                         isVar = match.view.isVar,
@@ -4757,21 +4905,13 @@ public object JdxService {
             // authority (the match above already proved the member); these are
             // just the keys the T-021 narrowing understands.
             val singleMatch = bytecodeMatches.singleOrNull()
-            // T-078 properties have no body slice yet (T-039 owns Kotlin bodies):
-            // the getter's JVM body would mislead (synthetic accessor), so name
-            // the Kotlin task instead of slicing.
-            if (singleMatch is BytecodeMember.Property) {
-                return ServiceOutcome.Failure(
-                    ErrorResult.notFound(
-                        rawRef,
-                        detail = "no body for property '${singleMatch.view.propertyName}' " +
-                            "in ${rootLabel(opened[winner], binary)} " +
-                            "(Kotlin property bodies: T-039)",
-                    ),
-                )
-            }
             val lookupRefs = listOf(effectiveRef) +
                 (singleMatch?.let { genericSpelledRef(target, it) }?.takeIf { it != effectiveRef }?.let(::listOf).orEmpty())
+            // Kotlin source spellings for the `.kt` attempt below (T-039):
+            // the `@JvmName` display name, the unmangled `internal` name, or
+            // the folded property name — the JVM spelling alone cannot match
+            // sources.
+            val ktAliases = kotlinSourceAliases(target, singleMatch)
             val label = rootLabel(opened[winner], binary)
             // `--with-doc` (T-072): docs come from the paired sources even
             // when the body itself is reconstructed — the doc block is
@@ -4781,7 +4921,7 @@ public object JdxService {
                 try {
                     withDocLines(
                         target, effectiveRef, lookupRefs, bytecodeMatches,
-                        opened, providers, workspace, docCache,
+                        opened, providers, workspace, docCache, ktParser,
                     )
                 } catch (e: Exception) {
                     null
@@ -4855,7 +4995,20 @@ public object JdxService {
             try {
                 var memberNotFound = false
                 for (lookupRef in lookupRefs) {
-                    when (val found = dev.jdx.sources.findJavaBodies(sources, lookupRef)) {
+                    // `.kt` flesh (T-039): both `NoSource` (a Kotlin class in
+                    // a shared file resolves to no `.java`) and `NotJava` (an
+                    // exact-name `.kt` hit) mean "try Kotlin" — the seam
+                    // re-resolves with PSI confirmation, so a miss here stays
+                    // a miss and never a wrong file.
+                    val found = when (
+                        val java = dev.jdx.sources.findJavaBodies(sources, lookupRef)
+                    ) {
+                        is dev.jdx.sources.JavaBodyResult.NoSource,
+                        is dev.jdx.sources.JavaBodyResult.NotJava,
+                        -> dev.jdx.sources.findKotlinBodies(sources, lookupRef, ktParser, ktAliases)
+                        else -> java
+                    }
+                    when (found) {
                     is dev.jdx.sources.JavaBodyResult.Found -> {
                         if (!specified && found.bodies.size > 1) {
                             return ServiceOutcome.Failure(ErrorResult.ambiguous(rawRef, matchRefs))
@@ -4901,12 +5054,35 @@ public object JdxService {
                             ),
                         )
                     is dev.jdx.sources.JavaBodyResult.NotJava ->
+                        // Unreachable: the mapping above sends every `NotJava`
+                        // through the Kotlin seam, which never emits it —
+                        // kept for exhaustiveness.
                         return ServiceOutcome.Failure(
                             ErrorResult.notFound(
                                 rawRef,
-                                detail = "$binary only ships Kotlin sources here " +
-                                    "(Kotlin bodies: T-039)",
+                                detail = "$binary has no source counterpart in $label " +
+                                    "(SOURCES_VERSION_MISMATCH)",
                             ),
+                        )
+                    is dev.jdx.sources.JavaBodyResult.ParserUnavailable ->
+                        // No usable PSI (T-039): the `.kt` file might as well
+                        // be absent — degrade down the reconstruction ladder.
+                        return defaultBodyOutcome(
+                            memberRef = memberRef,
+                            rawRef = rawRef,
+                            binary = binary,
+                            target = target,
+                            bytecodeMatches = bytecodeMatches,
+                            lookupRefs = lookupRefs,
+                            matchRefs = matchRefs,
+                            specified = specified,
+                            signatureLine = signatureLine,
+                            doc = bodyDoc,
+                            opened = opened,
+                            winner = winner,
+                            label = label,
+                            warnings = warnings,
+                            options = options,
                         )
                     is dev.jdx.sources.JavaBodyResult.ParseError ->
                         return failure(5, rawRef, found.message)
@@ -4925,6 +5101,7 @@ public object JdxService {
             }
         } finally {
             opened.forEach { it.root.close() }
+            runCatching { ktParser.close() }
         }
     }
 
@@ -4932,6 +5109,28 @@ public object JdxService {
         is dev.jdx.index.artifact.JarArtifact -> root.openSources()
         is dev.jdx.index.artifact.JrtArtifact -> root.openSources()
         else -> null
+    }
+
+    /**
+     * Opens the Kotlin source parser for one command (T-039): [userHome]
+     * overrides the ambient home (the `kotlinUserHome` test seam). Never
+     * throws — absence reads as an unavailable value the callers degrade.
+     * Cheap until the first parse (the ~1 s PSI init is lazy per parser),
+     * so one parser is opened per command and shared across its lookups.
+     */
+    private fun openKotlinParserFor(userHome: Path?): dev.jdx.sources.KotlinSourceParser {
+        val home = userHome
+            ?: runCatching { Path.of(System.getProperty("user.home")) }.getOrNull()
+            ?: Path.of(".")
+        return dev.jdx.sources.openKotlinParser(home)
+    }
+
+    /** Kotlin source spellings of one bytecode match for `.kt` lookup (T-039). */
+    private fun kotlinSourceAliases(target: ClassInfo, match: BytecodeMember?): Set<String> = when (match) {
+        is BytecodeMember.Method ->
+            kotlinViewOf(target, match.info)?.let { setOf(it.displayName) } ?: emptySet()
+        is BytecodeMember.Property -> setOf(match.view.propertyName)
+        is BytecodeMember.Field, null -> emptySet()
     }
 
     // -- decompilation fallback (T-026) --------------------------------------------
@@ -5165,6 +5364,11 @@ public object JdxService {
                     // kept for exhaustiveness (L-073).
                     memberNotFound = true
                 }
+                is dev.jdx.sources.JavaBodyResult.ParserUnavailable -> {
+                    // Unreachable: the Java seam never emits this (no parser
+                    // involved) — kept for exhaustiveness.
+                    memberNotFound = true
+                }
                 is dev.jdx.sources.JavaBodyResult.ParseError ->
                     return ServiceOutcome.Failure(
                         ErrorResult.notFound(
@@ -5302,6 +5506,11 @@ public object JdxService {
                 -> {
                     // Unreachable: the root holds exactly the decompiled file —
                     // kept for exhaustiveness (L-073).
+                    memberNotFound = true
+                }
+                is dev.jdx.sources.JavaBodyResult.ParserUnavailable -> {
+                    // Unreachable: the Java seam never emits this (no parser
+                    // involved) — kept for exhaustiveness.
                     memberNotFound = true
                 }
                 is dev.jdx.sources.JavaBodyResult.ParseError ->
@@ -5698,7 +5907,7 @@ public object JdxService {
                 // not a dead end.
                 ?: return defaultSourceOutcome(rawRef, binary, label, target, opened, winner, options, warnings)
             try {
-                return sourceOutcome(binary, rawRef, label, target, sources, options, warnings)
+                return sourceOutcome(binary, rawRef, label, target, sources, options, warnings, opened, winner)
             } finally {
                 runCatching { sources.close() }
             }
@@ -5720,25 +5929,23 @@ public object JdxService {
         sources: dev.jdx.sources.SourceRoot,
         options: SourceOptions,
         warnings: List<Warning>,
+        opened: List<OpenRoot>,
+        winner: Int,
     ): ServiceOutcome {
         val aroundRaw = options.aroundRef
         if (aroundRaw != null) {
-            return aroundOutcome(binary, rawRef, aroundRaw, label, target, sources, options, warnings)
+            return aroundOutcome(binary, rawRef, aroundRaw, label, target, sources, options, warnings, opened, winner)
         }
+        // `.kt` flesh (T-039): whole files need no PSI parse, only the path —
+        // and the Kotlin scan confirms it, so a same-package mention never
+        // serves the wrong file. Java keeps its precedence (a `.java` sibling
+        // wins over a `.kt` direct hit per T-074).
         val path = dev.jdx.sources.findJavaSourcePath(sources, binary)
+            ?.takeIf { !it.endsWith(".kt") }
+            ?: openKotlinParserFor(options.kotlinUserHome).use { kt ->
+                dev.jdx.sources.findKotlinSourcePath(sources, binary, kt)
+            }
             ?: return noSourceFileOutcome(binary, rawRef, label, sources)
-        if (path.endsWith(".kt")) {
-            // Kotlin sources need the PSI integration (T-039): served whole,
-            // a `.kt` file would be verbatim text, but facade/class mapping
-            // makes raw serving potentially misleading — degrade like `body`.
-            return ServiceOutcome.Failure(
-                ErrorResult.notFound(
-                    rawRef,
-                    detail = "$binary only ships Kotlin sources here " +
-                        "(Kotlin bodies: T-039)",
-                ),
-            )
-        }
         val fileLines = readSourceLines(sources, path)
             ?: return failure(5, rawRef, "source read error: cannot read $path")
         val allWarnings = warnings + listOfNotNull(mismatchWarning(target, sources, binary))
@@ -5756,10 +5963,11 @@ public object JdxService {
     }
 
     /**
-     * Maps a missing source file to its honest degradation: `.kt`-only roots
-     * name T-039; a root that holds no file at all for the class names a
-     * possible version mismatch (T-028) — reconstruction is only the fallback
-     * when no sources root exists at all.
+     * Maps a missing source file to its honest degradation: a `.kt`-only root
+     * whose file the Kotlin scan could not confirm names the sidecar (T-039);
+     * a root that holds no file at all for the class names a possible version
+     * mismatch (T-028) — reconstruction is only the fallback when no sources
+     * root exists at all.
      */
     private fun noSourceFileOutcome(
         binary: String,
@@ -5779,7 +5987,7 @@ public object JdxService {
                 ErrorResult.notFound(
                     rawRef,
                     detail = "$binary only ships Kotlin sources here " +
-                        "(Kotlin bodies: T-039)",
+                        "(${dev.jdx.sources.kotlinMissingHint()})",
                 ),
             )
         }
@@ -5867,14 +6075,32 @@ public object JdxService {
         sources: dev.jdx.sources.SourceRoot,
         options: SourceOptions,
         warnings: List<Warning>,
+        opened: List<OpenRoot>,
+        winner: Int,
     ): ServiceOutcome {
         val matched = matchAroundMember(target, aroundRaw, rawRef)
         if (matched is AroundMatch.Failed) return matched.outcome
         matched as AroundMatch.Ready
         val (effectiveRef, lookupRefs, matchRefs, specified) = matched
-        var memberNotFound = false
-        for (lookupRef in lookupRefs) {
-            when (val found = dev.jdx.sources.findJavaBodies(sources, lookupRef)) {
+        // `.kt` member spellings for the Kotlin attempt (T-039).
+        val ktAliases = kotlinSourceAliases(target, matched.matches.singleOrNull())
+        // One `--around` parser (T-039): cheap to open, parsed only when a
+        // `.kt` member actually centers the slice.
+        val ktParser = openKotlinParserFor(options.kotlinUserHome)
+        try {
+            var memberNotFound = false
+            for (lookupRef in lookupRefs) {
+                // `.kt` flesh (T-039): same NoSource/NotJava → Kotlin mapping
+                // as the body path; the Found shape below serves both.
+                val found = when (
+                    val java = dev.jdx.sources.findJavaBodies(sources, lookupRef)
+                ) {
+                    is dev.jdx.sources.JavaBodyResult.NoSource,
+                    is dev.jdx.sources.JavaBodyResult.NotJava,
+                    -> dev.jdx.sources.findKotlinBodies(sources, lookupRef, ktParser, ktAliases)
+                    else -> java
+                }
+                when (found) {
                 is dev.jdx.sources.JavaBodyResult.Found -> {
                     if (!specified && found.bodies.size > 1) {
                         return ServiceOutcome.Failure(ErrorResult.ambiguous(aroundRaw, matchRefs))
@@ -5922,12 +6148,22 @@ public object JdxService {
                         ),
                     )
                 is dev.jdx.sources.JavaBodyResult.NotJava ->
+                    // Unreachable: the mapping above sends every `NotJava`
+                    // through the Kotlin seam, which never emits it — kept
+                    // for exhaustiveness.
                     return ServiceOutcome.Failure(
                         ErrorResult.notFound(
                             rawRef,
-                            detail = "$binary only ships Kotlin sources here " +
-                                "(Kotlin bodies: T-039)",
+                            detail = "$binary has no source counterpart in $label " +
+                                "(SOURCES_VERSION_MISMATCH)",
                         ),
+                    )
+                is dev.jdx.sources.JavaBodyResult.ParserUnavailable ->
+                    // No usable PSI (T-039): the `.kt` file might as well be
+                    // absent — degrade down the reconstruction ladder, which
+                    // centers `--around` on decompiled/javap text.
+                    return defaultSourceOutcome(
+                        rawRef, binary, label, target, opened, winner, options, warnings,
                     )
                 is dev.jdx.sources.JavaBodyResult.ParseError ->
                     return failure(5, rawRef, found.message)
@@ -5941,6 +6177,9 @@ public object JdxService {
                     "(SOURCES_VERSION_MISMATCH)",
             ),
         )
+    } finally {
+        runCatching { ktParser.close() }
+    }
     }
 
     /**

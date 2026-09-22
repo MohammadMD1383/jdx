@@ -5,6 +5,88 @@ Append-only (D-023): 10 sessions per shard, newest first. Template and rules in
 
 ---
 
+## Session 65 — 2026-09-22 — T-039 Kotlin bodies/KDoc done (M5 closed)
+**Agent/Author:** Muse Spark 1.3 Free · **Commits:** `a1e3a8b` (claim) + closing commit (this session)
+
+### Goal
+Implement T-039, the last T-036 remainder slice (and the last M5 task):
+serve `.kt` member bodies + KDoc through the T-038 loader with real PSI
+ranges, property-aware, bytecode-authoritative, never-throwing, degrading to
+decompile/javap without usable PSI.
+
+### What I did
+- Claimed T-039 first (`docs/TASKS.md` TODO→WIP, committed `a1e3a8b` before coding).
+- `sources/.../KotlinBodies.kt` (new, ~700 lines): pure `KotlinDecl`/
+  `KotlinFile` model + `findKotlinBodies`/`findKotlinMemberDocs`/
+  `findKotlinTypeDoc`/`listKotlinMembers` returning the shared Java seam
+  types (+ new `ParserUnavailable` cases on all three). Discovery is direct
+  `.kt` hit → package-scoped scan (PSI-confirmed) → facade convention;
+  matching covers `@JvmName`/unmangled-`internal`/property aliases (`aka`
+  from the bytecode match), JVM-spelled `suspend`, extension receivers,
+  omitted trailing defaults, `Int`/`Any?` key normalisation, companion
+  fallback; slicing trims KDoc the PSI range includes.
+- `sources/.../KotlinParser.kt`: `parseKotlin` on the seam, reflective env
+  (`idea.home.path` → app env → empty `ExtensionStorage` → project env;
+  sibling runtime jars on the loader; deepest-cause degradation detail).
+- `sources/.../KotlinToolchain.kt`: `kotlinSidecarDir` + `kotlinMissingHint`
+  (`~`-relative, deterministic).
+- `index/.../service/JdxService.kt`: every T-039 degradation rewired —
+  `body` (incl. properties), `doc` member/type (incl. properties, inherited
+  walk), `source` whole-file + `--around`, `body --with-doc`, listing
+  `--with-doc`, samples snippets; `kotlinUserHome` test seams on
+  Body/Source/DocOptions; enrichment paths use one ambient parser per
+  command. `NoSource` with no `.kt` evidence stays `NoSource` (T-026 intact).
+- Tests: tier-1 `KotlinBodiesTest` (24 tests incl. hostile-never-throws,
+  determinism, line-monotonicity properties); tier-2 `KotlinBodiesPsiTest`
+  (9 tests, real compiler symlinked from the Gradle cache, skip when
+  absent); tier-2 `KotlinSourcesServiceTest` (13 tests incl. unavailable
+  degradation); updated 4 tests that pinned the old T-039 exit-1s.
+- Live proof (sidecar symlinked into the real cache, removed afterwards):
+  `body …KotlinMembers#fetch` → `KotlinShapes.kt:72` suspend slice;
+  `body …KotlinData#nickname` → property slice; `doc …KotlinShapesKt#
+  extensionGreeting` → KDoc; whole-file `source`, `--around`, `@JvmName`
+  aliasing, `--with-doc` all verified; `doctor kotlin` OK→WARN round-trip.
+- Notable finds: forced Vineflower *fails* on the Kotlin fixture class
+  ("could not parse decompiled text…", pre-existing engine limit — the T-073
+  javap retry is what answers); file-header KDoc over a typealias is not the
+  class's KDoc in PSI (test retargeted at `UserIdBox`).
+
+### Decisions made
+- **D-055** — T-039 semantics (3-step bootstrap, sidecar-as-set, one parser
+  per command, no auto-fetch, shared seam types, deferred mismatch pairing).
+
+### Tasks moved
+- T-039: TODO → WIP (`a1e3a8b`) → DONE. T-036: WIP → DONE (umbrella closed).
+  M5: TODO → DONE. Filed T-080 (sidecar fetch) + T-081 (Kotlin-aware
+  mismatch pairing) as TODO.
+
+### Lessons distilled
+- **L-094** — standalone PSI bootstrap recipe (three steps + sibling
+  runtime jars + deepest-cause diagnosis).
+- **L-095** — KDoc attaches to the following declaration.
+- Re-hit **L-039** (nested block comments): a literal `/**` inside a KDoc
+  opens a nested comment and breaks the file at EOF.
+
+### What works now (and how to verify it yourself)
+```bash
+./gradlew :sources:test :sources:tier2Test -x verifyTier1Budget  # incl. KotlinBodiesTest/PsiTest
+./gradlew :index:tier2Test --tests "dev.jdx.index.service.KotlinSourcesServiceTest" -x verifyTier1Budget
+./gradlew check -x verifyTier1Budget  # green incl. gates
+./gradlew soak -x verifyTier1Budget  # green except the known pre-existing JavapCorpusSoakTest JrtDirectoryStream access$ drift (same signature as sessions 53/55/56/58; CorpusSoakTest incl. the new Kotlin body/source/doc paths green)
+# live (needs sidecar): ln -s <gradle-cache jars> ~/.cache/jdx/kotlin/ && ./app/build/jdx body 'dev.jdx.fixtures.KotlinMembers#fetch' --jars testfixtures/build/libs/testfixtures-0.1.0-SNAPSHOT.jar --no-jdk
+```
+
+### What is broken / half-done
+- Nothing from this task. Known deferred (D-055 §6, T-080/T-081): no
+  auto-fetch; no Kotlin `SOURCES_VERSION_MISMATCH`; no facade file-docs.
+
+### Open questions / blockers
+- None.
+
+### Next action
+- **M6 T-040** (`JdxService` RPC protocol; expand the coarse one-liner into a
+  detail block when starting, per the board rules).
+
 ## Session 64 — 2026-09-22 — T-038 Kotlin PSI loader seam done
 **Agent/Author:** Muse Spark 1.3 Free · **Commits:** `aafe8bd` (claim) + closing commit (this session)
 

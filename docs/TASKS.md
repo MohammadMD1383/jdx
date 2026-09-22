@@ -47,7 +47,7 @@ be fiction.
 | **M2** | Index: SQLite, `search`, workspaces, auto-discovery | DONE |
 | **M3** | Bodies: sources, JavaParser, Vineflower, `body`/`source`/`doc` | DONE |
 | **M4** | Graph: `usages`/`hierarchy`/`callers`/`calls`/`samples` | DONE (T-029…T-034) |
-| **M5** | Kotlin: `@Metadata` + PSI source parsing | TODO |
+| **M5** | Kotlin: `@Metadata` + PSI source parsing | DONE (T-035…T-039) |
 | **M6** | Serving: daemon, MCP, HTTP, `batch` | TODO |
 | **M7** | Polish: token budgets, AppCDS, mutation gates, docs, install | TODO (T-060 done early) |
 
@@ -56,11 +56,12 @@ T-071 + T-021…T-028 + T-072/T-073; M4 via T-029…T-034; M5 opened with T-035)
 plus T-076** (first T-036 slice) **plus T-077** (second T-036 slice) **plus T-078** (third T-036 slice)
 **plus T-037** (`--view jvm`, last T-036 slice) **plus T-074** (T-020 `srcmap`
 remainder) **plus T-079** (annotation-element matching) **plus T-075** (`usages`
-graph enrichment).
+graph enrichment) **plus T-038** (PSI loader seam) **plus T-039** (Kotlin
+bodies/KDoc, last T-036 slice) **plus T-036** (member-mapping umbrella).
 DONE entries below are
 compressed to a summary + pointers; full notes live in git history and the
-session log. **WIP: T-036** (member mapping, T-037 DONE session 60, T-038 DONE session 64, T-039 PSI bodies next),
-**plus M5–M7** (coarse; T-060 already DONE).
+session log. **WIP: none** (T-036 closed session 65),
+**plus M6–M7** (coarse; T-060 already DONE).
 
 ---
 
@@ -741,7 +742,7 @@ mapping (T-036), no `--view jvm` (T-037), no PSI (T-038), no Kotlin bodies
 *Closed in session 56. Decisions: D-048. Lessons: L-087. Full notes in git history +
 session log.*
 
-### T-036 Kotlin member mapping (properties, default args, suspend) · `WIP` (session 57)
+### T-036 Kotlin member mapping (properties, default args, suspend) · `DONE` (session 65)
 
 **Depends:** T-035 (decoder + `isKotlin` flag) ·
 **Files:** `index/.../kotlin/KotlinMetadata.kt`, `index/.../kotlin/KotlinMembers.kt`,
@@ -762,6 +763,10 @@ carrier first, then renderings, then `--view jvm`:)*
 - **T-078 (next):** property folding (`getX`/`setX` → `val`/`var`) + default-arg
   annotation over the carrier.
 - **T-037 (parked):** `--view jvm` forcing the JVM projection.
+
+*Closed in session 65 via the last slice T-039 (T-037 DONE session 60,
+T-038 DONE session 64). Decisions: D-048…D-052, D-054, D-055. Full notes in
+git history + session log.*
 
 ### T-076 — Kotlin `KmClass` carrier (first T-036 slice) · `DONE` (session 57)
 
@@ -902,16 +907,51 @@ T-039 builds PSI queries on it.)*
 *Closed in session 64. Decisions: D-054. Lessons: L-093. T-036 stays WIP
 (T-039 next). Full notes in git history + session log.*
 
-### T-039 — Kotlin bodies/KDoc over the T-038 seam (last T-036 remainder slice) · `WIP` (session 65)
+### T-039 — Kotlin bodies/KDoc over the T-038 seam (last T-036 remainder slice) · `DONE` (session 65)
 
 **Depends:** T-038 (loader seam) · **Files:** `sources/.../KotlinBodies.kt` (new),
-`sources/.../JavaBodies.kt`, `sources/.../JavaDocs.kt` (`NotJava` branches),
-`index/.../service/JdxService.kt` (T-039 degradations)
+`sources/.../JavaBodies.kt`, `sources/.../JavaDocs.kt` (`ParserUnavailable` cases),
+`sources/.../KotlinParser.kt` (reflective PSI env), `sources/.../KotlinToolchain.kt`
+(sidecar dir + install hint), `index/.../service/JdxService.kt` (T-039 degradations)
 
 *(M5 last slice: serve `.kt` member bodies + KDoc through the T-038 loader with
 real PSI ranges (PROPOSAL.md §12.2). Stays bytecode-authoritative (D-009):
 overload ambiguity decided from bytecode first; property-aware (getter/setter →
 property name); never throws; degrades to decompile/javap where PSI has no node.)*
+
+*Closed in session 65. Decisions: D-055. Lessons: L-094, L-095 (plus L-039
+re-hit: nested block comments). Follow-ups filed as T-080 (sidecar fetch)
+and T-081 (`@Metadata`-aware mismatch pairing). Full notes in git history +
+session log.*
+
+### T-080 — Fetch the Kotlin sidecar set on first use · `TODO`
+
+**Depends:** T-038 (sidecar path), T-039 (runtime-jar set) · **Files:**
+`sources/.../KotlinToolchain.kt`, `cli/.../commands/*` (opt-in flag)
+
+*(Split out of T-039 in session 65: the D-008 mitigation "shipped in a
+separate jar fetched/verified on first use" is half-wired — T-039 reads
+whatever set is present and degrades otherwise, but nothing downloads it.
+The set is the compiler plus its runtime jars (stdlib, script-runtime,
+reflect, daemon-embeddable, coroutines) at pinned versions with checksum
+verification into `~/.cache/jdx/kotlin/`. Network stays opt-in per
+invocation (T-019 precedent): decide the flag surface (`--fetch` parity on
+the read commands vs a `jdx kotlin install` command vs daemon warm-up)
+when starting. M6 (T-040+) stays next per the lowest-numbered-TODO rule.)*
+
+### T-081 — `@Metadata`-aware `SOURCES_VERSION_MISMATCH` pairing for Kotlin · `TODO`
+
+**Depends:** T-039 (Kotlin listings) · **Files:**
+`sources/.../SourcesMismatch.kt`, `index/.../service/JdxService.kt`
+(`mismatchWarning`)
+
+*(Split out of T-039 in session 65: `mismatchWarning` skips Kotlin pairs
+(`null`) because compiler-generated members (data `componentN`/`copy`,
+value-class `-impl`s, `@JvmOverloads` overloads, file-facade statics) would
+false-positive a JVM-name pairing. Pair over Kotlin declaration names
+instead (display names + property names from the `ClassInfo` views, excusing
+defaulted overloads and data/value synthetics) so stale Kotlin sources still
+warn. Unblocked but low priority: M6 (T-040+) stays next.)*
 
 # M6 — Serving
 ### T-040 `JdxService` RPC protocol · **T-041** daemon + unix socket + 5-min idle shutdown (D-004) · **T-042** transparent CLI daemon client + `--no-daemon` · **T-043** MCP stdio server with generated schemas · **T-044** HTTP/JSON server on `com.sun.net.httpserver` · **T-045** `jdx batch` · **T-046** adapter parity test (CLI/HTTP/MCP byte-identical payloads)

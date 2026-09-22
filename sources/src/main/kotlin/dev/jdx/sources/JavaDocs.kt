@@ -51,6 +51,13 @@ public sealed interface JavaDocResult {
     /** The declaring type only ships `.kt` here — Kotlin parsing is T-039. */
     public data object NotJava : JavaDocResult
 
+    /**
+     * The `.kt` file needs the side-loaded Kotlin compiler, which is not
+     * installed (or failed to initialise) — the caller exits 1 with the
+     * install hint (T-039), never a failure. [detail] is the hint.
+     */
+    public data class ParserUnavailable(public val detail: String) : JavaDocResult
+
     /** The file parses, but the member is unknown or undocumented here. */
     public data object MemberNotFound : JavaDocResult
 

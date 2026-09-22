@@ -73,6 +73,13 @@ public sealed interface JavaBodyResult {
     /** The declaring type only ships `.kt` here — Kotlin parsing is T-039. */
     public data object NotJava : JavaBodyResult
 
+    /**
+     * The `.kt` file needs the side-loaded Kotlin compiler, which is not
+     * installed (or failed to initialise) — the caller degrades to
+     * decompile/javap (T-039), never a failure. [detail] is the install hint.
+     */
+    public data class ParserUnavailable(public val detail: String) : JavaBodyResult
+
     /** The file parses, but declares no such member (or no such nested type). */
     public data object MemberNotFound : JavaBodyResult
 
@@ -88,6 +95,12 @@ public sealed interface JavaMemberList {
     public data class Listed(public val members: List<DeclaredSourceMember>) : JavaMemberList
     public data object NoSource : JavaMemberList
     public data object NotJava : JavaMemberList
+    /**
+     * The `.kt` file needs the side-loaded Kotlin compiler, which is not
+     * installed (or failed to initialise) — the caller skips the pairing
+     * check (T-039), never a failure. [detail] is the install hint.
+     */
+    public data class ParserUnavailable(public val detail: String) : JavaMemberList
     public data object TypeNotFound : JavaMemberList
     public data class ParseError(public val message: String) : JavaMemberList
 }
