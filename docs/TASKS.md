@@ -994,7 +994,7 @@ vectors) + `RpcProtocolPropertyTest` (7 properties). Decisions: D-056. Lessons:
 L-096, L-097. Spec summary: PROPOSAL.md §14.5. The acceptance list above is left
 in full on purpose — T-041…T-046 implement against it.*
 
-### T-041 — daemon + unix socket + 5-min idle shutdown · `TODO`
+### T-041 — daemon + unix socket + 5-min idle shutdown · `WIP`
 
 **Depends:** T-040 (wire contract) · **Files:** `server/.../Daemon.kt`,
 `app/.../jdx` (spawn), `cli/.../commands/DaemonCommand.kt`
