@@ -963,7 +963,7 @@ plumbing, determinism + hostile-rendering properties) + doctor hint pin.
 flipped `doctor kotlin` to OK and `body …KotlinMembers#fetch` serves the PSI
 suspend slice. Lessons: L-109. Next: T-081/T-083 per owner direction.*
 
-### T-081 — `@Metadata`-aware `SOURCES_VERSION_MISMATCH` pairing for Kotlin · `TODO`
+### T-081 — `@Metadata`-aware `SOURCES_VERSION_MISMATCH` pairing for Kotlin · `WIP`
 
 **Depends:** T-039 (Kotlin listings) · **Files:**
 `sources/.../SourcesMismatch.kt`, `index/.../service/JdxService.kt`
