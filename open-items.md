@@ -18,8 +18,7 @@ mine the session log to learn what still needs doing.
 
 | Item | State | Notes |
 |---|---|---|
-| T-051 README + install docs (last M7 task) | TODO, coarse | Expand when starting (next: T-051) |
-| T-083 test-source + Java warnings-as-errors | TODO | Filed session 76 (T-052 split); M7 stays next |
+| T-083 test-source + Java warnings-as-errors | TODO | Filed session 76 (T-052 split); pick next per lowest-numbered rule (T-080 first) |
 | T-080 Kotlin sidecar fetch · T-081 Kotlin-aware mismatch pairing | TODO, low priority | Filed session 65; M6 stays next |
 
 ## Deferred follow-ups (no task number yet — file one when starting)
@@ -47,4 +46,4 @@ mine the session log to learn what still needs doing.
 
 ---
 
-*Last updated: 2026-09-23 (session 78).*
+*Last updated: 2026-09-23 (session 79).*

@@ -1448,7 +1448,7 @@ daemon path is the ≤ 20 ms story). `expandJarSpec` visibility is the only
 `index` touch and changes no behaviour, so no tier-3 run (T-047/T-052
 precedent). Lessons: L-108. Next: T-051.*
 
-### T-051 README + install docs · `WIP` (session 79)
+### T-051 README + install docs · `DONE` (session 79)
 
 *(Last M7 task: the README still describes M0–M3/M4-in-progress and the
 command table as "(target)" — stale since M6 closed. One sitting,
@@ -1469,10 +1469,16 @@ against the built binary.)*
   MCP stdio, HTTP `serve`, `batch` NDJSON), exit codes + symbol-ref
   pointer, Kotlin sidecar note (absent → degrade, D-008),
   `bench`/AppCDS advisory-targets note.
-- Verify: every example pasted from a live `app/build/jdx` run;
-  `./gradlew lint` clean; `check` tiers 1–2 green (docs-only —
-  no tier-3 per the T-047/T-052 precedent).
-- Close-out: T-051 DONE, session entry, CURRENT STATE, open-items.
+*Closed in session 79. Docs-only `README.md` rewrite (no code, no
+behaviour): status M0–M6 DONE, command surface actual (incl.
+`implementors`, `callers`/`calls`, `serve`/`mcp`/`batch`/`bench`/
+`help --agent`, `--view`, `--brief`/`--max-lines`, `--engine`,
+`--with-doc`, `--src`, `--coord`/`--fetch`/`--repo`, `--no-daemon`;
+dropped the nonexistent `jdx index` row), plus new Requirements /
+Build+install / Quickstart / Front-ends / Exit-codes+refs / Kotlin-note
+sections — every example and default verified against the built binary
+and `--help`. `lint` clean, `check -Ptier1.budget=10000` green (docs-only,
+no tier-3 per precedent). M7 left with T-080/T-081/T-083 (low priority).*
 
 ---
 

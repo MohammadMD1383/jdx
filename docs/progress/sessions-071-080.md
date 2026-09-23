@@ -5,6 +5,77 @@ Append-only (D-023): 10 sessions per shard, newest first. Template and rules in
 
 ---
 
+## Session 79 — 2026-09-23 — T-051 README + install docs done (last M7 task)
+
+**Agent/Author:** Muse Spark 1.3 Free · **Commits:** `2a9dea7` (claim) + closing commit (this session)
+
+### Goal
+Implement one task and push (explicit owner go-ahead this session).
+Picked T-051 (README + install docs): last M7 task. Wrote the detail block
+when starting per the board rule; scoped to one sitting as a docs-only
+`README.md` rewrite (no code, no behaviour).
+
+### What I did
+- Claimed T-051 first (`docs/TASKS.md` TODO→WIP + detail block, committed
+  `2a9dea7` before writing).
+- Rewrote `README.md`: stale status (`M0–M3 implemented, M4 in progress`) →
+  M0–M6 DONE; command surface `(target)` → actual (added `implementors`,
+  `callers`/`calls`, `--view kotlin|jvm`, `--brief`/`--max-lines`,
+  `--engine`, `--with-doc`, `--src`, `--coord`/`--fetch`/`--repo`,
+  `--no-daemon`; dropped the nonexistent `jdx index` row — help lists no
+  `index` command); new sections: Requirements (JDK 21+, wrapper-only),
+  Build+install (`:app:installDist` → `app/build/jdx`, `./install.sh
+  [--force]` per-user semantics, AppCDS `jdx.jsa` presence-check),
+  Quickstart (JDK-by-default query, `ws create`, `--coord --fetch`,
+  `--brief --max-lines`), Front-ends (daemon 5-min idle, MCP, HTTP
+  `serve`, `batch` NDJSON), Exit-codes + symbol-ref table, Kotlin sidecar
+  note (absent → degrade, D-008). Kept the intro/examples sections, with
+  both console examples re-verified live (JDK `HashMap` members + `get`
+  body — trimmed with `…`, not invented).
+- Verified every flag/default against the built binary (`members`/`body`/
+  `usages`/`ws create --help` + live runs from `/tmp` to avoid the
+  project-discovery warning): `-w`, `--src` (both), `--coord`
+  `group:artifact:version`, `--engine`, `--view`, `--brief`,
+  `--max-lines`, `--with-doc`, `--no-daemon`, `serve` 7070/localhost,
+  sidecar path `~/.cache/jdx/kotlin/`, launcher JDK-21 floor.
+- Verified: `./gradlew lint` clean; `./gradlew check -Ptier1.budget=10000`
+  green (14 s, docs-only change — no tier-3 per the T-047/T-052
+  precedent).
+
+### Decisions made
+- None (no new D-nnn). Trimming live output with `…` in README examples
+  and dropping the phantom `jdx index` row are recorded here, both
+  reversible in one line each.
+
+### Tasks moved
+- T-051: TODO → WIP (`2a9dea7`) → DONE (this session). **M7's planned
+  sequence is done** — remaining: T-080/T-081 (Kotlin follow-ups, low
+  priority) + T-083 (test-source/Java warnings-as-errors).
+
+### Lessons distilled
+- None (docs-only; the `/tmp`-cwd trick to dodge the
+  `PROJECT_DISCOVERY_FALLBACK` warning in pasted examples is one line,
+  not a lesson).
+
+### What works now (and how to verify it yourself)
+- `sed -n '1,10p' README.md` — status block names M0–M6 DONE.
+- `grep -c 'jdx index' README.md` — 0 (only `index` the noun survives).
+- `app/build/jdx help --agent | head -5` — matches the README table rows.
+- `./gradlew lint && ./gradlew check -Ptier1.budget=10000` — green.
+
+### What is broken / half-done
+- Nothing from this task.
+
+### Open questions / blockers
+- None.
+
+### Next action
+- **T-083** (test-source + Java warnings-as-errors) or **T-080/T-081**
+  (Kotlin follow-ups) — all low priority; pick per the lowest-numbered
+  rule (T-080 first) or owner direction.
+
+---
+
 ## Session 78 — 2026-09-23 — T-050 `jdx bench` done (workload + advisory §15 targets)
 
 **Agent/Author:** Muse Spark 1.3 Free · **Commits:** `f97a619` (claim) + closing commit (this session)
