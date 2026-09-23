@@ -1162,7 +1162,7 @@ lines vs one-shot `--json` — T-046 in miniature). Lessons: L-103 (fake-constru
 throws behind total adapters). Live proof in the session log (warm `members`
 parity via `cmp`, exit-6 carriage). T-046 unblocked.*
 
-### T-046 — adapter parity test (CLI/HTTP/MCP byte-identical payloads) · `TODO`
+### T-046 — adapter parity test (CLI/HTTP/MCP byte-identical payloads) · `WIP`
 
 **Depends:** T-042, T-043, T-044 · **Files:** `*/src/test/.../parity/*`
 
