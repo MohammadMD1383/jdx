@@ -1113,7 +1113,7 @@ the session log (raw JSON-RPC handshake, 20 tools, `members` byte-identical
 to CLI `--json` modulo the `println` newline, exit 0 on EOF). T-044
 unblocked.*
 
-### T-044 — HTTP/JSON server on `com.sun.net.httpserver` · `TODO`
+### T-044 — HTTP/JSON server on `com.sun.net.httpserver` · `WIP`
 
 **Depends:** T-040 (wire contract) · **Files:** `server/.../HttpServer.kt`,
 `cli/.../commands/ServeCommand.kt`
