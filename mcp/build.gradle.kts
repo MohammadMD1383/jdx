@@ -1,5 +1,11 @@
 import org.gradle.api.tasks.testing.Test
 
+kotlin {
+    // T-052: same contract as :core — every public declaration needs an explicit
+    // visibility and return type. Thin adapters (D-004) still have public API.
+    explicitApi()
+}
+
 dependencies {
     implementation(project(":core"))
     // Query dispatch (T-043): every tool answers through the same `JdxService`

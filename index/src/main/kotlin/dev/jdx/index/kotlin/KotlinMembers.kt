@@ -209,7 +209,6 @@ public object KotlinMembers {
             // text (which core already renders from the generic signature) wins.
             is KmClassifier.TypeParameter -> return null
             is KmClassifier.TypeAlias -> classifier.name.substringAfterLast('/')
-            else -> return null
         }
         val arguments = type.arguments.map { renderProjection(it) ?: return null }
         val applied = if (arguments.isEmpty()) base else "$base<${arguments.joinToString(", ")}>"
@@ -223,7 +222,9 @@ public object KotlinMembers {
             KmVariance.INVARIANT -> rendered
             KmVariance.IN -> "? super $rendered"
             KmVariance.OUT -> "? extends $rendered"
-            else -> return null
+            // `variance` is nullable (`*` projections carry none): the old
+            // redundant `else` only ever caught null. Name it (T-052).
+            null -> return null
         }
     }
 

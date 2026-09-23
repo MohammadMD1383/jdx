@@ -5,6 +5,92 @@ Append-only (D-023): 10 sessions per shard, newest first. Template and rules in
 
 ---
 
+## Session 76 — 2026-09-23 — T-052 warnings-as-errors, lint, final API review done
+
+**Agent/Author:** Muse Spark 1.3 Free · **Commits:** `dd3a681` (claim) + `629b4f5` (cli scoping) + closing commit (this session)
+
+### Goal
+Implement one M7 task and push (explicit owner go-ahead this session).
+Picked T-052 (warnings-as-errors, lint, final API review): next in M7 value
+order. Wrote the detail block when starting per the board rule; pre-claim
+probes (full `--rerun-tasks` warning sweep, `explicitApi` trial compile on
+`index`, lint-rule cleanliness over every source set) set a shippable scope,
+with the test-source + Java remainder split to T-083 up front.
+
+### What I did
+- Claimed T-052 first (`docs/TASKS.md` TODO→WIP + detail block + new T-083,
+  committed `dd3a681` before coding).
+- Fixed the 2 main-source warnings from the sweep:
+  `index/.../kotlin/KotlinMembers.kt` redundant `else` (the classifier `when`
+  over sealed `KmClassifier` is exhaustive — dropped; the variance `when` is
+  over *nullable* `KmVariance`, so its `else` became an explicit `null`
+  branch — first attempt removed the wrong `when`'s `else` and the build
+  said so) and `server/.../HttpServer.kt:90` redundant `as?`
+  (`HttpServer.address` is already non-null `InetSocketAddress`). Both
+  behavior-preserving (unreachable branch / identical type).
+- `allWarningsAsErrors` on every module's main `compileKotlin` (task-scoped
+  in the shared `subprojects` block; test compilations stay under T-083,
+  Java ungated — the deliberately-`strictfp` fixture would fail `-Werror`).
+- `explicitApi()` on `index`/`sources`/`decompile`/`mcp`/`server` — all
+  compile clean (`core` already had it). `cli` reverted in `629b4f5`: 99
+  violations across Clikt wiring with no Kotlin consumers — `public` noise
+  for zero API safety (its contract is the CLI surface, pinned by help +
+  parity goldens). `app` (assembly) and `testfixtures` (deliberately-nasty
+  fixtures) excluded likewise.
+- New dependency-free root `lint` task wired into every module's `check`
+  (CONTRIBUTING.md already promised "tests + lint"): trailing whitespace,
+  tabs, bare `TODO`/`FIXME` without `T-nnn`, console IO in library mains.
+  100-column stays a soft limit (774 lines over it), explicitly not gated.
+  Config-cache safe (plain-File captures only, T-067 pattern).
+- Verified: `./gradlew check -Ptier1.budget=10000` green (tiers 1–2, lint
+  included; the budget flag is the known machine-variance caveat, not a
+  failure). Negative proofs, both removed after: planted redundant-`else`
+  fails `:core:compileKotlin` with `warnings found and -Werror specified`;
+  planted trailing-WS + bare-TODO fails `lint` with file:line pointers.
+  (Side note: an unused-local probe produced no warning at all — gate
+  proven with the redundant-`else` class instead.)
+- No tier-3 run: both fixes remove provably-unreachable branches, so no
+  corpus behaviour can differ (T-047 precedent for tier-1–2 verification).
+
+### Decisions made
+- None (no new D-nnn). `cli` out of `explicitApi`, 100-col ungated, Java
+  ungated, test sources deferred to T-083 — all recorded as task-scope
+  rationale, reversible in one line each.
+
+### Tasks moved
+- T-052: TODO → WIP (`dd3a681`) → DONE (this session). Filed T-083
+  (test-source + Java warnings-as-errors) as the split remainder. Next:
+  T-048 (AppCDS) — M7 order is now T-048, T-050, T-051 last.
+
+### Lessons distilled
+- L-106 (a self-referential lint rule flags its own implementation — the
+  bare-TODO rule fired on its own source lines; carry the owning task ref).
+
+### What works now (and how to verify it yourself)
+- `./gradlew lint` — `lint: clean.`, exit 0.
+- `./gradlew compileKotlin --rerun-tasks` — zero `w:` lines, exit 0
+  (warnings are errors on mains now).
+- `./gradlew check -Ptier1.budget=10000` — tiers 1–2 + lint green.
+- Plant your own check: add `else -> x` to any exhaustive `when` in a main
+  source → compile fails; add a trailing space to any `.kt` → `lint` fails.
+
+### What is broken / half-done
+- Nothing from this task. Test-source warnings (~11: kotest opt-in,
+  `shouldNotBeNull { msg }` unused-expression — columns point at the message
+  string, investigate a possible silently-dropped message before "fixing" —
+  unnecessary `!!`, deprecated `Arb.stringPattern`) and the Java `strictfp`
+  fixture are T-083, not this task.
+
+### Open questions / blockers
+- None.
+
+### Next action
+- **M7 T-048** (AppCDS archive generation) — write the detail block when
+  starting. Then T-050 (`bench`), T-051 (README/install) last. T-080/T-081
+  stay low priority.
+
+---
+
 ## Session 75 — 2026-09-23 — T-047 token budgets (`--brief` + `--max-lines`) done
 
 **Agent/Author:** Muse Spark 1.3 Free · **Commits:** `f0580ac` (claim) + closing commit (this session)

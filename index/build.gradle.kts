@@ -4,6 +4,12 @@ plugins {
     alias(libs.plugins.pitest)
 }
 
+kotlin {
+    // T-052: same contract as :core — every public declaration needs an explicit
+    // visibility and return type. Trial-compiled clean before gating.
+    explicitApi()
+}
+
 dependencies {
     implementation(project(":core"))
     implementation(project(":sources"))

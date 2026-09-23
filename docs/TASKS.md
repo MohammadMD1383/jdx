@@ -1282,7 +1282,7 @@ tier-1/2 instead). Decisions: none (text-only scoping follows D-059).
 Lessons: L-105 (POSIX trailing-newline rule for line-counting oracles).
 Live proof in the session log. Next: T-052.*
 
-### T-052 — warnings-as-errors, lint, final API review · `WIP` (session 76)
+### T-052 — warnings-as-errors, lint, final API review · `DONE` (session 76)
 
 **Depends:** — · **Files:** `build.gradle.kts` (shared `subprojects` block),
 `index/.../kotlin/KotlinMembers.kt`, `server/.../HttpServer.kt`,
@@ -1318,6 +1318,18 @@ across every source set — verified, not assumed. Test-source warnings
   negative proof proves it bites.
 - Verify: full `./gradlew check` green (tiers 1–2) + both negative proofs
   (removed after) + session entry + open-items.
+
+*Closed in session 76. Both main warnings fixed (the `renderType` classifier
+`else` dropped as exhaustive; the `renderProjection` variance `else` narrowed
+to an explicit `null` branch — first attempt hit the wrong `when`, the build
+said so); `HttpServer.localAddress` cast dropped. `allWarningsAsErrors` gates
+main compilations (planted redundant-`else` fails with `-Werror`); `lint`
+green and wired into every `check` (planted trailing-WS + bare-TODO fail with
+pointers; the rule first fired on its own source — L-106). `explicitApi()` on
+index/sources/decompile/mcp/server clean; `cli` reverted (99 violations, no
+Kotlin consumers). Test-source + Java remainder filed as T-083. No tier-3 run:
+the two fixes remove provably-unreachable branches, so no corpus behaviour
+can differ (same reasoning as T-047's tier-1–2 verification).*
 
 ### T-083 — warnings-as-errors for test sources + Java · `TODO`
 

@@ -1,8 +1,14 @@
+import org.gradle.api.tasks.testing.Test
+
 plugins {
     alias(libs.plugins.pitest)
 }
 
-import org.gradle.api.tasks.testing.Test
+kotlin {
+    // T-052: same contract as :core — every public declaration needs an explicit
+    // visibility and return type. Trial-compile before trusting: index passed clean.
+    explicitApi()
+}
 
 dependencies {
     implementation(project(":core"))

@@ -87,7 +87,7 @@ public class JdxHttpServer(
     }
 
     /** The bound address (resolves the ephemeral port when [port] was 0 — tests bind that way). */
-    public fun localAddress(): InetSocketAddress = server?.address as? InetSocketAddress
+    public fun localAddress(): InetSocketAddress = server?.address
         ?: InetSocketAddress(bind, port)
 
     /** Blocks until [stop] runs. */

@@ -173,6 +173,56 @@ tasks.register("mutationTest") {
     }
 }
 
+// T-052: dependency-free style gate (CONTRIBUTING.md already promises
+// `./gradlew check` runs "tests + lint" — this task is the lint half). No
+// detekt/ktlint: four grep-able rules need no new dependency, and 100-column
+// stays a soft limit (774 main-source lines over it), so it is explicitly not
+// gated here. Every rule is green on today's tree (verified pre-claim); a new
+// violation fails `check` with file:line pointers.
+tasks.register("lint") {
+    group = "verification"
+    description = "Style gate: trailing whitespace, tabs, bare TODO/FIXME, console IO in library mains (T-052)."
+    // Captured at configuration time as plain values: touching `project` from
+    // `doLast` breaks the configuration cache (T-067).
+    val lintRoot: java.io.File = rootDir
+    val lintExtensions = listOf(".kt", ".kts")
+    val libModules = listOf("core", "index", "sources", "decompile")
+    inputs.files(fileTree(lintRoot) { include("**/*.kt", "**/*.kts") })
+    doLast {
+        val taskRef = Regex("T-\\d+")
+        val violations = mutableListOf<String>()
+        lintRoot.walkTopDown().forEach { file ->
+            if (!file.isFile) return@forEach
+            if (lintExtensions.none { file.name.endsWith(it) }) return@forEach
+            // Build outputs, VCS metadata and Gradle homes are not sources.
+            val rel = file.relativeTo(lintRoot).path
+            if (rel.split('/').any { it == "build" || it == ".git" || it == ".gradle" || it == ".kotlin" }) return@forEach
+            val inLibMain = libModules.any { rel.startsWith("$it/src/main/") }
+            file.readLines().forEachIndexed { index, line ->
+                val where = "$rel:${index + 1}"
+                if (line.endsWith(' ') || line.endsWith('\t')) violations += "$where: trailing whitespace"
+                if ('\t' in line) violations += "$where: tab character (4-space indent, CONTRIBUTING.md)"
+                // The rule names its own markers (T-052 self-hosting): without the
+                // task reference on these two lines, lint would flag itself.
+                if ((line.contains("TODO") || line.contains("FIXME")) && !taskRef.containsMatchIn(line)) { // T-052
+                    violations += "$where: bare TODO/FIXME without a task reference (rule owned by T-052)"
+                }
+                if (inLibMain && (line.contains("println(") || line.contains("System.exit") || line.contains("printStackTrace"))) {
+                    violations += "$where: console IO in a library main (adapters own IO, D-004)"
+                }
+            }
+        }
+        if (violations.isNotEmpty()) {
+            throw GradleException(
+                "lint: ${violations.size} violation(s):\n" +
+                    violations.sorted().take(20).joinToString("\n") +
+                    if (violations.size > 20) "\n… and ${violations.size - 20} more" else "",
+            )
+        }
+        logger.lifecycle("lint: clean.")
+    }
+}
+
 subprojects {
     apply(plugin = "org.jetbrains.kotlin.jvm")
 
@@ -189,6 +239,15 @@ subprojects {
             // We read a lot of annotated Java (ASM, JavaParser); without this their platform
             // types silently defeat null-safety, which is half of why we chose Kotlin (D-001).
             freeCompilerArgs.addAll("-Xjsr305=strict")
+        }
+    }
+
+    // T-052: warnings are errors on main compilations. Task-scoped — not the
+    // extension default — so test sources stay under T-083. Java is not gated:
+    // the deliberately-`strictfp` fixture (T-083) would fail `-Werror`.
+    tasks.withType<org.jetbrains.kotlin.gradle.tasks.KotlinJvmCompile>().configureEach {
+        if (name == "compileKotlin") {
+            compilerOptions.allWarningsAsErrors.set(true)
         }
     }
 
@@ -246,7 +305,12 @@ subprojects {
             testLogging.showStandardStreams = true
         }
     }
-    tasks.named("check") { dependsOn(tier2Test) }
+    tasks.named("check") {
+        dependsOn(tier2Test)
+        // T-052: the `lint` style gate runs with every `check` (CONTRIBUTING.md
+        // promises "tests + lint"). One root task, not per-module duplicates.
+        dependsOn(rootProject.tasks.named("lint"))
+    }
 
     // Line-coverage gates (T-060, docs/TESTING.md §10, D-021). Only the modules with a gate
     // get the `jacoco` plugin: core/index/sources/decompile. cli/mcp/server are thin
