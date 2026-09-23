@@ -1228,7 +1228,43 @@ renderers + `HelpResult` JSON) + `cli/.../commands/HelpCommand.kt`
 `HelpCommandTest` (7 tests, incl. a 200-case determinism property). Live
 proof in the session log. Full notes in git history + session log.*
 
-### T-047 token budgets (`--max-lines`, `--brief`) · **T-048** AppCDS archive generation · **T-050** `jdx bench` against `minecraft-client.jar` · **T-051** README + install docs · **T-052** warnings-as-errors, lint, final API review · `TODO` (detail blocks land when each starts)
+### T-047 — token budgets on `members`/`outline`: `--brief` + `--max-lines` · `WIP` (session 75)
+
+**Depends:** T-010 (renderers + envelope), T-011 (read-command patterns), T-042/D-059
+(warm serves `--json` only, so text-only flags need no wire change) · **Files:**
+`core/.../render/TokenBudget.kt` (new), `core/.../render/Listing.kt`
+(`renderBriefText`), `index/.../service/JdxService.kt`
+(`ServiceOutcome.renderBriefText` default), `cli/.../commands/ReadCommands.kt`
+(flags), `cli/.../commands/ReadCommandSupport.kt` (`finish` budget params +
+validation)
+
+*(First M7 token-budget slice, one sitting: `members --inherited` over JDK
+types is the biggest token burner, and `--limit` caps entities but not text
+lines. Text-only presentation, so the T-040 wire, daemon/HTTP/MCP adapters
+and T-046 parity stay untouched: `--json` bytes are byte-identical with or
+without the flags.)*
+
+- Core (test-first): new `TokenBudget.capLines(text, maxLines): String` —
+  whole-line cap; exact fit uncut; over keeps the first `maxLines` lines plus
+  a `… K more lines (--max-lines M to see more)` footer; `0` shows only the
+  footer. `MemberListing.renderBriefText()` — the `members of X` header, bare
+  member rows (no group headers, no ` — doc` suffixes, no provenance block),
+  object summary + truncation footer + warnings kept.
+  `ServiceOutcome.renderBriefText` defaults to `renderText` (only `MemberList`
+  overrides).
+- CLI: `members` + `outline` gain `--brief` (signatures only, no group
+  headers/provenance; warnings + footers kept; text only, `--json`
+  unaffected) and `--max-lines N` (cap text lines; `--json` unaffected).
+  `--max-lines < 0` exits 3; `--brief --with-doc` exits 3 (mutually exclusive,
+  `--static`/`--instance` precedent).
+- Tests: core `TokenBudgetTest` + hostile never-throws/determinism property +
+  brief example tests + brief⊆full property (the generating family); cli
+  tier-1 flag/validation/rendering tests; tier-2 e2e over the fixture jar +
+  a JDK sample; brief goldens.
+- Docs: PROPOSAL.md Appendix B `members`/`outline` rows; this detail block;
+  PROGRESS.md session entry; open-items.md.
+
+### T-048 AppCDS archive generation · **T-050** `jdx bench` against `minecraft-client.jar` · **T-051** README + install docs · **T-052** warnings-as-errors, lint, final API review · `TODO` (detail blocks land when each starts)
 
 ---
 
