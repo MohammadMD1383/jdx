@@ -1348,7 +1348,40 @@ plus the Java `[strictfp]` warning on the deliberately-`strictfp`
 `testfixtures`, or suppress at the declaration). Gate test compilations and
 decide Java when starting.)*
 
-### T-048 AppCDS archive generation · **T-050** `jdx bench` against `minecraft-client.jar` · **T-051** README + install docs · `TODO` (detail blocks land when each starts)
+### T-048 — AppCDS archive generation · `WIP` (session 77)
+
+**Depends:** T-004 (fat jar + launcher own the flags) · **Files:**
+`app/build.gradle.kts` (class-list + archive tasks, wired into `installDist`),
+`app/src/main/scripts/jdx` (use the archive when present),
+`app/src/test/kotlin/dev/jdx/app/LauncherScriptTest.kt` (present/absent pins + property)
+
+*(M7 cold-start slice, one sitting: the launcher already passes
+`-Xshare:auto` (T-004) but ships no archive, so CDS never engages.
+Generate `app/build/libs/jdx.jsa` from the fat jar with the build JVM's
+`java` (`-XX:DumpLoadedClassList` over `version` + `help` runs, merged +
+sorted, then `-Xshare:dump`), ship it via `installDist`, and have the
+launcher pass `-XX:SharedArchiveFile=<archive>` only when the file exists
+next to the fat jar — missing/stale archives degrade to today's plain
+run via `-Xshare:auto`, never a hard failure. No `doctor` row, no
+`install.sh` change (the archive travels with the build dir the launcher
+already resolves): file follow-ups when starting them. T-050 stays next.)*
+
+- Build: `generateCdsClassList` (fat jar inputs, class-list output) +
+  `createCdsArchive` (archive output, `installDist` depends on it); both
+  incremental (inputs/outputs declared) and config-cache safe (plain-File
+  captures only, T-067 pattern).
+- Launcher: fixed `"$jdx_home/libs/jdx.jsa"` path (stable name, not
+  versioned); flag order `… -Xshare:auto -XX:SharedArchiveFile=<path> -jar …`
+  so a stale archive is ignored, not fatal.
+- Tests: tier-2 `LauncherScriptTest` present/absent pins (exec-args
+  contain/omit the flag) + a generating property (archive × generated
+  version lines: exit codes unchanged, flag iff present); e2e pin that
+  `installDist` leaves a non-empty `jdx.jsa` next to the fat jar.
+- Verify: `./gradlew :app:installDist` produces the archive;
+  `app/build/jdx --version` still exits 0 with/without it;
+  `./gradlew :app:check -Ptier1.budget=10000` green.
+
+### T-050 `jdx bench` against `minecraft-client.jar` · T-051 README + install docs · `TODO` (detail blocks land when each starts)
 
 ---
 
