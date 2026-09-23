@@ -18,7 +18,7 @@ mine the session log to learn what still needs doing.
 
 | Item | State | Notes |
 |---|---|---|
-| T-048/T-050/T-051 M7 polish (AppCDS, `bench`, README/install; T-047 token budgets + T-049 `help --agent` + T-052 gates DONE) | TODO, coarse | Expand when starting (next: T-048) |
+| T-050/T-051 M7 polish (`bench`, README/install; T-047 token budgets + T-048 AppCDS + T-049 `help --agent` + T-052 gates DONE) | TODO, coarse | Expand when starting (next: T-050) |
 | T-083 test-source + Java warnings-as-errors | TODO | Filed session 76 (T-052 split); M7 stays next |
 | T-080 Kotlin sidecar fetch · T-081 Kotlin-aware mismatch pairing | TODO, low priority | Filed session 65; M6 stays next |
 
@@ -47,4 +47,4 @@ mine the session log to learn what still needs doing.
 
 ---
 
-*Last updated: 2026-09-23 (session 76).*
+*Last updated: 2026-09-23 (session 77).*

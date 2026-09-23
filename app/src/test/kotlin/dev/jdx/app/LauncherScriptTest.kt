@@ -2,6 +2,7 @@ package dev.jdx.app
 
 import io.kotest.matchers.shouldBe
 import io.kotest.matchers.collections.shouldContain
+import io.kotest.matchers.collections.shouldNotContain
 import io.kotest.matchers.string.shouldContain
 import io.kotest.matchers.string.shouldNotContain
 import io.kotest.matchers.string.shouldStartWith
@@ -56,7 +57,7 @@ class LauncherScriptTest {
     private fun tempDir(prefix: String): File = Files.createTempDirectory(prefix).toFile()
 
     /** A minimal `build/jdx` + `build/libs/jdx-*-all.jar` layout; the jar is never opened. */
-    private fun newFakeInstall(): File {
+    private fun newFakeInstall(withCdsArchive: Boolean = false): File {
         val dir = tempDir("jdx-install-")
         val launcher = File(dir, "jdx").apply {
             writeText(launcherSource.readText())
@@ -64,6 +65,10 @@ class LauncherScriptTest {
         }
         val libs = File(dir, "libs").apply { mkdirs() }
         File(libs, "jdx-0.0.0-all.jar").writeBytes(byteArrayOf(0x50, 0x4b))
+        if (withCdsArchive) {
+            // The launcher only checks presence; the stub java never reads it.
+            File(libs, "jdx.jsa").writeBytes(byteArrayOf(0x50, 0x4b))
+        }
         return dir
     }
 
@@ -340,6 +345,77 @@ class LauncherScriptTest {
         assertCleanFailure(result, ":app:installDist")
     }
 
+    // ------------------------------------------------------------------ AppCDS archive (T-048)
+
+    @Test
+    fun `a jdx-dot-jsa next to the fat jar is passed as SharedArchiveFile after Xshare-auto`() {
+        val install = newFakeInstall(withCdsArchive = true)
+        val stubJdk = newStubJdk()
+        val argsFile = File(install, "stub-args.txt")
+
+        val result = runLauncher(
+            File(install, "jdx"), install,
+            args = listOf("--version"),
+            environment = mapOf("JAVA_HOME" to stubJdk.absolutePath) + stubEnvironment(argsFile),
+        )
+
+        result.exitCode shouldBe 0
+        recordedArgs(argsFile) shouldBe listOf(
+            "-XX:TieredStopAtLevel=1",
+            "-XX:+UseSerialGC",
+            "-Xshare:auto",
+            "-XX:SharedArchiveFile=${File(install, "libs/jdx.jsa").absolutePath}",
+            "-jar",
+            File(install, "libs/jdx-0.0.0-all.jar").absolutePath,
+            "--version",
+        )
+    }
+
+    @Test
+    fun `a missing jdx-dot-jsa keeps the plain exec line`() {
+        val install = newFakeInstall(withCdsArchive = false)
+        val stubJdk = newStubJdk()
+        val argsFile = File(install, "stub-args.txt")
+
+        val result = runLauncher(
+            File(install, "jdx"), install,
+            args = listOf("--version"),
+            environment = mapOf("JAVA_HOME" to stubJdk.absolutePath) + stubEnvironment(argsFile),
+        )
+
+        result.exitCode shouldBe 0
+        recordedArgs(argsFile) shouldNotContain "-XX:SharedArchiveFile=${File(install, "libs/jdx.jsa").absolutePath}"
+        recordedArgs(argsFile) shouldContain "-Xshare:auto"
+    }
+
+    @Test
+    fun `archive presence never changes the version gate`() = runBlocking<Unit> {
+        val versionArb = versionLineArb
+        val archiveArb = Arb.of(true, false)
+
+        checkAll(100, versionArb, archiveArb) { generated, withArchive ->
+            val install = newFakeInstall(withCdsArchive = withArchive)
+            val stubJdk = newStubJdk()
+            val argsFile = File(install, "stub-args.txt")
+
+            val result = runLauncher(
+                File(install, "jdx"), install, args = listOf("--version"),
+                environment = mapOf("JAVA_HOME" to stubJdk.absolutePath) +
+                    stubEnvironment(argsFile, versionLine = generated.versionLine),
+            )
+            val archiveFlag = "-XX:SharedArchiveFile=${File(install, "libs/jdx.jsa").absolutePath}"
+            if (generated.effectiveMajor >= 21) {
+                result.exitCode shouldBe 0
+                if (withArchive) recordedArgs(argsFile) shouldContain archiveFlag
+                else recordedArgs(argsFile) shouldNotContain archiveFlag
+            } else {
+                // Rejected before the exec line: no args recorded at all.
+                result.exitCode shouldBe 6
+                result.stderr.shouldStartWith("jdx: ")
+            }
+        }
+    }
+
     // ------------------------------------------------------------------ generative family (TESTING.md §4)
 
     private data class GeneratedVersion(val versionLine: String, val effectiveMajor: Int)
@@ -463,6 +539,21 @@ class LauncherScriptTest {
 
         result.exitCode shouldBe 0
         result.stdout.trim() shouldBe "jdx version ${dev.jdx.cli.BuildInfo.version}"
+    }
+
+    @Test
+    fun `installDist ships a non-empty AppCDS archive next to the fat jar`() {
+        assumeTrue(builtLauncher.isFile, "app/build/jdx missing — run :app:installDist")
+
+        val libs = File(projectDir, "build/libs")
+        val fatJars = libs.listFiles { file -> file.name.startsWith("jdx-") && file.name.endsWith("-all.jar") }
+            .orEmpty().toList()
+        assumeTrue(fatJars.isNotEmpty(), "fat jar missing in app/build/libs — run :app:installDist")
+
+        // The launcher resolves this fixed path (T-048); presence is what engages CDS.
+        val archive = File(libs, "jdx.jsa")
+        archive.isFile shouldBe true
+        (archive.length() > 0) shouldBe true
     }
 
     private fun javaIsAvailable(): Boolean =

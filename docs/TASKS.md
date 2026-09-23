@@ -1348,7 +1348,7 @@ plus the Java `[strictfp]` warning on the deliberately-`strictfp`
 `testfixtures`, or suppress at the declaration). Gate test compilations and
 decide Java when starting.)*
 
-### T-048 — AppCDS archive generation · `WIP` (session 77)
+### T-048 — AppCDS archive generation · `DONE` (session 77)
 
 **Depends:** T-004 (fat jar + launcher own the flags) · **Files:**
 `app/build.gradle.kts` (class-list + archive tasks, wired into `installDist`),
@@ -1380,6 +1380,16 @@ already resolves): file follow-ups when starting them. T-050 stays next.)*
 - Verify: `./gradlew :app:installDist` produces the archive;
   `app/build/jdx --version` still exits 0 with/without it;
   `./gradlew :app:check -Ptier1.budget=10000` green.
+
+*Closed in session 77. `generateCdsClassList` + `createCdsArchive` in
+`app/build.gradle.kts` (build-JVM `java`, incremental, config-cache safe)
+ship `app/build/libs/jdx.jsa` via `installDist`; the launcher passes
+`-XX:SharedArchiveFile` only when present (stale archives degrade via
+`-Xshare:auto`, probed). Measured `--version` 187 ms → 90 ms cold
+(~140 ms → ~228 ms through the real launcher). Tests: 2 tier-2
+present/absent pins + archive×version-gate property + `installDist`
+archive pin (`LauncherScriptTest` 23/23). Lessons: L-107 (never merge
+class lists). Next: T-050.*
 
 ### T-050 `jdx bench` against `minecraft-client.jar` · T-051 README + install docs · `TODO` (detail blocks land when each starts)
 

@@ -5,6 +5,81 @@ Append-only (D-023): 10 sessions per shard, newest first. Template and rules in
 
 ---
 
+## Session 77 — 2026-09-23 — T-048 AppCDS archive generation done (cold start ~2x faster)
+
+**Agent/Author:** Muse Spark 1.3 Free · **Commits:** `24f45fd` (claim) + closing commit (this session)
+
+### Goal
+Implement one M7 task and push (explicit owner go-ahead this session).
+Picked T-048 (AppCDS archive generation): next in M7 value order. Wrote the
+detail block when starting per the board rule; pre-claim probes (hand-run
+`DumpLoadedClassList` + `Xshare:dump` against the fat jar, timing with/without
+the archive, corrupt-archive degradation) set a shippable scope: build tasks +
+launcher presence-check + tier-2 pins. No `doctor` row, no `install.sh` change
+(the archive travels with the build dir the launcher already resolves).
+
+### What I did
+- Claimed T-048 first (`docs/TASKS.md` TODO→WIP + detail block, committed
+  `24f45fd` before coding).
+- `app/build.gradle.kts`: `generateCdsClassList` (trains
+  `build/cds/jdx.lst` via `members java.util.HashMap --limit 5 --no-daemon` —
+  the broadest single-run class set measured, ~3.3k classes: CLI tree + ASM +
+  resolver + renderers, no workspace/network, read-only) + `createCdsArchive`
+  (dumps `build/libs/jdx.jsa`), both incremental (inputs/outputs declared) and
+  config-cache safe (plain-String java path from `java.home`, T-067 pattern);
+  `installDist` depends on both. Training uses the *build* JVM's `java`, so
+  the archive matches the JDK that built it.
+- `app/src/main/scripts/jdx`: passes `-XX:SharedArchiveFile=$jdx_home/libs/jdx.jsa`
+  (fixed name, after `-Xshare:auto`, before `-jar`) only when the file exists —
+  missing/stale archives degrade to today's plain run, never a failure.
+- Tests (`LauncherScriptTest`, tier-2): present pin (exact exec-args incl. the
+  flag), absent pin (no flag, `-Xshare:auto` kept), archive×version-gate
+  property (100 cases: exit codes follow the gate, flag iff present), and an
+  e2e pin that `installDist` leaves a non-empty `jdx.jsa` next to the fat jar.
+  Suite now 23/23 green.
+- Verified: `./gradlew :app:installDist` produces a 21 MB `jdx.jsa`;
+  `-Xlog:cds` shows the archive mapping; `--version` 187 ms → 90 ms raw
+  (152/158/119 ms → 227/224/234 ms through the real launcher);
+  `./gradlew check -Ptier1.budget=10000` green (the budget flag is the known
+  machine-variance caveat). No tier-3 run: build/launcher-only change, no
+  artifact/index/render code touched (§13 trigger does not fire).
+
+### Decisions made
+- None (no new D-nnn). Single-run training, fixed archive name, and
+  presence-check-only launcher are recorded as task-scope rationale in the
+  T-048 detail block — all reversible in one line each.
+
+### Tasks moved
+- T-048: TODO → WIP (`24f45fd`) → DONE (this session). Next: T-050 (`bench`).
+
+### Lessons distilled
+- L-107 (never merge `DumpLoadedClassList` outputs from two JVM runs —
+  conflicting lambda `id:` lines break `-Xshare:dump`; train one broad run).
+
+### What works now (and how to verify it yourself)
+- `./gradlew :app:installDist && ls -la app/build/libs/jdx.jsa` — archive present.
+- `app/build/jdx --version` — ~140 ms cold (was ~228 ms without the archive;
+  delete `app/build/libs/jdx.jsa` and compare, then rebuild).
+- `./gradlew :app:tier2Test --tests "dev.jdx.app.LauncherScriptTest"` — 23 tests green.
+- Corrupt-archive proof: `head -c 1000 app/build/libs/jdx.jsa > /tmp/c.jsa`
+  then `java -Xshare:auto -XX:SharedArchiveFile=/tmp/c.jsa -jar
+  app/build/libs/jdx-*-all.jar --version` — warns, still exits 0.
+
+### What is broken / half-done
+- Nothing from this task. `doctor` does not report AppCDS status and
+  `install.sh` does not mention the archive — deliberately out of this slice;
+  file follow-ups when starting them (next free number is T-084).
+
+### Open questions / blockers
+- None.
+
+### Next action
+- **M7 T-050** (`jdx bench` against `minecraft-client.jar`) — write the detail
+  block when starting. Then T-051 (README/install) last. T-080/T-081/T-083
+  stay low priority.
+
+---
+
 ## Session 76 — 2026-09-23 — T-052 warnings-as-errors, lint, final API review done
 
 **Agent/Author:** Muse Spark 1.3 Free · **Commits:** `dd3a681` (claim) + `629b4f5` (cli scoping) + closing commit (this session)

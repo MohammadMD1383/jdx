@@ -12,6 +12,11 @@
 #      (missing JDK, JDK too old, missing build). Exit code 6 (D-015/D-026).
 #   3. exec the fat jar with the one-shot CLI JVM flags (PROPOSAL.md §15):
 #      -XX:TieredStopAtLevel=1 -XX:+UseSerialGC -Xshare:auto
+#      plus -XX:SharedArchiveFile when the AppCDS archive (T-048,
+#      app/build/libs/jdx.jsa, shipped by :app:installDist) sits next to the
+#      fat jar. A missing or stale archive degrades to the plain run via
+#      -Xshare:auto, never a hard failure — so this is a presence check only,
+#      no version probing.
 #
 # install.sh symlinks this file into ~/.local/bin, so the fat jar is located relative to
 # the *resolved* script path, not $0 (GNU `readlink -f`; without it, $0 must be the real
@@ -80,4 +85,16 @@ esac
 
 [ "$major" -ge "$minimum_java_major" ] || die "jdx requires Java $minimum_java_major+, but '$java_exe' is version '$version' — set JAVA_HOME to a newer JDK"
 
-exec "$java_exe" -XX:TieredStopAtLevel=1 -XX:+UseSerialGC -Xshare:auto -jar "$jar" "$@"
+# AppCDS archive (T-048): shipped by :app:installDist next to the fat jar.
+# Presence check only — -Xshare:auto below makes a stale archive a warning,
+# never a failure, so no version probing here.
+cds_archive=
+if [ -f "$jdx_home/libs/jdx.jsa" ]; then
+    cds_archive="-XX:SharedArchiveFile=$jdx_home/libs/jdx.jsa"
+fi
+
+if [ -n "$cds_archive" ]; then
+    exec "$java_exe" -XX:TieredStopAtLevel=1 -XX:+UseSerialGC -Xshare:auto "$cds_archive" -jar "$jar" "$@"
+else
+    exec "$java_exe" -XX:TieredStopAtLevel=1 -XX:+UseSerialGC -Xshare:auto -jar "$jar" "$@"
+fi
