@@ -5,6 +5,89 @@ Append-only (D-023): 10 sessions per shard, newest first. Template and rules in
 
 ---
 
+## Session 78 — 2026-09-23 — T-050 `jdx bench` done (workload + advisory §15 targets)
+
+**Agent/Author:** Muse Spark 1.3 Free · **Commits:** `f97a619` (claim) + closing commit (this session)
+
+### Goal
+Implement one M7 task and push (explicit owner go-ahead this session).
+Picked T-050 (`jdx bench` against `minecraft-client.jar`): next in M7 value
+order. Wrote the detail block when starting per the board rule; scoped to
+one sitting as read-command root resolution + a fixed 5-case workload with
+advisory targets (budgets never gate — the `verifyTier1Budget` precedent).
+
+### What I did
+- Claimed T-050 first (`docs/TASKS.md` TODO→WIP + detail block, committed
+  `f97a619` before coding).
+- New `cli/.../bench/BenchRunner.kt`: fixed `CASES` (`load` ≤ 8000 ms,
+  `show`/`members`/`search`/`hierarchy` ≤ 250 ms each), first/middle/last
+  sampling over sorted binary names (no hard-coded symbols — the default
+  target is obfuscated), median-of-iterations reporting, `load` re-opens +
+  ASM-reads every class (the "first index" proxy). `usages` deliberately
+  out (no indexed path yet, D-043).
+- New `cli/.../render/BenchSheet.kt` (text table + standard `--json`
+  envelope, `command: "bench"`) + `cli/.../commands/BenchCommand.kt`
+  (thin adapter: read-command root flags, minecraft-client.jar probe under
+  `~/.gradle/caches/fabric-loom/` when no roots selected, exit
+  1/3/4/5/6 mapping — exit 1 via `ErrorResult.notFound` since `generic`
+  rejects 1/2). `--jars` (not `--jar`) for read-command consistency.
+- One-word `index` touch: `JdxService.expandJarSpec` internal→public so
+  bench samples the same roots the queries read (no behaviour change).
+- Tests: tier-1 `BenchRunnerTest` (median oracle + hostile properties) +
+  `BenchCommandTest` (7: validation, probe-miss, JSON, exit 5/1 paths);
+  tier-2 `BenchServiceTest` (real fixture-jar run, structural only);
+  `@Tag("bench") BenchSmokeTest` (1 test, what `./gradlew bench` runs);
+  `benchTest` wired to `jdx.fixturesDir`; root `bench` placeholder message
+  replaced. HelpSheet + Appendix B + README rows.
+- Three fix cycles, all kept: `when`-branch lambdas don't coerce (L-108),
+  `-Werror` unused-expression on service outcomes (`block: () -> Any?`),
+  `Arb.longList` doesn't exist in this kotest (`Arb.list(Arb.long…)`).
+- Verified: `./gradlew check -Ptier1.budget=10000` green (1m44s);
+  `./gradlew :cli:benchTest --rerun-tasks` green (smoke ran);
+  `./gradlew lint` clean. Live over `minecraft-client.jar` (10,410
+  classes): `load` 1273 ms ok, cold query cases OVER as designed (each
+  one-shot re-opens roots — the warm daemon path is the ≤ 20 ms story);
+  `--json` parses, `--iterations 0` exits 3, `help --agent` lists bench.
+  No tier-3 run: the only artifact/index touch is behavior-preserving
+  (T-047/T-052 precedent).
+
+### Decisions made
+- None (no new D-nnn). Advisory-only targets, `usages` exclusion, `--jars`
+  naming and probe fallback are recorded as task-scope rationale in the
+  T-050 block — all reversible.
+
+### Tasks moved
+- T-050: TODO → WIP (`f97a619`) → DONE (this session). Next: T-051
+  (README/install, last M7 task).
+
+### Lessons distilled
+- L-108 (`when` branches don't coerce block-lambdas; trailing-lambda or
+  anonymous `fun` instead — plus the `() -> Any?` timing-block corollary).
+
+### What works now (and how to verify it yourself)
+- `./gradlew :cli:benchTest --rerun-tasks` — smoke green.
+- `app/build/jdx bench --iterations 1` — timing table over
+  `minecraft-client.jar`, exit 0.
+- `app/build/jdx bench --iterations 1 --json` — same rows in the envelope.
+- `app/build/jdx bench --iterations 0` — exit 3.
+
+### What is broken / half-done
+- Nothing from this task. Cold one-shot queries over a 10k-class jar miss
+  the §15 ≤ 250 ms targets (each re-opens roots) — reported as OVER, not a
+  failure; closing that gap is daemon/index-acceleration work, not bench
+  work. `lint` + `processResources` fired one implicit-dependency ordering
+  complaint under parallel scheduling; re-run green, `lint` standalone
+  green — pre-existing latent wiring (T-067 family), not this task.
+
+### Open questions / blockers
+- None.
+
+### Next action
+- **M7 T-051** (README + install docs) — last M7 task. Then T-080/T-081/
+  T-083 (low priority).
+
+---
+
 ## Session 77 — 2026-09-23 — T-048 AppCDS archive generation done (cold start ~2x faster)
 
 **Agent/Author:** Muse Spark 1.3 Free · **Commits:** `24f45fd` (claim) + closing commit (this session)

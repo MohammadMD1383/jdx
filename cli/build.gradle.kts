@@ -57,7 +57,7 @@ tasks.named("processResources") { dependsOn(generateBuildProperties) }
 // Read-command tests (T-011) run the real `JdxService` over the `testfixtures` jars:
 // hand the directory in as a system property so tests never hard-code paths
 // (same pattern as `index/build.gradle.kts`, T-006).
-listOf("test", "tier2Test").forEach { taskName ->
+listOf("test", "tier2Test", "benchTest").forEach { taskName ->
     tasks.named<Test>(taskName) {
         dependsOn(":testfixtures:jar", ":testfixtures:sourcesJar")
         systemProperty(

@@ -144,15 +144,13 @@ tasks.register("soak") {
     dependsOn(subprojects.map { it.tasks.named("soakTest") })
 }
 
-// Tier 4: benchmarks (PROPOSAL.md §15, docs/TESTING.md §13). Real benchmarks land in T-050;
-// the per-module `benchTest` tasks already run `@Tag("bench")` tests once they exist.
+// Tier 4: benchmarks (PROPOSAL.md §15, T-050). The `bench` smoke lives in
+// `:cli` (`BenchSmokeTest`, @Tag("bench"), over the fixture jar); per-module
+// `benchTest` tasks run every `@Tag("bench")` test.
 tasks.register("bench") {
     group = "verification"
-    description = "Tier-4 benchmarks. Full benchmark suite lands in T-050."
+    description = "Tier-4 benchmarks. See BenchSmokeTest (T-050) for the smoke run."
     dependsOn(subprojects.map { it.tasks.named("benchTest") })
-    doLast {
-        logger.lifecycle("bench: no benchmarks yet (T-050). Per-module benchTest tasks are wired.")
-    }
 }
 
 // Tier 4: mutation testing (docs/TESTING.md §10, T-060). Runs PIT over every gated module;

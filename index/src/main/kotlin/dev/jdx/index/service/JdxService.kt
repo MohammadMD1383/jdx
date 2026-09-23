@@ -1222,8 +1222,11 @@ public object JdxService {
      * `[`, `{`). A leading `~` expands to the home directory. An empty glob
      * match is an artifact error, not silence — the agent asked for something
      * that names nothing.
+     *
+     * Public (not internal) so `jdx bench` (T-050) samples the same roots the
+     * queries read — one expansion rule, no drift between the cases.
      */
-    internal fun expandJarSpec(spec: String): List<Path> {
+    public fun expandJarSpec(spec: String): List<Path> {
         val expanded = if (spec.startsWith("~/") || spec == "~") {
             System.getProperty("user.home") + spec.substring(1)
         } else {

@@ -103,6 +103,7 @@ net.minecraft.world.item.ItemStack#getMaxStackSize()
 | `jdx samples <symbol>` | *(no IDE equivalent)* |
 | `jdx ws …` / `jdx index` / `jdx cache …` | Project & library configuration |
 | `jdx mcp` / `jdx daemon` / `jdx serve` / `jdx batch` | *(no IDE equivalent)* |
+| `jdx bench [--iterations N]` | *(no IDE equivalent — timings + §15 targets)* |
 | `jdx help [--agent]` | Cheat sheet (paste-ready for agents with `--agent`) |
 
 Full specification with every flag: [`docs/PROPOSAL.md`](docs/PROPOSAL.md).

@@ -41,6 +41,7 @@ public val HELP_ROWS: List<HelpRow> = listOf(
     HelpRow("serve [--port 7070]", "Local HTTP/JSON API", "jdx serve"),
     HelpRow("mcp", "MCP stdio server (typed jdx_* tools)", "jdx mcp"),
     HelpRow("batch", "Many queries, one process (NDJSON in/out)", "jdx batch --json < queries.ndjson"),
+    HelpRow("bench [--iterations 3]", "Benchmark the read path (timings + §15 targets)", "jdx bench --iterations 1"),
     HelpRow("help [--agent]", "This cheat sheet", "jdx help --agent"),
 )
 

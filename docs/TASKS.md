@@ -1391,13 +1391,15 @@ present/absent pins + archive×version-gate property + `installDist`
 archive pin (`LauncherScriptTest` 23/23). Lessons: L-107 (never merge
 class lists). Next: T-050.*
 
-### T-050 `jdx bench` against `minecraft-client.jar` · `WIP`
+### T-050 `jdx bench` against `minecraft-client.jar` · `DONE` (session 78)
 
 **Depends:** T-011 (read-command patterns + `resolveRoots`), T-010 (JSON
 envelope) · **Files:** `cli/.../bench/BenchRunner.kt` (new),
 `cli/.../render/BenchSheet.kt` (new), `cli/.../commands/BenchCommand.kt`
 (new), `cli/.../JdxCli.kt` (register), `cli/.../render/HelpSheet.kt`
-(row), `build.gradle.kts` (`bench` message), `docs/PROPOSAL.md`
+(row), `index/.../service/JdxService.kt` (`expandJarSpec` internal→public,
+no behaviour change), `cli/build.gradle.kts` (`benchTest` fixtures wiring),
+`build.gradle.kts` (`bench` message), `docs/PROPOSAL.md`
 (Appendix B row), `README.md` (table row)
 
 *(M7 perf slice, one sitting: PROPOSAL.md §15 promises "a `jdx bench`
@@ -1406,12 +1408,14 @@ command, tagged out of normal test runs, measuring against the local
 `benchTest` tasks + root `bench` task are wired but empty — this task
 fills them with a smoke plus the CLI command.)*
 
-- `jdx bench [--jar <path>]… [--iterations N] [--json] [-w name]
-  [--no-jdk]`: resolves roots exactly like the read commands
-  (`ReadCommandSupport.resolveRoots`); when no explicit roots and no
-  workspace is selected, probes `~/.gradle/caches/fabric-loom/*/minecraft-client.jar`
-  (newest first) and uses it — missing probe with no roots exits 4
-  naming `--jar`. `--iterations < 1` exits 3.
+- `jdx bench [--jars …] [--iterations N] [--json] [-w name] [--no-jdk]
+  [--src/--coord/--repo/--fetch]`: resolves roots exactly like the read
+  commands (`ReadCommandSupport.resolveRoots`); when no explicit roots and
+  no workspace is selected, probes `~/.gradle/caches/fabric-loom/` for the
+  newest `minecraft-client.jar` and uses it — missing probe with no roots
+  exits 4 naming `--jars`. `--iterations < 1` exits 3; empty jars exit 1
+  via `ErrorResult.notFound` (`generic` rejects 1/2, D-015). `--jars`
+  (not `--jar`) for read-command consistency.
 - Fixed workload in deterministic order over the resolved roots, sampling
   the first/middle/last sorted class names from the jars at runtime (no
   hard-coded symbols — `minecraft-client.jar` is obfuscated): `load`
@@ -1437,6 +1441,12 @@ fills them with a smoke plus the CLI command.)*
 - Verify: `./gradlew check` green + `./gradlew bench` green + live
   `jdx bench --iterations 1` over `minecraft-client.jar` + `bench
   --json` valid JSON.
+
+*Closed in session 78. Live: 10,410 classes, `load` 1273 ms ok, cold
+query cases OVER as designed (each one-shot re-opens roots — the warm
+daemon path is the ≤ 20 ms story). `expandJarSpec` visibility is the only
+`index` touch and changes no behaviour, so no tier-3 run (T-047/T-052
+precedent). Lessons: L-108. Next: T-051.*
 
 ### T-051 README + install docs · `TODO` (detail blocks land when each starts)
 
