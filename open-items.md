@@ -18,7 +18,7 @@ mine the session log to learn what still needs doing.
 
 | Item | State | Notes |
 |---|---|---|
-| T-042 transparent CLI daemon client + `--no-daemon` | TODO, **next** | Unblocked: transport (T-041) + dispatch (T-082) both live |
+| T-043 MCP stdio server | TODO, **next** | Unblocked: wire contract (T-040) live |
 | T-043 MCP stdio server | TODO | Depends on T-040 |
 | T-044 HTTP/JSON server | TODO | Depends on T-040 |
 | T-045 `jdx batch` | TODO | Depends on T-040 |
@@ -27,6 +27,10 @@ mine the session log to learn what still needs doing.
 | T-080 Kotlin sidecar fetch · T-081 Kotlin-aware mismatch pairing | TODO, low priority | Filed session 65; M6 stays next |
 
 ## Deferred follow-ups (no task number yet — file one when starting)
+
+- **Warm text output:** T-042 serves `--json` warm; text stays in-process in
+  v1 (no text wire, D-059). Lift with a text wire or a JSON→Outcome parser
+  when the human-first path needs daemon speed.
 
 - **`doctor` daemon aliveness:** the `daemon` row still counts `.sock`
   files; now that the T-041 daemon answers `health`, it could probe each
@@ -47,4 +51,4 @@ mine the session log to learn what still needs doing.
 
 ---
 
-*Last updated: 2026-09-23 (session 68).*
+*Last updated: 2026-09-23 (session 69).*

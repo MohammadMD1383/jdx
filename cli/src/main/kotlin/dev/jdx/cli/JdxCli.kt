@@ -55,6 +55,13 @@ class JdxCli : CoreCliktCommand(name = "jdx") {
             "after the subcommand name, like --json (D-027).",
     )
 
+    val noDaemon by option(
+        "--no-daemon",
+        help = "Force in-process execution: do not forward this query to the background " +
+            "daemon even when its socket answers (PROPOSAL.md §14.1). Accepted before or " +
+            "after the subcommand name, like --json.",
+    ).flag()
+
     override fun run() = Unit
 }
 

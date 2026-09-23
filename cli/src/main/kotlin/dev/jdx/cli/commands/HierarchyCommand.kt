@@ -8,12 +8,19 @@ import com.github.ajalt.clikt.parameters.options.flag
 import com.github.ajalt.clikt.parameters.options.multiple
 import com.github.ajalt.clikt.parameters.options.option
 import com.github.ajalt.clikt.parameters.types.int
+import dev.jdx.cli.DaemonClient
+import dev.jdx.cli.DaemonRoundTrip
+import dev.jdx.cli.WarmRoots
+import dev.jdx.cli.defaultRoundTrip
 import dev.jdx.cli.effectiveJson
+import dev.jdx.cli.effectiveNoDaemon
 import dev.jdx.cli.effectiveWorkspace
 import dev.jdx.core.render.ErrorResult
 import dev.jdx.index.service.JdxService
 import dev.jdx.index.workspace.FileWorkspaceStore
 import dev.jdx.index.workspace.WorkspaceStore
+import dev.jdx.server.DaemonPaths
+import java.nio.file.Path
 import kotlin.system.exitProcess
 
 /**
@@ -33,6 +40,8 @@ class HierarchyCommand(
     private val store: WorkspaceStore = FileWorkspaceStore.system(),
     private val getenv: (String) -> String? = { name -> System.getenv(name) },
     private val discover: ProjectDiscoveryFn? = null,
+    private val daemonRuntimeDir: Path? = DaemonPaths.systemRuntimeDir(),
+    private val daemonRoundTrip: DaemonRoundTrip = defaultRoundTrip,
 ) : CoreCliktCommand(name = "hierarchy") {
     override fun help(context: Context): String =
         "Show a type's hierarchy: supertypes upward (full transitive chain, " +
@@ -127,6 +136,12 @@ class HierarchyCommand(
         help = "Disable ANSI colors even on a TTY (piped output is always plain).",
     ).flag()
 
+    private val noDaemon by option(
+        "--no-daemon",
+        help = "Force in-process execution: do not forward this query to the background " +
+            "daemon even when its socket answers (PROPOSAL.md §14.1).",
+    ).flag()
+
     override fun run() {
         val json = effectiveJson(json)
         if (limit < 0) {
@@ -143,6 +158,28 @@ class HierarchyCommand(
             ReadCommandSupport.finish(failure, "hierarchy", json, noColor, terminate)
             return
         }
+        if (DaemonClient.serveWarmIfReady(
+                request = DaemonClient.hierarchyRequest(
+                    ref = ref,
+                    up = up,
+                    down = down,
+                    direct = direct,
+                    depth = depth,
+                    inArtifact = inArtifact,
+                    exclude = exclude,
+                    limit = limit,
+                ),
+                flagWorkspace = effectiveWorkspace(workspace),
+                roots = WarmRoots(jars = jars, coords = coord, repos = repo, fetch = fetch, noJdk = noJdk),
+                noDaemon = effectiveNoDaemon(noDaemon),
+                json = json,
+                terminate = terminate,
+                store = store,
+                getenv = getenv,
+                runtimeDir = daemonRuntimeDir,
+                roundTrip = daemonRoundTrip,
+            )
+        ) return
         when (val resolved = ReadCommandSupport.resolveRoots(
             jars,
             noJdk,
@@ -186,6 +223,8 @@ class ImplementorsCommand(
     private val store: WorkspaceStore = FileWorkspaceStore.system(),
     private val getenv: (String) -> String? = { name -> System.getenv(name) },
     private val discover: ProjectDiscoveryFn? = null,
+    private val daemonRuntimeDir: Path? = DaemonPaths.systemRuntimeDir(),
+    private val daemonRoundTrip: DaemonRoundTrip = defaultRoundTrip,
 ) : CoreCliktCommand(name = "implementors") {
     override fun help(context: Context): String =
         "List a type's implementors/subtypes across the workspace (alias for " +
@@ -267,6 +306,12 @@ class ImplementorsCommand(
         help = "Disable ANSI colors even on a TTY (piped output is always plain).",
     ).flag()
 
+    private val noDaemon by option(
+        "--no-daemon",
+        help = "Force in-process execution: do not forward this query to the background " +
+            "daemon even when its socket answers (PROPOSAL.md §14.1).",
+    ).flag()
+
     override fun run() {
         val json = effectiveJson(json)
         if (limit < 0) {
@@ -283,6 +328,26 @@ class ImplementorsCommand(
             ReadCommandSupport.finish(failure, "implementors", json, noColor, terminate)
             return
         }
+        if (DaemonClient.serveWarmIfReady(
+                request = DaemonClient.implementorsRequest(
+                    ref = ref,
+                    direct = direct,
+                    depth = depth,
+                    inArtifact = inArtifact,
+                    exclude = exclude,
+                    limit = limit,
+                ),
+                flagWorkspace = effectiveWorkspace(workspace),
+                roots = WarmRoots(jars = jars, coords = coord, repos = repo, fetch = fetch, noJdk = noJdk),
+                noDaemon = effectiveNoDaemon(noDaemon),
+                json = json,
+                terminate = terminate,
+                store = store,
+                getenv = getenv,
+                runtimeDir = daemonRuntimeDir,
+                roundTrip = daemonRoundTrip,
+            )
+        ) return
         when (val resolved = ReadCommandSupport.resolveRoots(
             jars,
             noJdk,

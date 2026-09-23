@@ -49,7 +49,7 @@ be fiction.
 | **M3** | Bodies: sources, JavaParser, Vineflower, `body`/`source`/`doc` | DONE |
 | **M4** | Graph: `usages`/`hierarchy`/`callers`/`calls`/`samples` | DONE (T-029…T-034) |
 | **M5** | Kotlin: `@Metadata` + PSI source parsing | DONE (T-035…T-039) |
-| **M6** | Serving: daemon, MCP, HTTP, `batch` | IN PROGRESS (T-040…T-041 + T-082 DONE; T-042 next) |
+| **M6** | Serving: daemon, MCP, HTTP, `batch` | IN PROGRESS (T-040…T-042 + T-082 DONE; T-043 next) |
 | **M7** | Polish: token budgets, AppCDS, mutation gates, docs, install | TODO (T-060 done early) |
 
 **DONE: T-001…T-035** (M0–M2 in full; M3 via the T-020 umbrella's slices —
@@ -60,13 +60,12 @@ remainder) **plus T-079** (annotation-element matching) **plus T-075** (`usages`
 graph enrichment) **plus T-038** (PSI loader seam) **plus T-039** (Kotlin
 bodies/KDoc, last T-036 slice) **plus T-036** (member-mapping umbrella)
 **plus T-040** (M6 RPC wire contract) **plus T-041** (daemon + unix socket)
-**plus T-082** (daemon `JdxService` dispatch).
+**plus T-082** (daemon `JdxService` dispatch) **plus T-042** (transparent CLI
+daemon client + `--no-daemon`).
 DONE entries below are
 compressed to a summary + pointers; full notes live in git history and the
-session log. **Next: T-042** (transparent CLI daemon client — transport
-(T-041) and dispatch (T-082) are both live, so warm answers exist to forward;
-then the remaining M6 slices T-043…T-046, whose detail blocks were expanded
-in session 66),
+session log. **Next: T-043** (MCP stdio server; then the remaining M6 slices
+T-044…T-046, whose detail blocks were expanded in session 66),
 **plus M7** (coarse; T-060 already DONE).
 
 ---
@@ -1062,7 +1061,7 @@ stays 0 (live roots, no index). Tests: `RpcDispatchTest` (28) +
 the session log (warm `members --json` byte-identical to one-shot). T-042
 unblocked.*
 
-### T-042 — transparent CLI daemon client + `--no-daemon` · `WIP`
+### T-042 — transparent CLI daemon client + `--no-daemon` · `DONE` (session 69)
 
 **Depends:** T-041 (daemon transport), T-082 (daemon query dispatch — both DONE,
 warm answers exist) · **Files:** `cli/.../DaemonClient.kt`,
@@ -1074,6 +1073,19 @@ answers, else runs in-process; `--no-daemon` forces in-process (PROPOSAL.md
 Tests: tier-2 (daemon up → served warm; daemon down → in-process identical
 bytes; `--no-daemon` bypasses) + parity property (client vs in-process
 byte-identical).
+
+*Closed in session 69. `cli/.../DaemonClient.kt` (new: `shouldAttempt` guards,
+`serveWarmIfReady`, `workspaceNameForDaemon`, `parseExitCode`, 17 flag-verbatim
+request builders) + `--no-daemon` on the root and every read command (D-027
+dual position). Warm serves `--json` only in v1 (no text wire, D-059);
+explicit roots, unnamed workspaces and usage errors stay cold. Tests: tier-1
+`DaemonClientTest` (18: precedence, guards, exit codes, builders, 3 hostile
+never-throws/determinism properties) + tier-2 `DaemonWarmTest` (8: all-17
+warm byte parity with exit-code carriage, down/bypass/text/explicit-roots
+degradation, command-level + root-flag plumbing, 200-request hostile parity
+property). Decisions: D-059. Lessons: L-100. Live proof in the session log
+(warm `members`/`search`/`usages --json` byte-identical to `--no-daemon`,
+exit-1 carriage, `queries served` climbing). T-043 unblocked.*
 
 ### T-043 — MCP stdio server with generated schemas · `TODO`
 
