@@ -7,6 +7,7 @@ import com.github.ajalt.clikt.parameters.options.flag
 import com.github.ajalt.clikt.parameters.options.option
 import com.github.ajalt.clikt.parameters.options.versionOption
 import dev.jdx.cli.commands.DoctorCommand
+import dev.jdx.cli.commands.daemonGroup
 import dev.jdx.cli.commands.LsCommand
 import dev.jdx.cli.commands.cacheGroup
 import dev.jdx.cli.commands.BodyCommand
@@ -110,6 +111,7 @@ fun main(args: Array<String>): Unit =
         CallersCommand(),
         CallsCommand(),
         SamplesCommand(),
+        daemonGroup(),
         wsGroup(),
         cacheGroup(),
     ).main(args)

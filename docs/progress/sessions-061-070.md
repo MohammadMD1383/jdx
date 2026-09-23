@@ -5,6 +5,112 @@ Append-only (D-023): 10 sessions per shard, newest first. Template and rules in
 
 ---
 
+## Session 67 — 2026-09-23 — T-041 daemon + unix socket done (M6 transport live)
+
+**Agent/Author:** Muse Spark 1.3 Free · **Commits:** `d5fb289` (claim) + closing commit (this session)
+
+### Goal
+T-041, the M6 transport slice: a background JVM on a version-stamped
+unix-domain socket with `daemon start|stop|status|restart`, 5-min idle
+shutdown, and framing tests — against the T-040 contract, with no
+`JdxService` dispatch unless it fits one sitting (it did not: filed as
+T-082).
+
+### What I did
+- Claimed T-041 first (`docs/TASKS.md` TODO→WIP, committed `d5fb289` before coding).
+- **`server/.../DaemonPaths.kt`** (new, pure): `$XDG_RUNTIME_DIR/jdx/
+  <16-hex-sha256-of-workspace>-v<rpc-version>.sock` + `.pid`/`.log`
+  siblings; no runtime dir is a `null`, never a fallback.
+- **`server/.../DaemonIdle.kt`** (new, pure): `parseIdleDuration`
+  (`0` disables, `<n>s|m|h`, bare seconds) + `DEFAULT_IDLE` (5 min).
+- **`server/.../DaemonServer.kt`** (new): `DaemonServer` (unix socket,
+  strict 1:1 NDJSON line mapping, per-request idle reset via a single-shot
+  scheduler, pid file, `snapshot()`), `DaemonProbe` (never-throws
+  round-trip + `health` handshake with protocol-level version refusal),
+  `defaultDaemonHandler` (`health`/`version` live, reads refused exit-6
+  naming T-082). Envelopes hand-rolled with core `JsonEscape` in the exact
+  T-010 key order — `server` cannot call the `internal` core builder.
+- **`cli/.../commands/DaemonCommand.kt`** (new): `daemon
+  start|stop|status|restart|run` thin over `:server` (new cli→server dep;
+  D-004 intact). `start` spawns `java.home`'s java detached onto `daemon
+  run` and polls health 5 s (idempotent: live daemon exits 0); `stop` kills
+  via the pid file and sweeps stale files; `status` prints uptime,
+  workspace, memory, indexed artifacts, query count (+ `--json` envelope);
+  `run` is the foreground spawn target. Exits 1 = not running, 3 = usage,
+  6 = spawn/IO.
+- **Tests:** tier-1 `DaemonPathsTest` (8) + `DaemonIdleTest` (9, incl. two
+  hostile never-throws properties) + cli `DaemonCommandTest` (7:
+  `formatUptime`, exit-1/3/6 paths over a temp runtime dir, ok-false status
+  envelope); tier-2 `DaemonServerTest` (13: lifecycle, query counting,
+  honest read refusal, malformed + wire-version refusal, double-start
+  refusal, idle shutdown with 200 ms idle, idle-clock reset, file sweeping,
+  socket framing round-trip + hostile-lines properties over 200 generated
+  `RpcRequest`s each).
+- **Live proof** (fat jar, `XDG_RUNTIME_DIR=/tmp/jdx-e2e`, cleaned up
+  after): `status`→exit 1 stopped; `start`→`daemon started (pid …)`;
+  `status` text + `--json` (query count climbs); second `start`→`already
+  running` exit 0; raw python socket client → `members` gets the T-082
+  exit-6 envelope, `{garbage` + `jdx:999` each get `command:"unknown"`
+  envelopes (2 lines in, 2 envelopes out); `stop`→exit 0, repeat→exit 1;
+  `--idle soon`→exit 3; unset `XDG_RUNTIME_DIR`→exit 3; `--idle 2s`
+  daemon gone after 4 s with socket+pid swept (log kept); `restart` works.
+- Filed **T-082** (daemon `JdxService` dispatch) and repointed T-042's
+  Depends at T-041+T-082 — no warm answers exist until dispatch lands.
+
+### Findings that surprised me
+- Every socket test failed identically (`roundTrip` → `null`) with no
+  trace: `SocketChannel.socket()` throws `UnsupportedOperationException`
+  for AF_UNIX channels, and the probe's never-throws `catch → null`
+  swallowed it. Unix sockets need raw `ByteBuffer` IO (+ `Selector` read
+  timeout client-side). See L-098.
+
+### Decisions made
+- **D-057** — daemon transport + lifecycle semantics (socket layout, raw
+  channel IO, 1:1 line mapping, idle task, spawn model, cli→server dep,
+  health shape out of T-046 parity scope).
+
+### Tasks moved
+- T-041: WIP → DONE. Filed T-082 (daemon dispatch) as TODO; T-042 now
+  depends on T-041 + T-082. Next is **T-082**.
+
+### Lessons distilled
+- **L-098** — `Socket.socket()` does not speak AF_UNIX.
+
+### What works now (and how to verify it yourself)
+```bash
+./gradlew :server:test :server:tier2Test :cli:test --tests 'dev.jdx.server.*' --tests 'dev.jdx.cli.commands.DaemonCommandTest' -x verifyTier1Budget  # 37 tests green
+./gradlew check -x verifyTier1Budget  # tiers 1-2 green incl. gates
+export XDG_RUNTIME_DIR=/tmp/jdx-try && ./app/build/jdx daemon start --workspace demo && ./app/build/jdx daemon status --workspace demo && ./app/build/jdx daemon stop --workspace demo
+```
+Nothing query-visible changed: the daemon answers `health`/`version` only;
+every read command still runs in-process exactly as after session 66 (the
+transparent client is T-042, dispatch is T-082).
+
+**Caveats, unchanged and pre-existing:**
+- `verifyTier1Budget` is red on this machine (pre-existing machine
+  variance, 0 test failures — not run past the gate here; `-x
+  verifyTier1Budget` per the session-66 precedent).
+- Tier 3 not run: T-041 touches no artifact reading, indexing or
+  rendering, so the `docs/TESTING.md` §13 trigger does not fire.
+- `doctor`'s `daemon` row still counts sockets (aliveness upgrade left
+  for a follow-up; it names M6, not this task).
+
+### What is broken / half-done
+- Read queries through the daemon are refused naming T-082 by design
+  (transport slice). `indexed artifacts` reports 0 until T-082 wires the
+  store. `daemon` output paths are absolute socket paths only in the
+  spawn-failure message (log location) — accepted as diagnostic, like
+  `doctor`.
+
+### Open questions / blockers
+- None.
+
+### Next action
+- **M6 T-082** (daemon `JdxService` dispatch; detail block already in
+  `docs/TASKS.md`). T-042 waits on it.
+
+---
+
 ## Session 66 — 2026-09-22 — T-040 RPC v1 wire contract done (M6 opened)
 **Agent/Author:** Claude Opus 5 (1M context) · **Commits:** `74b3b5b` (claim, previous
 session) + closing commit (this session)

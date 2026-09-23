@@ -48,7 +48,7 @@ be fiction.
 | **M3** | Bodies: sources, JavaParser, Vineflower, `body`/`source`/`doc` | DONE |
 | **M4** | Graph: `usages`/`hierarchy`/`callers`/`calls`/`samples` | DONE (T-029…T-034) |
 | **M5** | Kotlin: `@Metadata` + PSI source parsing | DONE (T-035…T-039) |
-| **M6** | Serving: daemon, MCP, HTTP, `batch` | IN PROGRESS (T-040 DONE; T-041 next) |
+| **M6** | Serving: daemon, MCP, HTTP, `batch` | IN PROGRESS (T-040…T-041 DONE; T-082 then T-042 next) |
 | **M7** | Polish: token budgets, AppCDS, mutation gates, docs, install | TODO (T-060 done early) |
 
 **DONE: T-001…T-035** (M0–M2 in full; M3 via the T-020 umbrella's slices —
@@ -58,11 +58,12 @@ plus T-076** (first T-036 slice) **plus T-077** (second T-036 slice) **plus T-07
 remainder) **plus T-079** (annotation-element matching) **plus T-075** (`usages`
 graph enrichment) **plus T-038** (PSI loader seam) **plus T-039** (Kotlin
 bodies/KDoc, last T-036 slice) **plus T-036** (member-mapping umbrella)
-**plus T-040** (M6 RPC wire contract).
+**plus T-040** (M6 RPC wire contract) **plus T-041** (daemon + unix socket).
 DONE entries below are
 compressed to a summary + pointers; full notes live in git history and the
-session log. **Next: T-041** (daemon + unix socket; the remaining M6 slices
-T-041…T-046 were expanded into detail blocks in session 66),
+session log. **Next: T-082** (daemon `JdxService` dispatch — filed session 67
+as the T-041 remainder; T-042 waits on it, then the remaining M6 slices
+T-042…T-046, whose detail blocks were expanded in session 66),
 **plus M7** (coarse; T-060 already DONE).
 
 ---
@@ -994,12 +995,14 @@ vectors) + `RpcProtocolPropertyTest` (7 properties). Decisions: D-056. Lessons:
 L-096, L-097. Spec summary: PROPOSAL.md §14.5. The acceptance list above is left
 in full on purpose — T-041…T-046 implement against it.*
 
-### T-041 — daemon + unix socket + 5-min idle shutdown · `WIP`
+### T-041 — daemon + unix socket + 5-min idle shutdown · `DONE` (session 67)
 
-**Depends:** T-040 (wire contract) · **Files:** `server/.../Daemon.kt`,
-`app/.../jdx` (spawn), `cli/.../commands/DaemonCommand.kt`
+**Depends:** T-040 (wire contract) · **Files:** `server/.../DaemonPaths.kt`,
+`DaemonIdle.kt`, `DaemonServer.kt`, `cli/.../commands/DaemonCommand.kt`,
+`cli/.../JdxCli.kt`, `cli/build.gradle.kts` (+ `:server` dep),
+`server/build.gradle.kts` (kotest-property for the generating family)
 
-Background JVM holding a hot index, listening on a version-stamped unix-domain
+Background JVM holding a hot process, listening on a version-stamped unix-domain
 socket (`$XDG_RUNTIME_DIR/jdx/<workspace-hash>.sock`, PROPOSAL.md §14.3).
 CLI auto-spawns on first use; `ScheduledExecutorService` idle shutdown after
 5 min (`--idle <duration>`, `0` disables); `daemon start|stop|status|restart`
@@ -1009,9 +1012,47 @@ version-stamp mismatch refuses) + property (framing round-trip over the
 socket). Live-index acceleration stays out (live roots first, D-043
 precedent) unless the slice fits one sitting — split again if not.
 
+*Closed in session 67. Transport only: `health`/`version` answered internally,
+read queries refused with an exit-6 envelope naming T-082 (filed below), so
+the slice fits one sitting. `DaemonPaths` (hashed, version-stamped socket +
+pid/log siblings; no `XDG_RUNTIME_DIR` → exit 3), `DaemonServer` (strict 1:1
+NDJSON line mapping, per-request idle reset, `health` handshake with
+protocol-level version refusal), `DaemonProbe` (never-throws round-trip +
+health), `parseIdleDuration` (`0`/`Ns`/`Nm`/`Nh`/bare seconds). CLI
+`daemon start|stop|status|restart|run` thin over `:server` (new cli→server
+dep, D-004 intact); `start` spawns `java.home`'s java detached and polls
+health; `run` is the foreground spawn target. Tests: tier-1 `DaemonPathsTest`
+(8) + `DaemonIdleTest` (9, incl. hostile never-throws properties) +
+cli `DaemonCommandTest` (7); tier-2 `DaemonServerTest` (13: lifecycle,
+query counting, honest refusal, malformed/version-mismatch refusal,
+double-start refusal, idle shutdown + idle reset, file sweeping, socket
+framing round-trip + hostile-lines properties). Decisions: D-057. Lessons:
+L-098. Live proof in the session log. Full `JdxService` dispatch → T-082;
+transparent auto-spawn on first query → T-042.*
+
+### T-082 — daemon `JdxService` query dispatch · `TODO`
+
+**Depends:** T-040 (wire contract), T-041 (transport) · **Files:**
+`server/.../DaemonDispatch.kt` (new), `index/.../service/JdxService.kt` (roots wiring)
+*(Split out of T-041 in session 67: the T-041 transport answers `health`/`version`
+internally and refuses read queries with an exit-6 envelope naming this task,
+so the transport slice fits one sitting. T-042's transparent client needs this
+before any warm answer exists.)*
+
+Build the daemon's `DaemonHandler` from a `JdxService` over the daemon's
+workspace roots: all 17 read `RpcCommand`s dispatch to the same service
+methods the one-shot CLI calls, and responses are `ServiceOutcome.toJson(
+command)` bytes verbatim — no second shape, so T-046 parity stays structural
+(D-056 §1). Malformed/unknown stays the T-041 envelope (transport owns it).
+Indexed acceleration stays out unless it fits one sitting (live roots first,
+D-043 precedent) — split again if not. Tests: tier-2 dispatch over the
+fixture jar through the live socket (every `RpcCommand` returns the same
+bytes as the in-process service call) + the existing framing properties.
+
 ### T-042 — transparent CLI daemon client + `--no-daemon` · `TODO`
 
-**Depends:** T-041 (daemon) · **Files:** `cli/.../DaemonClient.kt`,
+**Depends:** T-041 (daemon transport), T-082 (daemon query dispatch — no warm
+answers exist until it lands) · **Files:** `cli/.../DaemonClient.kt`,
 `cli/.../commands/*` (flag plumbing)
 
 One-shot CLI forwards the T-040 request to a running daemon when the socket

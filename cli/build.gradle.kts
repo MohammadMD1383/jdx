@@ -9,6 +9,10 @@ dependencies {
     implementation(project(":index"))
     implementation(project(":sources"))
     implementation(project(":decompile"))
+    // Daemon transport (T-041): `daemon` commands are thin over :server's
+    // socket server, probe and path helpers. No behaviour moves — :server owns
+    // the lifecycle, cli only parses flags and prints.
+    implementation(project(":server"))
     // clikt-core, NOT clikt: the mordant flavor eagerly loads JNA (native-access warnings
     // on JDK 22+, slower startup, ~2 MB of fat jar) and jdx never renders a terminal.
     implementation(libs.clikt.core)
