@@ -1448,7 +1448,31 @@ daemon path is the ≤ 20 ms story). `expandJarSpec` visibility is the only
 `index` touch and changes no behaviour, so no tier-3 run (T-047/T-052
 precedent). Lessons: L-108. Next: T-051.*
 
-### T-051 README + install docs · `TODO` (detail blocks land when each starts)
+### T-051 README + install docs · `WIP` (session 79)
+
+*(Last M7 task: the README still describes M0–M3/M4-in-progress and the
+command table as "(target)" — stale since M6 closed. One sitting,
+docs-only: no code, no behaviour, no tests beyond `lint` (md-untouched)
+plus a doc-accuracy pass where every command/flag shown is verified
+against the built binary.)*
+
+- `README.md`: status line → M0–M6 DONE, M7 state; command surface
+  `(target)` → actual incl. `implementors`, `callers`/`calls`,
+  `samples`, `ws`/`cache`/`daemon`/`serve`/`mcp`/`batch`/`bench`/
+  `help --agent`, `--view kotlin|jvm`, `--brief`/`--max-lines`,
+  `--engine vineflower|javap`, `--with-doc`, `--src`, `--coord`/
+  `--fetch`/`--repo`, `--no-daemon`; new sections: Requirements
+  (JDK 21+, wrapper-only build), Build + install (`:app:installDist`
+  → `app/build/jdx`, `./install.sh [--force]` per-user symlink,
+  AppCDS `jdx.jsa` presence-check), Quickstart (workspace-less JDK
+  query, `ws create`, `--jars`), front-ends (daemon 5-min idle,
+  MCP stdio, HTTP `serve`, `batch` NDJSON), exit codes + symbol-ref
+  pointer, Kotlin sidecar note (absent → degrade, D-008),
+  `bench`/AppCDS advisory-targets note.
+- Verify: every example pasted from a live `app/build/jdx` run;
+  `./gradlew lint` clean; `check` tiers 1–2 green (docs-only —
+  no tier-3 per the T-047/T-052 precedent).
+- Close-out: T-051 DONE, session entry, CURRENT STATE, open-items.
 
 ---
 
