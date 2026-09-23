@@ -5,6 +5,79 @@ Append-only (D-023): 10 sessions per shard, newest first. Template and rules in
 
 ---
 
+## Session 72 — 2026-09-23 — T-045 `jdx batch` done (NDJSON stdin, max-exit stream)
+
+**Agent/Author:** Muse Spark 1.3 Free · **Commits:** `c85da31` (claim) + closing commit (this session)
+
+### Goal
+Implement M6 T-045 (`jdx batch`): NDJSON `RpcRequest` lines on stdin, one
+`--json` envelope per line on stdout, exit code = max query exit code. Then
+push (explicit owner go-ahead this session).
+
+### What I did
+- New `cli/.../commands/BatchCommand.kt`: reads all stdin lines, skips blanks
+  (HTTP-batch parity), empty batch → one exit-3 envelope; roots resolve once
+  via `ReadCommandSupport.resolveRoots` (`--jars/--src/-w/--no-jdk/--coord/--repo/--fetch`);
+  a root failure serialises as every line's envelope (strict 1:1 mapping,
+  D-057 §3). Each line: `RpcRequest.decode` (malformed → exit-6 envelope,
+  same wording as HTTP batch), `version`/`health` answered internally
+  (daemon envelope shape + key order), `doctor` answered in-process via
+  `DoctorService` (unlike daemon/HTTP/MCP, batch runs on the caller's
+  machine, so the report is about the right environment), all 17 read queries
+  via `JdxService.dispatch` + `toJson(wire)` verbatim. Whole run is total
+  (per-line try/catch → exit 6); `--json` accepted as a no-op (output already
+  is envelopes). Registered `BatchCommand()` in `JdxCli` (README + PROPOSAL
+  already list `jdx batch` — no doc-table change needed).
+- Tests: tier-1 `BatchCommandTest` (8: mixed-stream max-exit + dispatch
+  capture, health shape/count, empty batch, blank skipping, roots-failure
+  mapping, `--json` no-op, 200-case hostile never-throws/determinism
+  property, doctor envelope) + tier-2 `BatchCommandsServiceTest` (mixed
+  ok/exit-2/exit-1/malformed/version stream over the fixture jar:
+  golden-pinned to `cli/src/test/resources/golden/batch/mixed.txt` after
+  reading the diff, plus byte parity of the show/body lines vs one-shot
+  `--json` stdout — T-046 in miniature).
+- Fixed along the way (test-only): the tier-1 fake built exit-1 via
+  `ErrorResult.generic` (which `require`s 3..6) — the total adapter turned the
+  fake's own throw into an exit-6 line (logged as L-103); the tier-2 ambiguous
+  line first used a member ref with `members` (exit 3, member refs are a usage
+  error there) — switched to `body …#copy` (bytecode-first overload exit 2,
+  D-009).
+- Verified: cli tier-1 180 tests green, cli tier-2 125 tests green (golden in
+  verify mode); live `./app/build/jdx batch` over the JDK (show + members +
+  garbage + version → exit 6) and `cmp` parity of a batch show line vs
+  `show --json` bytes (PARITY-OK).
+
+### Decisions made
+- None (no new D-nnn; the batch-doctor-in-process choice follows from where
+  the code runs and is recorded in the command KDoc, not the log).
+
+### Tasks moved
+- T-045: TODO → WIP (`c85da31`) → DONE (this session).
+
+### Lessons distilled
+- L-103 (total adapters convert fake-construction throws into exit-6 lines —
+  suspect the fake first).
+
+### What works now (and how to verify it yourself)
+- `echo '{"command":"show","query":"java.util.Map"}' | ./app/build/jdx batch`
+  prints the exact `show --json` envelope; `jdx batch --help` lists the root
+  flags. Mixed stream + exit codes: pipe show/members/garbage/version lines
+  (see session log above) and check exit 6.
+- `./gradlew :cli:test :cli:tier2Test --no-configuration-cache -x verifyTier1Budget`
+  (the `-x` skips the known-red machine-variance gate, not a test failure).
+
+### What is broken / half-done
+- Nothing from this task.
+
+### Open questions / blockers
+- None.
+
+### Next action
+- **M6 T-046** (adapter parity test — CLI/HTTP/MCP byte-identical payloads;
+  closes M6). Batch parity is already proven per-line by the tier-2 test.
+
+---
+
 ## Session 71 — 2026-09-23 — T-044 HTTP/JSON server done (`jdx serve` live)
 
 **Agent/Author:** Muse Spark 1.3 Free · **Commits:** `850e42b` (claim) + closing commit (this session)

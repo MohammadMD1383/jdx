@@ -62,11 +62,10 @@ bodies/KDoc, last T-036 slice) **plus T-036** (member-mapping umbrella)
 **plus T-040** (M6 RPC wire contract) **plus T-041** (daemon + unix socket)
 **plus T-082** (daemon `JdxService` dispatch) **plus T-042** (transparent CLI
 daemon client + `--no-daemon`) **plus T-043** (MCP stdio server) **plus
-T-044** (HTTP/JSON server).
+T-044** (HTTP/JSON server) **plus T-045** (`jdx batch`).
 DONE entries below are
 compressed to a summary + pointers; full notes live in git history and the
-session log. **Next: T-045** (`jdx batch`; then the remaining M6 slice
-T-046, whose detail block was expanded in session 66),
+session log. **Next: T-046** (adapter parity test, closes M6),
 **plus M7** (coarse; T-060 already DONE).
 
 ---
@@ -1139,7 +1138,7 @@ exit 3, bind-failure exit 6). Decisions: D-061. Lessons: none. Live proof
 in the session log (health, members parity vs `--json --no-daemon`,
 batch, doctor/unknown statuses). T-045 unblocked.*
 
-### T-045 — `jdx batch` · `WIP`
+### T-045 — `jdx batch` · `DONE` (session 72)
 
 **Depends:** T-040 (wire contract) · **Files:** `cli/.../commands/BatchCommand.kt`
 
@@ -1148,6 +1147,20 @@ per line on stdout; `--json` forced (output already is envelopes); per-query
 failures ride the envelope's `ok:false`, never abort the stream; exit code is
 the max query exit code. Tests: tier-1 framing + tier-2 goldens (mixed
 ok/not-found/ambiguous stream).
+
+*Closed in session 72. `cli/.../commands/BatchCommand.kt` (roots resolve once
+via `ReadCommandSupport`; `version`/`health` internal in the daemon envelope
+shape, `doctor` answered in-process via `DoctorService`, all 17 read queries
+via `JdxService.dispatch` verbatim; empty batch exits 3, malformed lines exit
+6, blank lines skipped) + `JdxCli` registration. Tests: tier-1
+`BatchCommandTest` (8: mixed-stream max-exit, health shape/count, empty batch,
+blank skipping, roots-failure mapping, `--json` no-op, 200-case hostile
+never-throws/determinism property, doctor envelope) + tier-2
+`BatchCommandsServiceTest` (mixed stream golden
+`cli/src/test/resources/golden/batch/mixed.txt` + byte parity of show/body
+lines vs one-shot `--json` — T-046 in miniature). Lessons: L-103 (fake-construction
+throws behind total adapters). Live proof in the session log (warm `members`
+parity via `cmp`, exit-6 carriage). T-046 unblocked.*
 
 ### T-046 — adapter parity test (CLI/HTTP/MCP byte-identical payloads) · `TODO`
 
