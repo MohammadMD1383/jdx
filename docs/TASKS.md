@@ -963,7 +963,39 @@ plumbing, determinism + hostile-rendering properties) + doctor hint pin.
 flipped `doctor kotlin` to OK and `body …KotlinMembers#fetch` serves the PSI
 suspend slice. Lessons: L-109. Next: T-081/T-083 per owner direction.*
 
-### T-081 — `@Metadata`-aware `SOURCES_VERSION_MISMATCH` pairing for Kotlin · `WIP`
+### T-081 — `@Metadata`-aware `SOURCES_VERSION_MISMATCH` pairing for Kotlin · `DONE` (session 81)
+
+**Depends:** T-039 (Kotlin listings) · **Files:**
+`sources/.../SourcesMismatch.kt` (`detectKotlinSourcesMismatch`, `kotlinViewKey`
+pairing, `Marker` count fix), `sources/.../KotlinBodies.kt`
+(`listedKotlinMembers` receiver), `index/.../service/JdxService.kt`
+(`mismatchWarning` Kotlin branch)
+
+*(Split out of T-039 in session 65: `mismatchWarning` skipped Kotlin pairs
+(`null`) because compiler-generated members (data `componentN`/`copy`,
+value-class `-impl`s, `@JvmOverloads` overloads, file-facade statics) would
+false-positive a JVM-name pairing. Pair over Kotlin declaration names
+instead (display names + property names from the `ClassInfo` views, excusing
+defaulted overloads and data/value synthetics) so stale Kotlin sources still
+warn. Unblocked but low priority: M6 (T-040+) stays next.)*
+
+*Closed in session 81. Declaration-space pairing (D-063): display names via
+`kotlinMethodViews`, `Continuation` strip, folded accessors/fields dropped
+for property rows (body-declared only — primary-ctor props pair via
+`<init>`), receiver positional, `kotlinTypeKey` params with the typealias
+leniency; leftover-only excuses (data/value synthetics, `Marker` ctors,
+`@JvmOverloads` shorts, companion-evidenced outer statics — still strict
+under `$Companion`); plain-named synthetics kept (`inline` impls).
+`mismatchWarning` tries Java, then Kotlin through the shared per-command
+parser (throwaway from `kotlinUserHome` on whole-file `source`), never
+throws. Tests: sources tier-1 `SourcesMismatchTest` +13 (11 examples incl.
+alias/known-type/companion/value/impl cases, never-throws + determinism
+properties) + index tier-2 `KotlinMismatchServiceTest` (5: matched silence
+over bodies/sources incl. suspend+alias, facade, data/value/object;
+added/renamed stale warns; determinism + text⊆JSON). `check` green.
+Known limitations in the detector KDoc: companion `const` under direct
+`$Companion` queries; body-property removals undetected. Lessons: L-110.
+Next: T-083 per owner direction.*
 
 **Depends:** T-039 (Kotlin listings) · **Files:**
 `sources/.../SourcesMismatch.kt`, `index/.../service/JdxService.kt`

@@ -18,8 +18,7 @@ mine the session log to learn what still needs doing.
 
 | Item | State | Notes |
 |---|---|---|
-| T-081 Kotlin-aware mismatch pairing | TODO, low priority | Filed session 65; pick next per lowest-numbered rule (T-081 first) |
-| T-083 test-source + Java warnings-as-errors | TODO | Filed session 76 (T-052 split) |
+| T-083 test-source + Java warnings-as-errors | TODO | Filed session 76 (T-052 split); last remaining task |
 
 ## Deferred follow-ups (no task number yet — file one when starting)
 
@@ -46,4 +45,4 @@ mine the session log to learn what still needs doing.
 
 ---
 
-*Last updated: 2026-09-23 (session 80).*
+*Last updated: 2026-09-23 (session 81).*

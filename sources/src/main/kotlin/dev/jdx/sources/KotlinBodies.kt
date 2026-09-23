@@ -268,7 +268,9 @@ private fun listedKotlinMembers(scope: KtScope): List<DeclaredSourceMember> {
             KotlinDeclKind.FUNCTION -> DeclaredSourceMember(
                 SourceBodyKind.METHOD,
                 decl.name,
-                decl.params.map { param -> param.typeText ?: "Object" },
+                // The extension receiver counts as the leading JVM parameter
+                // (the facade static's first argument) — pair over it (T-081).
+                decl.matchParams().map { param -> param.typeText ?: "Object" },
             )
             KotlinDeclKind.CONSTRUCTOR -> DeclaredSourceMember(
                 SourceBodyKind.CONSTRUCTOR,

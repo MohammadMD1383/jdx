@@ -5,6 +5,8 @@ import dev.jdx.core.model.AccessFlag
 import dev.jdx.core.model.ClassInfo
 import dev.jdx.core.model.FieldInfo
 import dev.jdx.core.model.JvmDescriptor
+import dev.jdx.core.model.KotlinMethodView
+import dev.jdx.core.model.KotlinPropertyView
 import dev.jdx.core.model.MethodInfo
 import dev.jdx.core.model.MethodSignature
 import dev.jdx.core.model.TypeKind
@@ -12,6 +14,7 @@ import dev.jdx.core.model.TypeName
 import dev.jdx.core.model.TypeVariableSignature
 import dev.jdx.core.model.VoidSignature
 import dev.jdx.core.model.WarningCode
+import dev.jdx.core.model.kotlinViewKey
 import dev.jdx.core.model.typeNameFromBinaryName
 import io.kotest.matchers.nulls.shouldBeNull
 import io.kotest.matchers.nulls.shouldNotBeNull
@@ -373,5 +376,247 @@ class SourcesMismatchTest {
         // detector excuses exactly this shape, so agreement still holds.
         val allMethods = if (methods.none { it.name == "<init>" }) methods + method("<init>") else methods
         return target(methods = allMethods, fields = fields)
+    }
+
+    // -- Kotlin declaration-space pairing (T-081) ------------------------------
+
+    private fun rawMethod(name: String, descriptor: String, access: Access): MethodInfo = MethodInfo(
+        name = name,
+        descriptor = JvmDescriptor.parse(descriptor) as JvmDescriptor.Method,
+        access = access,
+    )
+
+    private val publicAccess: Access = Access.of(AccessFlag.PUBLIC)
+    private val publicFinalAccess: Access = Access.of(AccessFlag.PUBLIC, AccessFlag.FINAL)
+    private val publicStaticFinalAccess: Access = Access.of(AccessFlag.PUBLIC, AccessFlag.STATIC, AccessFlag.FINAL)
+    private val privateAccess: Access = Access.of(AccessFlag.PRIVATE)
+
+    private fun kotlinTarget(
+        methods: List<MethodInfo> = emptyList(),
+        fields: List<FieldInfo> = emptyList(),
+        views: Map<String, KotlinMethodView> = emptyMap(),
+        properties: Map<String, KotlinPropertyView> = emptyMap(),
+        hiddenMethods: Set<String> = emptySet(),
+        hiddenFields: Set<String> = emptySet(),
+    ): ClassInfo = target(methods = methods, fields = fields).copy(
+        isKotlin = true,
+        kotlinMethodViews = views,
+        kotlinProperties = properties,
+        kotlinHiddenMethods = hiddenMethods,
+        kotlinHiddenFields = hiddenFields,
+    )
+
+    @Test
+    fun `kotlin display names pair over JVM spellings`() {
+        val info = kotlinTarget(
+            methods = listOf(
+                rawMethod("renamedForJvm", "(I)I", publicFinalAccess),
+                rawMethod("internalHelper\$testfixtures", "()V", publicFinalAccess),
+            ),
+            views = mapOf(
+                kotlinViewKey("renamedForJvm", "(I)I") to KotlinMethodView(displayName = "originalName"),
+                kotlinViewKey("internalHelper\$testfixtures", "()V") to KotlinMethodView(displayName = "internalHelper"),
+            ),
+        )
+        val sources = listOf(sourceMethod("originalName", "Int"), sourceMethod("internalHelper"))
+        detectKotlinSourcesMismatch(info, sources, "w-sources.jar").shouldBeNull()
+    }
+
+    @Test
+    fun `kotlin suspend strips the continuation and tolerates aliases`() {
+        val info = kotlinTarget(
+            methods = listOf(
+                rawMethod(
+                    "fetch",
+                    "(Ljava/lang/String;Lkotlin/coroutines/Continuation;)Ljava/lang/Object;",
+                    publicFinalAccess,
+                ),
+            ),
+            views = mapOf(
+                kotlinViewKey(
+                    "fetch",
+                    "(Ljava/lang/String;Lkotlin/coroutines/Continuation;)Ljava/lang/Object;",
+                ) to KotlinMethodView(
+                    displayName = "fetch",
+                    stripTrailingContinuation = true,
+                    displayReturn = "java.lang.String",
+                    markSuspend = true,
+                ),
+            ),
+        )
+        // Concrete spelling pairs strictly …
+        detectKotlinSourcesMismatch(info, listOf(sourceMethod("fetch", "String")), "w-sources.jar").shouldBeNull()
+        // … and a typealias the detector cannot resolve (`UserId` erases to
+        // `String`) pairs by arity rather than warning as noise.
+        detectKotlinSourcesMismatch(info, listOf(sourceMethod("fetch", "UserId")), "w-sources.jar").shouldBeNull()
+    }
+
+    @Test
+    fun `kotlin known-type changes still warn`() {
+        val info = kotlinTarget(
+            methods = listOf(rawMethod("greet", "(Ljava/lang/String;)V", publicFinalAccess)),
+        )
+        val warning = detectKotlinSourcesMismatch(info, listOf(sourceMethod("greet", "Int")), "w-sources.jar")
+        warning.shouldNotBeNull()
+        warning.message shouldContain "omits com.example.Widget#greet(String)"
+        warning.message shouldContain "declares com.example.Widget#greet(Int)"
+    }
+
+    @Test
+    fun `kotlin properties fold accessors and backing fields`() {
+        val getter = kotlinViewKey("getNickname", "()Ljava/lang/String;")
+        val setter = kotlinViewKey("setNickname", "(Ljava/lang/String;)V")
+        val info = kotlinTarget(
+            methods = listOf(
+                rawMethod("getNickname", "()Ljava/lang/String;", publicFinalAccess),
+                rawMethod("setNickname", "(Ljava/lang/String;)V", publicFinalAccess),
+            ),
+            fields = listOf(field("nickname")),
+            properties = mapOf(
+                "nickname" to KotlinPropertyView(propertyName = "nickname", isVar = true, displayType = "java.lang.String?"),
+            ),
+            hiddenMethods = setOf(getter, setter),
+            hiddenFields = setOf("nickname"),
+        )
+        detectKotlinSourcesMismatch(info, listOf(sourceField("nickname")), "w-sources.jar").shouldBeNull()
+    }
+
+    @Test
+    fun `kotlin primary-constructor properties pair through the init`() {
+        // `val name` lives in the ctor header: no source field, no property
+        // row — the hidden backing field is dropped and the ctor pairs.
+        val getter = kotlinViewKey("getName", "()Ljava/lang/String;")
+        val info = kotlinTarget(
+            methods = listOf(
+                rawMethod("<init>", "(Ljava/lang/String;I)V", publicAccess),
+                rawMethod("getName", "()Ljava/lang/String;", publicFinalAccess),
+            ),
+            fields = listOf(field("name")),
+            properties = mapOf(
+                "name" to KotlinPropertyView(propertyName = "name", isVar = false, displayType = "java.lang.String"),
+            ),
+            hiddenMethods = setOf(getter),
+            hiddenFields = setOf("name"),
+        )
+        detectKotlinSourcesMismatch(info, listOf(sourceCtor("String", "Int")), "w-sources.jar").shouldBeNull()
+    }
+
+    @Test
+    fun `kotlin data synthetics do not warn`() {
+        val info = kotlinTarget(
+            methods = listOf(
+                rawMethod("<init>", "(Ljava/lang/String;I)V", publicAccess),
+                rawMethod("<init>", "(Ljava/lang/String;IILkotlin/jvm/internal/DefaultConstructorMarker;)V", publicAccess),
+                rawMethod("component1", "()Ljava/lang/String;", publicFinalAccess),
+                rawMethod("component2", "()I", publicFinalAccess),
+                rawMethod("copy", "(Ljava/lang/String;I)Lcom/example/Widget;", publicFinalAccess),
+                rawMethod("toString", "()Ljava/lang/String;", publicAccess),
+                rawMethod("hashCode", "()I", publicAccess),
+                rawMethod("equals", "(Ljava/lang/Object;)Z", publicAccess),
+            ),
+        )
+        detectKotlinSourcesMismatch(info, listOf(sourceCtor("String", "Int")), "w-sources.jar").shouldBeNull()
+    }
+
+    @Test
+    fun `kotlin value-class impls do not warn`() {
+        val info = kotlinTarget(
+            methods = listOf(
+                rawMethod("toString-impl", "(Ljava/lang/String;)Ljava/lang/String;", publicStaticFinalAccess),
+                rawMethod("toString", "()Ljava/lang/String;", publicAccess),
+                rawMethod("hashCode-impl", "(Ljava/lang/String;)I", publicStaticFinalAccess),
+                rawMethod("hashCode", "()I", publicAccess),
+                rawMethod("equals-impl", "(Ljava/lang/String;Ljava/lang/Object;)Z", publicStaticFinalAccess),
+                rawMethod("equals", "(Ljava/lang/Object;)Z", publicAccess),
+                rawMethod("box-impl", "(Ljava/lang/String;)Lcom/example/Widget;", publicStaticFinalAccess),
+            ),
+        )
+        detectKotlinSourcesMismatch(info, listOf(sourceCtor("String")), "w-sources.jar").shouldBeNull()
+    }
+
+    @Test
+    fun `kotlin defaulted overloads do not warn`() {
+        val descriptor = "(ILjava/lang/String;)Ljava/lang/String;"
+        val info = kotlinTarget(
+            methods = listOf(
+                rawMethod("withDefault", descriptor, publicFinalAccess),
+                rawMethod("withDefault", "(I)Ljava/lang/String;", publicFinalAccess),
+            ),
+            views = mapOf(
+                kotlinViewKey("withDefault", descriptor) to KotlinMethodView(
+                    displayName = "withDefault",
+                    defaultArgIndices = setOf(1),
+                ),
+            ),
+        )
+        val sources = listOf(sourceMethod("withDefault", "Int", "String"))
+        detectKotlinSourcesMismatch(info, sources, "w-sources.jar").shouldBeNull()
+    }
+
+    @Test
+    fun `kotlin companion statics do not warn on the outer`() {
+        val info = kotlinTarget(
+            methods = listOf(
+                rawMethod("<init>", "()V", publicAccess),
+                rawMethod("create", "()Lcom/example/Widget;", publicStaticFinalAccess),
+            ),
+            fields = listOf(
+                FieldInfo(
+                    name = "Companion",
+                    type = classType("com.example.Widget\$Companion"),
+                    access = publicStaticFinalAccess,
+                ),
+                FieldInfo(name = "VERSION", type = fieldType("int"), access = publicStaticFinalAccess),
+            ),
+        )
+        detectKotlinSourcesMismatch(info, emptyList(), "w-sources.jar").shouldBeNull()
+    }
+
+    @Test
+    fun `kotlin stale members warn on both sides`() {
+        val info = kotlinTarget(
+            methods = listOf(
+                rawMethod("kept", "()V", publicFinalAccess),
+                rawMethod("removed", "(I)V", publicFinalAccess),
+            ),
+        )
+        val warning = detectKotlinSourcesMismatch(
+            info,
+            listOf(sourceMethod("kept"), sourceMethod("brandNew", "Int")),
+            "widget-sources.jar",
+        )
+        warning.shouldNotBeNull()
+        warning.code shouldBe WarningCode.SOURCES_VERSION_MISMATCH
+        warning.message shouldContain "widget-sources.jar declares"
+        warning.message shouldContain "com.example.Widget#brandNew(Int)"
+        warning.message shouldContain "omits com.example.Widget#removed(int)"
+        warning.subject shouldBe binary
+    }
+
+    @Test
+    fun `non-kotlin input delegates to JVM pairing`() {
+        val info = target(
+            methods = listOf(method("greet", listOf("String")), method("<init>")),
+            fields = listOf(field("seed")),
+        )
+        val sources = listOf(sourceMethod("greet", "String"), sourceCtor(), sourceField("seed"))
+        detectKotlinSourcesMismatch(info, sources, "widget-sources.jar").shouldBeNull()
+    }
+
+    @Test
+    fun `kotlin detection never throws on hostile input`() = runBlocking<Unit> {
+        checkAll(500, Arb.list(Arb.int(0..999), 0..6), Arb.list(Arb.int(0..999), 0..6)) { a, b ->
+            detectKotlinSourcesMismatch(classInfoFromSeeds(a, hostile = false), sourcesFromSeeds(b, hostile = true), "s.jar")
+        }
+    }
+
+    @Test
+    fun `kotlin detection is deterministic`() = runBlocking<Unit> {
+        checkAll(500, Arb.list(Arb.int(0..999), 0..6), Arb.list(Arb.int(0..999), 0..6)) { a, b ->
+            val info = classInfoFromSeeds(a, hostile = true).copy(isKotlin = true)
+            val sources = sourcesFromSeeds(b, hostile = true)
+            detectKotlinSourcesMismatch(info, sources, "s.jar") shouldBe
+                detectKotlinSourcesMismatch(info, sources, "s.jar")
+        }
     }
 }

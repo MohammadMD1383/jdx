@@ -4294,7 +4294,7 @@ public object JdxService {
                 val replacement = if (directDoc.rawComment.contains("{@inheritDoc")) inherited?.paragraph else null
                 val lines = docLines(directDoc, options.raw, replacement)
                 if (lines.isNotEmpty()) {
-                    val allWarnings = warnings + listOfNotNull(mismatchWarning(target, sources, binary))
+                    val allWarnings = warnings + listOfNotNull(mismatchWarning(target, sources, binary, ktParser))
                     return docOutcome(
                         directDoc, sources.displayName, binary, canonicalRef,
                         docSubjectOf(directDoc.kind), allWarnings, options, lines, inheritedFrom = null,
@@ -4302,7 +4302,7 @@ public object JdxService {
                 }
             }
             if (inherited != null) {
-                val allWarnings = warnings + listOfNotNull(mismatchWarning(target, sources, binary))
+                val allWarnings = warnings + listOfNotNull(mismatchWarning(target, sources, binary, ktParser))
                 return docOutcome(
                     inherited.doc, inherited.displayName, binary, canonicalRef,
                     docSubjectOf(inherited.doc.kind), allWarnings, options, inherited.lines,
@@ -4372,7 +4372,7 @@ public object JdxService {
                             ),
                         )
                     } else {
-                        val allWarnings = warnings + listOfNotNull(mismatchWarning(target, sources, binary))
+                        val allWarnings = warnings + listOfNotNull(mismatchWarning(target, sources, binary, ktParser))
                         docOutcome(
                             doc, sources.displayName, binary, binary,
                             docSubjectOf(doc.kind), allWarnings, options, lines, inheritedFrom = null,
@@ -4568,17 +4568,46 @@ public object JdxService {
      * The `SOURCES_VERSION_MISMATCH` warning for one sources-backed answer
      * (T-028): compares the winning root's source declarations against the
      * bytecode the query resolved from. `null` when they agree or when the
-     * sources cannot be listed (missing file, `.kt`-only, unparseable) — those
-     * degradations already have their own labels.
+     * sources cannot be listed (missing file, unparseable) — those
+     * degradations already have their own labels. Kotlin pairs over
+     * declaration names through the shared [ktParser] (T-081); without a
+     * usable parser Kotlin stays silent, like before. Never throws: a
+     * warning must not break an answer.
      */
     private fun mismatchWarning(
         target: ClassInfo,
         sources: dev.jdx.sources.SourceRoot,
         binary: String,
+        // Shared Kotlin parser (T-039), or null to open a throwaway one from
+        // [kotlinHome] (the `kotlinUserHome` test seam) for the Kotlin attempt.
+        ktParser: dev.jdx.sources.KotlinSourceParser? = null,
+        kotlinHome: Path? = null,
     ): Warning? {
-        val listed = dev.jdx.sources.listJavaMembers(sources, binary)
+        when (val listed = dev.jdx.sources.listJavaMembers(sources, binary)) {
+            is dev.jdx.sources.JavaMemberList.Listed ->
+                return dev.jdx.sources.detectSourcesMismatch(target, listed.members, sources.displayName)
+            else -> Unit
+        }
+        if (!target.isKotlin) return null
+        return runCatching {
+            if (ktParser != null) {
+                kotlinMismatchWarning(target, sources, binary, ktParser)
+            } else {
+                openKotlinParserFor(kotlinHome).use { kotlinMismatchWarning(target, sources, binary, it) }
+            }
+        }.getOrNull()
+    }
+
+    /** The `.kt` side of [mismatchWarning]: `null` unless listed-and-mismatched. */
+    private fun kotlinMismatchWarning(
+        target: ClassInfo,
+        sources: dev.jdx.sources.SourceRoot,
+        binary: String,
+        ktParser: dev.jdx.sources.KotlinSourceParser,
+    ): Warning? {
+        val listed = dev.jdx.sources.listKotlinMembers(sources, binary, ktParser)
         val members = (listed as? dev.jdx.sources.JavaMemberList.Listed)?.members ?: return null
-        return dev.jdx.sources.detectSourcesMismatch(target, members, sources.displayName)
+        return dev.jdx.sources.detectKotlinSourcesMismatch(target, members, sources.displayName)
     }
 
     /** Rendered (`--raw` verbatim) lines of one doc, before `--max-lines` truncation. */
@@ -5026,7 +5055,7 @@ public object JdxService {
                         }
                         val body = found.bodies.singleOrNull()
                             ?: return ServiceOutcome.Failure(ErrorResult.ambiguous(rawRef, matchRefs))
-                        mismatchWarning(target, sources, binary)?.let(warnings::add)
+                        mismatchWarning(target, sources, binary, ktParser)?.let(warnings::add)
                         return bodyOutcome(
                             body = body,
                             sources = sources,
@@ -5959,7 +5988,9 @@ public object JdxService {
             ?: return noSourceFileOutcome(binary, rawRef, label, sources)
         val fileLines = readSourceLines(sources, path)
             ?: return failure(5, rawRef, "source read error: cannot read $path")
-        val allWarnings = warnings + listOfNotNull(mismatchWarning(target, sources, binary))
+        val allWarnings = warnings + listOfNotNull(
+            mismatchWarning(target, sources, binary, kotlinHome = options.kotlinUserHome),
+        )
         return fileSourceOutcome(
             binary = binary,
             rawRef = rawRef,
@@ -6120,7 +6151,7 @@ public object JdxService {
                         ?: return ServiceOutcome.Failure(ErrorResult.ambiguous(aroundRaw, matchRefs))
                     val fileLines = readSourceLines(sources, body.file)
                         ?: return failure(5, rawRef, "source read error: cannot read ${body.file}")
-                    val allWarnings = warnings + listOfNotNull(mismatchWarning(target, sources, binary))
+                    val allWarnings = warnings + listOfNotNull(mismatchWarning(target, sources, binary, ktParser))
                     return ServiceOutcome.Source(
                         buildSourceBlock(
                             canonicalRef = binary,

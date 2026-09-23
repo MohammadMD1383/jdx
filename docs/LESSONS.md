@@ -39,7 +39,7 @@ and never reused. Tags in use: `build` · `tooling` · `jvm-spec` · `kotlin` ·
 | `docs/lessons/L-026-050.md` | L-026…L-050 | full |
 | `docs/lessons/L-051-075.md` | L-051…L-075 | full |
 | `docs/lessons/L-076-100.md` | L-076…L-100 | full |
-| `docs/lessons/L-101-125.md` | L-101…L-109 | open |
+| `docs/lessons/L-101-125.md` | L-101…L-110 | open |
 
 ## Topic guide
 
@@ -74,6 +74,7 @@ session-log references keep resolving. Numbers are never reused.)
 | Stdio servers: stdout is the protocol (silence banners) + exit on EOF | L-101, L-102 |
 | Total adapters hide fake-construction throws as exit-6 lines | L-103 |
 | Group-builder `::exitProcess` defaults kill the test worker on failure paths | L-109 |
+| Calibrate pairing rules against a scratch dump of the real fixture | L-110 |
 
 ## Adding an entry
 
