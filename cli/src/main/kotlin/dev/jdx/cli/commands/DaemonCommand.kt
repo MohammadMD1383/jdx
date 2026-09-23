@@ -15,6 +15,7 @@ import dev.jdx.server.DaemonPaths
 import dev.jdx.server.DaemonProbe
 import dev.jdx.server.DaemonServer
 import dev.jdx.server.DaemonStatusSnapshot
+import dev.jdx.server.jdxServiceHandler
 import dev.jdx.server.parseIdleDuration
 import kotlinx.serialization.Serializable
 import kotlinx.serialization.json.encodeToJsonElement
@@ -482,12 +483,24 @@ class DaemonRunCommand(
             return
         }
         val socket = DaemonPaths.socketPath(runtimeDir, workspace)
-        val server = DaemonServer(
+        // The dispatch handler (T-082) answers every read query through the same
+        // JdxService the one-shot CLI calls; health/version stay on the transport
+        // internals. Roots resolve per request, so `ws create` while the daemon
+        // runs is picked up. The handler captures this server for `status` —
+        // assigned before any connection is served, read only afterwards.
+        lateinit var server: DaemonServer
+        val handler = jdxServiceHandler(
+            workspace = workspace,
+            status = { server.snapshot() },
+            appVersion = BuildInfo.version,
+        )
+        server = DaemonServer(
             workspace = workspace,
             socketPath = socket,
             pidPath = DaemonPaths.pidPath(socket),
             idleTimeout = idleTimeout.takeUnless { it.isZero },
             appVersion = BuildInfo.version,
+            handler = handler,
         )
         Runtime.getRuntime().addShutdownHook(Thread({ server.stop() }, "jdx-daemon-shutdown"))
         try {

@@ -49,7 +49,7 @@ be fiction.
 | **M3** | Bodies: sources, JavaParser, Vineflower, `body`/`source`/`doc` | DONE |
 | **M4** | Graph: `usages`/`hierarchy`/`callers`/`calls`/`samples` | DONE (T-029…T-034) |
 | **M5** | Kotlin: `@Metadata` + PSI source parsing | DONE (T-035…T-039) |
-| **M6** | Serving: daemon, MCP, HTTP, `batch` | IN PROGRESS (T-040…T-041 DONE; T-082 then T-042 next) |
+| **M6** | Serving: daemon, MCP, HTTP, `batch` | IN PROGRESS (T-040…T-041 + T-082 DONE; T-042 next) |
 | **M7** | Polish: token budgets, AppCDS, mutation gates, docs, install | TODO (T-060 done early) |
 
 **DONE: T-001…T-035** (M0–M2 in full; M3 via the T-020 umbrella's slices —
@@ -59,12 +59,14 @@ plus T-076** (first T-036 slice) **plus T-077** (second T-036 slice) **plus T-07
 remainder) **plus T-079** (annotation-element matching) **plus T-075** (`usages`
 graph enrichment) **plus T-038** (PSI loader seam) **plus T-039** (Kotlin
 bodies/KDoc, last T-036 slice) **plus T-036** (member-mapping umbrella)
-**plus T-040** (M6 RPC wire contract) **plus T-041** (daemon + unix socket).
+**plus T-040** (M6 RPC wire contract) **plus T-041** (daemon + unix socket)
+**plus T-082** (daemon `JdxService` dispatch).
 DONE entries below are
 compressed to a summary + pointers; full notes live in git history and the
-session log. **Next: T-082** (daemon `JdxService` dispatch — filed session 67
-as the T-041 remainder; T-042 waits on it, then the remaining M6 slices
-T-042…T-046, whose detail blocks were expanded in session 66),
+session log. **Next: T-042** (transparent CLI daemon client — transport
+(T-041) and dispatch (T-082) are both live, so warm answers exist to forward;
+then the remaining M6 slices T-043…T-046, whose detail blocks were expanded
+in session 66),
 **plus M7** (coarse; T-060 already DONE).
 
 ---
@@ -1031,7 +1033,7 @@ framing round-trip + hostile-lines properties). Decisions: D-057. Lessons:
 L-098. Live proof in the session log. Full `JdxService` dispatch → T-082;
 transparent auto-spawn on first query → T-042.*
 
-### T-082 — daemon `JdxService` query dispatch · `WIP`
+### T-082 — daemon `JdxService` query dispatch · `DONE` (session 68)
 
 **Depends:** T-040 (wire contract), T-041 (transport) · **Files:**
 `server/.../DaemonDispatch.kt` (new), `index/.../service/JdxService.kt` (roots wiring)
@@ -1050,10 +1052,20 @@ D-043 precedent) — split again if not. Tests: tier-2 dispatch over the
 fixture jar through the live socket (every `RpcCommand` returns the same
 bytes as the in-process service call) + the existing framing properties.
 
+*Closed in session 68. Dispatch + `daemonRoots` landed in
+`index/.../service/RpcDispatch.kt` (new, same package as `JdxService` — the
+6k-line `JdxService.kt` stays untouched) rather than inside `JdxService.kt`;
+`server/.../DaemonDispatch.kt` only resolves roots and serialises (D-004).
+`doctor` refused exit-6 (`DoctorService` lives in `:cli`); `indexedArtifacts`
+stays 0 (live roots, no index). Tests: `RpcDispatchTest` (28) +
+`DaemonDispatchTest` (5). Decisions: D-058. Lessons: L-099. Live proof in
+the session log (warm `members --json` byte-identical to one-shot). T-042
+unblocked.*
+
 ### T-042 — transparent CLI daemon client + `--no-daemon` · `TODO`
 
-**Depends:** T-041 (daemon transport), T-082 (daemon query dispatch — no warm
-answers exist until it lands) · **Files:** `cli/.../DaemonClient.kt`,
+**Depends:** T-041 (daemon transport), T-082 (daemon query dispatch — both DONE,
+warm answers exist) · **Files:** `cli/.../DaemonClient.kt`,
 `cli/.../commands/*` (flag plumbing)
 
 One-shot CLI forwards the T-040 request to a running daemon when the socket

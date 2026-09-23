@@ -18,8 +18,7 @@ mine the session log to learn what still needs doing.
 
 | Item | State | Notes |
 |---|---|---|
-| T-082 daemon `JdxService` query dispatch | TODO, **next** | T-041 remainder; T-042 waits on it |
-| T-042 transparent CLI daemon client + `--no-daemon` | TODO | Depends on T-041 + T-082 |
+| T-042 transparent CLI daemon client + `--no-daemon` | TODO, **next** | Unblocked: transport (T-041) + dispatch (T-082) both live |
 | T-043 MCP stdio server | TODO | Depends on T-040 |
 | T-044 HTTP/JSON server | TODO | Depends on T-040 |
 | T-045 `jdx batch` | TODO | Depends on T-040 |
@@ -43,8 +42,9 @@ mine the session log to learn what still needs doing.
   sessions 53/55/56/58).
 - `verifyTier1Budget` is red on this machine (machine variance, 0 test
   failures — not a test failure).
-- `indexed artifacts` in `daemon status` reports 0 until T-082 wires the store.
+- `indexed artifacts` in `daemon status` reports 0 by design with live
+  roots (no persistent index in T-082; D-043 precedent).
 
 ---
 
-*Last updated: 2026-09-23 (session 67).*
+*Last updated: 2026-09-23 (session 68).*

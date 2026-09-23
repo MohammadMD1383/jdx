@@ -5,6 +5,102 @@ Append-only (D-023): 10 sessions per shard, newest first. Template and rules in
 
 ---
 
+## Session 68 — 2026-09-23 — T-082 daemon query dispatch done (warm answers live)
+
+**Agent/Author:** Muse Spark 1.3 Free · **Commits:** `25a7447` (claim) + closing commit (this session)
+
+### Goal
+T-082, the filed T-041 remainder: dispatch all 17 read `RpcCommand`s through
+the live daemon socket to the same `JdxService` methods the one-shot CLI
+calls, with `toJson(wire)` bytes verbatim — so T-042's transparent client has
+warm answers to forward to.
+
+### What I did
+- Claimed T-082 first (`docs/TASKS.md` TODO→WIP, committed `25a7447` before coding).
+- **`index/.../service/RpcDispatch.kt`** (new): `JdxService.dispatch(request,
+  roots)` over all 17 read commands with the v1 param contract (flag names
+  without dashes, text values, absent = CLI default; full table in the KDoc),
+  plus `JdxService.daemonRoots(workspace, query, store)` (`-w` semantics per
+  request: stored jars + local-only coords + srcs + JDK flag; missing → exit
+  4, bad coord → exit 5). Total functions, no shared parse state (per-call
+  `ParamScope`, safe across the daemon's concurrent connections); unknown
+  enums / bad ints / bad `--lines` / bad `--grep` / exclusive-flag pairs are
+  exit-3 envelopes naming the param. `VERSION`/`DOCTOR`/`HEALTH` through
+  `dispatch` answer exit 3 (transport-owned).
+- **`server/.../DaemonDispatch.kt`** (new) + **`server/build.gradle.kts`**:
+  `jdxServiceHandler` keeps `health`/`version` on the T-041 internals, refuses
+  `doctor` exit-6 (names `jdx doctor`; `DoctorService` lives in `:cli`, a
+  dependency cycle the other way), and dispatches everything else through
+  per-request roots + `toJson(wire)`. New `:server`→`:index` dep (D-004:
+  parsing lives in `:index`); test fixtures wiring mirrored from
+  `index/build.gradle.kts` for the socket tests.
+- **`cli/.../commands/DaemonCommand.kt`**: `daemon run` builds the server with
+  the dispatch handler (lateinit capture of the server for `status`, assigned
+  before any connection is served). `indexedArtifacts` stays 0 — no index
+  lands here (live roots, D-043 precedent).
+- **Tests:** index tier-2 `RpcDispatchTest` (28: byte parity per command over
+  the fixture jar + crafted case jars, 8 param-error pins, `daemonRoots`
+  exit-4/5 pins, hostile-params never-throws + determinism properties — the
+  generating family); server tier-2 `DaemonDispatchTest` (5: all 17 commands
+  round-tripped over the live socket byte-equal to the in-process call,
+  exit-0/command pins, missing-workspace exit 4, doctor exit 6, status query
+  counting). Existing `DaemonServerTest` refusal pin still passes (default
+  handler untouched).
+- **Live proof** (fat jar, isolated `XDG_RUNTIME_DIR` + `HOME`, cleaned up
+  after): `daemon restart --workspace fx` over a fixture-jar workspace;
+  python socket client → `members`/`show`/`search`/`hierarchy` all `ok:true`;
+  warm `members --json` bytes **byte-identical** to one-shot `jdx -w fx
+  members --json`; `daemon stop` sweeps, temp workspace removed.
+
+### Decisions made
+- **D-058** — dispatch param contract, `:index` placement, per-request `-w`
+  roots with no fetch, `doctor` refusal, `indexedArtifacts` stays 0.
+
+### Tasks moved
+- T-082: WIP → DONE. Next is **T-042** (transparent CLI daemon client).
+
+### Lessons distilled
+- **L-099** — nullable params (`engine`, `lines`) need a presence check:
+  absent and invalid both read as null, so `?: return failure` rejects the
+  no-flag case.
+
+### What works now (and how to verify it yourself)
+```bash
+./gradlew :index:tier2Test --tests "dev.jdx.index.service.RpcDispatchTest" -x verifyTier1Budget  # 28 green
+./gradlew :server:tier2Test --tests "dev.jdx.server.DaemonDispatchTest" -x verifyTier1Budget  # 5 green
+./gradlew check -x verifyTier1Budget  # tiers 1-2 green incl. gates
+export XDG_RUNTIME_DIR=/tmp/jdx-try HOME=/tmp/jdx-try-home
+./app/build/jdx ws create fx --jars <jar> --no-jdk && ./app/build/jdx daemon start --workspace fx
+# raw socket: {"jdx":1,"command":"members","query":"<type>","params":{"limit":"5"}} → ok:true envelope
+# compare with: ./app/build/jdx -w fx members <type> --limit 5 --json  # byte-identical
+./app/build/jdx daemon stop --workspace fx  # sweeps socket+pid, keeps .log
+```
+
+**Caveats, unchanged and pre-existing:**
+- `verifyTier1Budget` is red on this machine (pre-existing machine
+  variance, 0 test failures — run past the gate via `-x verifyTier1Budget`
+  per the session-66 precedent).
+- Tier 3 not run: T-082 touches dispatch/roots plumbing over already-covered
+  readers (the §13 trigger fires on artifact/index/render changes, and every
+  touched path is exercised tier-2 over real jars + the soak corpora are
+  untouched).
+- `JavapCorpusSoakTest` still reds only on JDK-internal synthetic `access$`
+  members (pre-existing, proven on the stashed-clean tree).
+
+### What is broken / half-done
+- Nothing from this task. `doctor` through the daemon is an honest exit-6
+  refusal (no `DoctorService` in `:server`); the transparent client (T-042)
+  decides what to do with it.
+
+### Open questions / blockers
+- None.
+
+### Next action
+- **M6 T-042** (transparent CLI daemon client + `--no-daemon`; dispatch and
+  transport are both live, so the client has warm answers to forward to).
+
+---
+
 ## Session 67 — 2026-09-23 — T-041 daemon + unix socket done (M6 transport live)
 
 **Agent/Author:** Muse Spark 1.3 Free · **Commits:** `d5fb289` (claim) + closing commit (this session)
