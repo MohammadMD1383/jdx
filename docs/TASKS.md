@@ -1087,7 +1087,7 @@ property). Decisions: D-059. Lessons: L-100. Live proof in the session log
 (warm `members`/`search`/`usages --json` byte-identical to `--no-daemon`,
 exit-1 carriage, `queries served` climbing). T-043 unblocked.*
 
-### T-043 — MCP stdio server with generated schemas · `TODO`
+### T-043 — MCP stdio server with generated schemas · `WIP`
 
 **Depends:** T-040 (wire contract) · **Files:** `mcp/.../*`
 
