@@ -107,6 +107,19 @@ class MembersCommand(
         help = "Include the first javadoc sentence per member.",
     ).flag()
 
+    private val brief by option(
+        "--brief",
+        help = "Minimal text output: bare member rows with no group headers and no " +
+            "provenance block (warnings and footers stay). Mutually exclusive with " +
+            "--with-doc. Text only; --json is unaffected.",
+    ).flag()
+
+    private val maxLines by option(
+        "--max-lines",
+        help = "Maximum text lines shown; the rest become a continuation footer. " +
+            "Text only; --json is unaffected.",
+    ).int()
+
     private val sort by option(
         "--sort",
         help = "Row order: kind (the default, kind-then-name in linearisation order); " +
@@ -183,6 +196,8 @@ class MembersCommand(
             grep = grep,
             withDoc = withDoc,
             sort = sort.lowercase(),
+            brief = brief,
+            maxLines = maxLines,
         )
         if (usageError != null) {
             val failure = JdxService.ServiceOutcome.Failure(
@@ -252,7 +267,7 @@ class MembersCommand(
                     includeSynthetic,
                     limit,
                 )
-                ReadCommandSupport.finish(outcome, "members", json, noColor, terminate)
+                ReadCommandSupport.finish(outcome, "members", json, noColor, terminate, maxLines, brief)
             }
             is ReadCommandSupport.RootsOrFailure.Failed ->
                 ReadCommandSupport.finish(resolved.outcome, "members", json, noColor, terminate)
@@ -326,6 +341,19 @@ class OutlineCommand(
         help = "Include the first javadoc sentence per member.",
     ).flag()
 
+    private val brief by option(
+        "--brief",
+        help = "Minimal text output: bare member rows with no group headers and no " +
+            "provenance block (warnings and footers stay). Mutually exclusive with " +
+            "--with-doc. Text only; --json is unaffected.",
+    ).flag()
+
+    private val maxLines by option(
+        "--max-lines",
+        help = "Maximum text lines shown; the rest become a continuation footer. " +
+            "Text only; --json is unaffected.",
+    ).int()
+
     private val sort by option(
         "--sort",
         help = "Row order: kind (the default, kind-then-name in linearisation order); " +
@@ -402,6 +430,8 @@ class OutlineCommand(
             grep = grep,
             withDoc = withDoc,
             sort = sort.lowercase(),
+            brief = brief,
+            maxLines = maxLines,
         )
         if (usageError != null) {
             val failure = JdxService.ServiceOutcome.Failure(
@@ -470,7 +500,7 @@ class OutlineCommand(
                     includeSynthetic,
                     limit,
                 )
-                ReadCommandSupport.finish(outcome, "outline", json, noColor, terminate)
+                ReadCommandSupport.finish(outcome, "outline", json, noColor, terminate, maxLines, brief)
             }
             is ReadCommandSupport.RootsOrFailure.Failed ->
                 ReadCommandSupport.finish(resolved.outcome, "outline", json, noColor, terminate)

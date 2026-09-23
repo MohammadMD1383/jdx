@@ -333,6 +333,11 @@ next: jdx members com.google.gson.Gson --inherited
 - `--from <supertype>` — only members inherited from a specific supertype
 - `--grep <regex>` — filter by name
 - `--with-doc` — include first javadoc sentence per member
+- `--brief` — signatures only: bare member rows, no group headers, no
+  provenance block (warnings and footers stay); mutually exclusive with
+  `--with-doc`; text only, `--json` unaffected
+- `--max-lines N` — cap text lines with a continuation footer; text only,
+  `--json` unaffected
 - `--sort name|kind|declaring` *(default: `kind` then `name`)*
 - `--include-synthetic` — bridge/synthetic/lambda members, hidden by default
 
@@ -370,6 +375,7 @@ Decompiles if no sources exist. This is the escape hatch when a body is not enou
 
 #### `jdx outline <type>`
 One dense line per member — the *File Structure* popup. Cheapest way to see a class's shape.
+Takes the same `--brief` / `--max-lines` text budgets as `members`.
 
 ### 7.2 Search and navigation
 
@@ -1134,9 +1140,9 @@ the authoritative machine-readable version.)*
 ```
 show      <type> [-w …] [--jars …] [--no-jdk] [--json] [--no-color]
 outline   <type> [--kind --static/--instance --access --from --grep
-          --include-synthetic --limit --view kotlin|jvm] [-w …] [--jars …] [--no-jdk] [--json] [--no-color]
+          --include-synthetic --limit --brief --max-lines --view kotlin|jvm] [-w …] [--jars …] [--no-jdk] [--json] [--no-color]
 members   --inherited/--declared --kind --static --instance --access --from
-          --grep --with-doc --sort --view kotlin|jvm --include-synthetic
+          --grep --with-doc --brief --max-lines --sort --view kotlin|jvm --include-synthetic
           [-w …] [--jars …] [--no-jdk] [--json] [--no-color]
 body      --engine vineflower|javap --with-doc --with-signature --context N
           --line-numbers --max-lines

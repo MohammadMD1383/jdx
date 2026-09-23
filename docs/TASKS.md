@@ -1228,7 +1228,7 @@ renderers + `HelpResult` JSON) + `cli/.../commands/HelpCommand.kt`
 `HelpCommandTest` (7 tests, incl. a 200-case determinism property). Live
 proof in the session log. Full notes in git history + session log.*
 
-### T-047 — token budgets on `members`/`outline`: `--brief` + `--max-lines` · `WIP` (session 75)
+### T-047 — token budgets on `members`/`outline`: `--brief` + `--max-lines` · `DONE` (session 75)
 
 **Depends:** T-010 (renderers + envelope), T-011 (read-command patterns), T-042/D-059
 (warm serves `--json` only, so text-only flags need no wire change) · **Files:**
@@ -1263,6 +1263,24 @@ without the flags.)*
   a JDK sample; brief goldens.
 - Docs: PROPOSAL.md Appendix B `members`/`outline` rows; this detail block;
   PROGRESS.md session entry; open-items.md.
+
+*Closed in session 75. `core/.../render/TokenBudget.kt` (`capLines`: whole-line
+cap, universal newlines, POSIX trailing-newline rule, `… K more lines
+(--max-lines M to see more)` footer) + `MemberListing.renderBriefText()`
+(header + bare rows, object summary + limit footer + warnings kept, group
+headers + doc suffixes + provenance dropped) + `MemberRow.briefLine()` +
+`ServiceOutcome.renderBriefText` default (only `MemberList` overrides);
+`members`/`outline` gain `--brief` + `--max-lines` (text-only, `--json`
+byte-identical, so no wire/adapter/parity touch). `--brief --with-doc` and
+`--max-lines < 0` exit 3. Tests: core `TokenBudgetTest` (6) +
+`TokenBudgetPropertyTest` (whole-line-prefix + hostile never-throws/
+determinism properties) + `MemberListingBriefTest` (4 examples + brief⊆full
+property); cli tier-1 `ReadCommandsTest` +6; tier-2
+`ReadCommandsServiceTest` +3 + `TokenBudgetGoldenTest`
+(`golden/members-budget/`, 6 files, text only — JSON immunity pinned in
+tier-1/2 instead). Decisions: none (text-only scoping follows D-059).
+Lessons: L-105 (POSIX trailing-newline rule for line-counting oracles).
+Live proof in the session log. Next: T-052.*
 
 ### T-048 AppCDS archive generation · **T-050** `jdx bench` against `minecraft-client.jar` · **T-051** README + install docs · **T-052** warnings-as-errors, lint, final API review · `TODO` (detail blocks land when each starts)
 

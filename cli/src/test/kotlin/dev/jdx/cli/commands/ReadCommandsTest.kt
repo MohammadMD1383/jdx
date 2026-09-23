@@ -24,6 +24,7 @@ import dev.jdx.index.workspace.InMemoryWorkspaceStore
 import dev.jdx.index.workspace.WorkspaceDefinition
 import io.kotest.matchers.shouldBe
 import io.kotest.matchers.string.shouldContain
+import io.kotest.matchers.string.shouldNotContain
 import java.io.ByteArrayOutputStream
 import java.io.PrintStream
 import kotlinx.serialization.json.Json
@@ -359,6 +360,114 @@ class ReadCommandsTest {
             ).parse(listOf("Point", "--with-doc"))
         }
         seen shouldBe true
+    }
+
+    @Test
+    fun `members --brief renders bare rows without headers or provenance (T-047)`() {
+        val output = captureStdout {
+            MembersCommand(
+                query = { _, _, _, _, _, _ -> pointListing() },
+                terminate = noExit,
+                discover = noDiscovery,
+                store = emptyStore(),
+                getenv = noEnv,
+            ).parse(listOf("Point", "--brief"))
+        }
+        output shouldContain "members of com.example.Point"
+        output shouldContain "  method public int getX()"
+        output.lines().none { it.endsWith(":") } shouldBe true
+        output shouldNotContain "source:"
+    }
+
+    @Test
+    fun `outline --brief renders bare rows (T-047)`() {
+        val output = captureStdout {
+            OutlineCommand(
+                query = { _, _, _, _, _, _ -> pointListing() },
+                terminate = noExit,
+                discover = noDiscovery,
+                store = emptyStore(),
+                getenv = noEnv,
+            ).parse(listOf("Point", "--brief"))
+        }
+        output shouldContain "members of com.example.Point"
+        output shouldContain "  field public int x"
+        output shouldNotContain "source:"
+    }
+
+    @Test
+    fun `members --brief with --with-doc exits 3 without querying (T-047)`() {
+        var queried = false
+        val output = captureStdout {
+            val thrown = try {
+                MembersCommand(
+                    query = { _, _, _, _, _, _ -> queried = true; pointListing() },
+                    terminate = noExit,
+                    discover = noDiscovery,
+                    store = emptyStore(),
+                    getenv = noEnv,
+                ).parse(listOf("Point", "--brief", "--with-doc"))
+                null
+            } catch (e: TestExit) {
+                e
+            }
+            (thrown?.code) shouldBe 3
+        }
+        queried shouldBe false
+        output shouldContain "usage error: --brief and --with-doc are mutually exclusive"
+    }
+
+    @Test
+    fun `members --max-lines caps text lines with a continuation footer (T-047)`() {
+        val output = captureStdout {
+            MembersCommand(
+                query = { _, _, _, _, _, _ -> pointListing() },
+                terminate = noExit,
+                discover = noDiscovery,
+                store = emptyStore(),
+                getenv = noEnv,
+            ).parse(listOf("Point", "--max-lines", "5"))
+        }
+        val lines = output.trimEnd().lines()
+        lines.size shouldBe 6
+        lines.take(5) shouldBe pointListing().listing.renderText().lines().take(5)
+        lines.last() shouldBe "… 3 more lines (--max-lines 8 to see more)"
+    }
+
+    @Test
+    fun `members --max-lines negative exits 3 without querying (T-047)`() {
+        var queried = false
+        val output = captureStdout {
+            val thrown = try {
+                MembersCommand(
+                    query = { _, _, _, _, _, _ -> queried = true; pointListing() },
+                    terminate = noExit,
+                    discover = noDiscovery,
+                    store = emptyStore(),
+                    getenv = noEnv,
+                ).parse(listOf("Point", "--max-lines", "-1"))
+                null
+            } catch (e: TestExit) {
+                e
+            }
+            (thrown?.code) shouldBe 3
+        }
+        queried shouldBe false
+        output shouldContain "usage error: --max-lines must be >= 0, got -1"
+    }
+
+    @Test
+    fun `members --json ignores the text budget (T-047)`() {
+        fun runJson(vararg flags: String): String = captureStdout {
+            MembersCommand(
+                query = { _, _, _, _, _, _ -> pointListing() },
+                terminate = noExit,
+                discover = noDiscovery,
+                store = emptyStore(),
+                getenv = noEnv,
+            ).parse(listOf("Point", "--json") + flags)
+        }
+        runJson("--brief", "--max-lines", "1") shouldBe runJson()
     }
 
     @Test

@@ -5,6 +5,83 @@ Append-only (D-023): 10 sessions per shard, newest first. Template and rules in
 
 ---
 
+## Session 75 — 2026-09-23 — T-047 token budgets (`--brief` + `--max-lines`) done
+
+**Agent/Author:** Muse Spark 1.3 Free · **Commits:** `f0580ac` (claim) + closing commit (this session)
+
+### Goal
+Implement one M7 task and push (explicit owner go-ahead this session).
+Picked T-047 (token budgets): lowest-numbered TODO with DONE deps. Wrote the
+detail block when starting per the board rule; scoped to one sitting as
+`members`/`outline` text-only flags, so the T-040 wire and all adapters stay
+untouched.
+
+### What I did
+- Claimed T-047 first (`docs/TASKS.md` TODO→WIP + detail block, committed
+  `f0580ac` before coding).
+- Core (test-first): new `core/.../render/TokenBudget.kt` (`capLines` —
+  whole-line cap, universal newlines, POSIX trailing-newline rule, `… K more
+  lines (--max-lines M to see more)` footer); `MemberListing.renderBriefText()`
+  (header + bare rows; object summary + limit footer + warnings kept; group
+  headers + doc suffixes + provenance dropped) + `MemberRow.briefLine()`;
+  `ServiceOutcome.renderBriefText` default in `index/.../service/JdxService.kt`
+  (only `MemberList` overrides).
+- CLI: `members` + `outline` gain `--brief` and `--max-lines N` (both text
+  only — `--json` bytes byte-identical, so DaemonClient/RPC/HTTP/MCP and the
+  T-046 parity proof are untouched); `ReadCommandSupport.finish` takes the
+  budget params, `validateMemberFlags` rejects `--brief --with-doc` and
+  `--max-lines < 0` with exit 3.
+- Tests: core `TokenBudgetTest` (6) + `TokenBudgetPropertyTest`
+  (whole-line-prefix law + hostile never-throws/determinism/no-`\r`
+  properties) + `MemberListingBriefTest` (4 examples + brief⊆full property);
+  cli tier-1 `ReadCommandsTest` +6 (rendering, both exit-3 paths, `--json`
+  immunity); tier-2 `ReadCommandsServiceTest` +3 (JDK brief, outline brief,
+  max-lines cap + JSON immunity) + `TokenBudgetGoldenTest`
+  (`golden/members-budget/`, 6 text goldens over Generics/TrafficLight$1/
+  KotlinMembers — read the diff before accepting, per the golden rule).
+- Docs: PROPOSAL.md §7.1 `members`/`outline` + Appendix B rows; L-105.
+- Verified: `./gradlew check -Ptier1.budget=10000` green (tiers 1–2, 0
+  failures; the only red at the default budget is the known pre-existing
+  `verifyTier1Budget` machine-variance gate). Live: `members HashMap --brief`
+  (bare rows + Object summary + limit footer + warning, no `source:`),
+  `--max-lines 6` (prefix + footer), `--brief --with-doc` (exit 3),
+  `--json --brief --max-lines 1` (byte-identical to `--json`).
+
+### Decisions made
+- None (no new D-nnn). Text-only scoping follows D-059 (no text wire, so
+  text flags need no RPC/adapter work); the exit-3 combos follow the
+  `--static`/`--instance` precedent; the POSIX trailing-newline rule is a
+  spec choice recorded in L-105 rather than a decision entry.
+
+### Tasks moved
+- T-047: TODO → WIP (`f0580ac`) → DONE (this session). Next: T-052 (M7 value
+  order is T-052, T-048, T-050, T-051 last).
+
+### Lessons distilled
+- L-105 (POSIX trailing-newline rule for line-counting specs and oracles —
+  the new property caught the naive-split disagreement at attempt 39).
+
+### What works now (and how to verify it yourself)
+- `app/build/jdx members java.util.HashMap --limit 5 --brief` — bare rows,
+  exit 0, no `source:` line.
+- `app/build/jdx members java.util.HashMap --max-lines 6` — 6 lines + footer.
+- `./gradlew :core:test --tests "dev.jdx.core.render.TokenBudget*" --tests "dev.jdx.core.render.MemberListingBriefTest" -Ptier1.budget=10000` — green.
+- `./gradlew :cli:tier2Test --tests "dev.jdx.cli.commands.TokenBudgetGoldenTest" --tests "dev.jdx.cli.commands.ReadCommandsServiceTest"` — green.
+
+### What is broken / half-done
+- Nothing from this task. Budgets on the other commands (`search`, `usages`,
+  `tree`, `show`, …) are still open — deliberately out of this slice; file a
+  follow-up task when starting one (next free number is T-083).
+
+### Open questions / blockers
+- None.
+
+### Next action
+- **M7 T-052** (warnings-as-errors, lint, final API review) — write the
+  detail block when starting.
+
+---
+
 ## Session 74 — 2026-09-23 — T-049 `jdx help --agent` done (first M7 slice)
 
 **Agent/Author:** Muse Spark 1.3 Free · **Commits:** `0ec768d` (claim) + closing commit (this session)

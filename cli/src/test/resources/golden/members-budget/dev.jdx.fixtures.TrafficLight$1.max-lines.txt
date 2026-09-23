@@ -1,0 +1,7 @@
+members of dev.jdx.fixtures.TrafficLight$1
+methods declared on dev.jdx.fixtures.TrafficLight$1:
+  method public boolean isStop()
+methods inherited from dev.jdx.fixtures.TrafficLight:
+  method public int seconds()
+  method public static dev.jdx.fixtures.TrafficLight valueOf(java.lang.String arg0)
+… 7 more lines (--max-lines 13 to see more)

@@ -1,0 +1,7 @@
+members of dev.jdx.fixtures.KotlinMembers
+constructors declared on dev.jdx.fixtures.KotlinMembers:
+  constructor public KotlinMembers()
+methods declared on dev.jdx.fixtures.KotlinMembers:
+  method public final int originalName(int value)
+  method public final java.lang.Integer nullable(java.lang.String input)
+… 10 more lines (--max-lines 16 to see more)

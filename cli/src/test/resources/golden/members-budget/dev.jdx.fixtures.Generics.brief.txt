@@ -1,0 +1,6 @@
+members of dev.jdx.fixtures.Generics
+  constructor public Generics()
+  method public <V extends T> V bounded(V input)
+  method public U identity(U value)
+  method public void wildcard(java.util.List<? extends T> producers, java.util.List<? super U> consumers)
+warning UNRESOLVED_SUPERTYPE: supertype java.lang.Object is not in the workspace — members inherited from it are missing

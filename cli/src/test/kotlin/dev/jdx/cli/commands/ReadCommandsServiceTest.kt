@@ -238,6 +238,50 @@ class ReadCommandsServiceTest {
         run.output shouldMatch Regex("(?s).*0 of \\d+ members shown.*")
     }
 
+    // -- token budgets (T-047) -----------------------------------------------------------
+
+    @Test
+    fun `members --brief strips headers and provenance over the JDK`() {
+        val full = run(listOf("members", "java.util.HashMap", "--limit", "5"))
+        full.exit shouldBe 0
+        val brief = run(listOf("members", "java.util.HashMap", "--limit", "5", "--brief"))
+        brief.exit shouldBe 0
+        brief.output shouldContain "members of java.util.HashMap"
+        brief.output shouldNotContain "declared on"
+        brief.output shouldNotContain "inherited from"
+        brief.output shouldNotContain "source:"
+        (brief.output.lines().size < full.output.lines().size) shouldBe true
+    }
+
+    @Test
+    fun `outline --brief keeps rows and drops the provenance block`() {
+        val ref = "dev.jdx.fixtures.Generics"
+        val full = run(listOf("outline") + fixtureArgs(ref))
+        full.exit shouldBe 0
+        val brief = run(listOf("outline") + fixtureArgs(ref, "--brief"))
+        brief.exit shouldBe 0
+        for (line in brief.output.lines().filter { it.startsWith("  ") }) {
+            full.output shouldContain line
+        }
+        brief.output shouldNotContain "source:"
+    }
+
+    @Test
+    fun `members --max-lines caps text with a footer and leaves json whole`() {
+        val ref = "dev.jdx.fixtures.Generics"
+        val full = run(listOf("members") + fixtureArgs(ref))
+        full.exit shouldBe 0
+        val capped = run(listOf("members") + fixtureArgs(ref, "--max-lines", "4"))
+        capped.exit shouldBe 0
+        val lines = capped.output.trimEnd().lines()
+        lines.take(4) shouldBe full.output.lines().take(4)
+        lines.last() shouldMatch Regex("… \\d+ more lines \\(--max-lines \\d+ to see more\\)")
+        val plainJson = run(listOf("members") + fixtureArgs(ref, "--json"))
+        val cappedJson = run(listOf("members") + fixtureArgs(ref, "--json", "--max-lines", "4", "--brief"))
+        cappedJson.exit shouldBe 0
+        cappedJson.output shouldBe plainJson.output
+    }
+
     // -- failures --------------------------------------------------------------------------
 
     @Test

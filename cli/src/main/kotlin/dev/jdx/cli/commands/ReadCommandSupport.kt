@@ -2,6 +2,7 @@ package dev.jdx.cli.commands
 
 import dev.jdx.core.model.Warning
 import dev.jdx.core.render.ErrorResult
+import dev.jdx.core.render.TokenBudget
 import dev.jdx.index.maven.MavenCoords
 import dev.jdx.index.maven.MavenFetch
 import dev.jdx.index.maven.MavenResolveFn
@@ -359,9 +360,17 @@ internal object ReadCommandSupport {
         grep: String?,
         withDoc: Boolean,
         sort: String,
+        brief: Boolean = false,
+        maxLines: Int? = null,
     ): String? {
         if (static && instance) {
             return "usage error: --static and --instance are mutually exclusive"
+        }
+        if (brief && withDoc) {
+            return "usage error: --brief and --with-doc are mutually exclusive"
+        }
+        if (maxLines != null && maxLines < 0) {
+            return "usage error: --max-lines must be >= 0, got $maxLines"
         }
         if (grep != null) {
             try {
@@ -376,18 +385,29 @@ internal object ReadCommandSupport {
         return null
     }
 
-    /** Prints the outcome in the requested rendering and terminates on non-zero exit. */
+    /**
+     * Prints the outcome in the requested rendering and terminates on non-zero exit.
+     *
+     * [brief] renders the minimal text (`ServiceOutcome.renderBriefText`, T-047)
+     * and [maxLines] caps text lines via `TokenBudget` — both are text-only
+     * presentation (D-059 precedent): `--json` bytes are unaffected, so warm
+     * serving and adapter parity never see them.
+     */
     internal fun finish(
         outcome: JdxService.ServiceOutcome,
         command: String,
         json: Boolean,
         noColor: Boolean,
         terminate: (Int) -> Nothing = ::exitProcess,
+        maxLines: Int? = null,
+        brief: Boolean = false,
     ) {
         if (json) {
             println(outcome.toJson(command))
         } else {
-            println(outcome.renderText(useColor(noColor)))
+            val color = useColor(noColor)
+            val text = if (brief) outcome.renderBriefText(color) else outcome.renderText(color)
+            println(if (maxLines != null) TokenBudget.capLines(text, maxLines) else text)
         }
         if (outcome.exitCode != 0) terminate(outcome.exitCode)
     }

@@ -231,6 +231,13 @@ public object JdxService {
         /** Human-readable text; [color] is TTY-ness passed in by the adapter (D-028). */
         public fun renderText(color: Boolean = false): String
 
+        /**
+         * Minimal human-readable text for `--brief` (T-047). Defaults to the
+         * full text; only outcomes with a minimal rendering override it.
+         * `--json` is unaffected (text-only flag, D-059 precedent).
+         */
+        public fun renderBriefText(color: Boolean = false): String = renderText(color)
+
         /** The shared JSON envelope for [command]. */
         public fun toJson(command: String): String
 
@@ -238,6 +245,7 @@ public object JdxService {
         public data class MemberList(public val listing: MemberListing) : ServiceOutcome {
             override val exitCode: Int = 0
             override fun renderText(color: Boolean): String = listing.renderText(color)
+            override fun renderBriefText(color: Boolean): String = listing.renderBriefText(color)
             override fun toJson(command: String): String = listing.toJson(command)
         }
 

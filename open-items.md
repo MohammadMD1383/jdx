@@ -18,7 +18,7 @@ mine the session log to learn what still needs doing.
 
 | Item | State | Notes |
 |---|---|---|
-| T-047/T-048/T-050…T-052 M7 polish (token budgets, AppCDS, `bench`, README/install, lint/gates; T-049 `help --agent` DONE session 74) | TODO, coarse | Expand when starting |
+| T-048/T-050…T-052 M7 polish (AppCDS, `bench`, README/install, lint/gates; T-047 token budgets + T-049 `help --agent` DONE) | TODO, coarse | Expand when starting |
 | T-080 Kotlin sidecar fetch · T-081 Kotlin-aware mismatch pairing | TODO, low priority | Filed session 65; M6 stays next |
 
 ## Deferred follow-ups (no task number yet — file one when starting)
@@ -46,4 +46,4 @@ mine the session log to learn what still needs doing.
 
 ---
 
-*Last updated: 2026-09-23 (session 74).*
+*Last updated: 2026-09-23 (session 75).*

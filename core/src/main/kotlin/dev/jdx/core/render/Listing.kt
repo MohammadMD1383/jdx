@@ -59,6 +59,9 @@ public data class MemberRow(
         "  ${kind.word} $signature — $doc"
     }
 
+    /** The brief line (`--brief`, T-047): the signature, never the ` — doc` suffix. */
+    public fun briefLine(): String = "  ${kind.word} $signature"
+
     /** The structural row: empty lists and `false` are omitted (token economy). */
     public fun toJson(): String = buildString {
         append("{\"ref\":").append(JsonEscape.quote(canonicalRef))
@@ -198,6 +201,25 @@ public data class MemberListing(
             if (range == null) "source: ${entry.artifact} ($base, $file)"
             else "source: ${entry.artifact} ($base, $file:${range.first}-${range.last})"
         }
+    }
+
+    /**
+     * Minimal text for `--brief` (T-047, PROPOSAL.md §3.1): the header plus
+     * bare member rows — no group headers, no ` — doc` suffixes, no
+     * provenance block. Warnings, the collapsed-`Object` summary and the
+     * truncation footer stay, so a brief answer is still honest (G6).
+     * JSON is unaffected (text-only flag, D-059 precedent).
+     */
+    public fun renderBriefText(color: Boolean = false): String {
+        val lines = mutableListOf("members of ${query.binaryName}")
+        for (group in groups) {
+            for (row in group.rows) lines.add(row.briefLine())
+        }
+        objectSummary?.let { lines.add(it.textLine()) }
+        truncation?.let { lines.add("${it.shown} of ${it.total} members shown (${it.hint} to see more)") }
+        for (warning in warnings) lines.add("warning ${warning.code}: ${warning.message}")
+        val plain = lines.joinToString("\n")
+        return if (color) Ansi.colorizeListing(plain) else plain
     }
 
     /** Full JSON envelope; every text row's signature and ref appears here (D-007). */
