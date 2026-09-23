@@ -20,6 +20,7 @@ import dev.jdx.cli.commands.ImplementorsCommand
 import dev.jdx.cli.commands.SignatureCommand
 import dev.jdx.cli.commands.SourceCommand
 import dev.jdx.cli.commands.MembersCommand
+import dev.jdx.cli.commands.McpCommand
 import dev.jdx.cli.commands.OutlineCommand
 import dev.jdx.cli.commands.ResolveCommand
 import dev.jdx.cli.commands.SearchCommand
@@ -118,6 +119,7 @@ fun main(args: Array<String>): Unit =
         CallersCommand(),
         CallsCommand(),
         SamplesCommand(),
+        McpCommand(),
         daemonGroup(),
         wsGroup(),
         cacheGroup(),

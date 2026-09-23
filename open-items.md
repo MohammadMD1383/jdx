@@ -18,9 +18,7 @@ mine the session log to learn what still needs doing.
 
 | Item | State | Notes |
 |---|---|---|
-| T-043 MCP stdio server | TODO, **next** | Unblocked: wire contract (T-040) live |
-| T-043 MCP stdio server | TODO | Depends on T-040 |
-| T-044 HTTP/JSON server | TODO | Depends on T-040 |
+| T-044 HTTP/JSON server | TODO, **next** | Depends on T-040 |
 | T-045 `jdx batch` | TODO | Depends on T-040 |
 | T-046 adapter parity test | TODO, closes M6 | Depends on T-042…T-044 |
 | T-047…T-052 M7 polish (token budgets, AppCDS, `help --agent`, `bench`, README/install, lint/gates) | TODO, coarse | Expand when M6 closes |
@@ -51,4 +49,4 @@ mine the session log to learn what still needs doing.
 
 ---
 
-*Last updated: 2026-09-23 (session 69).*
+*Last updated: 2026-09-23 (session 70).*

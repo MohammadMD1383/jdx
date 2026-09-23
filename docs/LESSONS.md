@@ -38,7 +38,8 @@ and never reused. Tags in use: `build` · `tooling` · `jvm-spec` · `kotlin` ·
 | `docs/lessons/L-001-025.md` | L-001…L-025 | full |
 | `docs/lessons/L-026-050.md` | L-026…L-050 | full |
 | `docs/lessons/L-051-075.md` | L-051…L-075 | full |
-| `docs/lessons/L-076-100.md` | L-076… | open |
+| `docs/lessons/L-076-100.md` | L-076…L-100 | full |
+| `docs/lessons/L-101-125.md` | L-101… | open |
 
 ## Topic guide
 
@@ -70,6 +71,7 @@ session-log references keep resolving. Numbers are never reused.)
 | Redundant validation = unkillable mutants (one authoritative check) | L-096 |
 | PIT boundary mutator drops the first char of `c in "chars"` | L-097 |
 | `Socket.socket()` does not speak AF_UNIX (raw channel IO for unix sockets) | L-098 |
+| Stdio servers: stdout is the protocol (silence banners) + exit on EOF | L-101, L-102 |
 
 ## Adding an entry
 

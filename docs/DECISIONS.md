@@ -35,7 +35,7 @@ log.
 | Process (docs gate, testing, cadence, sharding, lessons) | D-019…D-024 |
 | Command semantics (launcher → hierarchy, in task order) | D-026…D-048 |
 | Kotlin member mapping (carrier → suspend → properties) | D-049…D-051 |
-| Serving (M6 wire contract + daemon transport) | D-056, D-057 |
+| Serving (M6 wire contract + daemon transport) | D-056, D-057, D-058, D-059, D-060 |
 
 ## Index
 
@@ -98,3 +98,6 @@ log.
 | D-055 | Kotlin bodies/KDoc over the side-loaded PSI seam (T-039) | proposed-by-implementer | `D-051-075.md` |
 | D-056 | `JdxService` RPC v1 wire contract (T-040) | proposed-by-implementer | `D-051-075.md` |
 | D-057 | daemon transport + lifecycle semantics (T-041) | proposed-by-implementer | `D-051-075.md` |
+| D-058 | daemon query-dispatch semantics (T-082) | proposed-by-implementer | `D-051-075.md` |
+| D-059 | transparent CLI daemon client semantics (T-042) | proposed-by-implementer | `D-051-075.md` |
+| D-060 | MCP stdio server semantics (T-043) | proposed-by-implementer | `D-051-075.md` |

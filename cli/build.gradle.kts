@@ -13,6 +13,10 @@ dependencies {
     // socket server, probe and path helpers. No behaviour moves — :server owns
     // the lifecycle, cli only parses flags and prints.
     implementation(project(":server"))
+    // MCP stdio server (T-043): `jdx mcp` is thin over :mcp's session and SDK
+    // wiring. No behaviour moves — :mcp owns the tool table, cli only parses
+    // the workspace flag and blocks on stdio.
+    implementation(project(":mcp"))
     // clikt-core, NOT clikt: the mordant flavor eagerly loads JNA (native-access warnings
     // on JDK 22+, slower startup, ~2 MB of fat jar) and jdx never renders a terminal.
     implementation(libs.clikt.core)

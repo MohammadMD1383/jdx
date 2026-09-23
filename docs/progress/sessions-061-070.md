@@ -5,6 +5,100 @@ Append-only (D-023): 10 sessions per shard, newest first. Template and rules in
 
 ---
 
+## Session 70 — 2026-09-23 — T-043 MCP stdio server done (20 typed tools live)
+
+**Agent/Author:** Muse Spark 1.3 Free · **Commits:** `460262d` (claim) + closing commit (this session)
+
+### Goal
+T-043, the first M6 server slice after the daemon + transparent client:
+JSON-RPC over stdio exposing each T-040 command as a typed MCP tool with
+schemas generated from the same command metadata the CLI uses
+(PROPOSAL.md §14.2) — against the T-040 contract, holding the workspace in
+memory like a per-session daemon.
+
+### What I did
+- Claimed T-043 first (`docs/TASKS.md` TODO→WIP, committed `460262d` before coding).
+- **`mcp/.../McpTools.kt`** (new): the `ALL_MCP_TOOLS` table — one
+  `jdx_<wire>` tool per `RpcCommand` (20 entries), each with typed params in
+  the D-058 wire spellings. `inputSchema()` generates the SDK `ToolSchema`
+  from those rows and `requestFor()` builds the `RpcRequest` from the same
+  rows (never hand-written twice); `splitArgs`/`scalarText` canonicalise
+  typed MCP args like `RpcRequest.decode` (numbers/booleans→text,
+  null→absent, arrays/objects→exit-3 naming the param). Total, never throws.
+- **`mcp/.../McpSession.kt`** (new): the per-session daemon. Resolves roots
+  per call through `JdxService.daemonRoots` (server `-w` default, per-tool
+  `workspace` override; missing workspace → exit 4, like the socket daemon).
+  `version`/`health` answered internally in the daemon's envelope shapes;
+  `doctor` refused exit 6 naming `jdx doctor` (D-060 §4). Results are the
+  `--json` envelope verbatim with `isError` = `ok:false`.
+- **`mcp/.../McpServer.kt`** (new): SDK registration + stdio serving that
+  returns on stdin EOF (transport `onClose`, bounded close) with an
+  `exitProcess(0)` after serving — one live run in ~20 lingered with stdout
+  closed but the JVM alive — silencing kotlin-logging's stdout banner first
+  (L-101, L-102); plus `serveMcpStdioBlocking` so `:cli` never names SDK
+  types. **`cli/.../McpCommand.kt`** (new):
+  `jdx mcp [-w name]`, registered in `JdxCli` (new `:cli`→`:mcp` dep).
+- Build: `kotlinx-coroutines-core`, `kotlinx-io-core`, `kotlin-logging`
+  added to the version catalog (T-001 rule) + `:mcp`→`:index` dep.
+- Tests: tier-1 `McpToolsTest` (10: exact 1:1 tool↔wire pin, `query`
+  required exactly where `requiresQuery`, schema determinism, hostile
+  never-throws property) + tier-2 `McpSessionTest` (26: all-17-tool parity
+  vs hand-written `RpcRequest`s over the fixture jar, version/health/doctor
+  pins, missing-workspace exit 4, per-call override, SDK tool-listing pin).
+- Live proof (raw JSON-RPC over the built binary, `mcp-proof` workspace):
+  `initialize` → 20 tools → `jdx_members` answer **byte-identical** to
+  `jdx members --json --no-daemon` (modulo the `println` newline) →
+  `health` → exit 0 on stdin EOF. Fixed two real bugs found there (L-101,
+  L-102).
+- Docs: T-043 DONE, D-060, L-101/L-102 (new `L-101-125.md` shard — L-076-100
+  was full at 25), CURRENT STATE + open-items updated, Appendix B
+  `mcp [-w …]`. Also repaired an omission: D-058/D-059 shard entries
+  (sessions 68/69) never got `docs/DECISIONS.md` index rows — added, plus
+  D-060 and the M6 tag roll-up.
+
+### Decisions made
+- **D-060** — MCP stdio server semantics (table-as-metadata, stored-workspace
+  sessions, verbatim envelopes + `isError`, daemon-shaped version/health,
+  `doctor` refusal, stdout/EOF discipline, cli-never-names-SDK).
+
+### Tasks moved
+- T-043: TODO → WIP (`460262d`) → DONE. T-044 unblocked.
+
+### Lessons distilled
+- **L-101** — on a stdio transport, stdout is the protocol: silence every
+  banner (kotlin-logging's goes to stdout).
+- **L-102** — `awaitCancellation` never returns on stdin EOF: await the
+  transport close; prove exit 0 after EOF.
+
+### What works now (and how to verify it yourself)
+```bash
+./gradlew :mcp:check :cli:check -x verifyTier1Budget  # 328 tests, 0 failures
+./gradlew :app:installDist
+./app/build/jdx ws create mcp-proof --jars testfixtures/build/libs/testfixtures-0.1.0-SNAPSHOT.jar --no-jdk
+printf '%s\n' '{"jsonrpc":"2.0","id":1,"method":"initialize","params":{"protocolVersion":"2025-06-18","capabilities":{},"clientInfo":{"name":"x","version":"1"}}}' '{"jsonrpc":"2.0","method":"notifications/initialized"}' '{"jsonrpc":"2.0","id":2,"method":"tools/call","params":{"name":"jdx_show","arguments":{"query":"dev.jdx.fixtures.Generics"}}}' | ./app/build/jdx mcp -w mcp-proof
+# 20 tools serve; the call answers the show envelope; server exits 0 at EOF
+```
+
+### What is broken / half-done
+- Nothing from this task. Known caveats unchanged: `verifyTier1Budget` red
+  on this machine (pre-existing machine variance); `JavapCorpusSoakTest`
+  drift (pre-existing).
+- Note: `~/.gradle/gradle.properties` points Maven at a localhost:10808
+  proxy that is currently down — new-dependency fetches need
+  `-Dhttp.nonProxyHosts='*' -Dhttps.nonProxyHosts='*'` until it is back.
+  (Two small artifacts fetched this way: `kotlinx-coroutines-debug`
+  1.11.0 POM/jar via the coroutines BOM.)
+
+### Open questions / blockers
+- None.
+
+### Next action
+- **M6 T-044** (HTTP/JSON server on `com.sun.net.httpserver`: `GET
+  /v1/<command>`, `POST /v1/batch`, `GET /v1/health`; localhost by default;
+  byte parity feeds T-046).
+
+---
+
 ## Session 69 — 2026-09-23 — T-042 transparent CLI daemon client done (warm `--json` live)
 
 **Agent/Author:** Muse Spark 1.3 Free · **Commits:** `51c4e95` (claim) + closing commit (this session)

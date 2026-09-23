@@ -49,7 +49,7 @@ be fiction.
 | **M3** | Bodies: sources, JavaParser, Vineflower, `body`/`source`/`doc` | DONE |
 | **M4** | Graph: `usages`/`hierarchy`/`callers`/`calls`/`samples` | DONE (T-029…T-034) |
 | **M5** | Kotlin: `@Metadata` + PSI source parsing | DONE (T-035…T-039) |
-| **M6** | Serving: daemon, MCP, HTTP, `batch` | IN PROGRESS (T-040…T-042 + T-082 DONE; T-043 next) |
+| **M6** | Serving: daemon, MCP, HTTP, `batch` | IN PROGRESS (T-040…T-043 + T-082 DONE; T-044 next) |
 | **M7** | Polish: token budgets, AppCDS, mutation gates, docs, install | TODO (T-060 done early) |
 
 **DONE: T-001…T-035** (M0–M2 in full; M3 via the T-020 umbrella's slices —
@@ -61,11 +61,11 @@ graph enrichment) **plus T-038** (PSI loader seam) **plus T-039** (Kotlin
 bodies/KDoc, last T-036 slice) **plus T-036** (member-mapping umbrella)
 **plus T-040** (M6 RPC wire contract) **plus T-041** (daemon + unix socket)
 **plus T-082** (daemon `JdxService` dispatch) **plus T-042** (transparent CLI
-daemon client + `--no-daemon`).
+daemon client + `--no-daemon`) **plus T-043** (MCP stdio server).
 DONE entries below are
 compressed to a summary + pointers; full notes live in git history and the
-session log. **Next: T-043** (MCP stdio server; then the remaining M6 slices
-T-044…T-046, whose detail blocks were expanded in session 66),
+session log. **Next: T-044** (HTTP/JSON server; then the remaining M6 slices
+T-045…T-046, whose detail blocks were expanded in session 66),
 **plus M7** (coarse; T-060 already DONE).
 
 ---
@@ -1087,7 +1087,7 @@ property). Decisions: D-059. Lessons: L-100. Live proof in the session log
 (warm `members`/`search`/`usages --json` byte-identical to `--no-daemon`,
 exit-1 carriage, `queries served` climbing). T-043 unblocked.*
 
-### T-043 — MCP stdio server with generated schemas · `WIP`
+### T-043 — MCP stdio server with generated schemas · `DONE` (session 70)
 
 **Depends:** T-040 (wire contract) · **Files:** `mcp/.../*`
 
@@ -1097,6 +1097,21 @@ the same command metadata the CLI uses — never hand-written twice. Holds the
 index in memory (per-session daemon). Tests: tier-2 tool-listing pin +
 per-tool smoke over the fixture jar + parity (MCP result bytes == CLI
 `--json` bytes, feeds T-046).
+
+*Closed in session 70. `mcp/.../McpTools.kt` (the `ALL_MCP_TOOLS` table: one
+`jdx_<wire>` tool per `RpcCommand`, schema + wire request generated from the
+same rows), `McpSession.kt` (per-session daemon: per-call roots via
+`daemonRoots`, `version`/`health` internal in the daemon's envelope shapes,
+`doctor` refused exit 6, `isError` = `ok:false`), `McpServer.kt` (SDK
+registration + stdio to EOF), `cli/.../McpCommand.kt` (`jdx mcp [-w name]`,
+new `:cli`→`:mcp` dep). Tests: tier-1 `McpToolsTest` (10: table pin, schema
+determinism, hostile never-throws property) + tier-2 `McpSessionTest` (26:
+all-17-tool parity vs hand-written requests, transport commands, workspace
+override, SDK tool-listing pin). Decisions: D-060. Lessons: L-101 (stdout is
+the protocol), L-102 (exit on EOF, not `awaitCancellation`). Live proof in
+the session log (raw JSON-RPC handshake, 20 tools, `members` byte-identical
+to CLI `--json` modulo the `println` newline, exit 0 on EOF). T-044
+unblocked.*
 
 ### T-044 — HTTP/JSON server on `com.sun.net.httpserver` · `TODO`
 
