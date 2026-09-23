@@ -210,13 +210,16 @@ that you have no memory of yesterday.
    contributor the same becomes an `L-nnn` entry in the newest `docs/lessons/` shard,
    indexed from `docs/LESSONS.md`. A session that learned something and logged no lesson
    is incomplete.
-6. **Update the CURRENT STATE block.** The next agent reads it first and trusts it. If it is
+6. **Update `open-items.md` (always on).** Move finished items out, record newly found
+   ones — tasks, deferred follow-ups, environment caveats. A session that changed
+   behaviour or found a caveat and left it stale is incomplete.
+7. **Update the CURRENT STATE block.** The next agent reads it first and trusts it. If it is
    stale, you have actively misled someone.
-7. **Report honestly.** If tests fail, say so and paste the output. If you skipped part of a
+8. **Report honestly.** If tests fail, say so and paste the output. If you skipped part of a
    task, say which part and why. Half-finished work that is *documented* as half-finished is
    useful; half-finished work reported as done is a trap that costs the next contributor more
    than the work was worth.
-8. **Do not expand scope silently.** If you find adjacent work, add a task to
-   `docs/TASKS.md`; do not fold it into the current one.
-9. **Leave the build green.** If you cannot, say so loudly in the progress entry and in the
+9. **Do not expand scope silently.** If you find adjacent work, add a task to
+   `docs/TASKS.md`; do not fold it into the current one. Record it in `open-items.md` too.
+10. **Leave the build green.** If you cannot, say so loudly in the progress entry and in the
    CURRENT STATE block, with the exact failing command.

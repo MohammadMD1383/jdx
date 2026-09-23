@@ -10,7 +10,10 @@
 > 4. **`docs/LESSONS.md`** — mistakes already made and paid for, so you don't repeat them
 >    (D-024). Skim the index; it points into `docs/lessons/` shards.
 > 5. **`docs/TASKS.md`** — pick your task here, following the rules at the top of that file.
-> 6. **`docs/TESTING.md`** — required before you write a test. **`CONTRIBUTING.md`** — required
+> 6. **`open-items.md`** (repo root) — everything unfinished in one list: next tasks,
+>    deferred follow-ups, known caveats. Check it before starting; update it before stopping
+>    (always on).
+> 7. **`docs/TESTING.md`** — required before you write a test. **`CONTRIBUTING.md`** — required
 >    before you write code.
 >
 > The full design lives in `docs/PROPOSAL.md`; read it lazily, when a task sends you there.
@@ -177,6 +180,9 @@ Gson#toJson                                       short form → resolved, or ex
   logged no lesson is incomplete.
 - **Claim your task by committing the `TODO`→`WIP` change** in `docs/TASKS.md` *before* you
   start, so parallel contributors don't collide.
+- **Keep `open-items.md` current, every session** — move finished items out, record newly
+  found ones (tasks, deferred follow-ups, caveats). It is the always-on open-items list;
+  a session that changed behaviour or found a caveat and left it stale is incomplete.
 - **Ask the owner about genuine ambiguity** rather than picking. Record the answer as a new
   `D-nnn` in `docs/DECISIONS.md`, then proceed. A silent wrong guess propagates through a
   codebase nobody fully reads.

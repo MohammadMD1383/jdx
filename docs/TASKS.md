@@ -22,7 +22,8 @@
    written **test-first**.
 5. Set status to `DONE`, append a session entry to the newest `docs/progress/` shard,
    distill any new lessons into the newest `docs/lessons/` shard (D-023/D-024), update
-   `docs/PROGRESS.md`'s CURRENT STATE, commit.
+   `docs/PROGRESS.md`'s CURRENT STATE, update `open-items.md` (always on — move finished
+   items out, record new ones), commit.
 6. If you discover new work, **add a task here** rather than doing it silently. New tasks get
    the next free number, even if they belong to an earlier milestone.
 

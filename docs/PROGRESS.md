@@ -91,6 +91,7 @@ an undocumented one costs a day. Include the file and the reason you stopped.>
 
 **Before you stop, verify:**
 - [ ] `docs/TASKS.md` statuses match reality
+- [ ] `open-items.md` is current (finished items moved out, new ones recorded — always on)
 - [ ] The **CURRENT STATE** block at the top of this file is true
 - [ ] New decisions are in `docs/DECISIONS.md`'s newest shard, not buried in this log
 - [ ] New lessons are in `docs/LESSONS.md`'s newest shard, not buried in this log
