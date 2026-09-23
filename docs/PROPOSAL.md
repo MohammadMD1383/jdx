@@ -1168,4 +1168,5 @@ daemon    start|stop|status|restart --idle <duration>
 serve     [-w …] --port --bind
 mcp       [-w …] (stdio; per-call workspace override)
 batch     --json
+help      [--agent] [--json]
 ```

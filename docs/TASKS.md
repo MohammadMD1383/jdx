@@ -1201,7 +1201,7 @@ the unreachable code.
 T-049 first (small, unblocks T-051), then T-047, T-052, T-048, T-050, T-051
 last (sweeps everything landed). T-080/T-081 stay low priority.
 
-### T-049 — `jdx help --agent` · `WIP` (session 74)
+### T-049 — `jdx help --agent` · `DONE` (session 74)
 
 **Depends:** — · **Files:** `cli/.../render/HelpSheet.kt` (new),
 `cli/.../commands/HelpCommand.kt` (new), `cli/.../JdxCli.kt` (register)
@@ -1221,6 +1221,12 @@ envelope. Exit 0 always on valid flags; bad flags exit 3 via Clikt.)*
 - Tests: tier-1 `HelpCommandTest` (default vs `--agent` content, `--json`
   envelope pin, determinism) + a generating family (hostile-flag
   never-throws / determinism property). No tier-3 touch (pure strings).
+
+*Closed in session 74. `cli/.../render/HelpSheet.kt` (HELP_ROWS + both
+renderers + `HelpResult` JSON) + `cli/.../commands/HelpCommand.kt`
+(`jdx help [--agent] [--json]`, registered in `JdxCli`) +
+`HelpCommandTest` (7 tests, incl. a 200-case determinism property). Live
+proof in the session log. Full notes in git history + session log.*
 
 ### T-047 token budgets (`--max-lines`, `--brief`) · **T-048** AppCDS archive generation · **T-050** `jdx bench` against `minecraft-client.jar` · **T-051** README + install docs · **T-052** warnings-as-errors, lint, final API review · `TODO` (detail blocks land when each starts)
 

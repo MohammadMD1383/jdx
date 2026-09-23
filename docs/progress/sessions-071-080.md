@@ -5,6 +5,65 @@ Append-only (D-023): 10 sessions per shard, newest first. Template and rules in
 
 ---
 
+## Session 74 — 2026-09-23 — T-049 `jdx help --agent` done (first M7 slice)
+
+**Agent/Author:** Muse Spark 1.3 Free · **Commits:** `0ec768d` (claim) + closing commit (this session)
+
+### Goal
+Implement one M7 task and push (explicit owner go-ahead this session).
+Picked T-049 (`jdx help --agent`): smallest unblocked M7 slice, unblocks
+the T-051 README sweep. Expanded the coarse M7 one-liners into detail
+blocks per the board rule (M7 order by value-per-sitting: T-049 first).
+
+### What I did
+- Claimed T-049 first (`docs/TASKS.md` TODO→WIP + M7 expansion, committed
+  `0ec768d` before coding).
+- New `cli/.../render/HelpSheet.kt`: one `HELP_ROWS` table (26 commands,
+  one-liner + example each) feeding both renderers so the human sheet and
+  the paste-ready agent block cannot drift; `HelpResult` + standard
+  `--json` envelope. Pure strings — deterministic, no timestamps/paths.
+- New `cli/.../commands/HelpCommand.kt` (`jdx help [--agent] [--json]`,
+  thin adapter per D-004) + registration in `JdxCli`.
+- New `HelpCommandTest` (tier-1, 7 tests green): human/agent content pins,
+  `--json` envelope pin, Clikt end-to-end in all three flavours, plus a
+  200-case determinism property (the generating family).
+- Spec/table sweep: `docs/PROPOSAL.md` Appendix B gains the `help` row;
+  `README.md` command surface gains the `help [--agent]` row.
+- Verified: `:cli` suite 7/7 green; `./gradlew check` tiers 1–2 green
+  (only red is the known pre-existing `verifyTier1Budget`
+  machine-variance gate — open-items caveat, not a test failure). Live:
+  `app/build/jdx help`, `help --agent`, `help --json` all exit 0 with
+  the pinned content.
+
+### Decisions made
+- None (no new D-nnn; single-table-feeds-both-flavours follows from the
+  "generated from the same metadata" line in PROPOSAL.md Appendix B).
+
+### Tasks moved
+- T-049: TODO → WIP (`0ec768d`) → DONE (this session). Next: T-047.
+
+### Lessons distilled
+- None (no new L-nnn; the `verifyTier1Budget` red-on-this-machine trap is
+  already a recorded caveat).
+
+### What works now (and how to verify it yourself)
+- `bash app/build/jdx help --agent` — compact paste-ready block, exit 0.
+- `bash app/build/jdx help --json` — same 26 rows in the envelope.
+- `./gradlew :cli:test --tests "dev.jdx.cli.commands.HelpCommandTest" -Ptier1.budget=10000`
+  — 7 tests green.
+
+### What is broken / half-done
+- Nothing from this task.
+
+### Open questions / blockers
+- None.
+
+### Next action
+- **M7 T-047** (token budgets) — next detail block to write. T-048/T-050/
+  T-051/T-052 + T-080/T-081 remain as filed.
+
+---
+
 ## Session 73 — 2026-09-23 — T-046 adapter parity done (M6 closed)
 
 **Agent/Author:** Muse Spark 1.3 Free · **Commits:** `9a13803` (claim) + closing commit (this session)
