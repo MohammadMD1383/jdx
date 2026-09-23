@@ -18,8 +18,7 @@ mine the session log to learn what still needs doing.
 
 | Item | State | Notes |
 |---|---|---|
-| T-046 adapter parity test | TODO, **next** (closes M6) | Detail block expanded session 66 |
-| T-047…T-052 M7 polish (token budgets, AppCDS, `help --agent`, `bench`, README/install, lint/gates) | TODO, coarse | Expand when M6 closes |
+| T-047…T-052 M7 polish (token budgets, AppCDS, `help --agent`, `bench`, README/install, lint/gates) | TODO, coarse | Expand when starting (M6 closed session 73) |
 | T-080 Kotlin sidecar fetch · T-081 Kotlin-aware mismatch pairing | TODO, low priority | Filed session 65; M6 stays next |
 
 ## Deferred follow-ups (no task number yet — file one when starting)
@@ -47,4 +46,4 @@ mine the session log to learn what still needs doing.
 
 ---
 
-*Last updated: 2026-09-23 (session 72).*
+*Last updated: 2026-09-23 (session 73).*

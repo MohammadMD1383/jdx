@@ -49,7 +49,7 @@ be fiction.
 | **M3** | Bodies: sources, JavaParser, Vineflower, `body`/`source`/`doc` | DONE |
 | **M4** | Graph: `usages`/`hierarchy`/`callers`/`calls`/`samples` | DONE (T-029…T-034) |
 | **M5** | Kotlin: `@Metadata` + PSI source parsing | DONE (T-035…T-039) |
-| **M6** | Serving: daemon, MCP, HTTP, `batch` | IN PROGRESS (T-040…T-044 + T-082 DONE; T-045 next) |
+| **M6** | Serving: daemon, MCP, HTTP, `batch` | DONE (T-040…T-046 + T-082) |
 | **M7** | Polish: token budgets, AppCDS, mutation gates, docs, install | TODO (T-060 done early) |
 
 **DONE: T-001…T-035** (M0–M2 in full; M3 via the T-020 umbrella's slices —
@@ -62,11 +62,11 @@ bodies/KDoc, last T-036 slice) **plus T-036** (member-mapping umbrella)
 **plus T-040** (M6 RPC wire contract) **plus T-041** (daemon + unix socket)
 **plus T-082** (daemon `JdxService` dispatch) **plus T-042** (transparent CLI
 daemon client + `--no-daemon`) **plus T-043** (MCP stdio server) **plus
-T-044** (HTTP/JSON server) **plus T-045** (`jdx batch`).
+T-044** (HTTP/JSON server) **plus T-045** (`jdx batch`) **plus T-046**
+(adapter parity test, closes M6).
 DONE entries below are
 compressed to a summary + pointers; full notes live in git history and the
-session log. **Next: T-046** (adapter parity test, closes M6),
-**plus M7** (coarse; T-060 already DONE).
+session log. **Next: M7** (coarse; T-060 already DONE).
 
 ---
 
@@ -1162,14 +1162,25 @@ lines vs one-shot `--json` — T-046 in miniature). Lessons: L-103 (fake-constru
 throws behind total adapters). Live proof in the session log (warm `members`
 parity via `cmp`, exit-6 carriage). T-046 unblocked.*
 
-### T-046 — adapter parity test (CLI/HTTP/MCP byte-identical payloads) · `WIP`
+### T-046 — adapter parity test (CLI/HTTP/MCP byte-identical payloads) · `DONE` (session 73)
 
-**Depends:** T-042, T-043, T-044 · **Files:** `*/src/test/.../parity/*`
+**Depends:** T-042, T-043, T-044 · **Files:** `cli/src/test/.../parity/AdapterParityTest.kt`
 
 TESTING.md §9 contract: the same query answered via CLI `--json`, HTTP and
 MCP returns byte-identical `result` payloads (envelope `command`/`query`
 equal by construction; timestamps/paths already banned by CLAUDE.md §2).
 Tier-2, over the fixture jar + a JDK sample. Closes M6.
+
+*Closed in session 73. New `cli/.../parity/AdapterParityTest.kt` (`@Tag("tier2")`,
+5 tests): all 17 read `RpcCommand`s (built with the CLI's own
+`DaemonClient` flag→param builders) plus a JDK `show java.util.HashMap`
+sample and two failure branches (exit 1 unknown, exit 3 usage) assert
+`dispatch.toJson` == MCP `callTool` text == HTTP `GET /v1/<wire>` body,
+one line each; two real one-shot `--json` spot checks (`show`, `members`
+with kind+limit) anchor the `dispatch`-as-CLI reference; a 100-case
+kotest-property over hostile (command, query, params) keeps the proof
+generating (the standing bar). Lessons: L-104. Full notes in git history +
+session log.*
 
 # M7 — Polish
 ### T-060 — Mutation testing and coverage gates · `DONE` (session 30)

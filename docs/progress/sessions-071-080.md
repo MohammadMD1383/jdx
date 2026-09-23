@@ -5,6 +5,79 @@ Append-only (D-023): 10 sessions per shard, newest first. Template and rules in
 
 ---
 
+## Session 73 — 2026-09-23 — T-046 adapter parity done (M6 closed)
+
+**Agent/Author:** Muse Spark 1.3 Free · **Commits:** `9a13803` (claim) + closing commit (this session)
+
+### Goal
+Implement M6 T-046 (adapter parity test: same query via CLI `--json`,
+HTTP and MCP returns byte-identical payloads — closes M6). Then push
+(explicit owner go-ahead this session).
+
+### What I did
+- Claimed T-046 first (`docs/TASKS.md` TODO→WIP, committed `9a13803` before coding).
+- New `cli/src/test/kotlin/dev/jdx/cli/parity/AdapterParityTest.kt`
+  (`@Tag("tier2")`, 5 tests, all green): lives in `:cli` because it is the
+  only module that already depends on all three adapters (`:index` dispatch
+  as the CLI-`--json` reference, `:mcp` session, `:server` HTTP) — no new
+  module or dependency, D-004 intact.
+  - All 17 read `RpcCommand`s in one table, each built with the CLI's own
+    `DaemonClient` flag→param builders (so the table also pins the
+    flag spelling), asserting `JdxService.dispatch(...).toJson(wire)` ==
+    MCP `callTool("jdx_<wire>", …)` text == HTTP `GET /v1/<wire>?…` body,
+    one line each, over the fixture-jar workspace `fx`.
+  - A JDK sample (`show java.util.HashMap` from a jars-empty
+    `includeJdk=true` workspace `jdk`, via the per-call workspace
+    override on MCP/HTTP) and two failure branches (exit-1 unknown
+    symbol, exit-3 `kind=bogus` usage error, with `isError` pinned).
+  - Two real one-shot `--json` spot checks (`ShowCommand`,
+    `MembersCommand` with `--kind method --limit 5` through Clikt with
+    captured stdout, hermetic store/env/discovery) anchoring the
+    `dispatch`-as-CLI reference the structural proof leans on (D-056 §1).
+  - A 100-case kotest `checkAll` property over hostile (command, query,
+    params) asserting the same three-way parity — the generating family
+    the standing bar demands (logged as L-104 for the routing-key filter
+    it needed).
+- Verified: new suite 5/5 green (`:cli:tier2Test --tests
+  "dev.jdx.cli.parity.AdapterParityTest"`); full `./gradlew check` —
+  1988 tests, 0 failures, 0 errors. Only red is the known pre-existing
+  `verifyTier1Budget` machine-variance gate (open-items caveat, not a
+  test failure). Tier 3 not run: test-only change, no artifact/index/
+  render code touched (§13 trigger does not fire).
+
+### Decisions made
+- None (no new D-nnn; single-suite-in-`:cli` placement follows from the
+  dependency rule and is recorded in the test KDoc, not the log).
+
+### Tasks moved
+- T-046: TODO → WIP (`9a13803`) → DONE (this session). **M6 CLOSED.**
+
+### Lessons distilled
+- L-104 (parity-property generators must filter MCP/HTTP routing keys —
+  `query`/`workspace` select subject/roots there but are inert wire
+  params to the dispatch).
+
+### What works now (and how to verify it yourself)
+- `./gradlew :cli:tier2Test --tests "dev.jdx.cli.parity.AdapterParityTest"`
+  — 5 tests green (17-command table, JDK sample, failures, CLI spot
+  checks, 100-case hostile property).
+- `./gradlew check -x verifyTier1Budget` — tiers 1–2 green (1988 tests,
+  0 failures; the `-x` skips the known-red machine-variance gate).
+
+### What is broken / half-done
+- Nothing from this task.
+
+### Open questions / blockers
+- None.
+
+### Next action
+- **M7 T-047…T-052** (coarse one-liners: token budgets, AppCDS,
+  `help --agent`, `bench`, README/install, lint/gates — expand into
+  detail blocks when starting, per the board rule). T-080/T-081 stay low
+  priority.
+
+---
+
 ## Session 72 — 2026-09-23 — T-045 `jdx batch` done (NDJSON stdin, max-exit stream)
 
 **Agent/Author:** Muse Spark 1.3 Free · **Commits:** `c85da31` (claim) + closing commit (this session)
