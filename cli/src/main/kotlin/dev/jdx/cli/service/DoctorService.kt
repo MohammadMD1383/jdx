@@ -264,7 +264,7 @@ class DoctorService(private val environment: DoctorEnvironment) {
                 "kotlin",
                 DoctorStatus.WARN,
                 "side-loaded compiler not installed (${status.jar}) — " +
-                    "Kotlin sources unavailable (D-008)",
+                    "run `jdx kotlin install` to fetch it; Kotlin sources unavailable (D-008)",
             )
         }
     }

@@ -70,7 +70,8 @@ public fun openKotlinParser(userHome: Path): KotlinSourceParser {
     if (status is KotlinToolchainStatus.Missing) {
         return UnavailableKotlinParser(
             "kotlin-compiler-embeddable $KOTLIN_COMPILER_VERSION not installed " +
-                "(${status.jar}) — Kotlin sources unavailable (D-008)",
+                "(${status.jar}) — run `jdx kotlin install` to fetch it; " +
+                "Kotlin sources unavailable (D-008)",
         )
     }
     status as KotlinToolchainStatus.Installed

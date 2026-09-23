@@ -34,7 +34,7 @@ public fun kotlinSidecarDir(userHome: Path): Path =
  */
 public fun kotlinMissingHint(): String =
     "$KOTLIN_COMPILER_JAR not installed under ~/.cache/jdx/kotlin " +
-        "(Kotlin sources unavailable — see `jdx doctor`)"
+        "(Kotlin sources unavailable — run `jdx kotlin install` to fetch it, see `jdx doctor`)"
 
 /**
  * Whether the side-loaded Kotlin compiler is installed. A value on every

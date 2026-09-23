@@ -33,6 +33,7 @@ import dev.jdx.cli.commands.TreeCommand
 import dev.jdx.cli.commands.UsagesCommand
 import dev.jdx.cli.commands.VersionCommand
 import dev.jdx.cli.commands.cacheGroup
+import dev.jdx.cli.commands.kotlinGroup
 import dev.jdx.cli.commands.wsGroup
 
 /**
@@ -131,4 +132,5 @@ fun main(args: Array<String>): Unit =
         daemonGroup(),
         wsGroup(),
         cacheGroup(),
+        kotlinGroup(),
     ).main(args)

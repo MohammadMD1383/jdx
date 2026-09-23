@@ -102,3 +102,4 @@ log.
 | D-059 | transparent CLI daemon client semantics (T-042) | proposed-by-implementer | `D-051-075.md` |
 | D-060 | MCP stdio server semantics (T-043) | proposed-by-implementer | `D-051-075.md` |
 | D-061 | HTTP/JSON server semantics (T-044) | proposed-by-implementer | `D-051-075.md` |
+| D-062 | Kotlin sidecar fetch: explicit `jdx kotlin install`, no auto-fetch (T-080) | proposed-by-implementer | `D-051-075.md` |

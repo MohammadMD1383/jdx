@@ -316,6 +316,7 @@ class DoctorServiceTest {
         kotlin.status shouldBe DoctorStatus.WARN
         kotlin.detail shouldContain "not installed"
         kotlin.detail shouldContain "D-008"
+        kotlin.detail shouldContain "jdx kotlin install"
         exitCodeFor(report) shouldBe 0
     }
 

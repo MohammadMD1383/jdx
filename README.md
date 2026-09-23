@@ -189,7 +189,9 @@ Kotlin member bodies and KDoc come from `.kt` sources through a side-loaded
 `kotlin-compiler-embeddable` (never on the compile classpath, never in the fat jar).
 When the sidecar at `~/.cache/jdx/kotlin/` is absent, `jdx doctor` warns and
 `body`/`source`/`doc` over `.kt`-only roots degrade to decompile/`javap` — they emit
-*something* and say what it is, never an error.
+*something* and say what it is, never an error. Run `jdx kotlin install` to fetch
+and verify the sidecar set (compiler plus its runtime jars, SHA-1 checked) from
+Maven Central; re-run to resume after a failure.
 
 ## Fixture corpus
 

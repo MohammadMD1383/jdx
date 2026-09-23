@@ -5,6 +5,88 @@ Append-only (D-023): 10 sessions per shard, newest first. Template and rules in
 
 ---
 
+## Session 80 — 2026-09-23 — T-080 Kotlin sidecar fetch done (`jdx kotlin install`)
+
+**Agent/Author:** Muse Spark 1.3 Free · **Commits:** `3571144` (claim) + closing commit (this session)
+
+### Goal
+Implement one task and push (explicit owner go-ahead this session).
+Picked T-080 (lowest-numbered TODO: Kotlin sidecar fetch).
+
+### What I did
+- Claimed T-080 first (`docs/TASKS.md` TODO→WIP, committed `3571144`
+  before coding).
+- `index/.../kotlin/KotlinSidecarFetch.kt` (new): 7-artifact table (the
+  `kotlin-compiler-embeddable` POM's dependency closure — compiler, stdlib,
+  script-runtime, daemon-embeddable at `KOTLIN_COMPILER_VERSION`, plus
+  `kotlin-reflect 1.6.10`, `kotlinx-coroutines-core-jvm 1.8.0`,
+  `annotations 13.0`), Central-layout URLs via `MavenCoords.downloadUrl`,
+  `fetchKotlinSidecar` (SHA-1 verification + atomic writes via `MavenFetch`,
+  skip-present without network, resume on re-run, `--force` repair, never
+  throws). Lives in `:index` (not `:sources`) so no new dependency and no
+  HTTP duplication — `:index` already owns `MavenFetch` and depends on
+  `:sources` for the sidecar paths.
+- `cli/.../commands/KotlinCommands.kt` (new): `jdx kotlin install
+  [--repo …] [--force] [--json]` thin over the fetch (D-004), exit 0 ok ·
+  3 bad `--repo` · 5 download/checksum/IO failure; file-names-only text +
+  `--json` envelope. Registered in `JdxCli`; `HELP_ROWS` row; Appendix B
+  rows (§7.4 + per-command table).
+- Degrade hints now name the fix: `kotlinMissingHint`, the parser's
+  unavailable detail (`KotlinParser.kt`), the `doctor kotlin` WARN row —
+  all substring-safe under existing pins.
+- Tests: index tier-2 `KotlinSidecarFetchTest` (10) + cli tier-1
+  `KotlinInstallCommandTest` (9, incl. determinism + hostile-rendering
+  properties as the generating family) + `doctor` hint pin. Fixed a
+  self-inflicted worker kill: failure-path tests parsed through
+  `kotlinGroup(...)` whose `terminate` default is `::exitProcess` — added a
+  `testGroup` helper with a throwing terminator (L-109).
+- Docs: `README.md` Kotlin note, `PROPOSAL.md` §7.4 + Appendix B, **D-062**
+  (explicit install command, no auto-fetch, set/fetch/exit-code/report
+  semantics), `TASKS.md` T-080 DONE, `LESSONS.md` + shard (L-109),
+  `open-items.md`, this entry, CURRENT STATE.
+
+### Decisions made
+- **D-062** — T-080 flag surface: explicit `jdx kotlin install`, no
+  auto-fetch on read commands (D-055 §3, T-019 ethos), no daemon warm-up;
+  maintenance commands stay out of MCP (cache/daemon precedent).
+
+### Tasks moved
+- T-080: TODO → WIP (`3571144`) → DONE. Remaining: T-081 + T-083 (both
+  TODO, low priority).
+
+### Lessons distilled
+- **L-109** — group-builder `::exitProcess` defaults kill the test worker
+  on failure paths (L-026 one level up: pass the throwing terminator
+  through the group builder in tests).
+
+### What works now (and how to verify it yourself)
+```bash
+./gradlew check -Ptier1.budget=10000  # green incl. lint + the 19 new tests
+./app/build/jdx kotlin install        # 7 jars, SHA-1 verified, into ~/.cache/jdx/kotlin
+./app/build/jdx doctor | grep kotlin   # ok (was: warn … run `jdx kotlin install` …)
+./app/build/jdx body 'dev.jdx.fixtures.KotlinMembers#fetch' --jars testfixtures/build/libs/testfixtures-0.1.0-SNAPSHOT.jar --no-jdk
+# → suspend fun fetch(id: UserId): String = "user:$id" (PSI slice via the real sidecar)
+./app/build/jdx kotlin install --json  # envelope, command "kotlin install"
+```
+
+### What is broken / half-done
+- Nothing from this task. Note: the live proof installed the real sidecar
+  into this machine's `~/.cache/jdx/kotlin` (~63 MB, the tool's designated
+  cache dir) — kept deliberately, so Kotlin sources work here now.
+
+### Open questions / blockers
+- None. Owner asked about v1 distance this session: 81/83 tasks DONE after
+  this commit; left are T-081 + T-083 (low priority). No release/packaging
+  task exists (Homebrew/AUR/GitHub Releases is phase-2 scope per
+  PROPOSAL.md) — offered to file T-084, awaiting direction.
+
+### Next action
+- **T-081** (`@Metadata`-aware mismatch pairing) or **T-083**
+  (test-source/Java warnings-as-errors) per owner direction — or the
+  offered T-084 release task if the owner wants a tagged v1.
+
+---
+
 ## Session 79 — 2026-09-23 — T-051 README + install docs done (last M7 task)
 
 **Agent/Author:** Muse Spark 1.3 Free · **Commits:** `2a9dea7` (claim) + closing commit (this session)

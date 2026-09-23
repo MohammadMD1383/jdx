@@ -442,6 +442,7 @@ jdx ws create <name> [--jars <glob|path>…] [--src <dir>…] [--coord <g:a:v>�
 jdx ws list | info <name> | remove <name> | add <name> <root> | use <name>
 jdx index [-w <name>] [--force]        build / refresh the index
 jdx cache info | gc | clear
+jdx kotlin install [--repo <url>] [--force]   fetch the Kotlin PSI sidecar set (T-080)
 jdx doctor                             environment diagnostics
 jdx version [--json]
 jdx help --agent                       paste-ready cheat sheet for an agent prompt
@@ -1170,6 +1171,7 @@ samples   --limit N --prefer-sources
 ws        create|list|info|remove|add|use   --auto --jars --src --coord --repo --jdk
 index     --force -w
 cache     info|gc|clear [--cache-dir --json]  (gc: --dry-run)
+kotlin    install [--repo --force] [--json]
 daemon    start|stop|status|restart --idle <duration>
 serve     [-w …] --port --bind
 mcp       [-w …] (stdio; per-call workspace override)

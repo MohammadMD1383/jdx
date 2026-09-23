@@ -929,7 +929,7 @@ re-hit: nested block comments). Follow-ups filed as T-080 (sidecar fetch)
 and T-081 (`@Metadata`-aware mismatch pairing). Full notes in git history +
 session log.*
 
-### T-080 — Fetch the Kotlin sidecar set on first use · `WIP`
+### T-080 — Fetch the Kotlin sidecar set on first use · `DONE` (session 80)
 
 **Depends:** T-038 (sidecar path), T-039 (runtime-jar set) · **Files:**
 `sources/.../KotlinToolchain.kt`, `cli/.../commands/*` (opt-in flag)
@@ -943,6 +943,25 @@ verification into `~/.cache/jdx/kotlin/`. Network stays opt-in per
 invocation (T-019 precedent): decide the flag surface (`--fetch` parity on
 the read commands vs a `jdx kotlin install` command vs daemon warm-up)
 when starting. M6 (T-040+) stays next per the lowest-numbered-TODO rule.)*
+
+*Closed in session 80. Flag surface decided as an explicit `jdx kotlin
+install [--repo …] [--force] [--json]` group command (D-062: no auto-fetch
+on read commands per D-055 §3, no daemon warm-up hook). `index/.../kotlin/
+KotlinSidecarFetch.kt` (new: 7-artifact table = the compiler POM's
+dependency closure, Central-layout URLs via `MavenCoords`, `fetchKotlinSidecar`
+with SHA-1 verification + atomic writes + skip-present/resume semantics, never
+throws) + `cli/.../commands/KotlinCommands.kt` (`kotlinGroup`, exit 0/3/5,
+file-names-only text + `--json` envelope) + `JdxCli` registration + `HELP_ROWS`
+row + Appendix B rows. Degrade hints (`kotlinMissingHint`, the parser's
+unavailable detail, `doctor kotlin` WARN) now name `jdx kotlin install`.
+Tests: index tier-2 `KotlinSidecarFetchTest` (10: table pin, URL layout,
+full-install bytes, skip-without-network, resume, force, checksum/missing-checksum/
+unreachable/throwing fakes, hostile-home property) + cli tier-1
+`KotlinInstallCommandTest` (9: text/JSON pins, exit 3/5 paths, force
+plumbing, determinism + hostile-rendering properties) + doctor hint pin.
+`check` green; live proof: real `kotlin install` (7 jars, SHA-1 verified)
+flipped `doctor kotlin` to OK and `body …KotlinMembers#fetch` serves the PSI
+suspend slice. Lessons: L-109. Next: T-081/T-083 per owner direction.*
 
 ### T-081 — `@Metadata`-aware `SOURCES_VERSION_MISMATCH` pairing for Kotlin · `TODO`
 

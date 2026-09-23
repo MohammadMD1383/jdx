@@ -37,6 +37,7 @@ public val HELP_ROWS: List<HelpRow> = listOf(
     HelpRow("doctor", "Self-diagnosis (JDK, index, daemon, workspace)", "jdx doctor"),
     HelpRow("ws create|list|info|remove|add|use", "Project and library configuration", "jdx ws list"),
     HelpRow("cache info|gc|clear", "Index and cache maintenance", "jdx cache info"),
+    HelpRow("kotlin install", "Fetch the Kotlin PSI sidecar (Kotlin sources)", "jdx kotlin install"),
     HelpRow("daemon start|stop|status|restart", "Warm background JVM (5-min idle shutdown)", "jdx daemon status"),
     HelpRow("serve [--port 7070]", "Local HTTP/JSON API", "jdx serve"),
     HelpRow("mcp", "MCP stdio server (typed jdx_* tools)", "jdx mcp"),
