@@ -1304,11 +1304,12 @@ across every source set — verified, not assumed. Test-source warnings
   (task-scoped in the shared block, so test compilations stay under T-083).
   Full build green proves the gate; a planted-warning negative proof proves
   it bites.
-- `explicitApi()` on `index`/`sources`/`decompile`/`cli`/`mcp`/`server`
-  (`core` already has it). `app` (assembly + launcher tests) and
-  `testfixtures` (deliberately-nasty fixtures) are excluded — rationale in
-  the session log. Fix violations mechanically (explicit visibility/return
-  type only, no behaviour change).
+- `explicitApi()` on `index`/`sources`/`decompile`/`mcp`/`server`
+  (`core` already has it; all five compile clean). `cli` is reverted:
+  99 violations across Clikt wiring with no Kotlin consumers — `public`
+  noise on every command class for zero API safety (its contract is the
+  CLI surface, pinned by help/parity goldens). `app` (assembly) and
+  `testfixtures` (deliberately-nasty fixtures) excluded likewise.
 - New dependency-free root `lint` task wired into every module's `check`:
   no trailing whitespace, no tabs, no bare `TODO`/`FIXME` without `T-nnn`,
   no `println`/`System.exit`/`printStackTrace` in library mains
