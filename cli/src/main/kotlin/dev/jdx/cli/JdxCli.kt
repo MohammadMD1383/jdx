@@ -14,6 +14,7 @@ import dev.jdx.cli.commands.BodyCommand
 import dev.jdx.cli.commands.CallersCommand
 import dev.jdx.cli.commands.CallsCommand
 import dev.jdx.cli.commands.SamplesCommand
+import dev.jdx.cli.commands.ServeCommand
 import dev.jdx.cli.commands.DocCommand
 import dev.jdx.cli.commands.HierarchyCommand
 import dev.jdx.cli.commands.ImplementorsCommand
@@ -119,6 +120,7 @@ fun main(args: Array<String>): Unit =
         CallersCommand(),
         CallsCommand(),
         SamplesCommand(),
+        ServeCommand(),
         McpCommand(),
         daemonGroup(),
         wsGroup(),

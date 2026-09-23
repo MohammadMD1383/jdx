@@ -1165,7 +1165,7 @@ ws        create|list|info|remove|add|use   --auto --jars --src --coord --repo -
 index     --force -w
 cache     info|gc|clear [--cache-dir --json]  (gc: --dry-run)
 daemon    start|stop|status|restart --idle <duration>
-serve     --port --bind
+serve     [-w …] --port --bind
 mcp       [-w …] (stdio; per-call workspace override)
 batch     --json
 ```

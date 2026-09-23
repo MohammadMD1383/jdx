@@ -35,7 +35,7 @@ log.
 | Process (docs gate, testing, cadence, sharding, lessons) | D-019…D-024 |
 | Command semantics (launcher → hierarchy, in task order) | D-026…D-048 |
 | Kotlin member mapping (carrier → suspend → properties) | D-049…D-051 |
-| Serving (M6 wire contract + daemon transport) | D-056, D-057, D-058, D-059, D-060 |
+| Serving (M6 wire contract + daemon transport) | D-056, D-057, D-058, D-059, D-060, D-061 |
 
 ## Index
 
@@ -101,3 +101,4 @@ log.
 | D-058 | daemon query-dispatch semantics (T-082) | proposed-by-implementer | `D-051-075.md` |
 | D-059 | transparent CLI daemon client semantics (T-042) | proposed-by-implementer | `D-051-075.md` |
 | D-060 | MCP stdio server semantics (T-043) | proposed-by-implementer | `D-051-075.md` |
+| D-061 | HTTP/JSON server semantics (T-044) | proposed-by-implementer | `D-051-075.md` |

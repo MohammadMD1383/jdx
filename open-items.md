@@ -18,8 +18,7 @@ mine the session log to learn what still needs doing.
 
 | Item | State | Notes |
 |---|---|---|
-| T-044 HTTP/JSON server | TODO, **next** | Depends on T-040 |
-| T-045 `jdx batch` | TODO | Depends on T-040 |
+| T-045 `jdx batch` | TODO, **next** | Depends on T-040 |
 | T-046 adapter parity test | TODO, closes M6 | Depends on T-042…T-044 |
 | T-047…T-052 M7 polish (token budgets, AppCDS, `help --agent`, `bench`, README/install, lint/gates) | TODO, coarse | Expand when M6 closes |
 | T-080 Kotlin sidecar fetch · T-081 Kotlin-aware mismatch pairing | TODO, low priority | Filed session 65; M6 stays next |
@@ -49,4 +48,4 @@ mine the session log to learn what still needs doing.
 
 ---
 
-*Last updated: 2026-09-23 (session 70).*
+*Last updated: 2026-09-23 (session 71).*

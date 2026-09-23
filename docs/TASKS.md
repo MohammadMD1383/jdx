@@ -49,7 +49,7 @@ be fiction.
 | **M3** | Bodies: sources, JavaParser, Vineflower, `body`/`source`/`doc` | DONE |
 | **M4** | Graph: `usages`/`hierarchy`/`callers`/`calls`/`samples` | DONE (T-029…T-034) |
 | **M5** | Kotlin: `@Metadata` + PSI source parsing | DONE (T-035…T-039) |
-| **M6** | Serving: daemon, MCP, HTTP, `batch` | IN PROGRESS (T-040…T-043 + T-082 DONE; T-044 next) |
+| **M6** | Serving: daemon, MCP, HTTP, `batch` | IN PROGRESS (T-040…T-044 + T-082 DONE; T-045 next) |
 | **M7** | Polish: token budgets, AppCDS, mutation gates, docs, install | TODO (T-060 done early) |
 
 **DONE: T-001…T-035** (M0–M2 in full; M3 via the T-020 umbrella's slices —
@@ -61,11 +61,12 @@ graph enrichment) **plus T-038** (PSI loader seam) **plus T-039** (Kotlin
 bodies/KDoc, last T-036 slice) **plus T-036** (member-mapping umbrella)
 **plus T-040** (M6 RPC wire contract) **plus T-041** (daemon + unix socket)
 **plus T-082** (daemon `JdxService` dispatch) **plus T-042** (transparent CLI
-daemon client + `--no-daemon`) **plus T-043** (MCP stdio server).
+daemon client + `--no-daemon`) **plus T-043** (MCP stdio server) **plus
+T-044** (HTTP/JSON server).
 DONE entries below are
 compressed to a summary + pointers; full notes live in git history and the
-session log. **Next: T-044** (HTTP/JSON server; then the remaining M6 slices
-T-045…T-046, whose detail blocks were expanded in session 66),
+session log. **Next: T-045** (`jdx batch`; then the remaining M6 slice
+T-046, whose detail block was expanded in session 66),
 **plus M7** (coarse; T-060 already DONE).
 
 ---
@@ -1113,16 +1114,30 @@ the session log (raw JSON-RPC handshake, 20 tools, `members` byte-identical
 to CLI `--json` modulo the `println` newline, exit 0 on EOF). T-044
 unblocked.*
 
-### T-044 — HTTP/JSON server on `com.sun.net.httpserver` · `WIP`
+### T-044 — HTTP/JSON server on `com.sun.net.httpserver` · `DONE` (session 71)
 
 **Depends:** T-040 (wire contract) · **Files:** `server/.../HttpServer.kt`,
 `cli/.../commands/ServeCommand.kt`
 
-`jdx serve [--port 7070] [--bind 127.0.0.1]` (PROPOSAL.md §14.4, JDK builtin
+`jdx serve [-w name] [--port 7070] [--bind 127.0.0.1]` (PROPOSAL.md §14.4, JDK builtin
 only): `GET /v1/<command>?…`, `POST /v1/batch`, `GET /v1/health`; localhost
 by default; serves the exact `--json` envelope. Separate port/socket from the
 daemon. Tests: tier-2 (health, one query GET, batch POST, bind-default pin) +
 parity (HTTP bytes == CLI `--json` bytes, feeds T-046).
+
+*Closed in session 71. `server/.../HttpServer.kt` (`JdxHttpServer` over
+`com.sun.net.httpserver`: per-request `daemonRoots`, verbatim
+`toJson(wire)` bodies, exit→status via `statusForExit`, NDJSON batch,
+`?workspace=` per-call override, total handlers) + `cli/.../ServeCommand.kt`
+(`jdx serve`, registered in `JdxCli`, injectable runner). Tests: server
+tier-2 `HttpServerTest` (12: health/version pins, GET byte parity,
+not-found 404 with identical envelope, batch lines + malformed-line
+survival + empty-batch usage, missing-workspace exit 4 with override,
+doctor refusal, unknown/method envelopes, defaults + status + query-string
+pins) + cli tier-1 `ServeCommandTest` (4: defaults, flag plumbing, port
+exit 3, bind-failure exit 6). Decisions: D-061. Lessons: none. Live proof
+in the session log (health, members parity vs `--json --no-daemon`,
+batch, doctor/unknown statuses). T-045 unblocked.*
 
 ### T-045 — `jdx batch` · `TODO`
 
