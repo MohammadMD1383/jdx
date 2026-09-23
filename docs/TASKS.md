@@ -1282,7 +1282,60 @@ tier-1/2 instead). Decisions: none (text-only scoping follows D-059).
 Lessons: L-105 (POSIX trailing-newline rule for line-counting oracles).
 Live proof in the session log. Next: T-052.*
 
-### T-048 AppCDS archive generation · **T-050** `jdx bench` against `minecraft-client.jar` · **T-051** README + install docs · **T-052** warnings-as-errors, lint, final API review · `TODO` (detail blocks land when each starts)
+### T-052 — warnings-as-errors, lint, final API review · `WIP` (session 76)
+
+**Depends:** — · **Files:** `build.gradle.kts` (shared `subprojects` block),
+`index/.../kotlin/KotlinMembers.kt`, `server/.../HttpServer.kt`,
+`{index,sources,decompile,cli,mcp,server}/build.gradle.kts`
+
+*(M7 gate slice, one sitting: turn today's clean tree into a build-enforced
+guarantee. Pre-claim probes: full `compileKotlin`/`compileTestKotlin`
+`--rerun-tasks` sweep shows exactly 2 main-source warnings; `explicitApi()`
+trial-compiles clean on `index`; all four lint rules below are green today
+across every source set — verified, not assumed. Test-source warnings
+(~11) + the Java `strictfp` fixture stay out — filed as T-083.)*
+
+- Fix the 2 main-source warnings: `index/.../KotlinMembers.kt:212`
+  redundant `else` (exhaustive `KmVariance` when — unreachable branch, drop
+  it) and `server/.../HttpServer.kt:90` redundant `as? InetSocketAddress`
+  (`HttpServer.address` is already non-null `InetSocketAddress`). Both
+  behavior-preserving; covered by existing tests.
+- `allWarningsAsErrors` on every module's main `compileKotlin` only
+  (task-scoped in the shared block, so test compilations stay under T-083).
+  Full build green proves the gate; a planted-warning negative proof proves
+  it bites.
+- `explicitApi()` on `index`/`sources`/`decompile`/`cli`/`mcp`/`server`
+  (`core` already has it). `app` (assembly + launcher tests) and
+  `testfixtures` (deliberately-nasty fixtures) are excluded — rationale in
+  the session log. Fix violations mechanically (explicit visibility/return
+  type only, no behaviour change).
+- New dependency-free root `lint` task wired into every module's `check`:
+  no trailing whitespace, no tabs, no bare `TODO`/`FIXME` without `T-nnn`,
+  no `println`/`System.exit`/`printStackTrace` in library mains
+  (`core`/`index`/`sources`/`decompile`). 100-column stays a soft limit
+  (774 main-source lines over it) — explicitly not gated. A planted-violation
+  negative proof proves it bites.
+- Verify: full `./gradlew check` green (tiers 1–2) + both negative proofs
+  (removed after) + session entry + open-items.
+
+### T-083 — warnings-as-errors for test sources + Java · `TODO`
+
+**Depends:** T-052 · **Files:** `build.gradle.kts`,
+`core/src/test/...`, `testfixtures/src/main/java/...`
+
+*(Split out of T-052 in session 76: the test-source sweep shows ~11 warnings —
+`ExperimentalKotest` opt-in at `core/.../gen/PropertySupport.kt:22` (gate via
+`-opt-in` flag, not per-call-site annotations), 5× `shouldNotBeNull { msg }`
+"unused expression" in `GenericSignatureTest`/`GenericSignaturePropertyTest`
+(columns point at the message string — investigate whether the message lambda
+is silently dropped before "fixing"), 4× unnecessary `!!` in the render
+property tests, 1× deprecated `Arb.stringPattern` in `ReferencePropertyTest` —
+plus the Java `[strictfp]` warning on the deliberately-`strictfp`
+`VarargsAndModifiers` fixture (scope Java `-Werror` to exclude
+`testfixtures`, or suppress at the declaration). Gate test compilations and
+decide Java when starting.)*
+
+### T-048 AppCDS archive generation · **T-050** `jdx bench` against `minecraft-client.jar` · **T-051** README + install docs · `TODO` (detail blocks land when each starts)
 
 ---
 
