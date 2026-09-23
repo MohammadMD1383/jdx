@@ -1139,7 +1139,7 @@ exit 3, bind-failure exit 6). Decisions: D-061. Lessons: none. Live proof
 in the session log (health, members parity vs `--json --no-daemon`,
 batch, doctor/unknown statuses). T-045 unblocked.*
 
-### T-045 — `jdx batch` · `TODO`
+### T-045 — `jdx batch` · `WIP`
 
 **Depends:** T-040 (wire contract) · **Files:** `cli/.../commands/BatchCommand.kt`
 
