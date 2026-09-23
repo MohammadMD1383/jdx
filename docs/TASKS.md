@@ -1031,7 +1031,7 @@ framing round-trip + hostile-lines properties). Decisions: D-057. Lessons:
 L-098. Live proof in the session log. Full `JdxService` dispatch → T-082;
 transparent auto-spawn on first query → T-042.*
 
-### T-082 — daemon `JdxService` query dispatch · `TODO`
+### T-082 — daemon `JdxService` query dispatch · `WIP`
 
 **Depends:** T-040 (wire contract), T-041 (transport) · **Files:**
 `server/.../DaemonDispatch.kt` (new), `index/.../service/JdxService.kt` (roots wiring)
