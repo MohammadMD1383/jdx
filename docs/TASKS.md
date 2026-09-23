@@ -1062,7 +1062,7 @@ stays 0 (live roots, no index). Tests: `RpcDispatchTest` (28) +
 the session log (warm `members --json` byte-identical to one-shot). T-042
 unblocked.*
 
-### T-042 — transparent CLI daemon client + `--no-daemon` · `TODO`
+### T-042 — transparent CLI daemon client + `--no-daemon` · `WIP`
 
 **Depends:** T-041 (daemon transport), T-082 (daemon query dispatch — both DONE,
 warm answers exist) · **Files:** `cli/.../DaemonClient.kt`,
