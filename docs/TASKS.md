@@ -1391,7 +1391,54 @@ present/absent pins + archive×version-gate property + `installDist`
 archive pin (`LauncherScriptTest` 23/23). Lessons: L-107 (never merge
 class lists). Next: T-050.*
 
-### T-050 `jdx bench` against `minecraft-client.jar` · T-051 README + install docs · `TODO` (detail blocks land when each starts)
+### T-050 `jdx bench` against `minecraft-client.jar` · `WIP`
+
+**Depends:** T-011 (read-command patterns + `resolveRoots`), T-010 (JSON
+envelope) · **Files:** `cli/.../bench/BenchRunner.kt` (new),
+`cli/.../render/BenchSheet.kt` (new), `cli/.../commands/BenchCommand.kt`
+(new), `cli/.../JdxCli.kt` (register), `cli/.../render/HelpSheet.kt`
+(row), `build.gradle.kts` (`bench` message), `docs/PROPOSAL.md`
+(Appendix B row), `README.md` (table row)
+
+*(M7 perf slice, one sitting: PROPOSAL.md §15 promises "a `jdx bench`
+command, tagged out of normal test runs, measuring against the local
+`minecraft-client.jar` so regressions are caught". The per-module
+`benchTest` tasks + root `bench` task are wired but empty — this task
+fills them with a smoke plus the CLI command.)*
+
+- `jdx bench [--jar <path>]… [--iterations N] [--json] [-w name]
+  [--no-jdk]`: resolves roots exactly like the read commands
+  (`ReadCommandSupport.resolveRoots`); when no explicit roots and no
+  workspace is selected, probes `~/.gradle/caches/fabric-loom/*/minecraft-client.jar`
+  (newest first) and uses it — missing probe with no roots exits 4
+  naming `--jar`. `--iterations < 1` exits 3.
+- Fixed workload in deterministic order over the resolved roots, sampling
+  the first/middle/last sorted class names from the jars at runtime (no
+  hard-coded symbols — `minecraft-client.jar` is obfuscated): `load`
+  (re-open + ASM-read every class, the "first index" proxy, target
+  ≤ 8000 ms) then `show`/`members`/`search`/`hierarchy` on the samples
+  (cold-query targets ≤ 250 ms each, PROPOSAL.md §15). Each case runs
+  `iterations` times (default 3), reported as the median. Targets are
+  advisory: rows print `ok`/`OVER` but the command exits 0 on success
+  (machine variance — budgets never gate, per the `verifyTier1Budget`
+  precedent). `usages` stays out: the live scan has no indexed path yet
+  (D-043), so a §15 `≤ 150 ms` row would only document the known gap.
+- Text table + `--json` in the standard envelope (`command: "bench"`).
+  Timings are inherently non-deterministic (the disciplined exception to
+  CLAUDE.md §2, like `doctor` sizes) — everything else (order, labels,
+  targets) is byte-stable.
+- Tests: tier-1 `BenchRunnerTest` (median/target math + rendering
+  determinism + hostile never-throws property — the generating family) +
+  `BenchCommandTest` (flag validation, probe-miss exit 4, JSON envelope);
+  tier-2 `BenchServiceTest` (real run over the fixture jar: rows present,
+  `ms >= 0`, JSON parses); `@Tag("bench") BenchSmokeTest`
+  (iterations=1 over the fixture jar completes) so `./gradlew bench`
+  runs something real; root `bench` message updated.
+- Verify: `./gradlew check` green + `./gradlew bench` green + live
+  `jdx bench --iterations 1` over `minecraft-client.jar` + `bench
+  --json` valid JSON.
+
+### T-051 README + install docs · `TODO` (detail blocks land when each starts)
 
 ---
 
