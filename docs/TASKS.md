@@ -929,7 +929,7 @@ re-hit: nested block comments). Follow-ups filed as T-080 (sidecar fetch)
 and T-081 (`@Metadata`-aware mismatch pairing). Full notes in git history +
 session log.*
 
-### T-080 — Fetch the Kotlin sidecar set on first use · `TODO`
+### T-080 — Fetch the Kotlin sidecar set on first use · `WIP`
 
 **Depends:** T-038 (sidecar path), T-039 (runtime-jar set) · **Files:**
 `sources/.../KotlinToolchain.kt`, `cli/.../commands/*` (opt-in flag)
