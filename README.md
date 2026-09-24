@@ -59,6 +59,8 @@ curl -fsSL https://raw.githubusercontent.com/MohammadMD1383/jdx/main/install-rel
 Verify with `jdx version` (`jdx doctor` reports JDK, cache, index, Kotlin
 sidecar, daemon, and workspace status). Release installs self-update with
 `jdx upgrade` (`--check` to only report); source builds are never self-updated.
+Still on v1.0.0 (which predates `jdx upgrade`)? Reinstall once with the script
+above — self-update works from v1.1.0 on.
 Prefer building from source? See
 [Build and install](#build-and-install).
 
