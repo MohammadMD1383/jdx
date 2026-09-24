@@ -1000,7 +1000,7 @@ Each milestone ends with a working, committed, demoable binary.
 | **M6** | Serving | Daemon + unix socket + 5-min idle shutdown, transparent CLI client, MCP server, HTTP server, `batch` | Same query answered identically via CLI, MCP, and HTTP |
 | **M7** | Polish | Token budgets, did-you-mean, warnings, AppCDS, `help --agent`, README, install script, `bench` | Cold query ≤ 250 ms; docs complete |
 
-**Phase-2 backlog** is §21. `open-items.md` tracks limitations and the backlog against this table.
+**Phase-2 backlog** is §21. GitHub Issues track limitations and the backlog against this table.
 
 ---
 

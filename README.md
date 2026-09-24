@@ -251,7 +251,7 @@ Targets are advisory — rows print `ok`/`OVER` but the command always exits 0 o
 ## Known limitations (by design)
 
 Nothing below is a bug; each is a candidate for future tasks. Full list in
-[`open-items.md`](open-items.md).
+[GitHub Issues](https://github.com/MohammadMD1383/jdx/issues).
 
 - **No persistent index acceleration.** `usages`/`hierarchy`/`callers`/`calls`/`samples`
   re-scan live bytecode roots on every query; slow on giant roots.
@@ -273,7 +273,8 @@ Nothing below is a bug; each is a candidate for future tasks. Full list in
 obfuscated jars) · resources & metadata inspection (`META-INF/services`, `module-info`,
 manifests) · annotation-driven views · `--since` / API-level reporting · `jdx flow`
 (dataflow-lite) · multi-release jar variant selection · Scala/Groovy views · publishing
-(Homebrew/AUR, GitHub Releases, native image).
+(Homebrew/AUR, GitHub Releases, native image) — tracked as
+[GitHub Issues](https://github.com/MohammadMD1383/jdx/issues).
 
 ## Fixture corpus
 
@@ -333,7 +334,7 @@ never bundled), SQLite (index store), Clikt (CLI), MCP Kotlin SDK + `com.sun.net
 | [`docs/PROPOSAL.md`](docs/PROPOSAL.md) | Full design specification (Appendix B is the flag reference) |
 | [`docs/TESTING.md`](docs/TESTING.md) | Testing strategy — required reading before writing tests |
 | [`CONTRIBUTING.md`](CONTRIBUTING.md) | Conventions, code style, definition of done |
-| [`open-items.md`](open-items.md) | Limitations, caveats, and the phase-2 backlog |
+| [GitHub Issues](https://github.com/MohammadMD1383/jdx/issues) | Limitations, caveats, and the phase-2 backlog |
 
 ## Contributing
 

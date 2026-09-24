@@ -1,7 +1,7 @@
 # AGENTS.md — `jdx`
 
 > **Entry point.** This file is the rules. Then read only what your change needs:
-> the module `AGENTS.md` (`core/`, `index/`, …), `open-items.md` (roadmap),
+> the module `AGENTS.md` (`core/`, `index/`, …), GitHub Issues (roadmap),
 > `docs/TESTING.md` (before writing tests), `CONTRIBUTING.md` (before writing
 > code). The full design lives in `docs/PROPOSAL.md` — read it lazily.
 > (The v1 task board, session logs, and decision/lesson shards were removed
@@ -93,7 +93,6 @@ jdx/
 ├── AGENTS.md                  ← you are here
 ├── README.md                  user-facing catalogue
 ├── CONTRIBUTING.md            conventions, code style, definition of done
-├── open-items.md              limitations, caveats, phase-2 backlog (the roadmap)
 ├── <module>/AGENTS.md         per-module notes — read only the one(s) you touch
 ├── docs/
 │   ├── PROPOSAL.md            full design document (the spec)
@@ -165,9 +164,9 @@ round-tripping.
 
 ## 8. Working agreements
 
-- **Keep `open-items.md` current** — it is the roadmap. Move finished items out, record
+- **Keep GitHub Issues current** — they are the roadmap. Move finished items out, record
   newly found ones (limitations, follow-ups, caveats). A change that alters behaviour
-  or finds a caveat and leaves it stale is incomplete.
+  or finds a caveat and leaves them stale is incomplete.
 - **Keep the `AGENTS.md` notes true.** If a change invalidates a module note (new
   invariant, new gotcha, new key file), update that note in the same change. A
   contributor who trusts a stale note pays twice.
@@ -180,7 +179,7 @@ round-tripping.
 - **Definition of done for a command:** behaviour in `core`/`index`/`sources`/`decompile`,
   thin adapter in `cli`, `--help` text, text renderer, JSON renderer, exit codes,
   truncation, golden tests for both renderers, at least one *generative* test family,
-  README table row, Appendix B flag entry, `open-items.md` updated if behaviour or
+  README table row, Appendix B flag entry, GitHub Issue filed/updated if behaviour or
   limitations changed.
 - **Report honestly.** Failing tests get pasted, not summarised away. Documented
   half-finished work is useful; half-finished work reported as done is a trap.
@@ -194,7 +193,7 @@ round-tripping.
 - `docs/PROPOSAL.md` — design spec (§6 ref grammar, §8 output, §14 serving,
   Appendix B flag reference, §19 licenses). Code cites `PROPOSAL.md §X`; keep true.
 - `docs/TESTING.md` — testing strategy; read before writing tests.
-- `open-items.md` — known limitations + phase-2 backlog.
+- GitHub Issues — known limitations + phase-2 backlog (the roadmap).
 - README is the user-facing catalogue; every shipped flag must appear in
   `jdx <cmd> --help`, the README table, and Appendix B.
 

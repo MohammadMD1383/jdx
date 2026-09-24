@@ -15,10 +15,10 @@ section at the bottom of this file.
 git clone <repo> && cd jdx
 ./gradlew build                 # no system gradle/maven needed; the wrapper is the only entry point
 cat AGENTS.md                   # architecture rules, build/test/lint, pointers
-cat open-items.md               # limitations and the phase-2 backlog — where new work starts
+gh issue list --limit 40        # limitations and the phase-2 backlog — where new work starts
 # ... do the work ...
 ./gradlew check                 # tests + lint must pass
-# update open-items.md and the touched module's AGENTS.md if behaviour changed, commit
+# update GitHub Issues and the touched module's AGENTS.md if behaviour changed, commit
 ```
 
 ---
@@ -30,7 +30,7 @@ cat open-items.md               # limitations and the phase-2 backlog — where 
 | What is this project and what are its rules? | `AGENTS.md` |
 | Why is it designed this way? What does each command do? | `docs/PROPOSAL.md` |
 | Why was X chosen over Y? May I change it? | `AGENTS.md` (root locked rules + module notes) |
-| What should I work on next? | `open-items.md` (limitations, follow-ups, phase-2 backlog) |
+| What should I work on next? | GitHub Issues (limitations, follow-ups, phase-2 backlog) |
 | What happened before I got here? | git history (the v1 board and session logs were removed post-v1) |
 | What mistakes have already been made here? | The module `AGENTS.md` gotchas (distilled post-v1; history in git) |
 | How do I write code that fits in? | this file |
@@ -108,7 +108,7 @@ source of half-done work.
 - [ ] MCP tool entry — generated from shared metadata, not hand-written twice
 - [ ] Row in the README command table
 - [ ] Flag documented in `docs/PROPOSAL.md` Appendix B
-- [ ] `open-items.md` updated if behaviour or limitations changed
+- [ ] GitHub Issue filed/updated if behaviour or limitations changed
 
 ---
 
@@ -192,12 +192,12 @@ that you have no memory of yesterday.
 **Your session is only complete when the documentation is.** Concretely:
 
 1. **Read before writing.** `AGENTS.md` → the module
-   `AGENTS.md` for your area → `open-items.md`. Roughly 15 minutes. It will save you
+   `AGENTS.md` for your area → GitHub Issues. Roughly 15 minutes. It will save you
    from re-deciding things that are already settled and from repeating paid-for mistakes.
 2. **Ask the owner about genuine ambiguity instead of picking.** This is an explicit standing
    instruction from the owner. A wrong guess propagates silently through a codebase that
    nobody fully reads.
-3. **Update `open-items.md` (always on).** Move finished items out, record newly found
+3. **Update GitHub Issues (always on).** Move finished items out, record newly found
    ones — deferred follow-ups, environment caveats, limitations. A change that alters
    behaviour or finds a caveat and leaves it stale is incomplete.
 4. **Update the touched module's `AGENTS.md`.** New invariant, new gotcha, new key file —
@@ -206,6 +206,5 @@ that you have no memory of yesterday.
    task, say which part and why. Half-finished work that is *documented* as half-finished is
    useful; half-finished work reported as done is a trap that costs the next contributor more
    than the work was worth.
-6. **Do not expand scope silently.** If you find adjacent work, record it in
-   `open-items.md`; do not fold it into the current change.
+6. **Do not expand scope silently.** If you find adjacent work, file an issue; do not fold it into the current change.
 7. **Leave the build green.** If you cannot, say so loudly, with the exact failing command.
