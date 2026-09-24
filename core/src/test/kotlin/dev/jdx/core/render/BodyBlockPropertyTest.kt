@@ -91,11 +91,12 @@ class BodyBlockPropertyTest {
                 file, 1, file.size.coerceAtLeast(1), provenanceOf(),
                 contextLines = context, maxLines = max,
             )
-            if (cut.truncation == null) {
+            // Captured first so the local val smart-casts — no `!!` (T-083).
+            val truncation = cut.truncation
+            if (truncation == null) {
                 cut.lines shouldBe full.lines
                 cut.displayStartLine shouldBe full.displayStartLine
             } else {
-                val truncation = cut.truncation!!
                 (truncation.shown <= truncation.total) shouldBe true
                 truncation.hint shouldContain "--max-lines"
                 truncation.total shouldBe full.lines.size

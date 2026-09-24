@@ -2,7 +2,6 @@ package dev.jdx.core.model
 
 import dev.jdx.core.gen.JDX_PROPERTY_ITERATIONS
 import dev.jdx.core.gen.arbJvmDescriptor
-import io.kotest.matchers.nulls.shouldNotBeNull
 import io.kotest.matchers.shouldBe
 import io.kotest.property.Arb
 import io.kotest.property.arbitrary.list
@@ -22,8 +21,11 @@ class JvmDescriptorPropertyTest {
     @Test
     fun `descriptor text is a fixed point`() = runBlocking<Unit> {
         checkAll(JDX_PROPERTY_ITERATIONS, arbJvmDescriptor()) { descriptor ->
-            val parsed = JvmDescriptor.parse(descriptor.descriptor)
-            parsed.shouldNotBeNull { "generated descriptor '${descriptor.descriptor}' must parse" }
+            // `requireNotNull`, not `shouldNotBeNull { msg }`: the kotest block
+            // overload is `(T) -> Unit`, so the message string is dropped (T-083).
+            val parsed = requireNotNull(JvmDescriptor.parse(descriptor.descriptor)) {
+                "generated descriptor '${descriptor.descriptor}' must parse"
+            }
             parsed.descriptor shouldBe descriptor.descriptor
         }
     }

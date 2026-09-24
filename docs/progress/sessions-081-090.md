@@ -5,6 +5,97 @@ Append-only (D-023): 10 sessions per shard, newest first. Template and rules in
 
 ---
 
+## Session 82 — 2026-09-24 — T-083 test-source/Java warnings-as-errors done (board all-DONE)
+
+**Agent/Author:** Muse Spark 1.3 Free · **Commits:** `1cbdfbb` (claim) + closing commit (this session)
+
+### Goal
+Implement one task and push. Picked T-083 (only remaining TODO:
+test-source + Java warnings-as-errors, filed session 76 as the T-052 split).
+
+### What I did
+- Claimed T-083 first (`docs/TASKS.md` TODO→WIP, committed `1cbdfbb`
+  before coding).
+- Fixed all 11 test-source warnings (all in `core`, the only module with
+  any — proven by a full `--rerun-tasks` sweep):
+  - 5× `shouldNotBeNull { msg }` "unused expression"
+    (`GenericSignatureTest` ×3, `GenericSignaturePropertyTest` ×2) → the
+    messages were genuinely dropped: `javap` on kotest's `MatchersKt`
+    shows the block overload is `(T, (T) -> Unit)`, so the message string
+    coerces to `Unit`. Replaced with `requireNotNull(x) { msg }` (lazy
+    message kept, smart-cast) at 6 sites — including
+    `JvmDescriptorPropertyTest`, which never warned but had the identical
+    latent misuse — and dropped the now-unused kotest imports.
+  - 4× unnecessary `!!` (render property tests) → capture-then-check
+    locals (`val truncation = cut.truncation; if (truncation == null) …`),
+    smart-cast, no assertion. First attempt kept the check on
+    `cut.truncation` (no smart-cast on the local) — caught on re-read
+    before compiling.
+  - 1× deprecated `Arb.stringPattern` → `Arb.pattern` (same `(Arb, String)`
+    signature, verified via `javap` on `PatternKt`).
+  - 1× `ExperimentalKotest` opt-in → `-opt-in` compiler flag on
+    `compileTestKotlin` (D-064 §1). The blanket flag on
+    `compileTestFixturesKotlin` was tried first and breaks the build
+    (unresolved opt-in marker is a hard error — no kotest on that
+    classpath), so the flag is scoped to `compileTestKotlin` only.
+- Java decision (D-064 §2): `-Werror` on every `JavaCompile` (all Java in
+  the repo is `testfixtures` fixtures, so excluding the module would gate
+  nothing) + `@SuppressWarnings("strictfp")` at the
+  `VarargsAndModifiers.fp` declaration — proven to silence the warning via
+  a `javac` scratch test before wiring the gate.
+- Gates: `allWarningsAsErrors` on `compileTestKotlin` +
+  `compileTestFixturesKotlin`; Java `-Werror` (shared `subprojects` block,
+  task-scoped like T-052).
+- Negative proofs (both bite, then removed): planted unnecessary `!!` in a
+  test source fails `compileTestKotlin` with `-Werror`; de-suppressed
+  `strictfp` fails `compileJava` with `-Werror`. (First Kotlin plant used
+  `!!` on a nullable — necessary, no warning — and top-level vals draw no
+  unused warning; replanted with `Int` + `!!`.)
+- Full `./gradlew check -Ptier1.budget=10000` green (4m14s, tiers 1–2 +
+  lint + coverage, 0 failures). Zero warnings on full
+  `compileTestKotlin`/`compileTestFixturesKotlin`/`compileJava
+  --rerun-tasks`. No tier-3 run: test-only + build-logic changes
+  (T-047/T-052 precedent).
+
+### Decisions made
+- **D-064** — T-083 gating scope (opt-in flag on `compileTestKotlin` only;
+  Java `-Werror` everywhere with declaration-level suppression;
+  `requireNotNull` over `shouldNotBeNull { msg }`).
+
+### Tasks moved
+- T-083: TODO → WIP (`1cbdfbb`) → DONE. Board is now all-DONE
+  (T-001…T-083); M7 DONE.
+
+### Lessons distilled
+- **L-111** — probe the matcher overload before "fixing" an
+  unused-expression warning (the warning reported real message loss).
+- **L-112** — a one-build `:lint` validation red after build-logic
+  changes is stale state until proven otherwise (see below).
+
+### What works now (and how to verify it yourself)
+```bash
+./gradlew compileTestKotlin compileTestFixturesKotlin compileJava --rerun-tasks 2>&1 | grep -cE "^w: |^e: |warning:"  # 0
+./gradlew check -Ptier1.budget=10000  # green, tiers 1-2 + lint + coverage
+./gradlew lint  # clean
+```
+
+### What is broken / half-done
+- Nothing from this task. One transient to know about: the first `check`
+  after wiring the gates failed `:lint` validation ("uses this output of
+  `:core:compileKotlin`"), but the stashed-clean tree passed, `lint` alone
+  passed, the same `check` passed on retry (green), and forced
+  lint+compile co-executions pass with and without the change — stale
+  state from interleaved `--rerun-tasks`/stash churn (L-112). A narrowing
+  of lint's declared inputs was tried and reverted as unneeded.
+
+### Open questions / blockers
+- None.
+
+### Next action
+- Board is empty (all 83 tasks DONE). Owner direction decides what comes
+  next — push this session's commits (D-012: unpushed sessions need owner
+  go-ahead per session; the standing "implement 1 task and push" covers it).
+
 ## Session 81 — 2026-09-23 — T-081 Kotlin-aware mismatch pairing done (stale `.kt` warns, matched stays silent)
 
 **Agent/Author:** Muse Spark 1.3 Free · **Commits:** `c97159f` (claim) + closing commit (this session)

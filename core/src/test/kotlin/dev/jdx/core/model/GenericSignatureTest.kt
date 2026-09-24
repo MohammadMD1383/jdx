@@ -1,7 +1,6 @@
 package dev.jdx.core.model
 
 import io.kotest.matchers.nulls.shouldBeNull
-import io.kotest.matchers.nulls.shouldNotBeNull
 import io.kotest.matchers.shouldBe
 import org.junit.jupiter.api.Test
 import org.junit.jupiter.params.ParameterizedTest
@@ -15,8 +14,12 @@ class GenericSignatureTest {
 
     /** For every well-formed signature, parse then print must reproduce the input exactly. */
     private fun assertRoundTrips(text: String) {
-        val parsed = GenericSignature.parse(text)
-        parsed.shouldNotBeNull { "expected '$text' to parse" }
+        // `requireNotNull` (not kotest's `shouldNotBeNull { msg }`): the kotest
+        // overload takes a `(T) -> Unit` block, so a trailing message string is
+        // coerced to Unit and silently dropped (T-083) — the message never
+        // reaches the failure. `requireNotNull` keeps it via its lazy-message
+        // parameter and smart-casts `parsed` for the line below.
+        val parsed = requireNotNull(GenericSignature.parse(text)) { "expected '$text' to parse" }
         parsed.signature shouldBe text
     }
 
@@ -207,8 +210,9 @@ class GenericSignatureTest {
 
     @Test
     fun `parseClass reads a superclass-only signature as a class signature`() {
-        val parsed = GenericSignature.parseClass("Lt/ArrayList<Ljava/lang/String;>;")
-        parsed.shouldNotBeNull { "expected a class signature" }
+        val parsed = requireNotNull(GenericSignature.parseClass("Lt/ArrayList<Ljava/lang/String;>;")) {
+            "expected a class signature"
+        }
         parsed.signature shouldBe "Lt/ArrayList<Ljava/lang/String;>;"
         parsed.superclass.simpleName shouldBe "ArrayList"
         parsed.superinterfaces shouldBe emptyList()
@@ -218,8 +222,9 @@ class GenericSignatureTest {
 
     @Test
     fun `parseClass reads a plain superclass with no interfaces`() {
-        val parsed = GenericSignature.parseClass("Ljava/lang/Object;")
-        parsed.shouldNotBeNull { "expected a class signature" }
+        val parsed = requireNotNull(GenericSignature.parseClass("Ljava/lang/Object;")) {
+            "expected a class signature"
+        }
         parsed.superclass.simpleName shouldBe "Object"
         parsed.superinterfaces shouldBe emptyList()
     }

@@ -62,13 +62,14 @@ class MemberListingPropertyTest {
             val cut = listingFor(graph, synthetic, max)
             // Eligible rows: every shown row plus collapsed Object rows.
             val eligible = full.groups.sumOf { it.rows.size } + (full.objectSummary?.count ?: 0)
-            if (cut.truncation == null) {
+            // Captured first so the local val smart-casts — no `!!` (T-083).
+            val truncation = cut.truncation
+            if (truncation == null) {
                 // Nothing cut: the limited listing shows exactly what the full one shows.
                 cut.groups.flatMap { it.rows }.map { it.canonicalRef } shouldBe
                     full.groups.flatMap { it.rows }.map { it.canonicalRef }
                 cut.objectSummary?.count shouldBe full.objectSummary?.count
             } else {
-                val truncation = cut.truncation!!
                 (truncation.shown <= truncation.total) shouldBe true
                 truncation.hint shouldContain "--limit"
                 truncation.total shouldBe eligible

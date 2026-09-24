@@ -240,13 +240,30 @@ subprojects {
         }
     }
 
-    // T-052: warnings are errors on main compilations. Task-scoped — not the
-    // extension default — so test sources stay under T-083. Java is not gated:
-    // the deliberately-`strictfp` fixture (T-083) would fail `-Werror`.
+    // T-083: warnings are errors on test compilations too (main compilations were
+    // gated in T-052). Task-scoped, not the extension default, so the task name
+    // stays visible next to the gate. Test sources additionally opt into kotest's
+    // experimental API once via a compiler flag (T-083) rather than per-call-site
+    // `@OptIn` annotations — scoped to `compileTestKotlin`, whose classpath always
+    // carries kotest through the shared test dependencies below: the same flag on
+    // `compileTestFixturesKotlin` breaks the build (unresolved opt-in marker is a
+    // hard error there, proven red in-session). Java is gated with `-Werror` as
+    // well — every Java source in the repo is a `testfixtures` fixture, and the one
+    // deliberate warning (`strictfp` in `VarargsAndModifiers`) is suppressed at its
+    // declaration with a comment pointing here.
     tasks.withType<org.jetbrains.kotlin.gradle.tasks.KotlinJvmCompile>().configureEach {
         if (name == "compileKotlin") {
             compilerOptions.allWarningsAsErrors.set(true)
         }
+        if (name == "compileTestKotlin" || name == "compileTestFixturesKotlin") {
+            compilerOptions.allWarningsAsErrors.set(true)
+        }
+        if (name == "compileTestKotlin") {
+            compilerOptions.freeCompilerArgs.add("-opt-in=io.kotest.common.ExperimentalKotest")
+        }
+    }
+    tasks.withType<org.gradle.api.tasks.compile.JavaCompile>().configureEach {
+        options.compilerArgs.add("-Werror")
     }
 
     dependencies {

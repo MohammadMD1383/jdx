@@ -50,7 +50,7 @@ be fiction.
 | **M4** | Graph: `usages`/`hierarchy`/`callers`/`calls`/`samples` | DONE (T-029…T-034) |
 | **M5** | Kotlin: `@Metadata` + PSI source parsing | DONE (T-035…T-039) |
 | **M6** | Serving: daemon, MCP, HTTP, `batch` | DONE (T-040…T-046 + T-082) |
-| **M7** | Polish: token budgets, AppCDS, mutation gates, docs, install | TODO (T-060 done early) |
+| **M7** | Polish: token budgets, AppCDS, mutation gates, docs, install | DONE (T-047…T-052 + T-060 + T-080/T-081/T-083) |
 
 **DONE: T-001…T-035** (M0–M2 in full; M3 via the T-020 umbrella's slices —
 T-071 + T-021…T-028 + T-072/T-073; M4 via T-029…T-034; M5 opened with T-035) **plus T-053…T-073
@@ -1382,7 +1382,7 @@ Kotlin consumers). Test-source + Java remainder filed as T-083. No tier-3 run:
 the two fixes remove provably-unreachable branches, so no corpus behaviour
 can differ (same reasoning as T-047's tier-1–2 verification).*
 
-### T-083 — warnings-as-errors for test sources + Java · `WIP` (session 82)
+### T-083 — warnings-as-errors for test sources + Java · `DONE` (session 82)
 
 **Depends:** T-052 · **Files:** `build.gradle.kts`,
 `core/src/test/...`, `testfixtures/src/main/java/...`
@@ -1398,6 +1398,28 @@ plus the Java `[strictfp]` warning on the deliberately-`strictfp`
 `VarargsAndModifiers` fixture (scope Java `-Werror` to exclude
 `testfixtures`, or suppress at the declaration). Gate test compilations and
 decide Java when starting.)*
+
+*Closed in session 82. All 11 Kotlin warnings fixed + Java gated (D-064):
+the `shouldNotBeNull { msg }` messages were indeed silently dropped (the
+kotest overload takes `(T) -> Unit`, proven via `javap` on
+`MatchersKt` — 6 sites incl. the unwarned `JvmDescriptorPropertyTest`
+switched to `requireNotNull` which keeps the lazy message and smart-casts);
+4× `!!` restructured to capture-then-check locals (smart-cast, no assertion);
+`Arb.stringPattern` → `Arb.pattern` (same signature, verified via `javap` on
+`PatternKt`); `-opt-in=io.kotest.common.ExperimentalKotest` on
+`compileTestKotlin` only (the blanket flag breaks kotest-free
+`compileTestFixturesKotlin` — unresolved opt-in marker is a hard error);
+`allWarningsAsErrors` on `compileTestKotlin` + `compileTestFixturesKotlin`;
+Java `-Werror` on all `JavaCompile` with `@SuppressWarnings("strictfp")` at
+the fixture declaration (proven to silence it via a `javac` scratch test).
+Verify: zero warnings on full `compileTestKotlin`/`compileTestFixturesKotlin`/
+`compileJava --rerun-tasks`, both negative proofs bite (planted `!!` fails
+test compile, de-suppressed `strictfp` fails Java compile), full
+`./gradlew check -Ptier1.budget=10000` green (tiers 1–2 + lint + coverage).
+Lessons: L-111 (stale-state `:lint` validation red), L-112 (probe the
+`shouldNotBeNull` overload before "fixing" unused-expression warnings). No
+tier-3 run: test-only + build-logic changes, no artifact/index/render touch
+(T-047/T-052 precedent). Board is now all-DONE (T-001…T-083).*
 
 ### T-048 — AppCDS archive generation · `DONE` (session 77)
 

@@ -8,7 +8,7 @@ import io.kotest.property.arbitrary.element
 import io.kotest.property.arbitrary.list
 import io.kotest.property.arbitrary.map
 import io.kotest.property.arbitrary.orNull
-import io.kotest.property.arbitrary.stringPattern
+import io.kotest.property.arbitrary.pattern
 import io.kotest.property.checkAll
 import kotlinx.coroutines.runBlocking
 import org.junit.jupiter.api.Test
@@ -23,7 +23,7 @@ import org.junit.jupiter.api.Test
 class ReferencePropertyTest {
 
     private fun arbEdge(): Arb<ReferenceEdge> {
-        val binary = Arb.stringPattern("[a-z]{1,8}(\\.[a-z]{1,8}){0,2}")
+        val binary = Arb.pattern("[a-z]{1,8}(\\.[a-z]{1,8}){0,2}")
             .map { it.ifEmpty { "a" } }
         val member = Arb.element(listOf("run", "get", "<init>", "<clinit>", "m\$1", "ünïcode"))
         val descriptor = Arb.element(listOf("()V", "(I)V", "(Ljava/lang/String;)I", "()Ljava/lang/Object;"))

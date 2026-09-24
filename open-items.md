@@ -14,11 +14,14 @@ mine the session log to learn what still needs doing.
 
 ---
 
-## Next tasks (in board order — pick from `docs/TASKS.md`)
+## Next tasks (all DONE — board empty as of session 82)
+
+No open tasks. New work gets the next free number per the board rule; the
+rows below are kept as the closing record.
 
 | Item | State | Notes |
 |---|---|---|
-| T-083 test-source + Java warnings-as-errors | TODO | Filed session 76 (T-052 split); last remaining task |
+| T-083 test-source + Java warnings-as-errors | DONE (session 82) | Last task; `allWarningsAsErrors` on test compilations, `-opt-in` flag, Java `-Werror` (D-064) |
 
 ## Deferred follow-ups (no task number yet — file one when starting)
 
@@ -40,9 +43,13 @@ mine the session log to learn what still needs doing.
   sessions 53/55/56/58).
 - `verifyTier1Budget` is red on this machine (machine variance, 0 test
   failures — not a test failure).
+- A one-build `:lint` validation red ("uses this output of
+  `:core:compileKotlin`") can appear on the first `check` after a
+  build-logic change amid `--rerun-tasks`/stash churn; it self-heals on
+  retry and never reproduced in isolation (session 82, L-112).
 - `indexed artifacts` in `daemon status` reports 0 by design with live
   roots (no persistent index in T-082; D-043 precedent).
 
 ---
 
-*Last updated: 2026-09-23 (session 81).*
+*Last updated: 2026-09-24 (session 82).*

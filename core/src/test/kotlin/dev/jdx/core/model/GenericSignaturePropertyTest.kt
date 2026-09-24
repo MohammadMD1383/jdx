@@ -3,7 +3,6 @@ package dev.jdx.core.model
 import dev.jdx.core.gen.JDX_PROPERTY_ITERATIONS
 import dev.jdx.core.gen.arbClassSignature
 import dev.jdx.core.gen.arbGenericSignature
-import io.kotest.matchers.nulls.shouldNotBeNull
 import io.kotest.matchers.shouldBe
 import io.kotest.property.Arb
 import io.kotest.property.arbitrary.list
@@ -25,8 +24,11 @@ class GenericSignaturePropertyTest {
     fun `signature text is a fixed point`() = runBlocking<Unit> {
         checkAll(JDX_PROPERTY_ITERATIONS, arbGenericSignature()) { signature ->
             val text = signature.signature
-            val parsed = GenericSignature.parse(text)
-            parsed.shouldNotBeNull { "generated signature '$text' must parse" }
+            // `requireNotNull`, not `shouldNotBeNull { msg }`: the kotest block
+            // overload is `(T) -> Unit`, so the message string is dropped (T-083).
+            val parsed = requireNotNull(GenericSignature.parse(text)) {
+                "generated signature '$text' must parse"
+            }
             parsed.signature shouldBe text
         }
     }
@@ -35,8 +37,9 @@ class GenericSignaturePropertyTest {
     fun `class signatures round-trip through parseClass`() = runBlocking<Unit> {
         checkAll(JDX_PROPERTY_ITERATIONS, arbClassSignature()) { signature ->
             val text = signature.signature
-            val parsed = GenericSignature.parseClass(text)
-            parsed.shouldNotBeNull { "generated class signature '$text' must parse as a class" }
+            val parsed = requireNotNull(GenericSignature.parseClass(text)) {
+                "generated class signature '$text' must parse as a class"
+            }
             parsed.signature shouldBe text
         }
     }

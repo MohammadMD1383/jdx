@@ -29,6 +29,10 @@ public class VarargsAndModifiers {
     // Declared `strictfp`, but `javap -p` prints no flag: since JEP 306 (JDK 17) every
     // floating-point operation is strict by default and `javac` no longer emits `ACC_STRICT`.
     // The entry below is the printed truth, not the source spelling.
+    // The `strictfp` keyword itself is the fixture (readers must not choke on it);
+    // the suppression keeps the repo-wide Java `-Werror` gate (T-083) green — the
+    // obsolete-modifier warning is the point being documented here, not a defect.
+    @SuppressWarnings("strictfp")
     public strictfp double fp(double x) {
         return x * 1.5;
     }

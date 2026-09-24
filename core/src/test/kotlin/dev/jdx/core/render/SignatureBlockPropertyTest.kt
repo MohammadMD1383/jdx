@@ -76,10 +76,11 @@ class SignatureBlockPropertyTest {
         checkAll(JDX_PROPERTY_ITERATIONS, Arb.list(arbEntry(), 0..20), Arb.int(0..25)) { entries, max ->
             val full = blockOf(entries, Int.MAX_VALUE)
             val cut = blockOf(entries, max)
-            if (cut.truncation == null) {
+            // Captured first so the local val smart-casts — no `!!` (T-083).
+            val truncation = cut.truncation
+            if (truncation == null) {
                 cut.signatures shouldBe full.signatures
             } else {
-                val truncation = cut.truncation!!
                 (truncation.shown <= truncation.total) shouldBe true
                 truncation.hint shouldContain "--limit"
                 truncation.total shouldBe full.signatures.size
