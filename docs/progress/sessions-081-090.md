@@ -7,6 +7,58 @@ Append-only (D-023): 10 sessions per shard, newest first. Template and rules in
 
 ---
 
+## Session 86 — 2026-09-24 — docs: full limitation catalog in open-items
+
+**Agent/Author:** Muse Spark 1.3 Free · **Commits:** closing commit (this session)
+
+### Goal
+Owner-directed docs task: record every known limitation, caveat and deferred
+scope item in `open-items.md` (the full catalog, with pointers) so the owner
+can decide each one; the follow-up job is to board whichever items the owner
+picks (next free number: T-087).
+
+### What I did
+- Swept the repo for documented-but-unboarded work: `open-items.md` caveats,
+  PROPOSAL §21, D-042/D-043/D-049/D-050/D-053/D-055/D-056/D-058/D-060/D-061/
+  D-063/D-067 limitation clauses, T-033/T-048/T-050 scope notes, and the
+  `SourcesMismatch.kt` KDoc — and verified the checkable ones against code
+  (`MAX_SAMPLE_SNIPPET_LINES = 15`, no lexer fallback exists, facades carry
+  null `KmClass`).
+- Rewrote `open-items.md`: kept the closing record (T-084…T-086) and the 4
+  pre-existing caveats, added "Documented behavior limitations" (7 query-power
+  + 5 Kotlin + 6 daemon/serving, each with its decision pointer) and the 9-item
+  "Phase-2 backlog" from PROPOSAL §21. No behavior change; `lint` clean.
+- No tasks filed: the owner has not decided yet — nothing in `docs/TASKS.md`
+  changed, board stays empty (T-001…T-086 all DONE).
+
+### Decisions made
+- None (no behavior or scope chosen; catalog only).
+
+### Tasks moved
+- None.
+
+### Lessons distilled
+- None.
+
+### What works now (and how to verify it yourself)
+```bash
+git diff --stat  # open-items.md + docs/PROGRESS.md + docs/progress/sessions-081-090.md only
+./gradlew lint -Ptier1.budget=10000  # clean (docs-only change)
+```
+
+### What is broken / half-done
+- Nothing. Awaiting owner picks; then board each as T-087+ with detail blocks.
+
+### Open questions / blockers
+- None.
+
+### Next action
+- **Owner picks items** from `open-items.md`; then file each as T-087+ in
+  `docs/TASKS.md` (detail block per the board rule) and implement in task
+  order.
+
+---
+
 ## Session 85 — 2026-09-24 — T-086 warm text output done (board empty, no follow-ups left)
 
 **Agent/Author:** Muse Spark 1.3 Free · **Commits:** `3d5876c` (claim) + closing commit (this session)
