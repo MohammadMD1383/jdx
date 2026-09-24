@@ -20,6 +20,11 @@ Fat-jar assembly + the `jdx` POSIX launcher + AppCDS archive.
   merged lists break `-Xshare:dump` with `Duplicated ID`).
 - `install.sh` (repo root) stays per-user: refuses root, refuses to clobber an
   unrelated `jdx` without `--force`.
+- Releases: pushing tag `vX.Y.Z` on `main` runs `.github/workflows/release.yml`
+  (version via `-PjdxVersion`, tarball `jdx-<version>.tar.gz` with the launcher +
+  `libs/` layout this module builds, checksums, `gh release create`). The remote
+  installer `install-release.sh` (repo root) follows the same per-user rules as
+  `install.sh` and is pinned by `InstallReleaseScriptTest` (fake `--tarball`).
 - Launcher behaviour is pinned by present/absent exec-args tests — flag order
   (`-Xshare:auto` before `-XX:SharedArchiveFile`) is what makes stale archives
   degrade instead of fail.

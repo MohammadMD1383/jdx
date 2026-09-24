@@ -38,6 +38,28 @@ java.util.HashMap#get(java.lang.Object)
 No sources jar? It decompiles with Vineflower — and **says so**, so the agent knows it is
 reading a reconstruction (pass `--engine javap` for raw opcodes instead).
 
+## Install
+
+Requires **JDK 21+** (the launcher resolves `JAVA_HOME` → `java` on `PATH` →
+`/usr/lib/jvm/default`). Linux x64 tarballs are published as
+[GitHub Releases](https://github.com/MohammadMD1383/jdx/releases).
+
+```bash
+curl -fsSL https://raw.githubusercontent.com/MohammadMD1383/jdx/main/install-release.sh | bash
+```
+
+This installs the latest release per-user into `~/.local/share/jdx` and links
+`~/.local/bin/jdx` (never root, never clobbers an unrelated `jdx` without
+`--force`). A specific version:
+
+```bash
+curl -fsSL https://raw.githubusercontent.com/MohammadMD1383/jdx/main/install-release.sh | bash -s -- --version v1.0.0
+```
+
+Verify with `jdx version` (`jdx doctor` reports JDK, cache, index, Kotlin
+sidecar, daemon, and workspace status). Prefer building from source? See
+[Build and install](#build-and-install).
+
 ## What makes it an *IDE*, not a better `javap`
 
 - **Inherited members resolved transitively**, with generic substitution — so
@@ -194,7 +216,7 @@ rendered (see limitations).
   opt-in `--fetch` of Maven coordinates.
 - Linux is the developed-on platform; the launcher is POSIX `sh`.
 
-## Build and install
+## Build and install (from source)
 
 ```bash
 git clone <repo> && cd jdx
@@ -272,9 +294,11 @@ Nothing below is a bug; each is a candidate for future tasks. Full list in
 `jdx diff a.jar b.jar` (public-API diff) · mappings/remapping (Tiny/SRG/ProGuard,
 obfuscated jars) · resources & metadata inspection (`META-INF/services`, `module-info`,
 manifests) · annotation-driven views · `--since` / API-level reporting · `jdx flow`
-(dataflow-lite) · multi-release jar variant selection · Scala/Groovy views · publishing
-(Homebrew/AUR, GitHub Releases, native image) — tracked as
-[GitHub Issues](https://github.com/MohammadMD1383/jdx/issues).
+(dataflow-lite) · multi-release jar variant selection · Scala/Groovy views ·
+Homebrew/AUR packaging, native image — tracked as
+[GitHub Issues](https://github.com/MohammadMD1383/jdx/issues). Versioned tarballs with
+checksums ship as [GitHub Releases](https://github.com/MohammadMD1383/jdx/releases)
+(`install-release.sh`, `.github/workflows/release.yml`: tag `vX.Y.Z` on `main`).
 
 ## Fixture corpus
 
@@ -304,7 +328,9 @@ jdx/
 ├── README.md                  user-facing intro (this file)
 ├── AGENTS.md                  project rules and entry point for contributors and agents
 ├── CONTRIBUTING.md            conventions, code style, definition of done
-├── install.sh                 per-user symlink installer (~/.local/bin)
+├── install.sh                 per-user symlink installer for source builds (~/.local/bin)
+├── install-release.sh         per-user installer for GitHub Release tarballs
+├── .github/workflows/release.yml  tag-vX.Y.Z auto-release (tarball + checksums)
 ├── gradle/libs.versions.toml  single source of dependency versions
 ├── core/                      model, symbol refs, resolution, rendering. Pure Kotlin, no IO.
 ├── index/                     ASM readers, Kotlin metadata, SQLite store, indexer

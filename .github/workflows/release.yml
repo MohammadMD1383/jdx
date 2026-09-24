@@ -1,0 +1,106 @@
+name: release
+
+# Auto-release: pushing a tag `vX.Y.Z` (on main) builds the distribution and
+# publishes it as a GitHub Release with a versioned tarball + checksums.
+#
+#   git tag v0.2.0 && git push origin v0.2.0
+#
+# Tag rules: must match `v<major>.<minor>.<patch>` and must point at a commit
+# reachable from `main` — otherwise the job fails with a human-readable error.
+# The project version (`BuildInfo.version`, fat-jar manifest) comes from the
+# tag via `-PjdxVersion`, never from a hand-edited source file.
+
+on:
+  push:
+    tags:
+      - "v*.*.*"
+
+permissions:
+  contents: write
+
+jobs:
+  release:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Check out the tag
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Validate tag and resolve version
+        id: version
+        run: |
+          tag="${GITHUB_REF_NAME}"
+          case "$tag" in
+            v[0-9]*.[0-9]*.[0-9]*)
+              case "$tag" in
+                *.*.*.*) echo "release: tag '$tag' is not vX.Y.Z" >&2; exit 1 ;;
+              esac
+              ;;
+            *) echo "release: tag '$tag' is not vX.Y.Z (expected e.g. v0.2.0)" >&2; exit 1 ;;
+          esac
+          version="${tag#v}"
+          case "$version" in
+            ''|*[!0-9.]*)
+              echo "release: version '$version' is not numeric X.Y.Z" >&2
+              exit 1
+              ;;
+          esac
+          echo "tag=$tag" >> "$GITHUB_OUTPUT"
+          echo "version=$version" >> "$GITHUB_OUTPUT"
+
+      - name: Tag must be on main
+        run: |
+          git fetch origin main --depth=50
+          if ! git merge-base --is-ancestor "$GITHUB_SHA" origin/main; then
+            echo "release: tag '$GITHUB_REF_NAME' ($GITHUB_SHA) is not reachable from 'main' — tag a commit on main" >&2
+            exit 1
+          fi
+
+      - name: Set up JDK 21
+        uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: "21"
+
+      - name: Set up Gradle
+        uses: gradle/actions/setup-gradle@v4
+
+      - name: Build distribution
+        run: ./gradlew :app:installDist -PjdxVersion="${{ steps.version.outputs.version }}"
+
+      - name: Verify version
+        run: |
+          reported="$(./app/build/jdx version)"
+          expected="jdx version ${{ steps.version.outputs.version }}"
+          if [ "$reported" != "$expected" ]; then
+            echo "release: version mismatch: got '$reported', want '$expected'" >&2
+            exit 1
+          fi
+
+      - name: Assemble tarball
+        run: |
+          version="${{ steps.version.outputs.version }}"
+          stage="dist/jdx"
+          rm -rf dist
+          mkdir -p "$stage/libs"
+          cp app/build/jdx "$stage/jdx"
+          chmod +x "$stage/jdx"
+          cp app/build/libs/jdx-*-all.jar "$stage/libs/"
+          if [ -f app/build/libs/jdx.jsa ]; then
+            cp app/build/libs/jdx.jsa "$stage/libs/"
+          fi
+          tar -czf "jdx-$version.tar.gz" -C dist jdx
+          sha256sum "jdx-$version.tar.gz" > "jdx-$version.tar.gz.sha256"
+
+      - name: Publish GitHub Release
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          tag="${{ steps.version.outputs.tag }}"
+          version="${{ steps.version.outputs.version }}"
+          gh release create "$tag" \
+            --title "$tag" \
+            --generate-notes \
+            "jdx-$version.tar.gz" \
+            "jdx-$version.tar.gz.sha256"
