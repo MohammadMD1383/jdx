@@ -1,12 +1,12 @@
 # `jdx` — an IDE for AI agents
 
-> **Status: M0–M6 implemented; M7 polish landing.**
-> Read path, index, workspaces, bodies, sources, docs, decompilers, usages,
-> hierarchy, call hierarchy, samples, Kotlin signatures, daemon, MCP server,
-> HTTP API, `batch`, token budgets (`--brief`/`--max-lines`), AppCDS
-> cold-start archive, `bench`, and `help --agent` all work. See
-> [`docs/PROGRESS.md`](docs/PROGRESS.md) for the real state and
-> [`docs/TASKS.md`](docs/TASKS.md) for what's next.
+> **Status: v1 complete.** M0–M7 done, all 86 tasks (T-001…T-086) closed,
+> board empty. Every command below is implemented with text + `--json`
+> renderers, exit-code contract, golden tests, and byte-identical payloads
+> across CLI / daemon / MCP / HTTP / `batch`.
+> Details: [`docs/PROGRESS.md`](docs/PROGRESS.md) (current state),
+> [`docs/TASKS.md`](docs/TASKS.md) (closing record),
+> [`open-items.md`](open-items.md) (limitations + phase-2 backlog).
 
 ---
 
@@ -58,6 +58,8 @@ reading a reconstruction (pass `--engine javap` for raw opcodes instead).
   `@JvmName` mappings — not the misleading JVM projection (`--view jvm` forces the
   raw JVM projection when the agent genuinely needs it: Java interop, stack traces).
 - **Javadoc/KDoc**, including documentation inherited from a supertype.
+- **`jdx samples`** — real call sites from the classpath as usage examples. Evidence instead
+  of recollection.
 
 ## What makes it *for agents*, not for humans
 
@@ -70,44 +72,129 @@ reading a reconstruction (pass `--engine javap` for raw opcodes instead).
   *no index*, *bad usage* — branch without parsing prose. `--json` for everything.
 - **Provenance on every answer** — which jar, sources or bytecode, which decompiler — so an
   agent knows how much to trust what it just read.
-- **`jdx samples`** — real call sites from the classpath as usage examples. Evidence instead
-  of recollection.
 - **`jdx batch`** — many queries, one process, one index load.
 - **Four front-ends over one engine:** one-shot CLI, MCP server, a daemon (5-minute idle
   shutdown), and a local HTTP/JSON API.
 - **`jdx help --agent`** — a compact paste-ready block for `CLAUDE.md` / system prompts,
   generated from the same table as `jdx help` so the two cannot drift.
 
-## Command surface
+## Command catalogue
 
-| Command | IDE equivalent |
+`jdx <command> --help` documents each command; `jdx help --agent` prints the compact
+agent block. Every query command accepts `--json` (same information, structured envelope)
+and `--no-daemon` (force in-process even when the daemon is up).
+
+### Read: declaration, members, structure
+
+| Command | IDE equivalent | Key flags |
+|---|---|---|
+| `jdx show <type>` | Go to declaration | classpath flags only |
+| `jdx members <type>` | Code completion after `.` | `--declared` / `--inherited` (default), `--kind all\|method\|field\|ctor\|property`, `--access public\|protected\|package\|private\|all`, `--static` / `--instance`, `--from <supertype>`, `--grep <regex>`, `--include-synthetic`, `--limit` (50), `--with-doc`, `--brief`, `--max-lines`, `--sort kind\|name\|declaring`, `--view kotlin\|jvm` |
+| `jdx outline <type>` | File structure (`Ctrl+F12`) | Same filters as `members --declared` (never inherited): `--kind`, `--access`, `--static` / `--instance`, `--grep`, `--include-synthetic`, `--limit`, `--with-doc`, `--brief`, `--max-lines`, `--sort`, `--view` |
+| `jdx signature <member>` | Parameter info (`Ctrl+P`) | `--include-synthetic`, `--view kotlin\|jvm`, `--limit` (50) |
+| `jdx doc <symbol>` | Quick documentation (`Ctrl+Q`) | `--inherited` (default) / `--no-inherited`, `--raw`, `--max-lines` (200). Undocumented members fall back to the nearest documenting supertype. |
+| `jdx body <member>` | Open the method | `--context N`, `--line-numbers`, `--max-lines` (200), `--engine vineflower\|javap`, `--with-doc`, `--with-signature` |
+| `jdx source <type>` | Open the file / decompile | `--lines A:B`, `--around '<type>#<member>'` + `--context N`, `--line-numbers`, `--max-lines` (200), `--engine vineflower\|javap` |
+
+`body`/`source` ladder: paired sources → Vineflower reconstruction → `javap` disassembly →
+signatures → not found. `--engine vineflower` forces reconstruction even when sources are
+paired; `--engine javap` shows raw bytecode. Decompiled output is always labelled
+`⚠ reconstructed` with the engine named.
+
+### Search and browse
+
+| Command | IDE equivalent | Key flags |
+|---|---|---|
+| `jdx search <pattern>` | Search everywhere (`Shift Shift`) | `--kind all\|type\|class\|interface\|enum\|record\|annotation\|object\|companion\|method\|field\|package\|module`, `--regex`, `--fuzzy` (Levenshtein retry on miss), `--in <artifact-glob>`, `--package <glob>`, `--limit` (50). Bare words match case-insensitively or as camel humps (`HMap` finds `HashMap`). |
+| `jdx resolve <name>` | "What is this symbol?" | `--limit` (50). Several candidates are success (exit 0); none is exit 1 with did-you-mean. |
+| `jdx ls [package-glob]` | External library browser (packages/types) | `--limit` (50). A glob lists packages with type counts; an exact package lists its types. |
+| `jdx tree [artifact-glob]` | External library browser (artifacts) | `--depth` (8; 0 = top segments), `--counts`, `--limit` (50) |
+
+### Graph: usages, hierarchy, calls, samples
+
+| Command | IDE equivalent | Key flags |
+|---|---|---|
+| `jdx usages <symbol>` | Find usages (`Alt+F7`) | `--kind all\|call\|read\|write\|ref\|new\|throw\|annotation` (`impl`/`override` redirect to `hierarchy`/`implementors`; `--context` redirects to `samples`), `--in` / `--exclude <artifact-glob>`, `--limit` (50), `--src <dir>` (repeatable source-dir roots). `new` = constructor call sites; `throw` = methods declaring the type in `throws`; `annotation` = annotated classes/members. Source-dir hits are textual mentions (`ref` only). |
+| `jdx hierarchy <type>` | Type hierarchy (`Ctrl+H`) | `--up` / `--down` (default both), `--direct`, `--depth N`, `--in` / `--exclude`, `--limit` (50). Member refs exit 3. |
+| `jdx implementors <type>` | Who implements this? | Alias for `hierarchy --down`: `--direct`, `--depth N`, `--in` / `--exclude`, `--limit` (50) |
+| `jdx callers <member>` | Call hierarchy in (`Ctrl+Alt+H`) | `--depth N` (default 1), `--in` / `--exclude`, `--limit` (50). Methods + constructors only; type/field refs exit 3. Cycle-safe (`…(cycle)`). Exact name+descriptor matching — not override-aware (see limitations). |
+| `jdx calls <member>` | Call hierarchy out | Same as `callers`, plus `--external-only` (hide callees in the method's own artifact — dependency view) |
+| `jdx samples <symbol>` | *(no IDE equivalent)* | `--limit` (default 3), `--in` / `--exclude`, `--prefer-sources` (rank snippet-capable callers first). Ranked by exemplariness: non-test before test, non-generated before generated, fuller overloads first. Snippets capped at 15 lines. Type refs match calls to any member; field refs exit 3. |
+
+### Environment and maintenance
+
+| Command | Purpose | Key flags / notes |
+|---|---|---|
+| `jdx version` | Print the version | `--json` for the envelope form |
+| `jdx doctor` | Self-diagnosis | One `ok`/`warn`/`fail` row per check: JDK, `jrt:/`, `javap`, JDK sources, cache, config, index DB, Kotlin sidecar, daemon (probed live: running vs stale), workspace. Exits 6 if any check fails. |
+| `jdx ws create\|list\|info\|remove\|use\|add` | Project & library configuration | `create <name> --jars … --src … --coord … --repo … [--jdk\|--no-jdk]`; `add <name> <root>`; `use <name> [--clear]` sets the default; `list` / `info <name>` / `remove <name>` |
+| `jdx cache info\|gc\|clear` | Index and cache maintenance | `info` (DB location, size, schema, counts); `gc [--dry-run] [--cache-dir …]` (evicts unreferenced + stale artifacts + orphan daemon logs); `clear` (wipes regenerable cache) |
+| `jdx kotlin install` | Fetch the Kotlin PSI sidecar | `--repo …` (repeatable), `--force` (re-download). 7 jars, SHA-1 verified, into `~/.cache/jdx/kotlin/`; present jars are skipped, re-runs resume. |
+| `jdx help [--agent] [--json]` | Cheat sheet | `--agent` prints the paste-ready agent block |
+| `jdx bench` | Benchmark the read path | `--iterations N` (default 3, median reported), classpath flags. Fixed `load`/`show`/`members`/`search`/`hierarchy` workload with §15 advisory targets; always exits 0 on success. Falls back to the local `minecraft-client.jar` when no roots are given. |
+
+### Serving: daemon, MCP, HTTP, batch
+
+| Command | Purpose | Notes |
+|---|---|---|
+| `jdx daemon start\|stop\|status\|restart` | Warm background JVM | Per-workspace unix socket at `$XDG_RUNTIME_DIR/jdx/<hash>-v1.sock`; `--idle 5m` default (0 disables); `start` is idempotent. `status`: uptime, memory, query count. `run` (foreground) is the internal spawn target. |
+| `jdx mcp [-w name]` | MCP stdio server | One typed `jdx_*` tool per query (20 tools) with generated schemas; per-call workspace override; answers byte-identical to `--json`. |
+| `jdx serve [-w name] [--port 7070] [--bind 127.0.0.1]` | Local HTTP/JSON API | `GET /v1/<command>?query=…&<param>=…`, `POST /v1/batch` (NDJSON), `GET /v1/health`. Localhost by default; blocks until interrupted. Bodies byte-identical to `--json`. |
+| `jdx batch` | Many queries, one process | NDJSON `RpcRequest` lines on stdin (`{"command":"members","query":"…","params":{…}}`), one envelope per line on stdout; exit code is the max query exit code. Roots resolved once. `--json` accepted and ignored (output is always envelopes). |
+
+### Classpath flags (every query command)
+
+`--jars <jar|dir|glob>` (repeatable, merged in front of the workspace) ·
+`--coord group:artifact:version` (repeatable; local `~/.gradle/caches` + `~/.m2` first) ·
+`--repo <url>` (repeatable Maven mirror, tried before Central) ·
+`--fetch` (allow downloads incl. `-sources.jar`, checksum-verified into `~/.cache/jdx/m2/`) ·
+`--no-jdk` (exclude the running JDK stdlib, included by default via `jrt:/` + `src.zip`) ·
+`-w/--workspace <name>` (also `JDX_WORKSPACE` env or `jdx ws use` default; Gradle/Maven
+project roots auto-discover from the working directory) ·
+`--src <dir>` (only `usages`, `batch`, `bench`, and `ws create`: source dirs scanned textually).
+
+Global output flags: `--json` (accepted before or after the subcommand, e.g.
+`jdx --json show …`), `--no-color` (piped output is always plain),
+`--no-daemon` (force in-process). Warm (daemon) text is always plain; `--json` bytes are
+identical cold and warm.
+
+## Exit codes and symbol references
+
+| Code | Meaning |
 |---|---|
-| `jdx show <type>` | Go to declaration |
-| `jdx members <type> --inherited` | Code completion after `.` |
-| `jdx signature <member>` | Parameter info (`Ctrl+P`) |
-| `jdx doc <symbol>` | Quick documentation (`Ctrl+Q`) |
-| `jdx body <member>` | Open the method |
-| `jdx source <type>` | Open the file / decompile |
-| `jdx outline <type>` | File structure (`Ctrl+F12`) |
-| `jdx search <pattern>` | Search everywhere (`Shift Shift`) |
-| `jdx resolve <name>` | "What is this symbol?" |
-| `jdx ls [package]` / `jdx tree [artifact]` | External library browser |
-| `jdx usages <symbol>` | Find usages (`Alt+F7`) |
-| `jdx hierarchy <type>` / `jdx implementors <type>` | Type hierarchy (`Ctrl+H`) |
-| `jdx callers <member>` / `jdx calls <member>` | Call hierarchy (`Ctrl+Alt+H`) |
-| `jdx samples <symbol>` | *(no IDE equivalent)* |
-| `jdx ws …` / `jdx cache …` | Project & library configuration |
-| `jdx mcp` / `jdx daemon` / `jdx serve` / `jdx batch` | *(no IDE equivalent)* |
-| `jdx bench [--iterations N]` | *(no IDE equivalent — timings + §15 targets)* |
-| `jdx help [--agent]` | Cheat sheet (paste-ready for agents with `--agent`) |
+| `0` | Success, results found |
+| `1` | Valid query, **no results** |
+| `2` | **Ambiguous** reference — candidates printed, retry with one |
+| `3` | Usage / argument error |
+| `4` | No index or workspace resolved for this query |
+| `5` | Artifact read error (corrupt jar, unreadable file) |
+| `6` | Internal error |
 
-Full specification with every flag: [`docs/PROPOSAL.md`](docs/PROPOSAL.md)
-(Appendix B is the flag reference). `jdx <command> --help` documents each command;
-`jdx help --agent` prints the compact agent block.
+References are Javadoc style — `com.example.Outer`, `com.example.Outer#method(Type)`,
+short `Outer#method` (resolved, or exit 2 with candidates). Always quote the ref:
+`#` and `(` are shell-hostile. `::` and `.` are accepted in place of `#`.
+Constructors are `<init>`, static initialisers `<clinit>`.
+
+Every `--json` answer uses one envelope:
+`{"jdx":1, "ok":…, "command":…, "query":…, "result":…, "truncated":…, "warnings":…, "provenance":…}`.
+Warnings carry stable codes (`DUPLICATE_FQN`, `CORRUPT_CLASS`, `SOURCES_VERSION_MISMATCH`, …);
+provenance names the artifact, the source (sources / bytecode / decompiled + engine), and
+the file:lines.
+
+## Kotlin note
+
+Kotlin signatures come from `@Metadata` (suspend, properties, default args, `@JvmName`);
+Kotlin member bodies and KDoc come from `.kt` sources through a side-loaded
+`kotlin-compiler-embeddable` (never on the compile classpath, never in the fat jar).
+Without the sidecar, `body`/`source`/`doc` over `.kt`-only roots degrade to
+decompile/`javap` — they emit *something* and say what it is, never an error.
+Run `jdx kotlin install` to fetch the sidecar set (SHA-1 checked) from Maven Central;
+`jdx doctor` reports its status. File facades stay JVM-projected and nullability is not
+rendered (see limitations).
 
 ## Requirements
 
-- **JDK 21+** (developed against JDK 26). The launcher resolves the runtime as
+- **JDK 21+** (developed against JDK 26/27). The launcher resolves the runtime as
   `JAVA_HOME` → `java` on `PATH` → `/usr/lib/jvm/default`, and fails with one
   human-readable line (exit 6) when none is usable. `JAVA_HOME` is never assumed.
 - **No Maven or Gradle installation needed** — the Gradle wrapper is the only build
@@ -126,7 +213,8 @@ git clone <repo> && cd jdx
 - `./install.sh [--force]` refuses to run as root and refuses to overwrite an unrelated
   `jdx` already on `PATH` unless `--force` is given. Re-running it refreshes the link.
 - The build also ships an AppCDS archive (`app/build/libs/jdx.jsa`); the launcher uses it
-  when present and silently degrades to a plain run when it is missing or stale.
+  when present and silently degrades to a plain run when it is missing or stale
+  (~2× faster cold start: `--version` ~187 ms → ~90 ms).
 - Verify the install: `jdx doctor` reports JDK, `javap`, cache, index, Kotlin sidecar,
   daemon, and workspace status, each `ok`/`warn`/`fail`; `jdx version` prints the version.
 
@@ -147,51 +235,53 @@ jdx show com.google.gson.Gson --coord com.google.code.gson:gson:2.14.0 --fetch
 
 # Token budgets for the biggest listings (text only; --json bytes are unaffected)
 jdx members java.util.HashMap --inherited --brief --max-lines 20
+
+# Warm path: start once, query at ~20 ms instead of ~250 ms cold
+jdx daemon start -w fx
+jdx -w fx members 'com.example.Service'   # served warm automatically
+jdx daemon status
+
+# One process, many queries
+echo '{"command":"show","query":"java.util.Map"}' | jdx batch --jars gson.jar
 ```
 
-## Front-ends
+## Performance
 
-One engine, four ways to reach it — payloads are byte-identical (`--json` envelope)
-across all of them:
+Targets are advisory — rows print `ok`/`OVER` but the command always exits 0 on success
+(machine variance never gates):
 
-- **One-shot CLI** (cold, ~250 ms): every command above. `--no-daemon` forces the
-  in-process path.
-- **Daemon** (warm, ~20 ms): `jdx daemon start|status|stop|restart`. The CLI forwards
-  `--json` queries to the running daemon automatically and degrades to in-process when
-  it is down. Idle shutdown after 5 minutes.
-- **MCP stdio server**: `jdx mcp [-w name]` exposes each query as a typed `jdx_*` tool
-  for agents.
-- **HTTP/JSON API**: `jdx serve [-w name] [--port 7070] [--bind 127.0.0.1]`
-  (`GET /v1/<command>`, `POST /v1/batch`, `GET /v1/health`, localhost by default).
-- **`jdx batch`**: newline-delimited `RpcRequest` lines on stdin, one envelope per line on
-  stdout; exit code is the max query exit code.
+- Cold one-shot CLI: ~250 ms; warm daemon queries: ~20 ms.
+- `jdx bench [--iterations N]` runs the fixed `load`/`show`/`members`/`search`/`hierarchy`
+  workload (default 3 iterations, median reported) with §15 targets (`load` ≤ 8000 ms,
+  cold queries ≤ 250 ms each). `usages` is deliberately excluded — without an indexed
+  path it would only document the known gap below.
 
-## Exit codes and symbol references
+## Known limitations (by design)
 
-| Code | Meaning |
-|---|---|
-| `0` | Success, results found |
-| `1` | Valid query, **no results** |
-| `2` | **Ambiguous** reference — candidates printed, retry with one |
-| `3` | Usage / argument error |
-| `4` | No index or workspace resolved for this query |
-| `5` | Artifact read error (corrupt jar, unreadable file) |
-| `6` | Internal error |
+Nothing below is a bug; each is a candidate for future tasks. Full list in
+[`open-items.md`](open-items.md).
 
-References are Javadoc style — `com.example.Outer`, `com.example.Outer#method(Type)`,
-short `Outer#method` (resolved, or exit 2 with candidates). Always quote the ref:
-`#` and `(` are shell-hostile. `::` and `.` are accepted in place of `#`.
+- **No persistent index acceleration.** `usages`/`hierarchy`/`callers`/`calls`/`samples`
+  re-scan live bytecode roots on every query; slow on giant roots.
+- **Call hierarchy is not override-aware** — exact name+descriptor matching only.
+- **`--kind throw` reads declarations, not sites** (methods declaring the type in `throws`).
+- **No line numbers on bytecode reference edges** (source-dir mentions have file:line).
+- **The daemon never fetches** — stored `--repo` mirrors are inert; unresolvable stored
+  coordinates fail warm queries with exit 5. `doctor` is refused over the daemon wire;
+  `ws`/`cache` are absent from the wire; MCP is workspace-bound (stored workspace plus a
+  per-call override, no auto-discovery or explicit `--jars`/`--coord`).
+- **Kotlin:** file facades stay JVM-projected; nullability is not rendered; no fallback
+  lexer without the sidecar.
+- **Warm text is plain** (no ANSI — the daemon has no TTY); piped output is byte-identical
+  to cold.
 
-## Kotlin note
+## Out of scope for v1 (phase-2 backlog)
 
-Kotlin signatures come from `@Metadata` (suspend, properties, default args, `@JvmName`);
-Kotlin member bodies and KDoc come from `.kt` sources through a side-loaded
-`kotlin-compiler-embeddable` (never on the compile classpath, never in the fat jar).
-When the sidecar at `~/.cache/jdx/kotlin/` is absent, `jdx doctor` warns and
-`body`/`source`/`doc` over `.kt`-only roots degrade to decompile/`javap` — they emit
-*something* and say what it is, never an error. Run `jdx kotlin install` to fetch
-and verify the sidecar set (compiler plus its runtime jars, SHA-1 checked) from
-Maven Central; re-run to resume after a failure.
+`jdx diff a.jar b.jar` (public-API diff) · mappings/remapping (Tiny/SRG/ProGuard,
+obfuscated jars) · resources & metadata inspection (`META-INF/services`, `module-info`,
+manifests) · annotation-driven views · `--since` / API-level reporting · `jdx flow`
+(dataflow-lite) · multi-release jar variant selection · Scala/Groovy views · publishing
+(Homebrew/AUR, GitHub Releases, native image).
 
 ## Fixture corpus
 
@@ -209,17 +299,51 @@ adding a fixture adds coverage automatically. **To add one:** write the source, 
 member lines from `javap -p` into the annotation (never from memory), rebuild twice and
 check the jars are byte-identical. Full rules: [`docs/TESTING.md`](docs/TESTING.md) §11.1.
 
+Testing bar: `core` is test-first with a Pitest mutation gate (≥ 80 %, currently 91 %);
+every behaviour is covered by at least one *generative* family (property-based,
+`javap`-differential, metamorphic, fault-injection, corpus soak over ~2,183 real jars).
+Tiers 1–2 run in `check`; tier 3 soaks the corpus; tier 4 mutates `core`.
+
+## Repository layout
+
+```
+jdx/
+├── README.md                  user-facing intro (this file)
+├── CLAUDE.md                  project rules and entry point for contributors and agents
+├── CONTRIBUTING.md            conventions, code style, definition of done
+├── install.sh                 per-user symlink installer (~/.local/bin)
+├── gradle/libs.versions.toml  single source of dependency versions
+├── core/                      model, symbol refs, resolution, rendering. Pure Kotlin, no IO.
+├── index/                     ASM readers, Kotlin metadata, SQLite store, indexer
+├── sources/                   sources-jar handling, JavaParser, Kotlin PSI (isolated CL)
+├── decompile/                 Vineflower + javap engines
+├── cli/                       Clikt commands, text/JSON renderers
+├── mcp/                       MCP stdio server
+├── server/                    HTTP/JSON API + daemon
+├── app/                       fat-jar assembly + `jdx` launcher script
+└── testfixtures/              nasty Java/Kotlin classes → binary jar + -sources.jar
+```
+
+Dependency rule: `core` depends on nothing project-local. Everything depends on `core`.
+`cli`/`mcp`/`server` are thin adapters — no logic in adapters.
+
+Key dependencies: ASM (bytecode), JavaParser (Java sources), Vineflower (decompilation),
+`kotlin-metadata-jvm` (Kotlin signatures), `kotlin-compiler-embeddable` (side-loaded PSI,
+never bundled), SQLite (index store), Clikt (CLI), MCP Kotlin SDK + `com.sun.net.httpserver`
+(serving). Kotlin + Gradle, JDK 21 toolchain target.
+
 ## Documentation
 
 | | |
 |---|---|
 | [`CLAUDE.md`](CLAUDE.md) | Project rules and entry point for contributors and agents |
-| [`docs/PROPOSAL.md`](docs/PROPOSAL.md) | Full design specification |
+| [`docs/PROPOSAL.md`](docs/PROPOSAL.md) | Full design specification (Appendix B is the flag reference) |
 | [`docs/DECISIONS.md`](docs/DECISIONS.md) | Why things are the way they are |
-| [`docs/TASKS.md`](docs/TASKS.md) | Backlog — pick your next task here |
+| [`docs/TASKS.md`](docs/TASKS.md) | Backlog — all 86 tasks closed, the closing record |
 | [`docs/PROGRESS.md`](docs/PROGRESS.md) | Running work log and current state |
 | [`docs/TESTING.md`](docs/TESTING.md) | Testing strategy — required reading before writing tests |
 | [`CONTRIBUTING.md`](CONTRIBUTING.md) | Conventions, code style, definition of done |
+| [`open-items.md`](open-items.md) | Limitations, caveats, and the phase-2 backlog |
 
 ## Contributing
 
