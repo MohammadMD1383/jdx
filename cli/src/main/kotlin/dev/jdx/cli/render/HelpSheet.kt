@@ -10,7 +10,7 @@ import kotlinx.serialization.json.encodeToJsonElement
  * and the paste-ready agent block cannot drift: `renderHelpText(agent =
  * false)` is the human layout, `agent = true` the compact block designed to
  * be dropped into a `CLAUDE.md`, system prompt or MCP tool description.
- * Pure strings: deterministic, no timestamps, no paths (CLAUDE.md §2).
+ * Pure strings: deterministic, no timestamps, no paths (AGENTS.md).
  */
 public data class HelpRow(val command: String, val summary: String, val example: String? = null)
 

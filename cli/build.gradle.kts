@@ -31,7 +31,7 @@ dependencies {
 // The single source of that version is the Gradle project version, so it is generated into a
 // resource at build time — never hard-coded in source. Gradle's own `WriteProperties` task is
 // deliberately NOT used: it stamps the wall-clock date into the file, which would break the
-// byte-determinism every jar here promises (CLAUDE.md §2.5).
+// byte-determinism every jar here promises (AGENTS.md).
 val generateBuildProperties = tasks.register("generateBuildProperties") {
     val outputFile = layout.buildDirectory.file("generated/build-info/dev/jdx/cli/build.properties")
     // Captured at configuration time: reading `project` inside `doLast` (execution

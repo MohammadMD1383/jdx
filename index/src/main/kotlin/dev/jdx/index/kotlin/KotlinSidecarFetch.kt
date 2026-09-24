@@ -88,7 +88,7 @@ public val KOTLIN_SIDECAR_ARTIFACTS: List<KotlinSidecarArtifact> = listOf(
  * What [fetchKotlinSidecar] installed or found (T-080).
  *
  * File names only, in [KOTLIN_SIDECAR_ARTIFACTS] order — never absolute paths,
- * so reports stay deterministic across machines (CLAUDE.md §2.5).
+ * so reports stay deterministic across machines (AGENTS.md).
  */
 public data class KotlinSidecarReport(
     /** File names downloaded and verified this run. */

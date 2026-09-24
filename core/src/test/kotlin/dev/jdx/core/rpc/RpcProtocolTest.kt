@@ -71,7 +71,7 @@ class RpcProtocolTest {
 
     @Test
     fun `accepts a missing query and missing params as the empty defaults`() {
-        // Generous in what we accept, canonical in what we print (CLAUDE.md §6).
+        // Generous in what we accept, canonical in what we print (AGENTS.md).
         RpcRequest.decode("""{"command":"doctor"}""") shouldBe RpcRequest(RpcCommand.DOCTOR)
         RpcRequest.decode("""{"jdx":1,"command":"ls"}""") shouldBe RpcRequest(RpcCommand.LS)
     }

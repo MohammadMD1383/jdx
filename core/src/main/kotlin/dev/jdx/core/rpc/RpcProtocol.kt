@@ -129,7 +129,7 @@ public data class RpcRequest(
          * Parses one request line, or returns `null` if [text] is not a request this version
          * understands. **Never throws**, for any input.
          *
-         * Generous in what it accepts (CLAUDE.md §6): surrounding whitespace and a trailing
+         * Generous in what it accepts (AGENTS.md): surrounding whitespace and a trailing
          * `\r\n` are fine, `jdx`/`query`/`params` may be absent, unknown top-level keys are
          * ignored so a later version can add fields, and number/boolean param values are
          * accepted as their text. Strict where ambiguity would be dangerous: an unknown

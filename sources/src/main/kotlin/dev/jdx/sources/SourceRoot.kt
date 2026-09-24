@@ -19,7 +19,7 @@ import kotlin.io.path.isRegularFile
  * the flesh (D-009) — so a missing file is routine, not an error.
  *
  * Paths are normalised `com/foo/Bar.java` slash paths, sorted, so identical
- * inputs list identical bytes (CLAUDE.md §2.5). Nothing here parses source
+ * inputs list identical bytes (AGENTS.md). Nothing here parses source
  * text; that is T-021's JavaParser work.
  */
 public sealed interface SourceRoot : Closeable {

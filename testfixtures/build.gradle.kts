@@ -35,7 +35,7 @@ tasks.named<Jar>("testFixturesJar") {
 //   (D-017). `StaticInitMarker` has a static initialiser that writes a marker file; a test
 //   that loads it (reflection, `Class.forName`, even reading an annotation) proves nothing and
 //   ruins the D-017 proof. Use `Fixtures.classBytes(...)` (binary scan) instead.
-// - Both jars must be **byte-deterministic** (CLAUDE.md §2.5): fixed entry timestamps and
+// - Both jars must be **byte-deterministic** (AGENTS.md): fixed entry timestamps and
 //   sorted entry order, or golden tests go flaky. Verified by `FixtureCorpusTest` (entry
 //   timestamps) and by building twice and comparing sha256 (see the session log for T-006).
 

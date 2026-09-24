@@ -67,7 +67,7 @@ class SourceRootTest {
         JarSourceRoot(jar).use { root ->
             root.displayName shouldBe "lib-sources.jar"
             root.sourcePaths() shouldBe listOf("com/example/Data.kt", "com/example/Foo.java")
-            // Deterministic across runs (CLAUDE.md §2.5).
+            // Deterministic across runs (AGENTS.md).
             root.sourcePaths() shouldBe root.sourcePaths()
             root.findSource("com.example.Foo") shouldBe "com/example/Foo.java"
             root.findSource("com.example.Foo\$Inner") shouldBe "com/example/Foo.java"

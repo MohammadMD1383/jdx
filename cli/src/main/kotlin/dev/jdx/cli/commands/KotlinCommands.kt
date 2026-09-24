@@ -174,7 +174,7 @@ class KotlinInstallCommand(
     }
 }
 
-/** Renders the install outcome: file names only, never absolute paths (CLAUDE.md §2.5). */
+/** Renders the install outcome: file names only, never absolute paths (AGENTS.md). */
 internal fun renderInstallText(installed: List<String>, alreadyPresent: List<String>): String = buildString {
     val total = installed.size + alreadyPresent.size
     appendLine("kotlin sidecar installed ($total jar(s) in ~/.cache/jdx/kotlin)")

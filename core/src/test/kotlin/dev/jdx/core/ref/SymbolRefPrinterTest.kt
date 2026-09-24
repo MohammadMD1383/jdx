@@ -12,7 +12,7 @@ import org.junit.jupiter.api.Test
 
 /**
  * Tests for [SymbolRefPrinter] — the canonical output form of PROPOSAL.md §6:
- * `$`-joined nesting for types (CLAUDE.md §6), dotted FQ parameter types,
+ * `$`-joined nesting for types (AGENTS.md), dotted FQ parameter types,
  * `, `-separated, `:`-prefixed return type, `group:artifact:version/` coordinate.
  */
 class SymbolRefPrinterTest {

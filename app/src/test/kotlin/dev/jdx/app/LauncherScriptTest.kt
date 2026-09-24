@@ -487,7 +487,7 @@ class LauncherScriptTest {
 
         result.exitCode shouldBe 0
         result.stdout.trim() shouldBe "jdx version ${dev.jdx.cli.BuildInfo.version}"
-        // Piped output is plain text (CLAUDE.md §2.5): no ANSI escapes.
+        // Piped output is plain text (AGENTS.md): no ANSI escapes.
         result.stdout shouldNotContain "\u001B"
     }
 

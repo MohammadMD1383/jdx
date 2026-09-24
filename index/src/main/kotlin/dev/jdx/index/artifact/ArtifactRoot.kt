@@ -31,7 +31,7 @@ public interface ArtifactRoot : Closeable {
 
     /**
      * Every servable class entry, normalised slash paths, sorted, `module-info.class`
-     * excluded. Deterministic for identical inputs (CLAUDE.md §2.5).
+     * excluded. Deterministic for identical inputs (AGENTS.md).
      */
     public fun classEntryPaths(): List<String>
 

@@ -15,7 +15,7 @@ import java.nio.file.Path
  * only see this interface, which T-039 extends with PSI queries.
  *
  * Obtained via [openKotlinParser]: absent/corrupt sidecars read as an
- * unavailable value with an install hint, never a throw (CLAUDE.md §2.8).
+ * unavailable value with an install hint, never a throw (AGENTS.md).
  */
 public interface KotlinSourceParser : Closeable {
     /** True when the isolated compiler loader opened and presence-checked. */

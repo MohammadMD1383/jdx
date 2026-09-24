@@ -29,7 +29,7 @@ public fun kotlinSidecarDir(userHome: Path): Path =
 /**
  * The user-facing hint naming the missing sidecar without absolute paths
  * (T-039): error details must stay deterministic and `~`-relative
- * (CLAUDE.md §2.5), so callers use this instead of the absolute
+ * (AGENTS.md), so callers use this instead of the absolute
  * [KotlinSourceParser.detail].
  */
 public fun kotlinMissingHint(): String =

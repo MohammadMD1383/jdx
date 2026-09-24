@@ -9,7 +9,7 @@ import kotlinx.serialization.json.encodeToJsonElement
  *
  * One result model ([BenchResult]) feeds both renderers (D-007): text is the
  * human timing table, JSON the same rows in the standard envelope. Timings
- * are inherently non-deterministic (the disciplined CLAUDE.md §2 exception);
+ * are inherently non-deterministic (the disciplined AGENTS.md exception);
  * row order, labels and targets are byte-stable.
  */
 @Serializable

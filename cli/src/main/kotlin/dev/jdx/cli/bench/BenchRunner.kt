@@ -19,7 +19,7 @@ import java.nio.file.Path
  * (D-043), so a `≤ 150 ms` row would only document the known gap.
  *
  * Timings are inherently non-deterministic (the disciplined exception to
- * CLAUDE.md §2, like `doctor` sizes); case order, labels and targets are
+ * AGENTS.md, like `doctor` sizes); case order, labels and targets are
  * byte-stable. Pure timing math ([median]) and name mapping ([binaryName])
  * are total and unit-tested; jar IO throws [dev.jdx.index.artifact.ArtifactReadException],
  * which the command maps to exit 5.

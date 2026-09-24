@@ -10,7 +10,7 @@ plugins {
 
 rootProject.name = "jdx"
 
-// Module layout — see CLAUDE.md §4.
+// Module layout — see AGENTS.md
 //
 // Dependency rule, enforced by review: `core` depends on nothing project-local and has no
 // third-party runtime dependencies. Everything else depends on `core`. `cli`, `mcp` and

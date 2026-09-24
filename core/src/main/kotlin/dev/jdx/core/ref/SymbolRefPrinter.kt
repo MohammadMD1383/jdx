@@ -8,7 +8,7 @@ import dev.jdx.core.model.TypeSymbolRef
 
 /**
  * Prints a [SymbolRef] in its canonical form (PROPOSAL.md §6, D-014):
- *  - types print their binary name — nesting joined with `$` (CLAUDE.md §6)
+ *  - types print their binary name — nesting joined with `$` (AGENTS.md)
  *  - member parameters/return types print dotted packages with `$`-joined nesting
  *    (`java.util.Map$Entry`, `java.lang.String[]`) — the dotted fqn is **not** used
  *    because a default-package nested class (`c.λ`) would re-parse as a different

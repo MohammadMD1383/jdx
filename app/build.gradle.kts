@@ -4,7 +4,7 @@ import org.gradle.api.tasks.testing.Test
 // `:app` produces the runnable distribution: one self-contained fat jar plus the `jdx`
 // launcher script (src/main/scripts/jdx) that resolves a JDK and starts it. The launcher,
 // not Gradle, owns JDK resolution — JAVA_HOME is unset on the maintainer's machine and the
-// build must never assume otherwise (CLAUDE.md §8).
+// build must never assume otherwise (AGENTS.md).
 //
 // Why no shadow/application plugin: the fat jar is a plain `Jar` over the runtime classpath.
 // Today's dependencies (our modules, kotlin-stdlib, clikt, kotlinx-serialization, ASM,
@@ -39,7 +39,7 @@ val fatJar = tasks.register<Jar>("fatJar") {
             "META-INF/versions/**/module-info.class",
         )
     }
-    // Determinism (CLAUDE.md §2.5): same inputs -> same bytes.
+    // Determinism (AGENTS.md): same inputs -> same bytes.
     isPreserveFileTimestamps = false
     isReproducibleFileOrder = true
 }

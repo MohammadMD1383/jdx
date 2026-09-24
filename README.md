@@ -301,7 +301,7 @@ Tiers 1–2 run in `check`; tier 3 soaks the corpus; tier 4 mutates `core`.
 ```
 jdx/
 ├── README.md                  user-facing intro (this file)
-├── CLAUDE.md                  project rules and entry point for contributors and agents
+├── AGENTS.md                  project rules and entry point for contributors and agents
 ├── CONTRIBUTING.md            conventions, code style, definition of done
 ├── install.sh                 per-user symlink installer (~/.local/bin)
 ├── gradle/libs.versions.toml  single source of dependency versions
@@ -328,7 +328,7 @@ never bundled), SQLite (index store), Clikt (CLI), MCP Kotlin SDK + `com.sun.net
 
 | | |
 |---|---|
-| [`CLAUDE.md`](CLAUDE.md) | Project rules and entry point for contributors and agents |
+| [`AGENTS.md`](AGENTS.md) | Project rules and entry point for contributors and agents |
 | [`AGENTS.md`](AGENTS.md) (+ per-module `AGENTS.md`) | Contributor notes: architecture rules, gotchas, build/test |
 | [`docs/PROPOSAL.md`](docs/PROPOSAL.md) | Full design specification (Appendix B is the flag reference) |
 | [`docs/TESTING.md`](docs/TESTING.md) | Testing strategy — required reading before writing tests |

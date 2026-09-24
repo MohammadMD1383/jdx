@@ -4,7 +4,7 @@ This project is built by a rotating cast of contributors — humans and AI agent
 share memory, habits, or taste. Nobody here has read the whole codebase. **The conventions
 below exist so that code written by six different people looks like it was written by one.**
 
-If you are an AI agent, start with `CLAUDE.md`, then read the [For AI agents](#for-ai-agents)
+If you are an AI agent, start with `AGENTS.md`, then read the [For AI agents](#for-ai-agents)
 section at the bottom of this file.
 
 ---
@@ -27,7 +27,7 @@ cat open-items.md               # limitations and the phase-2 backlog — where 
 
 | Question | File |
 |---|---|
-| What is this project and what are its rules? | `CLAUDE.md` |
+| What is this project and what are its rules? | `AGENTS.md` |
 | Why is it designed this way? What does each command do? | `docs/PROPOSAL.md` |
 | Why was X chosen over Y? May I change it? | `AGENTS.md` (root locked rules + module notes) |
 | What should I work on next? | `open-items.md` (limitations, follow-ups, phase-2 backlog) |
@@ -191,7 +191,7 @@ that you have no memory of yesterday.
 
 **Your session is only complete when the documentation is.** Concretely:
 
-1. **Read before writing.** `CLAUDE.md` → root `AGENTS.md` → the module
+1. **Read before writing.** `AGENTS.md` → the module
    `AGENTS.md` for your area → `open-items.md`. Roughly 15 minutes. It will save you
    from re-deciding things that are already settled and from repeating paid-for mistakes.
 2. **Ask the owner about genuine ambiguity instead of picking.** This is an explicit standing

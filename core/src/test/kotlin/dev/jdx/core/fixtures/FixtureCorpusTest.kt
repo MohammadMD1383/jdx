@@ -86,7 +86,7 @@ class FixtureCorpusTest {
 
     @Test
     fun `every jar entry carries the same fixed 1980 timestamp`() {
-        // Byte-determinism (CLAUDE.md §2.5): reproducible archives fix every entry timestamp,
+        // Byte-determinism (AGENTS.md): reproducible archives fix every entry timestamp,
         // so rebuilding produces identical bytes. A single drifting entry breaks the promise.
         for (jar in listOf(binaryJar, sourcesJar)) {
             ZipFile(jar).use { zip ->

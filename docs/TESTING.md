@@ -246,7 +246,7 @@ months from now.
 
 ## 7. Fault injection (§family 6)
 
-`jdx`'s promise is *degrade, don't fail* (CLAUDE.md §2.8). That promise needs adversarial
+`jdx`'s promise is *degrade, don't fail* (AGENTS.md). That promise needs adversarial
 tests, generated programmatically rather than collected by hand:
 
 - Truncated class file (cut at every 10 % boundary)
