@@ -34,6 +34,7 @@ public val HELP_ROWS: List<HelpRow> = listOf(
     HelpRow("calls <member>", "Call hierarchy (out)", "jdx calls 'Gson#toJson(Object)'"),
     HelpRow("samples <symbol>", "Real call sites as usage examples", "jdx samples 'Gson#toJson(Object)'"),
     HelpRow("version", "Print the jdx version", "jdx version"),
+    HelpRow("upgrade [--check]", "Self-update from GitHub Releases", "jdx upgrade --check"),
     HelpRow("doctor", "Self-diagnosis (JDK, index, daemon, workspace)", "jdx doctor"),
     HelpRow("ws create|list|info|remove|add|use", "Project and library configuration", "jdx ws list"),
     HelpRow("cache info|gc|clear", "Index and cache maintenance", "jdx cache info"),

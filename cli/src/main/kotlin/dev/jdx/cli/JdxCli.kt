@@ -30,6 +30,7 @@ import dev.jdx.cli.commands.ResolveCommand
 import dev.jdx.cli.commands.SearchCommand
 import dev.jdx.cli.commands.ShowCommand
 import dev.jdx.cli.commands.TreeCommand
+import dev.jdx.cli.commands.UpgradeCommand
 import dev.jdx.cli.commands.UsagesCommand
 import dev.jdx.cli.commands.VersionCommand
 import dev.jdx.cli.commands.cacheGroup
@@ -106,6 +107,7 @@ internal fun CoreCliktCommand.effectiveJson(ownJson: Boolean): Boolean =
 fun main(args: Array<String>): Unit =
     JdxCli().subcommands(
         VersionCommand(),
+        UpgradeCommand(),
         DoctorCommand(),
         ShowCommand(),
         MembersCommand(),

@@ -1177,5 +1177,6 @@ serve     [-w …] --port --bind
 mcp       [-w …] (stdio; per-call workspace override)
 batch     --json
 bench     [--jars …] [-w …] [--no-jdk] [--iterations N] [--json]
+upgrade   [--version <tag>] [--check] [--repo OWNER/NAME] [--json]
 help      [--agent] [--json]
 ```

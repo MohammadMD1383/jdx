@@ -57,7 +57,9 @@ curl -fsSL https://raw.githubusercontent.com/MohammadMD1383/jdx/main/install-rel
 ```
 
 Verify with `jdx version` (`jdx doctor` reports JDK, cache, index, Kotlin
-sidecar, daemon, and workspace status). Prefer building from source? See
+sidecar, daemon, and workspace status). Release installs self-update with
+`jdx upgrade` (`--check` to only report); source builds are never self-updated.
+Prefer building from source? See
 [Build and install](#build-and-install).
 
 ## What makes it an *IDE*, not a better `javap`
@@ -140,6 +142,7 @@ paired; `--engine javap` shows raw bytecode. Decompiled output is always labelle
 | Command | Purpose | Key flags / notes |
 |---|---|---|
 | `jdx version` | Print the version | `--json` for the envelope form |
+| `jdx upgrade` | Self-update from GitHub Releases (release installs only) | `--version <tag>` (default latest), `--check` (report only), `--repo OWNER/NAME`, `--json`. Exits 1 on unknown tag, 3 on non-release installs, 5 on download failure |
 | `jdx doctor` | Self-diagnosis | One `ok`/`warn`/`fail` row per check: JDK, `jrt:/`, `javap`, JDK sources, cache, config, index DB, Kotlin sidecar, daemon (probed live: running vs stale), workspace. Exits 6 if any check fails. |
 | `jdx ws create\|list\|info\|remove\|use\|add` | Project & library configuration | `create <name> --jars … --src … --coord … --repo … [--jdk\|--no-jdk]`; `add <name> <root>`; `use <name> [--clear]` sets the default; `list` / `info <name>` / `remove <name>` |
 | `jdx cache info\|gc\|clear` | Index and cache maintenance | `info` (DB location, size, schema, counts); `gc [--dry-run] [--cache-dir …]` (evicts unreferenced + stale artifacts + orphan daemon logs); `clear` (wipes regenerable cache) |

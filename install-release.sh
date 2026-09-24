@@ -15,6 +15,9 @@
 # (default MohammadMD1383/jdx), JDX_INSTALL_DIR, JDX_BIN_DIR, JDX_TARBALL
 # (local .tar.gz for offline installs and tests — skips the download).
 #
+# Writes a `.jdx-release` marker (repo + tag) into the install dir: that is
+# how `jdx upgrade` knows this is a release install and which repo it tracks.
+#
 # Per-user only: never requires root, and refuses to run as root. Refuses to
 # overwrite an existing, unrelated `jdx` on PATH unless --force is given.
 
@@ -98,6 +101,20 @@ tarball=
 if [ -n "$tarball_override" ]; then
     [ -f "$tarball_override" ] || die "tarball '$tarball_override' not found"
     tarball=$tarball_override
+    # Offline installs carry no release tag; recover it from the asset name
+    # (jdx-<bare>.tar.gz) so the .jdx-release marker stays truthful.
+    base=$(basename -- "$tarball_override")
+    case $base in
+        jdx-*.tar.gz)
+            bare=${base#jdx-}
+            bare=${bare%.tar.gz}
+            case $bare in
+                ''|*[!0-9.]*) ;;
+                *) version="v$bare" ;;
+            esac
+            ;;
+    esac
+    unset base bare
 else
     if [ "$version" = "latest" ]; then
         version=$(resolve_latest)
@@ -149,6 +166,10 @@ rm -rf -- "$install_dir" || die "cannot clear '$install_dir'"
 mkdir -p -- "$install_dir" || die "cannot create '$install_dir'"
 cp -r -- "$tmp_dir/jdx/." "$install_dir/" || die "cannot copy into '$install_dir'"
 chmod +x -- "$install_dir/jdx" || die "cannot make '$install_dir/jdx' executable"
+# Marker for `jdx upgrade`: which repo this install tracks (and that it IS a
+# release install — source builds have no marker and are never self-updated).
+printf 'repo=%s\ntag=%s\n' "$repo" "$version" > "$install_dir/.jdx-release" \
+    || die "cannot write '$install_dir/.jdx-release'"
 
 mkdir -p -- "$bin_dir" || die "cannot create '$bin_dir'"
 target=$bin_dir/jdx
