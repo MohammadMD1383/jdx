@@ -1,22 +1,18 @@
 # CLAUDE.md — `jdx`
 
-> **New here? Read in this order — about 20 minutes, and it will save you a day:**
+> **New here? Read in this order — about 15 minutes, and it will save you a day:**
 > 1. **This file** — the rules. Short.
-> 2. **`docs/PROGRESS.md`** — the `CURRENT STATE` block at the top is the handoff: what
->    exists, what is next, what is broken.
-> 3. **`docs/DECISIONS.md`** — why things are the way they are (index; full entries live in
->    `docs/decisions/` shards — read the index, open only what your task needs). Entries
->    marked `locked` were decided explicitly by the project owner; **do not re-litigate them.**
-> 4. **`docs/LESSONS.md`** — mistakes already made and paid for, so you don't repeat them
->    (D-024). Skim the index; it points into `docs/lessons/` shards.
-> 5. **`docs/TASKS.md`** — pick your task here, following the rules at the top of that file.
-> 6. **`open-items.md`** (repo root) — everything unfinished in one list: next tasks,
->    deferred follow-ups, known caveats. Check it before starting; update it before stopping
->    (always on).
-> 7. **`docs/TESTING.md`** — required before you write a test. **`CONTRIBUTING.md`** — required
->    before you write code.
+> 2. **`AGENTS.md`** (repo root) — architecture rules, build/test/lint, spec pointers.
+> 3. **The module `AGENTS.md`** for the area you will touch (`core/`, `index/`, …) —
+>    key files, module rules, distilled gotchas. Read only the one(s) you need.
+> 4. **`open-items.md`** — known limitations, caveats, and the phase-2 backlog: the
+>    closest thing to a task list. New work starts here or from owner direction.
+> 5. **`docs/TESTING.md`** — required before you write a test. **`CONTRIBUTING.md`** —
+>    required before you write code.
 >
 > The full design lives in `docs/PROPOSAL.md`; read it lazily, when a task sends you there.
+> (The v1 task board, session logs, and decision/lesson shards were removed post-v1;
+> their durable content now lives in the `AGENTS.md` files, full history in git.)
 >
 > **This is an open-source project built by a rotating cast of humans and AI agents who share
 > no memory and no habits.** Nobody has read the whole codebase. That is the constraint the
@@ -71,11 +67,11 @@ member was asked for.
 9. **Heavily tested, by construction.** `core` is written **test-first**; everything else is
    backed by test families that *generate* their own cases — differential against `javap`,
    property-based, metamorphic, fault-injection, and a soak run over ~2,183 real jars. See
-   `docs/TESTING.md`. Hand-written examples alone are not sufficient coverage here (D-020).
+   `docs/TESTING.md`. Hand-written examples alone are not sufficient coverage here.
 
 ---
 
-## 3. Locked technical decisions (summary — see `docs/DECISIONS.md`)
+## 3. Locked technical decisions (summary — the rules live in `AGENTS.md`)
 
 | Area | Decision |
 |---|---|
@@ -105,16 +101,12 @@ jdx/
 ├── CLAUDE.md                  ← you are here
 ├── README.md                  user-facing intro
 ├── CONTRIBUTING.md            conventions, code style, definition of done
+├── AGENTS.md                  root contributor notes (rules, build/test, pointers)
+├── <module>/AGENTS.md         per-module notes — read only the one(s) you touch
+├── open-items.md              limitations, caveats, phase-2 backlog (the roadmap)
 ├── docs/
 │   ├── PROPOSAL.md            full design document (the spec)
-│   ├── DECISIONS.md           decision index + rules; entries in decisions/ shards (D-023)
-│   ├── TESTING.md             testing strategy — read before writing tests
-│   ├── TASKS.md               ** the backlog — pick your next task here **
-│   ├── PROGRESS.md            ** CURRENT STATE handoff + shard index — LOG EVERY SESSION **
-│   ├── progress/              session-log shards (10 sessions each, newest first)
-│   ├── LESSONS.md             lessons index + rules (D-024)
-│   ├── lessons/               L-nnn lesson shards (25 each) — mistakes already paid for
-│   └── decisions/             D-nnn decision shards (25 each)
+│   └── TESTING.md             testing strategy — read before writing tests
 ├── gradle/libs.versions.toml  version catalog (single source of dependency versions)
 ├── core/                      model, symbol refs, resolution, rendering. Pure Kotlin, no IO.
 ├── index/                     ASM readers, Kotlin metadata, SQLite store, indexer
@@ -169,33 +161,25 @@ Gson#toJson                                       short form → resolved, or ex
 
 ## 7. Working agreements (full details in `CONTRIBUTING.md`)
 
-- **Append a session entry at the end of every working session** — to the newest shard in
-  `docs/progress/` (index + template in `docs/PROGRESS.md`; 10 sessions per shard, D-023) —
-  and **update the `CURRENT STATE` block** in `docs/PROGRESS.md`. Another contributor
-  resumes from it and trusts it; leaving it stale actively misleads someone. A session that
-  changed files and left no log entry is an incomplete session (D-019).
-- **Distill what cost you time into `docs/LESSONS.md`** (D-024). Any mistake, toolchain
-  quirk or spec gotcha that could bite another contributor becomes an `L-nnn` entry —
-  short, tagged, referenced from your session log. A session that learned something and
-  logged no lesson is incomplete.
-- **Claim your task by committing the `TODO`→`WIP` change** in `docs/TASKS.md` *before* you
-  start, so parallel contributors don't collide.
-- **Keep `open-items.md` current, every session** — move finished items out, record newly
-  found ones (tasks, deferred follow-ups, caveats). It is the always-on open-items list;
-  a session that changed behaviour or found a caveat and left it stale is incomplete.
-- **Ask the owner about genuine ambiguity** rather than picking. Record the answer as a new
-  `D-nnn` in `docs/DECISIONS.md`, then proceed. A silent wrong guess propagates through a
-  codebase nobody fully reads.
+- **Keep `open-items.md` current** — it is the roadmap now that the v1 board is
+  closed. Move finished items out, record newly found ones (limitations, deferred
+  follow-ups, caveats). A change that alters behaviour or finds a caveat and leaves
+  it stale is incomplete.
+- **Keep the `AGENTS.md` notes true.** If a change invalidates a module note (new
+  invariant, new gotcha, new key file), update that note in the same change. A
+  contributor who trusts a stale note pays twice.
+- **Ask the owner about genuine ambiguity** rather than picking. A silent wrong guess
+  propagates through a codebase nobody fully reads.
 - **Do not push to any remote** without explicit owner go-ahead in the current conversation.
-- **Work in the cadence: one small task → commit → push → log → next task** (D-022). Set the
-  task `WIP` and commit *that* before you start. Conventional Commits with a module scope:
-  `feat(index): parallel artifact indexer (T-014)`. If a task can't be finished, committed and
-  logged in one sitting, it is too big — **split it in `docs/TASKS.md` first.** An unpushed,
-  unlogged working tree is invisible to every other contributor.
+- **Work in the cadence: one small change → commit → push → next.** Conventional Commits
+  with a module scope: `feat(index): parallel artifact indexer`. If a change can't be
+  finished and committed in one sitting, it is too big — **split it first.** An unpushed
+  working tree is invisible to every other contributor.
 - **Definition of done for a command:** behaviour in `core`/`index`/`sources`/`decompile`,
   thin adapter in `cli`, `--help` text, text renderer, JSON renderer, exit codes, truncation,
   golden tests for both renderers, at least one *generative* test family (`docs/TESTING.md`
-  §2), README table row, Appendix B flag entry, `TASKS.md` status, `PROGRESS.md` entry.
+  §2), README table row, Appendix B flag entry, `open-items.md` updated if behaviour or
+  limitations changed.
 - **Report honestly.** Failing tests get pasted, not summarised away. Documented half-finished
   work is useful; half-finished work reported as done is a trap.
 - **Write for a stranger.** Explicit over clever, named over inlined, invariants stated in

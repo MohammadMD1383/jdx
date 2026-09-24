@@ -442,7 +442,7 @@ jdx ws create <name> [--jars <glob|path>…] [--src <dir>…] [--coord <g:a:v>�
 jdx ws list | info <name> | remove <name> | add <name> <root> | use <name>
 jdx index [-w <name>] [--force]        build / refresh the index
 jdx cache info | gc | clear
-jdx kotlin install [--repo <url>] [--force]   fetch the Kotlin PSI sidecar set (T-080)
+jdx kotlin install [--repo <url>] [--force]   fetch the Kotlin PSI sidecar set
 jdx doctor                             environment diagnostics
 jdx version [--json]
 jdx help --agent                       paste-ready cheat sheet for an agent prompt
@@ -1000,7 +1000,7 @@ Each milestone ends with a working, committed, demoable binary.
 | **M6** | Serving | Daemon + unix socket + 5-min idle shutdown, transparent CLI client, MCP server, HTTP server, `batch` | Same query answered identically via CLI, MCP, and HTTP |
 | **M7** | Polish | Token budgets, did-you-mean, warnings, AppCDS, `help --agent`, README, install script, `bench` | Cold query ≤ 250 ms; docs complete |
 
-**Phase-2 backlog** is §21. `docs/PROGRESS.md` tracks live status against this table.
+**Phase-2 backlog** is §21. `open-items.md` tracks limitations and the backlog against this table.
 
 ---
 
@@ -1123,7 +1123,7 @@ the authoritative machine-readable version.)*
     --jars <path|glob|dir>  add binary roots (repeatable)
     --src <dir>             add source roots (repeatable)
     --coord <g:a:v>         add a Maven coordinate root (repeatable)
-    --repo <url>            add a Maven repository base URL for --coord fetches (repeatable, T-069)
+    --repo <url>            add a Maven repository base URL for --coord fetches (repeatable)
     --sources <path>        explicitly pair a sources jar
     --jdk / --no-jdk        include the JDK stdlib (default: include)
     --fetch                 allow network fetches from Maven repositories (Central last by default)

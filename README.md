@@ -329,10 +329,8 @@ never bundled), SQLite (index store), Clikt (CLI), MCP Kotlin SDK + `com.sun.net
 | | |
 |---|---|
 | [`CLAUDE.md`](CLAUDE.md) | Project rules and entry point for contributors and agents |
+| [`AGENTS.md`](AGENTS.md) (+ per-module `AGENTS.md`) | Contributor notes: architecture rules, gotchas, build/test |
 | [`docs/PROPOSAL.md`](docs/PROPOSAL.md) | Full design specification (Appendix B is the flag reference) |
-| [`docs/DECISIONS.md`](docs/DECISIONS.md) | Why things are the way they are |
-| [`docs/TASKS.md`](docs/TASKS.md) | Backlog — all 86 tasks closed, the closing record |
-| [`docs/PROGRESS.md`](docs/PROGRESS.md) | Running work log and current state |
 | [`docs/TESTING.md`](docs/TESTING.md) | Testing strategy — required reading before writing tests |
 | [`CONTRIBUTING.md`](CONTRIBUTING.md) | Conventions, code style, definition of done |
 | [`open-items.md`](open-items.md) | Limitations, caveats, and the phase-2 backlog |

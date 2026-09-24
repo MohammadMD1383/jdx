@@ -14,11 +14,11 @@ section at the bottom of this file.
 ```bash
 git clone <repo> && cd jdx
 ./gradlew build                 # no system gradle/maven needed; the wrapper is the only entry point
-cat docs/PROGRESS.md            # CURRENT STATE block = where the project is
-cat docs/TASKS.md               # pick the lowest-numbered unblocked TODO
+cat AGENTS.md                   # architecture rules, build/test/lint, pointers
+cat open-items.md               # limitations and the phase-2 backlog — where new work starts
 # ... do the work ...
 ./gradlew check                 # tests + lint must pass
-# update docs/TASKS.md status, append a session entry to docs/progress/, commit
+# update open-items.md and the touched module's AGENTS.md if behaviour changed, commit
 ```
 
 ---
@@ -29,10 +29,10 @@ cat docs/TASKS.md               # pick the lowest-numbered unblocked TODO
 |---|---|
 | What is this project and what are its rules? | `CLAUDE.md` |
 | Why is it designed this way? What does each command do? | `docs/PROPOSAL.md` |
-| Why was X chosen over Y? May I change it? | `docs/DECISIONS.md` (index → `docs/decisions/` shards) |
-| What should I work on next? | `docs/TASKS.md` |
-| What happened before I got here? | `docs/PROGRESS.md` (CURRENT STATE) + `docs/progress/` shards |
-| What mistakes have already been made here? | `docs/LESSONS.md` (index → `docs/lessons/` shards) |
+| Why was X chosen over Y? May I change it? | `AGENTS.md` (root locked rules + module notes) |
+| What should I work on next? | `open-items.md` (limitations, follow-ups, phase-2 backlog) |
+| What happened before I got here? | git history (the v1 board and session logs were removed post-v1) |
+| What mistakes have already been made here? | The module `AGENTS.md` gotchas (distilled post-v1; history in git) |
 | How do I write code that fits in? | this file |
 
 **Keep them accurate.** A stale doc in this project is worse than a missing one, because the
@@ -49,13 +49,13 @@ These are not style preferences. Violating one breaks the product.
    `core`, you need a different design.
 2. **Front-ends contain no logic.** `cli`, `mcp`, `server` parse input, call `JdxService`,
    render, and map exit codes. Nothing else. Four front-ends were a deliberate choice
-   (D-004) and they only stay consistent if they are all thin. If you catch yourself writing
+   and they only stay consistent if they are all thin. If you catch yourself writing
    an `if` about *behaviour* in a Clikt command, move it.
-3. **Never load an inspected class into the JVM** (D-017). Parse with ASM. Reflection on a
+3. **Never load an inspected class into the JVM**. Parse with ASM. Reflection on a
    third-party jar executes its static initialisers — that is a security property we sell.
-4. **Never guess a symbol** (D-016). Ambiguous input exits `2` with candidates listed.
-5. **Exit codes are a public contract** (D-015). Changing one is a breaking change.
-6. **Text and JSON must carry the same information** (D-007).
+4. **Never guess a symbol**. Ambiguous input exits `2` with candidates listed.
+5. **Exit codes are a public contract**. Changing one is a breaking change.
+6. **Text and JSON must carry the same information**.
 7. **Output is deterministic.** Sorted. No timestamps, absolute paths, hashes, or ANSI in
    non-TTY output. Golden tests enforce this; do not weaken them to make a test pass.
 8. **Every fallback is labelled.** Decompiled output says it is decompiled. A guessed
@@ -77,7 +77,7 @@ We optimise for **a stranger reading this once, under time pressure**, not for e
   is too clever.
 - **Sealed classes over booleans + nulls** for states with a closed set of cases
   (`Provenance`, `SymbolRef`, query results). Kotlin's exhaustive `when` is the main reason
-  we chose Kotlin (D-001); use it.
+  we chose Kotlin; use it.
 - **Errors are values, not exceptions**, on any path an agent can trigger. Exceptions are for
   bugs. A missing class is a `Result`, not a throw.
 - **Comment the invariant, not the syntax.** `// callers rely on this list being sorted by
@@ -101,14 +101,14 @@ source of half-done work.
 - [ ] Clikt command in `cli`, thin, with complete `--help` text (agents read `--help`)
 - [ ] **Text renderer** following the layout conventions in `docs/PROPOSAL.md` §8
 - [ ] **JSON renderer**, same information, inside the standard envelope
-- [ ] Exit codes per D-015, including the ambiguity path per D-016
+- [ ] Exit codes per the public contract, including the ambiguity path
 - [ ] Truncation handled: bounded output with `shown`/`total`/`hint`
 - [ ] `next:` hint line on single-entity output, where a sensible follow-up exists
 - [ ] **Golden tests** for text and JSON against the fixture corpus
-- [ ] MCP tool entry (once M6 lands) — generated from shared metadata, not hand-written twice
+- [ ] MCP tool entry — generated from shared metadata, not hand-written twice
 - [ ] Row in the README command table
 - [ ] Flag documented in `docs/PROPOSAL.md` Appendix B
-- [ ] `docs/TASKS.md` status updated; `docs/PROGRESS.md` entry appended
+- [ ] `open-items.md` updated if behaviour or limitations changed
 
 ---
 
@@ -122,7 +122,7 @@ strategy; this is the two-minute version.
 - **Hand-written examples are not enough.** They plateau at what you already thought of. Every
   new behaviour also needs at least one test family that *generates* its own cases:
   property-based, differential-vs-`javap`, metamorphic, fault-injection, or corpus soak.
-- **Fixtures over mocks.** The `testfixtures` corpus (T-006) compiles real, nasty Java and
+- **Fixtures over mocks.** The `testfixtures` corpus compiles real, nasty Java and
   Kotlin at build time. Hand-built `ClassInfo` objects encode your assumptions — and your
   assumptions are exactly what the test should be checking. There is no mocking framework in
   `core`; if you need one, push the IO outward instead.
@@ -154,36 +154,33 @@ strategy; this is the two-minute version.
 
 - **Conventional Commits:** `feat:`, `fix:`, `docs:`, `refactor:`, `test:`, `build:`,
   `perf:`, `chore:`. Scope with the module: `feat(index): parallel artifact indexer`.
-- **The cadence is: one small task → commit → push → log → next task** (D-022). Not
-  "finish the milestone, then commit". Contributors here share no memory; an unpushed,
-  unlogged working tree is invisible to everyone else, and if the session ends there the work
+- **The cadence is: one small change → commit → push → next.** Not
+  "finish everything, then commit". Contributors here share no memory; an unpushed
+  working tree is invisible to everyone else, and if the session ends there the work
   is effectively lost. Small pushed increments also keep `git bisect` useful and let a bad
-  task be reverted without unpicking four others.
-- **Claim first.** Set the task `WIP` in `docs/TASKS.md` and commit that *before* you start
-  coding.
+  change be reverted without unpicking four others.
 - **Small, working increments.** Every commit should build. A 2,000-line commit cannot be
   reviewed and cannot be bisected.
-- **If a task won't fit in one sitting, split it in `docs/TASKS.md` first**, then do the first
+- **If a change won't fit in one sitting, split it first**, then do the first
   half. That is normal, not an admission of failure.
-- Reference the task: `feat(cli): add jdx outline (T-011)`.
-- Branch per task: `t011-outline-command`.
+- Branch per change: `outline-command`, `daemon-log-gc`.
 - **Never push to a remote without an explicit go-ahead** from the project owner in the
-  current conversation/session (D-012).
+  current conversation/session.
 
 ---
 
-## Changing a decision
+## Changing a locked rule
 
-`docs/DECISIONS.md` marks each entry `locked` or `proposed-by-implementer`.
+`AGENTS.md` (root) marks which rules are owner-settled (`locked`) and which are
+defaults.
 
-- **`proposed-by-implementer`** — a default someone picked while building. Improve it in a
-  normal PR and update the entry in the same PR.
-- **`locked`** — the project owner decided it explicitly, usually after being shown the
-  alternatives. Do **not** change it, and do not erode it gradually through refactors. If you
-  think it is wrong, open an issue making the case, get an explicit reversal, and record it
-  as a **new** `D-nnn` that supersedes the old one.
+- **Defaults** — improve them in a normal PR and update the note in the same PR.
+- **`locked`** — the project owner decided them explicitly, usually after being shown
+  the alternatives. Do **not** change them, and do not erode them gradually through
+  refactors. If you think one is wrong, open an issue making the case, get an explicit
+  reversal, and record it in `AGENTS.md` (and the commit message).
 
-Never renumber and never delete a decision. The history is the value.
+Never silently re-litigate a settled rule. The history is the value.
 
 ---
 
@@ -194,32 +191,21 @@ that you have no memory of yesterday.
 
 **Your session is only complete when the documentation is.** Concretely:
 
-1. **Read before writing.** `CLAUDE.md` → `docs/PROGRESS.md` CURRENT STATE →
-   `docs/DECISIONS.md` → `docs/TASKS.md`. Roughly 15 minutes. It will save you from
-   re-deciding things that are already settled and from duplicating work.
-2. **Claim your task by committing the status change** to `docs/TASKS.md` *before* you start.
-   Another agent may be working in parallel.
-3. **Ask the owner about genuine ambiguity instead of picking.** This is an explicit standing
+1. **Read before writing.** `CLAUDE.md` → root `AGENTS.md` → the module
+   `AGENTS.md` for your area → `open-items.md`. Roughly 15 minutes. It will save you
+   from re-deciding things that are already settled and from repeating paid-for mistakes.
+2. **Ask the owner about genuine ambiguity instead of picking.** This is an explicit standing
    instruction from the owner. A wrong guess propagates silently through a codebase that
-   nobody fully reads. Record the answer as a new `D-nnn`.
-4. **Append a session entry before you stop** — to the newest `docs/progress/` shard
-   (index and template in `docs/PROGRESS.md`), and update the `CURRENT STATE` block there.
-   Include the exact commands a successor can run to verify your work. A session that
-   changed files and left no log entry is an incomplete session (D-019).
-5. **Distill lessons (D-024).** Anything that cost you time and could cost another
-   contributor the same becomes an `L-nnn` entry in the newest `docs/lessons/` shard,
-   indexed from `docs/LESSONS.md`. A session that learned something and logged no lesson
-   is incomplete.
-6. **Update `open-items.md` (always on).** Move finished items out, record newly found
-   ones — tasks, deferred follow-ups, environment caveats. A session that changed
-   behaviour or found a caveat and left it stale is incomplete.
-7. **Update the CURRENT STATE block.** The next agent reads it first and trusts it. If it is
-   stale, you have actively misled someone.
-8. **Report honestly.** If tests fail, say so and paste the output. If you skipped part of a
+   nobody fully reads.
+3. **Update `open-items.md` (always on).** Move finished items out, record newly found
+   ones — deferred follow-ups, environment caveats, limitations. A change that alters
+   behaviour or finds a caveat and leaves it stale is incomplete.
+4. **Update the touched module's `AGENTS.md`.** New invariant, new gotcha, new key file —
+   write it down in the same change, compressed. The next agent reads it cold and trusts it.
+5. **Report honestly.** If tests fail, say so and paste the output. If you skipped part of a
    task, say which part and why. Half-finished work that is *documented* as half-finished is
    useful; half-finished work reported as done is a trap that costs the next contributor more
    than the work was worth.
-9. **Do not expand scope silently.** If you find adjacent work, add a task to
-   `docs/TASKS.md`; do not fold it into the current one. Record it in `open-items.md` too.
-10. **Leave the build green.** If you cannot, say so loudly in the progress entry and in the
-   CURRENT STATE block, with the exact failing command.
+6. **Do not expand scope silently.** If you find adjacent work, record it in
+   `open-items.md`; do not fold it into the current change.
+7. **Leave the build green.** If you cannot, say so loudly, with the exact failing command.

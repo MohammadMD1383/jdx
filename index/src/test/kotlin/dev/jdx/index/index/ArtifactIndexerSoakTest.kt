@@ -23,7 +23,7 @@ import org.junit.jupiter.api.io.TempDir
  * Re-measured 2026-09-19 for T-064 (JDK 26.0.2.1): `minecraft-client.jar`
  * (10,952 classes) 4,004/s first run, 5,663–5,798/s second run; full `jrt:/`
  * (27,546 classes) ~5,900/s. The 3,000/s end-to-end target is met with no
- * code change; see the T-064 notes in `docs/TASKS.md`.
+ * code change (benchmarked for the closed indexer task T-064; notes in git history).
  */
 @Tag("soak")
 class ArtifactIndexerSoakTest {
