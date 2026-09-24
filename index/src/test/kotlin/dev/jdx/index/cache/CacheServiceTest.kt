@@ -5,8 +5,10 @@ import dev.jdx.index.workspace.WorkspaceCorruptException
 import dev.jdx.index.workspace.WorkspaceDefinition
 import dev.jdx.index.workspace.WorkspaceStore
 import io.kotest.matchers.shouldBe
+import java.nio.file.Files
 import java.nio.file.Path
 import org.junit.jupiter.api.Test
+import org.junit.jupiter.api.io.TempDir
 
 /**
  * Tier-1 example tests for [CacheService] (T-018).
@@ -19,6 +21,11 @@ import org.junit.jupiter.api.Test
  */
 class CacheServiceTest {
 
+    @TempDir
+    private lateinit var tempDir: Path
+
+    private var daemonSeq = 0
+
     /** One invented-but-plausible cache layout per test; nothing here exists on disk. */
     private class Harness {
         val store = FakeIndexStore()
@@ -26,7 +33,10 @@ class CacheServiceTest {
         var dbPresent = true
         val resolvable = mutableSetOf<String>()
 
-        fun service(): CacheService = CacheService(
+        fun service(
+            daemonDir: Path? = null,
+            aliveSockets: Set<String> = emptySet(),
+        ): CacheService = CacheService(
             cacheRoot = Path.of("/fake/cache"),
             workspaceStore = workspaces,
             openStore = { store },
@@ -35,6 +45,8 @@ class CacheServiceTest {
                 else throw IllegalArgumentException("no such artifact: $spec")
             },
             isDbPresent = { dbPresent },
+            daemonRuntimeDir = daemonDir,
+            daemonSocketAlive = { socket -> socket.fileName.toString() in aliveSockets },
         )
 
         /** Stores an artifact and optionally makes its path resolvable. */
@@ -190,6 +202,131 @@ class CacheServiceTest {
         (result is CacheResult.Failure) shouldBe true
         (result as CacheResult.Failure).exitCode shouldBe 4
         harness.store.listArtifacts().size shouldBe 1
+    }
+
+    // -- daemon log sweep (T-085) -------------------------------------------------
+
+    /** A fresh runtime dir per call; the database is absent so only the sweep runs. */
+    private fun daemonService(
+        aliveSockets: Set<String> = emptySet(),
+        throwingProbe: Boolean = false,
+    ): Pair<CacheService, Path> {
+        val harness = Harness()
+        harness.dbPresent = false
+        val dir = tempDir.resolve("daemon-${daemonSeq++}")
+        Files.createDirectories(dir)
+        val service = CacheService(
+            cacheRoot = Path.of("/fake/cache"),
+            workspaceStore = harness.workspaces,
+            openStore = { harness.store },
+            isDbPresent = { false },
+            daemonRuntimeDir = dir,
+            daemonSocketAlive = { socket ->
+                if (throwingProbe) throw RuntimeException("probe is down")
+                socket.fileName.toString() in aliveSockets
+            },
+        )
+        return service to dir
+    }
+
+    private fun writeLog(dir: Path, name: String, bytes: Int = 10): Path {
+        val file = dir.resolve(name)
+        Files.write(file, ByteArray(bytes) { it.toByte() })
+        return file
+    }
+
+    private fun touch(dir: Path, name: String): Path {
+        val file = dir.resolve(name)
+        Files.write(file, ByteArray(0))
+        return file
+    }
+
+    @Test
+    fun `gc deletes orphan logs and keeps the live one`() {
+        val (service, dir) = daemonService(aliveSockets = setOf("live-v1.sock"))
+        writeLog(dir, "orphan-v1.log", 10)
+        writeLog(dir, "dead-v1.log", 20)
+        touch(dir, "dead-v1.sock")
+        writeLog(dir, "live-v1.log", 30)
+        touch(dir, "live-v1.sock")
+        val report = okGc(service)
+        report.daemonLogs.deleted shouldBe listOf("dead-v1.log", "orphan-v1.log")
+        report.daemonLogs.bytesFreed shouldBe 30
+        Files.exists(dir.resolve("orphan-v1.log")) shouldBe false
+        Files.exists(dir.resolve("dead-v1.log")) shouldBe false
+        Files.exists(dir.resolve("live-v1.log")) shouldBe true
+    }
+
+    @Test
+    fun `gc dry-run reports orphan logs without deleting`() {
+        val (service, dir) = daemonService()
+        writeLog(dir, "orphan-v1.log", 12)
+        val report = okGc(service, dryRun = true)
+        report.dryRun shouldBe true
+        report.daemonLogs.deleted shouldBe listOf("orphan-v1.log")
+        report.daemonLogs.bytesFreed shouldBe 12
+        Files.exists(dir.resolve("orphan-v1.log")) shouldBe true
+    }
+
+    @Test
+    fun `gc without the daemon seam sweeps no logs`() {
+        val harness = Harness()
+        harness.dbPresent = false
+        val report = okGc(harness.service())
+        report.daemonLogs shouldBe DaemonLogSweep()
+    }
+
+    @Test
+    fun `gc keeps logs when the probe throws`() {
+        val (service, dir) = daemonService(throwingProbe = true)
+        touch(dir, "maybe-v1.sock")
+        writeLog(dir, "maybe-v1.log", 8)
+        val report = okGc(service)
+        report.daemonLogs.deleted shouldBe emptyList()
+        Files.exists(dir.resolve("maybe-v1.log")) shouldBe true
+    }
+
+    @Test
+    fun `gc ignores non-log files and subdirectories`() {
+        val (service, dir) = daemonService()
+        Files.write(dir.resolve("notes.txt"), byteArrayOf(1))
+        val sub = dir.resolve("sub")
+        Files.createDirectories(sub)
+        writeLog(sub, "inner.log", 5)
+        val report = okGc(service)
+        report.daemonLogs.deleted shouldBe emptyList()
+        Files.exists(dir.resolve("notes.txt")) shouldBe true
+        Files.exists(sub.resolve("inner.log")) shouldBe true
+    }
+
+    @Test
+    fun `gc with a missing runtime dir sweeps nothing`() {
+        val harness = Harness()
+        harness.dbPresent = false
+        val report = okGc(harness.service(daemonDir = tempDir.resolve("absent-${daemonSeq++}")))
+        report.daemonLogs shouldBe DaemonLogSweep()
+    }
+
+    @Test
+    fun `gc only sweeps the lowercase log suffix`() {
+        val (service, dir) = daemonService()
+        Files.write(dir.resolve("upper-V1.LOG"), byteArrayOf(4))
+        val report = okGc(service)
+        report.daemonLogs.deleted shouldBe emptyList()
+        Files.exists(dir.resolve("upper-V1.LOG")) shouldBe true
+    }
+
+    @Test
+    fun `gc sweeps artifacts and orphan logs together`() {
+        val harness = Harness()
+        harness.artifact("a".repeat(32), "/fake/a.jar", 3, exists = false)
+        val dir = tempDir.resolve("daemon-${daemonSeq++}")
+        Files.createDirectories(dir)
+        writeLog(dir, "orphan-v1.log", 7)
+        val report = okGc(harness.service(daemonDir = dir))
+        report.deleted.map { it.path } shouldBe listOf("/fake/a.jar")
+        report.daemonLogs.deleted shouldBe listOf("orphan-v1.log")
+        Files.exists(dir.resolve("orphan-v1.log")) shouldBe false
     }
 
     // -- clear ------------------------------------------------------------------

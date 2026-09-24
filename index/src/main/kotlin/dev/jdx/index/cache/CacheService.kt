@@ -61,6 +61,19 @@ public class CacheService(
      * is provable without SQLite or disk.
      */
     public val isDbPresent: () -> Boolean = { Files.isRegularFile(cacheRoot.resolve("index/v1.db")) },
+    /**
+     * Daemon socket directory (`$XDG_RUNTIME_DIR/jdx`, T-041) whose orphan
+     * `.log` files `gc` sweeps (T-085). `null` (the default) skips the sweep —
+     * today's behaviour; production wires the real directory in the CLI
+     * adapter, which already depends on `:server`.
+     */
+    public val daemonRuntimeDir: Path? = null,
+    /**
+     * Whether a daemon answers at a socket path. Defaults to `false` (every
+     * log reads as orphaned); production passes the `health` handshake.
+     * Must never throw — a throwing probe keeps the log (T-085).
+     */
+    public val daemonSocketAlive: (Path) -> Boolean = { false },
 ) {
     /** The shared index database file (D-013). */
     public val dbFile: Path = cacheRoot.resolve("index/v1.db")
@@ -114,11 +127,15 @@ public class CacheService(
 
     /**
      * `cache gc`: deletes stale artifacts (stored file gone) and artifacts no
-     * workspace references. With [dryRun] nothing is deleted and the report
-     * names what would be.
+     * workspace references, plus orphan daemon `.log` files (T-085). With
+     * [dryRun] nothing is deleted and the report names what would be.
      */
     public fun gc(dryRun: Boolean = false): CacheResult<GcReport> {
-        if (!isDbPresent()) return CacheResult.Ok(GcReport(emptyList(), kept = 0, dryRun = dryRun))
+        if (!isDbPresent()) {
+            return CacheResult.Ok(
+                GcReport(emptyList(), kept = 0, dryRun = dryRun, daemonLogs = sweepDaemonLogs(dryRun)),
+            )
+        }
         // References resolve before the store opens: a corrupt workspace (exit 4)
         // must fail without touching the database.
         val references = when (val collected = collectReferences()) {
@@ -138,7 +155,12 @@ public class CacheService(
                 if (!dryRun) store.deleteArtifactByHash(artifact.hash)
                 deleted.add(GcDeleted(path = artifact.path, hash = artifact.hash, classes = classes))
             }
-            GcReport(deleted = deleted.sortedBy { it.path }, kept = kept, dryRun = dryRun)
+            GcReport(
+                deleted = deleted.sortedBy { it.path },
+                kept = kept,
+                dryRun = dryRun,
+                daemonLogs = sweepDaemonLogs(dryRun),
+            )
         }
     }
 
@@ -250,6 +272,64 @@ public class CacheService(
         }
     }
 
+    /**
+     * Orphan daemon `.log` sweep (T-085, D-066): the `$XDG_RUNTIME_DIR/jdx`
+     * directory collects one `.log` sibling per spawned daemon, and neither
+     * idle shutdown nor `daemon stop` removes them. `gc` owns them now: a log
+     * is orphaned when its sibling `.sock` is absent or no daemon answers
+     * there; logs of live daemons are kept as running evidence.
+     *
+     * Only top-level `*.log` regular files are considered. Never throws: a
+     * missing directory sweeps nothing, unreadable state keeps the file, and
+     * a throwing probe reads as "cannot prove orphaned" (keep). Names are
+     * sorted file names, never paths (D-007).
+     */
+    private fun sweepDaemonLogs(dryRun: Boolean): DaemonLogSweep {
+        val dir = daemonRuntimeDir ?: return DaemonLogSweep()
+        val logs: List<Path> = try {
+            if (!Files.isDirectory(dir)) return DaemonLogSweep()
+            Files.list(dir).use { stream ->
+                stream.filter { it.fileName.toString().endsWith(".log") && it.isRegularFile() }
+                    .sorted().toList()
+            }
+        } catch (e: Exception) {
+            return DaemonLogSweep()
+        }
+        val deleted = mutableListOf<String>()
+        var bytes = 0L
+        for (log in logs) {
+            val name = log.fileName.toString()
+            if (daemonLogAlive(dir, name)) continue
+            bytes += fileBytes(log)
+            if (!dryRun) {
+                val gone = try {
+                    Files.deleteIfExists(log)
+                    !Files.exists(log)
+                } catch (e: Exception) {
+                    false
+                }
+                if (!gone) continue
+            }
+            deleted.add(name)
+        }
+        return DaemonLogSweep(deleted, bytes)
+    }
+
+    /** True when the log's sibling socket has a live daemon behind it; a throwing probe reads as "cannot prove orphaned" (keep). */
+    private fun daemonLogAlive(dir: Path, logName: String): Boolean {
+        return try {
+            val socket = dir.resolve(logName.removeSuffix(".log") + ".sock")
+            if (!Files.exists(socket)) return false
+            try {
+                daemonSocketAlive(socket)
+            } catch (e: Exception) {
+                true
+            }
+        } catch (e: Exception) {
+            true
+        }
+    }
+
     private fun normalise(path: Path): String = path.toAbsolutePath().normalize().toString()
 
     private fun directoryBytes(root: Path): Long {
@@ -329,10 +409,22 @@ public data class GcReport(
     public val deleted: List<GcDeleted>,
     public val kept: Int,
     public val dryRun: Boolean,
+    /** Orphan daemon `.log` sweep (T-085); empty when the seam is off or nothing was orphaned. */
+    public val daemonLogs: DaemonLogSweep = DaemonLogSweep(),
 ) {
     /** Classes freed (or that a real run would free). */
     public val deletedClasses: Int get() = deleted.sumOf { it.classes }
 }
+
+/**
+ * Orphan daemon `.log` files `gc` deleted (or would delete under `--dry-run`).
+ * File names only, sorted — never paths (D-007 keeps paths out of prose; the
+ * runtime dir is machine-local anyway).
+ */
+public data class DaemonLogSweep(
+    public val deleted: List<String> = emptyList(),
+    public val bytesFreed: Long = 0,
+)
 
 /** `cache clear` data. */
 public data class ClearReport(

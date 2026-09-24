@@ -15,6 +15,8 @@ import dev.jdx.index.cache.CacheService
 import dev.jdx.index.cache.ClearReport
 import dev.jdx.index.cache.GcReport
 import dev.jdx.index.cache.formatCacheBytes
+import dev.jdx.server.DaemonPaths
+import dev.jdx.server.DaemonProbe
 import java.nio.file.Files
 import java.nio.file.Path
 import kotlinx.serialization.Serializable
@@ -42,10 +44,17 @@ class CacheCommand : CoreCliktCommand(name = "cache") {
 /**
  * Builds the `cache` group. [services] resolves the service for the effective
  * `--cache-dir` (production: a service over that root with the system
- * workspace store); tests inject a prebuilt service over temp dirs.
+ * workspace store, plus the real daemon runtime dir so `gc` sweeps orphan
+ * daemon logs); tests inject a prebuilt service over temp dirs.
  */
 fun cacheGroup(
-    services: (Path) -> CacheService = { root -> CacheService(root) },
+    services: (Path) -> CacheService = { root ->
+        CacheService(
+            root,
+            daemonRuntimeDir = DaemonPaths.systemRuntimeDir()?.resolve(DaemonPaths.DIR_NAME),
+            daemonSocketAlive = { socket -> DaemonProbe.health(socket) != null },
+        )
+    },
     terminate: (Int) -> Nothing = ::exitProcess,
 ): CacheCommand = CacheCommand().subcommands(
     CacheInfoCommand(services, terminate),
@@ -87,6 +96,8 @@ private data class GcPayload(
     val deletedClasses: Int,
     val kept: Int,
     val dryRun: Boolean,
+    val daemonLogsDeleted: List<String>,
+    val daemonLogBytesFreed: Long,
     val message: String,
 )
 
@@ -180,7 +191,8 @@ class CacheGcCommand(
 ) : CoreCliktCommand(name = "gc") {
     override fun help(context: Context): String =
         "Evict cached artifacts no workspace references, plus stale ones whose file " +
-            "is gone. Artifacts still named by a workspace are kept; the JDK index " +
+            "is gone, plus orphan daemon logs (kept while their daemon answers). " +
+            "Artifacts still named by a workspace are kept; the JDK index " +
             "is kept while any workspace includes the JDK. With --dry-run, report " +
             "without deleting. Exits 4 on a corrupt workspace, 6 on DB/IO failure."
 
@@ -205,7 +217,7 @@ class CacheGcCommand(
             val message = "usage error: ${failure.message}"
             finishCache(
                 message,
-                GcPayload(emptyList(), 0, 0, dryRun, message).toJson(ok = false),
+                GcPayload(emptyList(), 0, 0, dryRun, emptyList(), 0, message).toJson(ok = false),
                 json, 3, terminate,
             )
             return
@@ -222,7 +234,7 @@ class CacheGcCommand(
             is CacheResult.Failure -> {
                 finishCache(
                     result.message,
-                    GcPayload(emptyList(), 0, 0, dryRun, result.message).toJson(ok = false),
+                    GcPayload(emptyList(), 0, 0, dryRun, emptyList(), 0, result.message).toJson(ok = false),
                     json, result.exitCode, terminate,
                 )
             }
@@ -301,19 +313,27 @@ private fun CacheInfo.toPayload(): CacheInfoPayload = CacheInfoPayload(
 private fun GcReport.renderText(dryRun: Boolean): String = buildString {
     appendLine(if (dryRun) "cache gc --dry-run" else "cache gc")
     if (deleted.isEmpty()) {
-        append("  nothing to collect ($kept artifact(s) referenced)")
+        appendLine("  nothing to collect ($kept artifact(s) referenced)")
     } else {
         val verb = if (dryRun) "would delete" else "deleted"
         appendLine("  $verb: ${deleted.size} artifact(s), $deletedClasses classes freed")
         for (entry in deleted) appendLine("    ${entry.path} (${entry.classes} classes)")
-        append("  kept: $kept artifact(s)")
-        if (dryRun) append("\n  re-run without --dry-run to delete")
+        appendLine("  kept: $kept artifact(s)")
+        if (dryRun) appendLine("  re-run without --dry-run to delete")
+    }
+    if (daemonLogs.deleted.isNotEmpty()) {
+        val verb = if (dryRun) "would delete" else "deleted"
+        append(
+            "  daemon logs: $verb ${daemonLogs.deleted.size} file(s), " +
+                "${formatCacheBytes(daemonLogs.bytesFreed)} freed (${daemonLogs.deleted.joinToString(", ")})",
+        )
     }
 }.trimEnd()
 
 private fun GcReport.toPayload(): GcPayload = GcPayload(
     deleted = deleted.map { GcDeletedPayload(it.path, it.hash, it.classes) },
-    deletedClasses = deletedClasses, kept = kept, dryRun = dryRun, message = "ok",
+    deletedClasses = deletedClasses, kept = kept, dryRun = dryRun,
+    daemonLogsDeleted = daemonLogs.deleted, daemonLogBytesFreed = daemonLogs.bytesFreed, message = "ok",
 )
 
 private fun ClearReport.renderText(): String =

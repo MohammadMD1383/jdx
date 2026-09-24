@@ -7,6 +7,79 @@ Append-only (D-023): 10 sessions per shard, newest first. Template and rules in
 
 ---
 
+## Session 84 — 2026-09-24 — T-085 `cache gc` daemon-log sweep done (one follow-up left)
+
+**Agent/Author:** Muse Spark 1.3 Free · **Commits:** `90e2ab9` (claim) + closing commit (this session)
+
+### Goal
+Implement one task and push. Board was empty (all 84 DONE), so filed the next
+free number from the `open-items.md` deferred follow-ups: daemon `.log`
+retention (idle shutdown and `stop` sweep socket + pid but keep `.log`, with
+no rotation or `gc` coverage).
+
+### What I did
+- Claimed T-085 first (`docs/TASKS.md` detail block as WIP, committed `90e2ab9`
+  before coding).
+- `index/.../cache/CacheService.kt`: injectable `daemonRuntimeDir: Path? = null`
+  (null skips — today's behaviour) + `daemonSocketAlive: (Path) -> Boolean`;
+  `gc()` sweeps top-level `*.log` regular files whose sibling `.sock` is absent
+  or answers no daemon, live-daemon logs kept. Runs even when the index DB is
+  absent; exit-4/6 failures still touch nothing. Never throws: missing dir
+  sweeps nothing, throwing probe keeps, IO failures keep. New `DaemonLogSweep`
+  (sorted names + bytes) rides `GcReport` with a default, so seam-off reports
+  are unchanged.
+- `cli/.../commands/CacheCommands.kt`: production `cacheGroup` wires the real
+  runtime dir + `DaemonProbe.health(it) != null`; text renders a `daemon logs:`
+  line only when something was/would be deleted (seam-off bytes identical);
+  JSON gains `daemonLogsDeleted` + `daemonLogBytesFreed`; `gc` help mentions
+  the sweep.
+- Caught by test while verifying: first implementation mapped a throwing probe
+  to orphaned (delete) via `runCatching{}.getOrDefault(false)`; the task's
+  conservative rule says keep. Fixed `daemonLogAlive` to return `true` on
+  probe throw — the `gc keeps logs when the probe throws` test pins it.
+- Tests: `CacheServiceTest` +8 examples; new `DaemonLogSweepPropertyTest`
+  (200 cases: sorted/conservative/idempotent/dry-run-promise laws — the
+  generating family); `CacheCommandsTest` tier-2 +3 (text sweep, JSON fields,
+  dry-run).
+- Docs: `TASKS.md` T-085 DONE, **D-066**, this entry, CURRENT STATE,
+  `open-items.md` (follow-up filed out).
+
+### Decisions made
+- **D-066** — orphan daemon `.log` gc semantics (gc owns orphans, sweep runs
+  without a DB but not on failure, conservative deletion, names-not-paths,
+  injectable seam).
+
+### Tasks moved
+- T-085: TODO → WIP (`90e2ab9`) → DONE. Remaining deferred follow-up: warm
+  text output (D-059).
+
+### Lessons distilled
+- None. (The probe-throw catch was a spec-vs-code mismatch the new test
+  existed to catch — ordinary TDD, already covered by D-020.)
+
+### What works now (and how to verify it yourself)
+```bash
+./gradlew :index:test --tests "dev.jdx.index.cache.*" :cli:tier2Test --tests "dev.jdx.cli.commands.CacheCommandsTest" -Ptier1.budget=10000  # 40/40
+./gradlew check -Ptier1.budget=10000  # green, tiers 1-2 + lint + coverage
+export XDG_RUNTIME_DIR=/tmp/jdx-run && ./app/build/jdx cache gc --dry-run  # daemon logs: would delete … (orphans only)
+./app/build/jdx cache gc --json  # result.daemonLogsDeleted + daemonLogBytesFreed
+```
+
+### What is broken / half-done
+- Nothing from this task. Dead `.sock`/`.pid` files are still `stop`/`doctor`
+  business (this task takes logs only, D-066 §1). No log rotation — the sweep
+  bounds growth instead; revisit if daemon chatter grows.
+
+### Open questions / blockers
+- None.
+
+### Next action
+- Remaining deferred follow-up: warm text output (D-059, T-042 serves `--json`
+  warm; text stays in-process) — or owner direction. Push this session's
+  commits (the standing "implement 1 task and push" covers it).
+
+---
+
 ## Session 83 — 2026-09-24 — T-084 `doctor` daemon aliveness done (board empty again)
 
 **Agent/Author:** Muse Spark 1.3 Free · **Commits:** `8c1e86c` (claim) + closing commit (this session)

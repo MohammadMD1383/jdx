@@ -1705,7 +1705,7 @@ proof: stale-only/mixed/running-only/not-running all verified against the built
 binary with a real daemon. Lessons: L-113. The `doctor` deferred follow-up in
 `open-items.md` is filed out; board empty again (T-001…T-084).*
 
-### T-085 — `cache gc` sweeps orphan daemon `.log` files · `WIP` (session 84)
+### T-085 — `cache gc` sweeps orphan daemon `.log` files · `DONE` (session 84)
 
 **Depends:** T-018 (gc policy + report), T-041 (socket/pid/log siblings) · **Files:**
 `index/.../cache/CacheService.kt` (sweep), `cli/.../commands/CacheCommands.kt`
@@ -1715,23 +1715,23 @@ binary with a real daemon. Lessons: L-113. The `doctor` deferred follow-up in
 sweep socket + pid files but keep the `.log` sibling as evidence, with no
 rotation or `gc` coverage yet.)*
 
-- `CacheService` gains injectable `daemonRuntimeDir: Path? = null` (the
-  `$XDG_RUNTIME_DIR/jdx` dir; `null` skips the sweep — today's behaviour) plus
-  `daemonSocketAlive: (Path) -> Boolean` (default `false`, never throws
-  by contract of the caller).
-- `gc()` also sweeps `*.log` files directly under the runtime dir: stale when
-  the sibling `.sock` is absent or the probe says no daemon answers;
-  live-daemon logs are kept. Deletes unless `dryRun`, sums bytes freed. Never
-  throws — IO failures keep the file, a missing dir sweeps nothing.
-- `GcReport` gains `daemonLogs: DaemonLogSweep` (`deleted`: sorted file names,
-  never paths; `bytesFreed`). Text renders a `daemon logs:` line only when the
-  seam is on; JSON payload gains `daemonLogsDeleted` + `daemonLogBytesFreed`.
-- Production `cacheGroup` wires the real runtime dir plus
-  `DaemonProbe.health(it) != null` (CLI already depends on `:server`, T-041).
-- Tests: index tier-1 examples (stale deleted, live kept, dry-run reports
-  without deleting, missing dir sweeps nothing, throwing probe keeps) + a
-  generating property over hostile layouts (never-throws, sorted, idempotent);
-  cli tier-2 end-to-end sweep + JSON fields.
+*Closed in session 84. `CacheService` gains injectable `daemonRuntimeDir`
+(`null` = skip, today's behaviour) + `daemonSocketAlive`; `gc()` sweeps
+top-level `*.log` orphans (sibling socket absent or no daemon answers,
+live-daemon logs kept, throwing probe keeps, never throws) even when the
+index DB is absent, but not on exit-4/6 failure (D-066). `GcReport` gains
+`daemonLogs: DaemonLogSweep` (sorted names + bytes); text renders a
+`daemon logs:` line only when something was/would be deleted (seam-off output
+byte-identical); JSON gains `daemonLogsDeleted` + `daemonLogBytesFreed`;
+production `cacheGroup` wires the real runtime dir + `health` probe. Tests:
+index tier-1 `CacheServiceTest` +8 (stale/dead deleted, live kept,
+dry-run, seam-off, throwing probe, non-log/subdir ignored, missing dir,
+artifacts+logs composed, lowercase-suffix pin) + new
+`DaemonLogSweepPropertyTest` (200-case sorted/conservative/idempotent laws —
+the generating family); cli tier-2 `CacheCommandsTest` +3 (text sweep,
+JSON fields, dry-run). `check` green; live proof: dry-run/real/second-run
+plus a real daemon's log kept. Lessons: none. The `.log` deferred follow-up
+in `open-items.md` is filed out; remaining: warm text output (D-059).*
 
 ## Open questions
 

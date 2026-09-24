@@ -14,12 +14,14 @@ import io.kotest.matchers.string.shouldContain
 import java.io.ByteArrayOutputStream
 import java.io.File
 import java.io.PrintStream
+import java.nio.file.Files
 import java.nio.file.Path
 import kotlinx.serialization.json.Json
 import kotlinx.serialization.json.int
 import kotlinx.serialization.json.jsonArray
 import kotlinx.serialization.json.jsonObject
 import kotlinx.serialization.json.jsonPrimitive
+import kotlinx.serialization.json.long
 import org.junit.jupiter.api.Tag
 import org.junit.jupiter.api.Test
 import org.junit.jupiter.api.io.TempDir
@@ -144,6 +146,63 @@ class CacheCommandsTest {
         val (output, code) = run(harness.group(), listOf("gc"))
         code shouldBe null
         output shouldContain "nothing to collect"
+    }
+
+    // -- daemon log sweep (T-085) ---------------------------------------------
+
+    private fun daemonService(harness: Harness, runtime: Path): CacheService {
+        val live = setOf("live-v1.sock")
+        return CacheService(
+            harness.cacheRoot,
+            harness.store,
+            daemonRuntimeDir = runtime,
+            daemonSocketAlive = { socket -> socket.fileName.toString() in live },
+        )
+    }
+
+    private fun writeDaemonLayout(runtime: Path) {
+        Files.createDirectories(runtime)
+        Files.write(runtime.resolve("stale-v1.log"), ByteArray(16))
+        Files.write(runtime.resolve("live-v1.log"), ByteArray(8))
+        Files.write(runtime.resolve("live-v1.sock"), ByteArray(0))
+    }
+
+    @Test
+    fun `gc sweeps orphan daemon logs and names them`() {
+        val harness = Harness(tempDir)
+        val runtime = tempDir.resolve("run")
+        writeDaemonLayout(runtime)
+        val (output, code) = run(testCacheGroup(daemonService(harness, runtime)), listOf("gc"))
+        code shouldBe null
+        output shouldContain "daemon logs: deleted 1 file(s)"
+        output shouldContain "stale-v1.log"
+        Files.exists(runtime.resolve("stale-v1.log")) shouldBe false
+        Files.exists(runtime.resolve("live-v1.log")) shouldBe true
+    }
+
+    @Test
+    fun `gc json carries the daemon sweep`() {
+        val harness = Harness(tempDir)
+        val runtime = tempDir.resolve("run")
+        writeDaemonLayout(runtime)
+        val (output, code) = run(testCacheGroup(daemonService(harness, runtime)), listOf("gc", "--json"))
+        code shouldBe null
+        val result = Json.parseToJsonElement(output.trim()).jsonObject["result"]!!.jsonObject
+        result["daemonLogsDeleted"]!!.jsonArray.map { it.jsonPrimitive.content } shouldBe
+            listOf("stale-v1.log")
+        result["daemonLogBytesFreed"]!!.jsonPrimitive.long shouldBe 16
+        Files.exists(runtime.resolve("stale-v1.log")) shouldBe false
+    }
+
+    @Test
+    fun `gc dry-run reports orphan daemon logs without deleting`() {
+        val harness = Harness(tempDir)
+        val runtime = tempDir.resolve("run")
+        writeDaemonLayout(runtime)
+        val (output, code) = run(testCacheGroup(daemonService(harness, runtime)), listOf("gc", "--dry-run"))
+        code shouldBe null
+        output shouldContain "daemon logs: would delete 1 file(s)"
+        Files.exists(runtime.resolve("stale-v1.log")) shouldBe true
     }
 
     // -- clear ---------------------------------------------------------------

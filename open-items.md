@@ -14,25 +14,21 @@ mine the session log to learn what still needs doing.
 
 ---
 
-## Next tasks (all DONE — board empty as of session 83)
+## Next tasks (all DONE — board empty as of session 84)
 
 No open tasks. New work gets the next free number per the board rule; the
 rows below are kept as the closing record.
 
 | Item | State | Notes |
 |---|---|---|
-| T-083 test-source + Java warnings-as-errors | DONE (session 82) | Last task; `allWarningsAsErrors` on test compilations, `-opt-in` flag, Java `-Werror` (D-064) |
 | T-084 `doctor` daemon aliveness | DONE (session 83) | Probes each `.sock` with `health`: running → OK, stale → WARN (D-065, L-113) |
+| T-085 `cache gc` daemon `.log` sweep | DONE (session 84) | Orphan `.log` files collected by `gc` (live kept, throwing probe keeps); dead sockets still `stop`/`doctor` business (D-066) |
 
 ## Deferred follow-ups (no task number yet — file one when starting)
 
 - **Warm text output:** T-042 serves `--json` warm; text stays in-process in
   v1 (no text wire, D-059). Lift with a text wire or a JSON→Outcome parser
   when the human-first path needs daemon speed.
-
-- **Daemon `.log` retention:** idle shutdown and `stop` sweep socket + pid
-  files but keep the `.log` sibling as evidence. No rotation or `gc`
-  coverage yet — revisit if logs grow (daemon is chatty only at startup).
 
 ## Known test / environment caveats (pre-existing, not failures)
 
@@ -50,4 +46,4 @@ rows below are kept as the closing record.
 
 ---
 
-*Last updated: 2026-09-24 (session 83).*
+*Last updated: 2026-09-24 (session 84).*
