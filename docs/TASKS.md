@@ -1673,6 +1673,26 @@ Unblocked but low priority alongside T-074/T-075: M5 (T-038/T-039) stays next.
 *Closed in session 62. Lessons: L-092 (filed in session 61). Full notes in git history +
 session log.*
 
+### T-084 — `doctor` daemon aliveness: probe sockets, report running/stale · `WIP` (session 83)
+
+**Depends:** T-041 (daemon transport + `DaemonProbe.health`) · **Files:**
+`cli/.../service/DoctorService.kt` (`daemonCheck`), `cli/.../service/DoctorTestFixtures.kt`,
+`cli/src/test/.../service/DoctorServiceTest.kt`
+
+*(Filed from `open-items.md` deferred follow-ups: the `daemon` row still counts `.sock`
+files; now that the T-041 daemon answers `health`, probe each socket and report
+running/stale. Small, one sitting.)*
+
+- `daemonCheck` probes every `$XDG_RUNTIME_DIR/jdx/*.sock` via `health` (injectable
+  `(Path) -> DaemonStatusSnapshot?`, default `DaemonProbe::health`): 0 sockets → OK
+  `not running` (unchanged); all answer → OK naming the running workspace(s), sorted;
+  none answer → WARN naming the stale file(s) with the cleanup hint; mixed → WARN naming
+  both. No `XDG_RUNTIME_DIR` / missing dir paths unchanged. Never throws; single-line.
+- Tests: tier-1 injected-probe cases (running-only OK, stale-only WARN, mixed WARN,
+  missing-dir OK, probe-throw stays a row) + a generating family (determinism /
+  never-throws over hostile socket layouts); tier-2 live proof over a real `DaemonServer`
+  socket (running) plus a dead file (stale).
+
 ## Open questions
 
 Add here when blocked. Format: `Q-nnn`, the question, why it blocks, and what you did instead.
