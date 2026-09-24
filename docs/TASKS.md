@@ -1382,7 +1382,7 @@ Kotlin consumers). Test-source + Java remainder filed as T-083. No tier-3 run:
 the two fixes remove provably-unreachable branches, so no corpus behaviour
 can differ (same reasoning as T-047's tier-1–2 verification).*
 
-### T-083 — warnings-as-errors for test sources + Java · `TODO`
+### T-083 — warnings-as-errors for test sources + Java · `WIP` (session 82)
 
 **Depends:** T-052 · **Files:** `build.gradle.kts`,
 `core/src/test/...`, `testfixtures/src/main/java/...`
