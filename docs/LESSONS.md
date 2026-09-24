@@ -30,7 +30,7 @@ and never reused. Tags in use: `build` · `tooling` · `jvm-spec` · `kotlin` ·
 | `build` | L-001, L-004, L-012, L-017, L-019, L-020, L-029, L-045, L-046, L-047, L-049, L-106 |
 | `tooling` | L-002, L-003, L-015, L-018, L-026, L-030, L-031, L-036, L-040, L-043, L-044, L-053, L-054, L-059, L-063, L-066, L-068, L-070, L-075, L-077, L-078, L-082, L-083, L-092, L-097, L-098, L-105, L-107, L-109, L-112 |
 | `jvm-spec` | L-005, L-006, L-024, L-032, L-037, L-079 |
-| `kotlin` | L-009, L-010, L-011, L-014, L-016, L-021, L-022, L-023, L-034, L-039 (incl. L-072), L-042, L-048, L-052, L-060, L-065, L-073, L-108 |
+| `kotlin` | L-009, L-010, L-011, L-014, L-016, L-021, L-022, L-023, L-034, L-039 (incl. L-072), L-042, L-048, L-052, L-060, L-065, L-073, L-108, L-113 |
 | `process` | L-007, L-008, L-013, L-025 (incl. L-028), L-027, L-033, L-035, L-038, L-041, L-050, L-051, L-057, L-058, L-061, L-062, L-064, L-067, L-069, L-071, L-074, L-076, L-080, L-081, L-084, L-085, L-096 |
 
 | Shard | Entries | Status |
@@ -39,7 +39,7 @@ and never reused. Tags in use: `build` · `tooling` · `jvm-spec` · `kotlin` ·
 | `docs/lessons/L-026-050.md` | L-026…L-050 | full |
 | `docs/lessons/L-051-075.md` | L-051…L-075 | full |
 | `docs/lessons/L-076-100.md` | L-076…L-100 | full |
-| `docs/lessons/L-101-125.md` | L-101…L-112 | open |
+| `docs/lessons/L-101-125.md` | L-101…L-113 | open |
 
 ## Topic guide
 

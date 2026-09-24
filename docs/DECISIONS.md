@@ -105,3 +105,4 @@ log.
 | D-062 | Kotlin sidecar fetch: explicit `jdx kotlin install`, no auto-fetch (T-080) | proposed-by-implementer | `D-051-075.md` |
 | D-063 | `@Metadata`-aware `SOURCES_VERSION_MISMATCH` pairing for Kotlin (T-081) | proposed-by-implementer | `D-051-075.md` |
 | D-064 | test-source/Java warnings-as-errors gating scope (T-083) | proposed-by-implementer | `D-051-075.md` |
+| D-065 | `doctor` daemon aliveness semantics (T-084) | proposed-by-implementer | `D-051-075.md` |

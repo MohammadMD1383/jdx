@@ -1,6 +1,8 @@
 package dev.jdx.cli.service
 
 import dev.jdx.index.artifact.JdkLayout
+import dev.jdx.server.DaemonProbe
+import dev.jdx.server.DaemonStatusSnapshot
 import kotlinx.serialization.SerialName
 import kotlinx.serialization.Serializable
 import java.io.File
@@ -129,8 +131,15 @@ data class DoctorEnvironment(
  * Runs every `jdx doctor` check and returns the report. Read-only by construction — no check
  * writes anything. Never throws: each check is isolated, and any exception becomes a FAIL
  * row naming the check (T-005 acceptance).
+ *
+ * @param daemonProbe answers `health` for one socket path, or null when no daemon answers.
+ * Defaults to the real [DaemonProbe.health]; tests inject fakes (running/stale/throwing).
+ * A throwing probe reads as stale, never as a crash (T-084).
  */
-class DoctorService(private val environment: DoctorEnvironment) {
+class DoctorService(
+    private val environment: DoctorEnvironment,
+    private val daemonProbe: (Path) -> DaemonStatusSnapshot? = { socket -> DaemonProbe.health(socket) },
+) {
 
     fun probe(): DoctorReport {
         val checks = listOf(
@@ -270,7 +279,10 @@ class DoctorService(private val environment: DoctorEnvironment) {
     }
 
     private fun daemonCheck(): DoctorCheck {
-        // Socket layout is PROPOSAL.md §15; aliveness verification arrives with the daemon (M6).
+        // T-084: every `.sock` file is probed with `health` (T-041). An answering socket is
+        // a running daemon (OK); a silent one is stale (WARN — housekeeping, never FAIL:
+        // a stale file blocks no query). Details name file names for stale sockets (the
+        // hash carries no workspace name back) and workspace names for running ones.
         val runtimeDir = environment.runtimeDir
             ?: return check("daemon", DoctorStatus.OK, "not running (XDG_RUNTIME_DIR is unset)")
         val socketDir = runtimeDir.resolve("jdx")
@@ -278,12 +290,46 @@ class DoctorService(private val environment: DoctorEnvironment) {
             return check("daemon", DoctorStatus.OK, "not running")
         }
         val sockets = Files.list(socketDir).use { stream ->
-            stream.filter { it.fileName.toString().endsWith(".sock") }.count()
+            stream.filter { it.fileName.toString().endsWith(".sock") }.sorted().toList()
         }
-        return if (sockets == 0L) {
-            check("daemon", DoctorStatus.OK, "not running")
-        } else {
-            check("daemon", DoctorStatus.OK, "$sockets socket(s) present — aliveness check lands with the daemon (M6)")
+        if (sockets.isEmpty()) {
+            return check("daemon", DoctorStatus.OK, "not running")
+        }
+        val running = mutableListOf<String>()
+        val stale = mutableListOf<String>()
+        for (socket in sockets) {
+            val snapshot = try {
+                daemonProbe(socket)
+            } catch (_: Exception) {
+                null
+            }
+            if (snapshot != null) {
+                running.add(snapshot.workspace)
+            } else {
+                stale.add(socket.fileName.toString())
+            }
+        }
+        running.sort()
+        stale.sort()
+        return when {
+            stale.isEmpty() -> check(
+                "daemon",
+                DoctorStatus.OK,
+                "${running.size} running (${running.joinToString(", ")})",
+            )
+            running.isEmpty() -> check(
+                "daemon",
+                DoctorStatus.WARN,
+                "${stale.size} stale socket(s) (${stale.joinToString(", ")}) " +
+                    "— no daemon answers (delete the file(s) or restart the daemon)",
+            )
+            else -> check(
+                "daemon",
+                DoctorStatus.WARN,
+                "${running.size} running (${running.joinToString(", ")}); " +
+                    "${stale.size} stale (${stale.joinToString(", ")}) " +
+                    "— no daemon answers on the stale socket(s) (delete or restart)",
+            )
         }
     }
 

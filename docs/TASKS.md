@@ -1673,7 +1673,7 @@ Unblocked but low priority alongside T-074/T-075: M5 (T-038/T-039) stays next.
 *Closed in session 62. Lessons: L-092 (filed in session 61). Full notes in git history +
 session log.*
 
-### T-084 — `doctor` daemon aliveness: probe sockets, report running/stale · `WIP` (session 83)
+### T-084 — `doctor` daemon aliveness: probe sockets, report running/stale · `DONE` (session 83)
 
 **Depends:** T-041 (daemon transport + `DaemonProbe.health`) · **Files:**
 `cli/.../service/DoctorService.kt` (`daemonCheck`), `cli/.../service/DoctorTestFixtures.kt`,
@@ -1692,6 +1692,18 @@ running/stale. Small, one sitting.)*
   missing-dir OK, probe-throw stays a row) + a generating family (determinism /
   never-throws over hostile socket layouts); tier-2 live proof over a real `DaemonServer`
   socket (running) plus a dead file (stale).
+
+*Closed in session 83. `DoctorService` takes an injectable
+`(Path) -> DaemonStatusSnapshot?` (default: the real `DaemonProbe.health` via a
+lambda — a `::health` reference keeps the defaulted `timeoutMs` arity, L-113);
+all-answer → OK with sorted workspace names, none-answer → WARN with stale file
+names + cleanup hint, mixed → WARN with both; stale never FAILs (D-065).
+Tests: `DoctorServiceTest` +6 (5 examples + 100-case hostile-layout property),
+`DoctorDaemonLiveTest` tier-2 +2 over a real `DaemonServer`,
+`DoctorEnvironmentTest` matrix repinned to stale-WARN. `check` green; live
+proof: stale-only/mixed/running-only/not-running all verified against the built
+binary with a real daemon. Lessons: L-113. The `doctor` deferred follow-up in
+`open-items.md` is filed out; board empty again (T-001…T-084).*
 
 ## Open questions
 

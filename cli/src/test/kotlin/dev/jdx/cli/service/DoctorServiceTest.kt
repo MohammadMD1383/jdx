@@ -1,14 +1,35 @@
 package dev.jdx.cli.service
 
+import dev.jdx.core.rpc.RPC_VERSION
+import dev.jdx.server.DaemonStatusSnapshot
 import io.kotest.matchers.shouldBe
 import io.kotest.matchers.string.shouldContain
 import io.kotest.matchers.string.shouldNotContain
+import io.kotest.property.Arb
+import io.kotest.property.arbitrary.filter
+import io.kotest.property.arbitrary.list
+import io.kotest.property.arbitrary.string
+import io.kotest.property.checkAll
+import kotlinx.coroutines.runBlocking
 import org.junit.jupiter.api.Assumptions.assumeTrue
 import org.junit.jupiter.api.Test
+import java.io.IOException
 import java.nio.file.Files
+import java.nio.file.Path
 import java.nio.file.attribute.PosixFilePermissions
 
 class DoctorServiceTest {
+
+    private fun runningSnapshot(workspace: String): DaemonStatusSnapshot = DaemonStatusSnapshot(
+        workspace = workspace,
+        uptimeSeconds = 7,
+        queryCount = 3,
+        indexedArtifacts = 0,
+        rpcVersion = RPC_VERSION,
+        appVersion = "test-0.0.0",
+        pid = 123,
+        memoryUsedMb = 4,
+    )
 
     private val expectedNames = listOf(
         "jdk", "jrt", "javap", "jdk-sources", "cache",
@@ -296,14 +317,109 @@ class DoctorServiceTest {
     }
 
     @Test
-    fun `daemon sockets are reported without claiming the daemon runs`() {
+    fun `stale sockets are WARN naming the files, never claiming the daemon runs`() {
+        // Dummy `.sock` files answer nothing, so the real default probe reads them as stale.
         val service = DoctorService(fakeEnvironment(tempDir("jdx-doctor-test-"), socketCount = 2))
 
         val report = service.probe()
 
         val daemon = report.checks.first { it.name == "daemon" }
+        daemon.status shouldBe DoctorStatus.WARN
+        daemon.detail shouldContain "2 stale"
+        daemon.detail shouldContain "daemon-0.sock"
+        daemon.detail shouldContain "no daemon answers"
+        daemon.detail shouldNotContain "running"
+        exitCodeFor(report) shouldBe 0
+    }
+
+    @Test
+    fun `a running daemon is OK naming its workspace`() {
+        val service = DoctorService(
+            fakeEnvironment(tempDir("jdx-doctor-test-"), socketCount = 1),
+            daemonProbe = { runningSnapshot("mc") },
+        )
+
+        val report = service.probe()
+
+        val daemon = report.checks.first { it.name == "daemon" }
         daemon.status shouldBe DoctorStatus.OK
-        daemon.detail shouldContain "2 socket"
+        daemon.detail shouldContain "1 running"
+        daemon.detail shouldContain "mc"
+        exitCodeFor(report) shouldBe 0
+    }
+
+    @Test
+    fun `mixed running and stale sockets are WARN naming both`() {
+        val service = DoctorService(
+            fakeEnvironment(tempDir("jdx-doctor-test-"), socketCount = 2),
+            daemonProbe = { socket ->
+                if (socket.fileName.toString() == "daemon-0.sock") runningSnapshot("live-ws") else null
+            },
+        )
+
+        val report = service.probe()
+
+        val daemon = report.checks.first { it.name == "daemon" }
+        daemon.status shouldBe DoctorStatus.WARN
+        daemon.detail shouldContain "1 running"
+        daemon.detail shouldContain "live-ws"
+        daemon.detail shouldContain "1 stale"
+        daemon.detail shouldContain "daemon-1.sock"
+        exitCodeFor(report) shouldBe 0
+    }
+
+    @Test
+    fun `a throwing probe reads as stale, never a crash`() {
+        val service = DoctorService(
+            fakeEnvironment(tempDir("jdx-doctor-test-"), socketCount = 1),
+            daemonProbe = { throw IOException("fake probe explosion") },
+        )
+
+        val report = service.probe()
+
+        val daemon = report.checks.first { it.name == "daemon" }
+        daemon.status shouldBe DoctorStatus.WARN
+        daemon.detail shouldContain "1 stale"
+        exitCodeFor(report) shouldBe 0
+    }
+
+    @Test
+    fun `no sockets is OK not running`() {
+        val service = DoctorService(fakeEnvironment(tempDir("jdx-doctor-test-")))
+
+        val report = service.probe()
+
+        val daemon = report.checks.first { it.name == "daemon" }
+        daemon.status shouldBe DoctorStatus.OK
+        daemon.detail shouldContain "not running"
+    }
+
+    @Test
+    fun `the daemon row is deterministic and single-line over hostile socket layouts`() = runBlocking<Unit> {
+        val root = tempDir("jdx-doctor-daemon-prop-")
+        val hostileName = Arb.string(1..12).filter { it.none { c -> c == '/' || c == '\u0000' } }
+        checkAll(100, Arb.list(hostileName, 0..4), Arb.string(0..20)) { names, workspace ->
+            val caseRoot = Files.createDirectory(root.resolve("case-${System.nanoTime()}"))
+            val env = fakeEnvironment(caseRoot)
+            val socketDir = env.runtimeDir!!.resolve("jdx").also { Files.createDirectories(it) }
+            val files = names.distinct().mapIndexed { index, name -> "$index-$name.sock" }
+            files.forEach { Files.createFile(socketDir.resolve(it)) }
+            val probe: (Path) -> DaemonStatusSnapshot? = { socket ->
+                val index = socket.fileName.toString().substringBefore("-").toIntOrNull() ?: 1
+                if (index % 2 == 0) runningSnapshot(workspace) else null
+            }
+            val first = DoctorService(env, probe).probe().checks.first { it.name == "daemon" }
+            val second = DoctorService(env, probe).probe().checks.first { it.name == "daemon" }
+            first shouldBe second
+            first.detail.lines().size shouldBe 1
+            if (files.isEmpty()) {
+                first.status shouldBe DoctorStatus.OK
+            } else if (files.indices.any { it % 2 == 1 }) {
+                first.status shouldBe DoctorStatus.WARN
+            } else {
+                first.status shouldBe DoctorStatus.OK
+            }
+        }
     }
 
     @Test

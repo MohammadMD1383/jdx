@@ -5,6 +5,75 @@ Append-only (D-023): 10 sessions per shard, newest first. Template and rules in
 
 ---
 
+---
+
+## Session 83 — 2026-09-24 — T-084 `doctor` daemon aliveness done (board empty again)
+
+**Agent/Author:** Muse Spark 1.3 Free · **Commits:** `8c1e86c` (claim) + closing commit (this session)
+
+### Goal
+Implement one task and push. Board was empty (all 83 DONE), so filed the next
+free number from the `open-items.md` deferred follow-ups: `doctor` daemon
+aliveness (probe each `.sock` with `health`, report running/stale).
+
+### What I did
+- Claimed T-084 first (`docs/TASKS.md` detail block as WIP, committed `8c1e86c`
+  before coding).
+- `cli/.../service/DoctorService.kt`: `daemonCheck` probes every
+  `$XDG_RUNTIME_DIR/jdx/*.sock` (sorted) through an injectable
+  `(Path) -> DaemonStatusSnapshot?` defaulting to the real `DaemonProbe.health`.
+  All answer → OK `N running (ws, …)` (workspaces sorted); none answer → WARN
+  `M stale socket(s) (…) — no daemon answers (delete the file(s) or restart
+  the daemon)`; mixed → WARN naming both. Throwing probes read as stale.
+  No-runtime-dir / missing-dir / no-socket rows unchanged. Never throws,
+  single-line via `check()`.
+- Tests: `DoctorServiceTest` +6 (running-only OK, stale-only WARN with the real
+  default probe over dummy files, mixed WARN, throwing-probe stale, no-socket
+  OK, plus a 100-case hostile-socket-layout determinism/single-line property —
+  the generating family); new tier-2 `DoctorDaemonLiveTest` +2 (live
+  `DaemonServer` + dead file → mixed WARN; stopped daemon + leftover → stale
+  WARN, both with the real probe); `DoctorEnvironmentTest` 576-combination
+  matrix repinned (SOCKETS now expects stale WARN).
+- Docs: `TASKS.md` T-084 DONE, **D-065**, `LESSONS.md` + shard (L-113),
+  `open-items.md` (follow-up filed out, T-084 closing row), this entry,
+  CURRENT STATE.
+- Verified: `./gradlew check -Ptier1.budget=10000` green (tiers 1–2 + lint).
+  Live proof against the built binary with a real daemon: stale-only → warn,
+  running+stale → warn naming both, running-only → `ok (1 running (default))`
+  in text and `--json`, after `daemon stop` + cleanup → `ok (not running)`.
+  (`verifyTier1Budget` at the default 30 s budget stays red on this machine —
+  pre-existing variance, 0 test failures; the override is the documented path.)
+
+### Decisions made
+- **D-065** — doctor daemon aliveness semantics (injectable probe, stale is
+  WARN never FAIL, running names workspaces / stale names files).
+
+### Tasks moved
+- T-084: TODO → WIP (`8c1e86c`) → DONE. Board empty again (T-001…T-084).
+
+### Lessons distilled
+- **L-113** — a callable reference keeps defaulted parameters: `DaemonProbe::health`
+  does not assign to `(Path) -> …` (defaults are not overloads); default to a lambda.
+
+### What works now (and how to verify it yourself)
+```bash
+./gradlew :cli:test --tests "dev.jdx.cli.service.*" -Ptier1.budget=10000  # 33/33 incl. the property
+./gradlew :cli:tier2Test --tests "dev.jdx.cli.service.DoctorDaemonLiveTest" -Ptier1.budget=10000  # 2/2 live
+./gradlew check -Ptier1.budget=10000  # green, tiers 1-2 + lint
+export XDG_RUNTIME_DIR=/tmp/jdx-run && ./app/build/jdx daemon start && ./app/build/jdx doctor | grep daemon  # ok (1 running (default))
+```
+
+### What is broken / half-done
+- Nothing from this task. Remaining deferred follow-ups (no task number):
+  warm text output (D-059) and daemon `.log` retention — both in `open-items.md`.
+
+### Open questions / blockers
+- None.
+
+### Next action
+- Board is empty (all 84 tasks DONE). Owner direction decides what comes
+  next — push this session's commits (the standing "implement 1 task and push" covers it).
+
 ## Session 82 — 2026-09-24 — T-083 test-source/Java warnings-as-errors done (board all-DONE)
 
 **Agent/Author:** Muse Spark 1.3 Free · **Commits:** `1cbdfbb` (claim) + closing commit (this session)

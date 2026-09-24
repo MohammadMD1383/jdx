@@ -149,7 +149,9 @@ class DoctorEnvironmentTest {
             byName.getValue("cache").detail shouldContain "6 KB"
         }
         if (daemon == DaemonState.SOCKETS) {
-            byName.getValue("daemon").detail shouldContain "2 socket"
+            // Dummy `.sock` files answer nothing, so the real probe reads them as stale (T-084).
+            byName.getValue("daemon").status shouldBe DoctorStatus.WARN
+            byName.getValue("daemon").detail shouldContain "2 stale"
         }
         if (workspace == WorkspaceState.NESTED) {
             byName.getValue("workspace").detail shouldContain outer.toString()

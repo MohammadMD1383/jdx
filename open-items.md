@@ -14,7 +14,7 @@ mine the session log to learn what still needs doing.
 
 ---
 
-## Next tasks (all DONE — board empty as of session 82)
+## Next tasks (all DONE — board empty as of session 83)
 
 No open tasks. New work gets the next free number per the board rule; the
 rows below are kept as the closing record.
@@ -22,6 +22,7 @@ rows below are kept as the closing record.
 | Item | State | Notes |
 |---|---|---|
 | T-083 test-source + Java warnings-as-errors | DONE (session 82) | Last task; `allWarningsAsErrors` on test compilations, `-opt-in` flag, Java `-Werror` (D-064) |
+| T-084 `doctor` daemon aliveness | DONE (session 83) | Probes each `.sock` with `health`: running → OK, stale → WARN (D-065, L-113) |
 
 ## Deferred follow-ups (no task number yet — file one when starting)
 
@@ -29,9 +30,6 @@ rows below are kept as the closing record.
   v1 (no text wire, D-059). Lift with a text wire or a JSON→Outcome parser
   when the human-first path needs daemon speed.
 
-- **`doctor` daemon aliveness:** the `daemon` row still counts `.sock`
-  files; now that the T-041 daemon answers `health`, it could probe each
-  socket and report running/stale. Left out of T-041 (not in acceptance).
 - **Daemon `.log` retention:** idle shutdown and `stop` sweep socket + pid
   files but keep the `.log` sibling as evidence. No rotation or `gc`
   coverage yet — revisit if logs grow (daemon is chatty only at startup).
@@ -52,4 +50,4 @@ rows below are kept as the closing record.
 
 ---
 
-*Last updated: 2026-09-24 (session 82).*
+*Last updated: 2026-09-24 (session 83).*
