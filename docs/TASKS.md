@@ -1733,6 +1733,43 @@ JSON fields, dry-run). `check` green; live proof: dry-run/real/second-run
 plus a real daemon's log kept. Lessons: none. The `.log` deferred follow-up
 in `open-items.md` is filed out; remaining: warm text output (D-059).*
 
+### T-086 — warm text output via server-rendered `text` envelope field · `WIP` (session 85)
+
+**Depends:** T-042 (warm `--json` client), T-082 (daemon dispatch), T-047
+(text-only `--brief`/`--max-lines`) · **Files:**
+`index/.../service/RpcDispatch.kt` (`dispatchJson`), `server/.../DaemonDispatch.kt`
+(handler), `cli/.../DaemonClient.kt` (text path), `cli/.../commands/ReadCommands.kt`
+(brief/maxLines passthrough)
+
+*(Filed from the last `open-items.md` deferred follow-up: T-042 serves `--json`
+warm (D-059); text stays in-process in v1. Lift with a text wire or a
+JSON→Outcome parser. This task takes the text-wire option: the daemon renders
+text server-side into an extra envelope field, so presentation flags stay local
+in meaning and `--json` bytes stay untouched.)*
+
+- Wire: new presentation-only params `warmText`/`warmBrief`/`warmMaxLines`
+  (unknown to old daemons, ignored on the `--json` path). When `warmText=true`,
+  the daemon answers the usual envelope plus a `"text"` field holding the plain
+  (`color=false`) rendering — `renderBriefText` when `warmBrief=true`, capped
+  via `TokenBudget.capLines` when `warmMaxLines` carries a valid `>= 0` int.
+  `--json` requests (no `warmText`) are byte-identical to before, so T-046
+  parity is untouched.
+- CLI: `shouldAttempt` no longer refuses text; `serveWarmIfReady` takes
+  `brief`/`warmMaxLines` (defaults cold-correct) and, when `json=false`,
+  forwards the request with the warm-text params, prints the `text` field
+  verbatim, and carries the envelope exit code. Missing/unparseable `text`
+  (old daemon) degrades to in-process, never an error. Warm text is plain
+  (no ANSI — the daemon has no TTY); piped output is identical, TTY color is
+  the only documented difference.
+- `members`/`outline` pass `--brief`/`--max-lines` through; every other
+  command's text-affecting flags are already query params. Usage errors still
+  fail fast locally before any socket IO.
+- Tests: tier-1 `DaemonClientTest` (text attempt + text extraction + fallback +
+  hostile properties) + index tier-1 `RpcDispatchTest` (text pin, brief/cap,
+  JSON immunity, hostile params) — the generating family; tier-2
+  `DaemonWarmTest` (warm text byte-identical to cold plain text over the live
+  socket, incl. brief/cap + old-daemon fallback).
+
 ## Open questions
 
 Add here when blocked. Format: `Q-nnn`, the question, why it blocks, and what you did instead.
