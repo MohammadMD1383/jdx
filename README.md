@@ -1,13 +1,5 @@
 # `jdx` — an IDE for AI agents
 
-> **Status: v1 complete.** M0–M7 done, all 86 tasks (T-001…T-086) closed,
-> board empty. Every command below is implemented with text + `--json`
-> renderers, exit-code contract, golden tests, and byte-identical payloads
-> across CLI / daemon / MCP / HTTP / `batch`.
-> Details: [`docs/PROGRESS.md`](docs/PROGRESS.md) (current state),
-> [`docs/TASKS.md`](docs/TASKS.md) (closing record),
-> [`open-items.md`](open-items.md) (limitations + phase-2 backlog).
-
 ---
 
 An AI agent working on a JVM codebase spends most of its time — and most of its context
