@@ -39,7 +39,7 @@ and never reused. Tags in use: `build` · `tooling` · `jvm-spec` · `kotlin` ·
 | `docs/lessons/L-026-050.md` | L-026…L-050 | full |
 | `docs/lessons/L-051-075.md` | L-051…L-075 | full |
 | `docs/lessons/L-076-100.md` | L-076…L-100 | full |
-| `docs/lessons/L-101-125.md` | L-101…L-113 | open |
+| `docs/lessons/L-101-125.md` | L-101…L-114 | open |
 
 ## Topic guide
 
@@ -77,6 +77,7 @@ session-log references keep resolving. Numbers are never reused.)
 | Calibrate pairing rules against a scratch dump of the real fixture | L-110 |
 | Probe the matcher overload before "fixing" an unused-expression warning | L-111 |
 | A one-build `:lint` validation red is stale state until proven otherwise | L-112 |
+| Pin envelope absence with byte-identity, not substring absence | L-114 |
 
 ## Adding an entry
 

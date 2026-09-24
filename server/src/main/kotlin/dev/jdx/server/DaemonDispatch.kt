@@ -5,6 +5,8 @@ import dev.jdx.index.service.DaemonRoots
 import dev.jdx.index.service.JdxService
 import dev.jdx.index.service.daemonRoots
 import dev.jdx.index.service.dispatch
+import dev.jdx.index.service.dispatchJson
+import dev.jdx.index.service.toJsonWithWarmText
 import dev.jdx.index.workspace.FileWorkspaceStore
 import dev.jdx.index.workspace.WorkspaceStore
 
@@ -23,6 +25,8 @@ import dev.jdx.index.workspace.WorkspaceStore
  * Malformed/unknown lines never reach this handler: the transport owns that
  * envelope (T-041). Root failures (missing workspace → exit 4, unresolvable
  * stored coordinate → exit 5) serialise as the query's envelope, never a drop.
+ * Warm-text requests (`warmText=true`, T-086) carry the server-rendered plain
+ * text in a `"text"` field on both paths.
  */
 public fun jdxServiceHandler(
     workspace: String,
@@ -43,9 +47,9 @@ public fun jdxServiceHandler(
             )
             else -> when (val resolved = JdxService.daemonRoots(workspace, request.query, store)) {
                 is DaemonRoots.Ready ->
-                    JdxService.dispatch(request, resolved.roots).toJson(request.command.wire)
+                    JdxService.dispatchJson(request, resolved.roots)
                 is DaemonRoots.Failed ->
-                    resolved.outcome.toJson(request.command.wire)
+                    resolved.outcome.toJsonWithWarmText(request.command.wire, request.params)
             }
         }
     }

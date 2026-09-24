@@ -1733,7 +1733,7 @@ JSON fields, dry-run). `check` green; live proof: dry-run/real/second-run
 plus a real daemon's log kept. Lessons: none. The `.log` deferred follow-up
 in `open-items.md` is filed out; remaining: warm text output (D-059).*
 
-### T-086 — warm text output via server-rendered `text` envelope field · `WIP` (session 85)
+### T-086 — warm text output via server-rendered `text` envelope field · `DONE` (session 85)
 
 **Depends:** T-042 (warm `--json` client), T-082 (daemon dispatch), T-047
 (text-only `--brief`/`--max-lines`) · **Files:**
@@ -1765,10 +1765,23 @@ in meaning and `--json` bytes stay untouched.)*
   command's text-affecting flags are already query params. Usage errors still
   fail fast locally before any socket IO.
 - Tests: tier-1 `DaemonClientTest` (text attempt + text extraction + fallback +
-  hostile properties) + index tier-1 `RpcDispatchTest` (text pin, brief/cap,
+  hostile properties) + index tier-2 `RpcDispatchTest` (text pin, brief/cap,
   JSON immunity, hostile params) — the generating family; tier-2
   `DaemonWarmTest` (warm text byte-identical to cold plain text over the live
   socket, incl. brief/cap + old-daemon fallback).
+
+*Closed in session 85. Text-wire option per D-059 (D-067): `dispatchJson` (+
+`ServiceOutcome.toJsonWithWarmText`, `injectWarmText`) serialises the outcome
+exactly as before, then inserts plain `renderText(false)` (`renderBriefText`
+under `warmBrief`, `TokenBudget.capLines` under a valid `warmMaxLines`) before
+the trailing `"warnings"` marker; `--json` without `warmText` is byte-identical
+(T-046 untouched). `DaemonClient.shouldAttempt` no longer refuses text;
+`serveWarmIfReady` takes `brief`/`warmMaxLines` and prints the `text` field on
+the text path (missing `text` degrades cold — pre-T-086 daemons keep working).
+`members`/`outline` forward `--brief`/`--max-lines`; warm text is always plain
+(no ANSI — daemon has no TTY). `check` green; live proof: cold-vs-warm `show`
+identical, `--json` warm still verbatim, `--brief --max-lines 2` warm
+identical to cold. Lessons: L-114. Board empty again (T-001…T-086).*
 
 ## Open questions
 

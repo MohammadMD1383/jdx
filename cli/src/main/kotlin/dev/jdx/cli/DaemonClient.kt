@@ -25,12 +25,11 @@ import kotlinx.serialization.json.jsonPrimitive
  * dashes, text values — the D-058 contract, so flags forward verbatim).
  * Behaviour stays in `JdxService` on both sides.
  *
- * v1 scope (D-059): only `--json` queries go warm. The wire response is the
- * `--json` envelope verbatim (D-056) and there is no text wire, so text output
- * stays in-process rather than rebuilding 17 renderers from JSON. The daemon's
- * audience is programmatic (`--json`/MCP/HTTP); text stays correct, just cold.
- * A missing/unreachable daemon, a usage error, or explicit root overrides all
- * read as "run in-process".
+ * v1 scope (D-059, lifted by T-086): `--json` queries go warm verbatim and
+ * text queries go warm via the server-rendered `"text"` envelope field
+ * (plain, no ANSI — the daemon has no TTY). A missing/unreachable daemon, a
+ * usage error, explicit root overrides, or a daemon that answers without the
+ * `text` field (pre-T-086) all read as "run in-process".
  */
 public object DaemonClient {
     private val lenientJson: Json = Json { ignoreUnknownKeys = true }
@@ -43,17 +42,28 @@ public object DaemonClient {
     public data class WarmHit(val line: String, val exitCode: Int)
 
     /**
+     * The answer when the daemon served a text query: the server-rendered
+     * plain text to print verbatim plus the process exit code parsed out of
+     * the same envelope.
+     */
+    public data class WarmTextHit(val text: String, val exitCode: Int)
+
+    /**
      * Decides whether this query may leave the process. Every clause is a
      * correctness guard, not an optimisation:
      *
      * - `noDaemon` — the user forced in-process.
-     * - `!json` — v1 warm serves `--json` only (no text wire, D-059).
      * - explicit roots (`jars`, `coords`, `repos`, `fetch`, `srcs`, `noJdk`) —
      *   the daemon serves its stored workspace only (D-058 §3); anything the
      *   caller added or removed would answer about different roots.
      * - no named workspace — auto-discovered project roots have no daemon
      *   socket; only `-w`/`JDX_WORKSPACE`/`jdx ws use` selections do.
      * - no runtime dir — without `XDG_RUNTIME_DIR` there is no socket path.
+     *
+     * Both `--json` and text may go warm (T-086): the JSON path prints the
+     * envelope verbatim, the text path prints the server-rendered `"text"`
+     * field. Presentation-only flags (`brief`, `warmMaxLines`) ride the
+     * request as `warmBrief`/`warmMaxLines` params.
      */
     public fun shouldAttempt(
         noDaemon: Boolean,
@@ -62,7 +72,7 @@ public object DaemonClient {
         workspaceName: String?,
         runtimeDir: Path?,
     ): Boolean {
-        if (noDaemon || !json) return false
+        if (noDaemon) return false
         if (roots.hasExplicitRoots()) return false
         if (workspaceName.isNullOrBlank()) return false
         if (runtimeDir == null) return false
@@ -90,6 +100,12 @@ public object DaemonClient {
      * the caller must stop (warm served). Returns `false` when the caller must
      * run in-process instead. Never throws for any input — a refusal here is
      * routine, not an error.
+     *
+     * When [json] is true the envelope line prints verbatim; otherwise the
+     * server-rendered `"text"` field prints (T-086). [brief] and
+     * [warmMaxLines] are the text-only presentation flags (`members`/`outline`
+     * `--brief`/`--max-lines`); every other text-affecting flag already rides
+     * the request as a query param.
      */
     public fun serveWarmIfReady(
         request: RpcRequest,
@@ -103,14 +119,47 @@ public object DaemonClient {
         runtimeDir: Path?,
         roundTrip: DaemonRoundTrip = defaultRoundTrip,
         printer: (String) -> Unit = ::println,
+        brief: Boolean = false,
+        warmMaxLines: Int? = null,
     ): Boolean {
         val workspaceName = workspaceNameForDaemon(flagWorkspace, getenv, store)
         if (!shouldAttempt(noDaemon, json, roots, workspaceName, runtimeDir)) return false
         val socket = DaemonPaths.socketPath(runtimeDir!!, workspaceName!!.trim())
-        val hit = tryWarm(request, socket, roundTrip) ?: return false
-        printer(hit.line)
+        if (json) {
+            val hit = tryWarm(request, socket, roundTrip) ?: return false
+            printer(hit.line)
+            if (hit.exitCode != 0) terminate(hit.exitCode)
+            return true
+        }
+        val textRequest = request.copy(
+            params = request.params + buildMap {
+                put("warmText", "true")
+                if (brief) put("warmBrief", "true")
+                if (warmMaxLines != null) put("warmMaxLines", warmMaxLines.toString())
+            },
+        )
+        val hit = tryWarmText(textRequest, socket, roundTrip) ?: return false
+        printer(hit.text)
         if (hit.exitCode != 0) terminate(hit.exitCode)
         return true
+    }
+
+    /**
+     * Forwards a text [request] (carrying the `warmText` params) to the daemon
+     * at [socketPath], or returns `null` when the query must run in-process
+     * instead. `null` covers every failure: no daemon, a daemon that answers
+     * without the `text` field (pre-T-086), version mismatch, truncated write,
+     * an envelope for a different command — never an error, never a throw.
+     */
+    public fun tryWarmText(
+        request: RpcRequest,
+        socketPath: Path,
+        roundTrip: DaemonRoundTrip = defaultRoundTrip,
+    ): WarmTextHit? {
+        val line = runCatching { roundTrip(socketPath, request) }.getOrNull() ?: return null
+        val code = parseExitCode(line, request.command.wire) ?: return null
+        val text = parseWarmText(line) ?: return null
+        return WarmTextHit(text, code)
     }
 
     /**
@@ -163,6 +212,22 @@ public object DaemonClient {
                 root["error"]?.jsonObject?.get("code")?.jsonPrimitive?.intOrNull
                     ?.takeIf { it in 1..6 }
             }
+        } catch (_: Exception) {
+            null
+        }
+    }
+
+    /**
+     * Reads the server-rendered plain text out of a warm envelope line.
+     * Returns `null` — degrade to in-process — when the line carries no
+     * `"text"` string (a pre-T-086 daemon, or a hand-written envelope).
+     * Never throws, on any input.
+     */
+    public fun parseWarmText(line: String): String? {
+        return try {
+            val primitive = lenientJson.parseToJsonElement(line).jsonObject["text"]?.jsonPrimitive ?: return null
+            if (!primitive.isString) return null
+            primitive.content
         } catch (_: Exception) {
             null
         }

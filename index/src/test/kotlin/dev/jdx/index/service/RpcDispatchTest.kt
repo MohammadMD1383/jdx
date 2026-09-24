@@ -291,6 +291,79 @@ class RpcDispatchTest {
         }
     }
 
+    // -- warm text (T-086): server-rendered "text" field -----------------------------
+
+    private fun warmJson(request: RpcRequest, roots: RootsSpec = fixtureRoots()): String =
+        JdxService.dispatchJson(request, roots)
+
+    @Test
+    fun `dispatchJson without warmText is byte-identical to toJson`() {
+        val requests = listOf(
+            req(RpcCommand.SHOW, "dev.jdx.fixtures.Generics"),
+            req(RpcCommand.MEMBERS, "dev.jdx.fixtures.Generics", "kind" to "method", "limit" to "5"),
+            req(RpcCommand.BODY, "dev.jdx.fixtures.Generics#identity(java.lang.Object)"),
+            req(RpcCommand.SHOW, "no.such.Type"),
+        )
+        for (request in requests) {
+            warmJson(request) shouldBe JdxService.dispatch(request, fixtureRoots()).toJson(request.command.wire)
+        }
+    }
+
+    @Test
+    fun `dispatchJson with warmText carries the plain rendering`() {
+        val query = "dev.jdx.fixtures.Generics"
+        val request = req(RpcCommand.SHOW, query, "warmText" to "true")
+        val outcome = JdxService.dispatch(req(RpcCommand.SHOW, query), fixtureRoots())
+        val line = warmJson(request)
+        line shouldContain "\"text\":" + quoteForTest(outcome.renderText(false))
+        line shouldContain "\"command\":\"show\""
+        // The JSON result stays intact beside the text.
+        line shouldContain "\"ok\":true"
+    }
+
+    @Test
+    fun `dispatchJson warmBrief and warmMaxLines shape only the text`() {
+        val query = "dev.jdx.fixtures.Generics"
+        val full = JdxService.members(query, fixtureRoots())
+        val brief = req(RpcCommand.MEMBERS, query, "warmText" to "true", "warmBrief" to "true")
+        warmJson(brief) shouldContain "\"text\":" + quoteForTest(full.renderBriefText(false))
+        val capped = req(RpcCommand.MEMBERS, query, "warmText" to "true", "warmMaxLines" to "2")
+        val cappedText = dev.jdx.core.render.TokenBudget.capLines(full.renderText(false), 2)
+        warmJson(capped) shouldContain "\"text\":" + quoteForTest(cappedText)
+        // The JSON half is untouched by presentation params.
+        warmJson(capped) shouldContain "\"ok\":true"
+        // Hostile presentation params degrade to the plain rendering, never a throw.
+        val hostile = req(RpcCommand.MEMBERS, query, "warmText" to "true", "warmMaxLines" to "many")
+        warmJson(hostile) shouldContain "\"text\":" + quoteForTest(full.renderText(false))
+        val negative = req(RpcCommand.MEMBERS, query, "warmText" to "true", "warmMaxLines" to "-1")
+        warmJson(negative) shouldContain "\"text\":" + quoteForTest(full.renderText(false))
+    }
+
+    @Test
+    fun `dispatchJson warmText on a failure carries the error text`() {
+        val request = req(RpcCommand.SHOW, "no.such.Type", "warmText" to "true")
+        val outcome = JdxService.dispatch(req(RpcCommand.SHOW, "no.such.Type"), fixtureRoots())
+        (outcome is ServiceOutcome.Failure) shouldBe true
+        val line = warmJson(request)
+        line shouldContain "\"ok\":false"
+        line shouldContain "\"text\":" + quoteForTest(outcome.renderText(false))
+    }
+
+    private fun quoteForTest(text: String): String = buildString {
+        append('"')
+        for (char in text) {
+            when (char) {
+                '"' -> append("\\\"")
+                '\\' -> append("\\\\")
+                '\n' -> append("\\n")
+                '\r' -> append("\\r")
+                '\t' -> append("\\t")
+                else -> if (char < ' ') append("\\u%04x".format(char.code)) else append(char)
+            }
+        }
+        append('"')
+    }
+
     // -- roots --------------------------------------------------------------------------
 
     @Test
@@ -353,6 +426,11 @@ class RpcDispatchTest {
             line shouldNotContain "\n"
             line shouldNotContain "\r"
             line shouldContain "\"command\":\"${request.command.wire}\""
+            // The warm-text serialisation is total too: one line, same command echo.
+            val warm = JdxService.dispatchJson(request, noRoots)
+            warm shouldNotContain "\n"
+            warm shouldNotContain "\r"
+            warm shouldContain "\"command\":\"${request.command.wire}\""
         }
     }
 

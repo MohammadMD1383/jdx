@@ -14,7 +14,9 @@ import dev.jdx.core.render.DEFAULT_SOURCE_MAX_LINES
 import dev.jdx.core.render.DEFAULT_TREE_DEPTH
 import dev.jdx.core.render.DEFAULT_USAGES_LIMIT
 import dev.jdx.core.render.ErrorResult
+import dev.jdx.core.render.JsonEscape
 import dev.jdx.core.render.MemberSort
+import dev.jdx.core.render.TokenBudget
 import dev.jdx.core.rpc.RpcCommand
 import dev.jdx.core.rpc.RpcRequest
 import dev.jdx.decompile.DecompilerId
@@ -84,6 +86,14 @@ import dev.jdx.index.workspace.WorkspaceStore
  *
  * `version`/`doctor`/`health` are transport-level (T-041): they never reach this
  * function through the daemon, and calling it directly answers exit 3 saying so.
+ *
+ * Warm text (T-086): when the request carries `warmText=true`, [dispatchJson]
+ * answers the usual envelope plus a `"text"` field holding the plain
+ * (`color=false`) rendering — `renderBriefText` when `warmBrief=true`, capped
+ * via `TokenBudget.capLines` when `warmMaxLines` carries a valid `>= 0` int.
+ * Requests without `warmText` are byte-identical to [ServiceOutcome.toJson],
+ * so T-046 parity is untouched. The daemon has no TTY, so warm text is always
+ * plain (no ANSI); piped output is identical, TTY color is the only difference.
  */
 public fun JdxService.dispatch(request: RpcRequest, roots: RootsSpec): ServiceOutcome {
     val scope = ParamScope(request.query, request.command.wire, request.params)
@@ -235,6 +245,46 @@ public fun JdxService.dispatch(request: RpcRequest, roots: RootsSpec): ServiceOu
                 ),
             )
     }
+}
+
+/**
+ * The daemon's serialised answer (T-086): [dispatch] plus the envelope bytes.
+ *
+ * Without `warmText=true` this is exactly `outcome.toJson(wire)`; with it, a
+ * `"text"` field is injected before `"warnings"` (last occurrence, so a result
+ * payload that happens to contain the marker cannot misplace it). Never throws:
+ * an uninjectable envelope (no `warnings` marker) returns unmodified rather
+ * than failing the query.
+ */
+public fun JdxService.dispatchJson(request: RpcRequest, roots: RootsSpec): String {
+    val outcome = dispatch(request, roots)
+    return outcome.toJsonWithWarmText(request.command.wire, request.params)
+}
+
+/**
+ * Serialises [this] outcome, injecting the plain-text rendering as `"text"`
+ * when [params] carries `warmText=true`. Presentation-only params (`warmBrief`,
+ * `warmMaxLines`) affect the text alone; `--json` bytes without `warmText`
+ * are byte-identical to [ServiceOutcome.toJson].
+ */
+public fun JdxService.ServiceOutcome.toJsonWithWarmText(command: String, params: Map<String, String>): String {
+    val json = this.toJson(command)
+    if (!params["warmText"].equals("true", ignoreCase = true)) return json
+    val base = if (params["warmBrief"].equals("true", ignoreCase = true)) {
+        this.renderBriefText(false)
+    } else {
+        this.renderText(false)
+    }
+    val text = params["warmMaxLines"]?.toIntOrNull()?.takeIf { it >= 0 }?.let { TokenBudget.capLines(base, it) } ?: base
+    return injectWarmText(json, text)
+}
+
+/** Inserts `"text"` before the trailing `"warnings"` field; no marker returns [json] unchanged. */
+internal fun injectWarmText(json: String, text: String): String {
+    val marker = ",\"warnings\":"
+    val index = json.lastIndexOf(marker)
+    if (index < 0) return json
+    return json.substring(0, index) + ",\"text\":" + JsonEscape.quote(text) + json.substring(index)
 }
 
 /**

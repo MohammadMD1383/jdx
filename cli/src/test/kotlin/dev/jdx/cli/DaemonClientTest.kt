@@ -84,11 +84,22 @@ class DaemonClientTest {
     }
 
     @Test
-    fun `no-daemon and text stay in-process`() {
+    fun `a clean text query to a named workspace may go warm`() {
+        DaemonClient.shouldAttempt(
+            noDaemon = false,
+            json = false,
+            roots = WarmRoots(),
+            workspaceName = "fx",
+            runtimeDir = Path.of("/run/user/1000"),
+        ) shouldBe true
+    }
+
+    @Test
+    fun `no-daemon stays in-process for json and text`() {
         val base = WarmRoots()
         val dir = Path.of("/run/user/1000")
         DaemonClient.shouldAttempt(true, true, base, "fx", dir) shouldBe false
-        DaemonClient.shouldAttempt(false, false, base, "fx", dir) shouldBe false
+        DaemonClient.shouldAttempt(true, false, base, "fx", dir) shouldBe false
     }
 
     @Test
@@ -196,12 +207,146 @@ class DaemonClientTest {
         printed shouldBe false
     }
 
+    // -- warm text (T-086): the server-rendered "text" field --
+
+    private fun textEnvelope(command: String, text: String, ok: Boolean = true, code: Int = 0): String =
+        if (ok) {
+            "{\"jdx\":1,\"ok\":true,\"command\":\"$command\",\"query\":\"Foo\"," +
+                "\"result\":{},\"text\":" + textEnvelopeQuote(text) + ",\"warnings\":[],\"provenance\":[]}"
+        } else {
+            "{\"jdx\":1,\"ok\":false,\"command\":\"$command\",\"query\":\"Foo\"," +
+                "\"error\":{\"code\":$code,\"message\":\"nope\"},\"candidates\":[]," +
+                "\"text\":" + textEnvelopeQuote(text) + ",\"warnings\":[],\"provenance\":[]}"
+        }
+
+    private fun textEnvelopeQuote(text: String): String = buildString {
+        append('"')
+        for (char in text) {
+            when (char) {
+                '"' -> append("\\\"")
+                '\\' -> append("\\\\")
+                '\n' -> append("\\n")
+                '\r' -> append("\\r")
+                '\t' -> append("\\t")
+                else -> if (char < ' ') append("\\u%04x".format(char.code)) else append(char)
+            }
+        }
+        append('"')
+    }
+
+    @Test
+    fun `warm text prints the server rendering and carries the exit code`() {
+        val line = textEnvelope("show", "line one\nline two")
+        DaemonClient.parseWarmText(line) shouldBe "line one\nline two"
+        val printed = mutableListOf<String>()
+        val served = DaemonClient.serveWarmIfReady(
+            request = DaemonClient.showRequest("Foo"),
+            flagWorkspace = "fx",
+            roots = WarmRoots(),
+            noDaemon = false,
+            json = false,
+            terminate = { throw DaemonExit(it) },
+            store = store(active = "fx"),
+            getenv = { null },
+            runtimeDir = Path.of("/run/user/1000"),
+            roundTrip = { _, _ -> line },
+            printer = { printed.add(it) },
+        )
+        served shouldBe true
+        printed shouldBe listOf("line one\nline two")
+    }
+
+    @Test
+    fun `warm text carries a non-zero exit code to terminate`() {
+        val line = textEnvelope("show", "not found", ok = false, code = 1)
+        var code = -1
+        val printed = mutableListOf<String>()
+        try {
+            DaemonClient.serveWarmIfReady(
+                request = DaemonClient.showRequest("Foo"),
+                flagWorkspace = "fx",
+                roots = WarmRoots(),
+                noDaemon = false,
+                json = false,
+                terminate = { throw DaemonExit(it) },
+                store = store(active = "fx"),
+                getenv = { null },
+                runtimeDir = Path.of("/run/user/1000"),
+                roundTrip = { _, _ -> line },
+                printer = { printed.add(it) },
+            )
+        } catch (e: DaemonExit) {
+            code = e.code
+        }
+        code shouldBe 1
+        printed shouldBe listOf("not found")
+    }
+
+    @Test
+    fun `warm text without a text field degrades to in-process`() {
+        val plain = "{\"jdx\":1,\"ok\":true,\"command\":\"show\",\"query\":\"Foo\"," +
+            "\"result\":{},\"warnings\":[],\"provenance\":[]}"
+        DaemonClient.parseWarmText(plain) shouldBe null
+        DaemonClient.parseWarmText("{garbage") shouldBe null
+        DaemonClient.parseWarmText("{\"jdx\":1,\"ok\":true,\"command\":\"show\",\"text\":42}") shouldBe null
+        var probed = false
+        val printed = mutableListOf<String>()
+        val served = DaemonClient.serveWarmIfReady(
+            request = DaemonClient.showRequest("Foo"),
+            flagWorkspace = "fx",
+            roots = WarmRoots(),
+            noDaemon = false,
+            json = false,
+            terminate = { throw DaemonExit(it) },
+            store = store(active = "fx"),
+            getenv = { null },
+            runtimeDir = Path.of("/run/user/1000"),
+            roundTrip = { _, _ -> probed = true; plain },
+            printer = { printed.add(it) },
+        )
+        served shouldBe false
+        probed shouldBe true
+        printed shouldBe emptyList()
+    }
+
+    @Test
+    fun `warm text forwards brief and max-lines as wire params`() {
+        val seen = mutableListOf<RpcRequest>()
+        val line = textEnvelope("members", "brief rows")
+        DaemonClient.serveWarmIfReady(
+            request = DaemonClient.membersRequest("Foo"),
+            flagWorkspace = "fx",
+            roots = WarmRoots(),
+            noDaemon = false,
+            json = false,
+            terminate = { throw DaemonExit(it) },
+            store = store(active = "fx"),
+            getenv = { null },
+            runtimeDir = Path.of("/run/user/1000"),
+            roundTrip = { _, request -> seen.add(request); line },
+            printer = { },
+            brief = true,
+            warmMaxLines = 3,
+        )
+        seen.size shouldBe 1
+        seen.single().params["warmText"] shouldBe "true"
+        seen.single().params["warmBrief"] shouldBe "true"
+        seen.single().params["warmMaxLines"] shouldBe "3"
+    }
+
     // -- generating family: hostile input never throws, builders stay total --
 
     @Test
     fun `exit-code parsing never throws on hostile lines`(): Unit = runBlocking {
         checkAll(1_000, Arb.string()) { text ->
             DaemonClient.parseExitCode(text, "show")
+        }
+    }
+
+    @Test
+    fun `warm-text parsing never throws on hostile lines`(): Unit = runBlocking {
+        checkAll(1_000, Arb.string()) { text ->
+            DaemonClient.parseWarmText(text)
         }
     }
 

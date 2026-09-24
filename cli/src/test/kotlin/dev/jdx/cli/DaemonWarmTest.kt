@@ -8,6 +8,7 @@ import dev.jdx.core.rpc.RpcCommand
 import dev.jdx.core.rpc.RpcRequest
 import dev.jdx.index.service.JdxService
 import dev.jdx.index.service.dispatch
+import dev.jdx.index.service.dispatchJson
 import dev.jdx.index.workspace.InMemoryWorkspaceStore
 import dev.jdx.index.workspace.WorkspaceDefinition
 import dev.jdx.server.DaemonPaths
@@ -238,30 +239,96 @@ class DaemonWarmTest {
     }
 
     @Test
-    fun `text and explicit roots stay in-process beside a live daemon`() {
+    fun `text is served warm with the plain rendering, explicit roots stay cold`() {
         val server = warmServer()
         server.start()
         try {
-            var probed = false
-            val probe: DaemonRoundTrip = { socket, request ->
-                probed = true
-                DaemonProbe.roundTrip(socket, request)
+            // Warm text prints the daemon's plain rendering: byte-identical to
+            // the cold plain text (the daemon has no TTY, so no ANSI on either
+            // side when piped).
+            val request = warmRequest()
+            val expected = JdxService.dispatch(request, fixtureRoots())
+            val printed = mutableListOf<String>()
+            var code = 0
+            try {
+                val served = DaemonClient.serveWarmIfReady(
+                    request = request, flagWorkspace = "fx", roots = WarmRoots(),
+                    noDaemon = false, json = false, terminate = { throw DaemonExit(it) },
+                    store = InMemoryWorkspaceStore(), getenv = { null }, runtimeDir = tempDir,
+                    printer = { printed.add(it) },
+                )
+                assert(served) { "warm text failed for ${request.command} ${request.query}" }
+            } catch (e: DaemonExit) {
+                code = e.code
             }
-            val text = DaemonClient.serveWarmIfReady(
-                request = warmRequest(), flagWorkspace = "fx", roots = WarmRoots(),
-                noDaemon = false, json = false, terminate = { throw DaemonExit(it) },
-                store = InMemoryWorkspaceStore(), getenv = { null }, runtimeDir = tempDir,
-                roundTrip = probe, printer = { fail("text must stay cold in v1") },
-            )
-            text shouldBe false
+            code shouldBe expected.exitCode
+            printed.size shouldBe 1
+            printed.single() shouldBe expected.renderText(false)
+
+            var probed = false
             val explicit = DaemonClient.serveWarmIfReady(
-                request = warmRequest(), flagWorkspace = "fx", roots = WarmRoots(jars = listOf("extra.jar")),
+                request = request, flagWorkspace = "fx", roots = WarmRoots(jars = listOf("extra.jar")),
                 noDaemon = false, json = true, terminate = { throw DaemonExit(it) },
                 store = InMemoryWorkspaceStore(), getenv = { null }, runtimeDir = tempDir,
-                roundTrip = probe, printer = { fail("explicit roots must stay cold") },
+                roundTrip = { socket, req -> probed = true; DaemonProbe.roundTrip(socket, req) },
+                printer = { fail("explicit roots must stay cold") },
             )
             explicit shouldBe false
             probed shouldBe false
+        } finally {
+            server.stop()
+        }
+    }
+
+    @Test
+    fun `every read command served warm-text is byte-identical to cold plain text`() {
+        val requests = listOf(
+            DaemonClient.showRequest("dev.jdx.fixtures.Generics"),
+            DaemonClient.membersRequest("dev.jdx.fixtures.Generics", kind = "method", limit = 5),
+            DaemonClient.bodyRequest("dev.jdx.fixtures.Generics#identity(java.lang.Object)"),
+            DaemonClient.showRequest("no.such.Type"),
+        )
+        val server = warmServer()
+        server.start()
+        try {
+            val roots = fixtureRoots()
+            for (request in requests) {
+                val expected = JdxService.dispatch(request, roots)
+                val printed = mutableListOf<String>()
+                var code = 0
+                try {
+                    val served = DaemonClient.serveWarmIfReady(
+                        request = request,
+                        flagWorkspace = "fx",
+                        roots = WarmRoots(),
+                        noDaemon = false,
+                        json = false,
+                        terminate = { throw DaemonExit(it) },
+                        store = InMemoryWorkspaceStore(),
+                        getenv = { null },
+                        runtimeDir = tempDir,
+                        printer = { printed.add(it) },
+                    )
+                    assert(served) { "warm text failed for ${request.command} ${request.query}" }
+                } catch (e: DaemonExit) {
+                    code = e.code
+                }
+                code shouldBe expected.exitCode
+                printed.size shouldBe 1
+                printed.single() shouldBe expected.renderText(false)
+            }
+            // Brief + cap ride the text path: the daemon shapes the text alone.
+            val briefExpected = JdxService.dispatch(warmRequest(), roots)
+            val briefPrinted = mutableListOf<String>()
+            val briefServed = DaemonClient.serveWarmIfReady(
+                request = warmRequest(), flagWorkspace = "fx", roots = WarmRoots(),
+                noDaemon = false, json = false, terminate = { throw DaemonExit(it) },
+                store = InMemoryWorkspaceStore(), getenv = { null }, runtimeDir = tempDir,
+                printer = { briefPrinted.add(it) }, brief = true, warmMaxLines = 2,
+            )
+            briefServed shouldBe true
+            val briefBase = briefExpected.renderBriefText(false)
+            briefPrinted.single() shouldBe dev.jdx.core.render.TokenBudget.capLines(briefBase, 2)
         } finally {
             server.stop()
         }
@@ -359,11 +426,13 @@ class DaemonWarmTest {
                     RpcRequest(command, query, params)
                 },
             ) { request ->
-                // Same roots, same dispatch function on both sides: any request —
-                // hostile or not — answers identically warm and cold.
+                // Same roots, same serialisation on both sides: any request —
+                // hostile or not — answers identically warm and cold. The probe
+                // goes through the production handler, so warm-text params are
+                // honoured on both sides via dispatchJson.
                 val warm = DaemonProbe.roundTrip(socket(), request)
                 warm shouldNotBe null
-                warm shouldBe JdxService.dispatch(request, roots).toJson(request.command.wire)
+                warm shouldBe JdxService.dispatchJson(request, roots)
             }
         } finally {
             server.stop()

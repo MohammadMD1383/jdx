@@ -231,6 +231,8 @@ class MembersCommand(
                 getenv = getenv,
                 runtimeDir = daemonRuntimeDir,
                 roundTrip = daemonRoundTrip,
+                brief = brief,
+                warmMaxLines = maxLines,
             )
         ) return
         val filters = JdxService.MemberFilters(
@@ -464,6 +466,8 @@ class OutlineCommand(
                 getenv = getenv,
                 runtimeDir = daemonRuntimeDir,
                 roundTrip = daemonRoundTrip,
+                brief = brief,
+                warmMaxLines = maxLines,
             )
         ) return
         val filters = JdxService.MemberFilters(

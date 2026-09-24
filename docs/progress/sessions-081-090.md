@@ -7,6 +7,97 @@ Append-only (D-023): 10 sessions per shard, newest first. Template and rules in
 
 ---
 
+## Session 85 — 2026-09-24 — T-086 warm text output done (board empty, no follow-ups left)
+
+**Agent/Author:** Muse Spark 1.3 Free · **Commits:** `3d5876c` (claim) + closing commit (this session)
+
+### Goal
+Implement one task and push. Board was empty (all 85 DONE), so filed the next
+free number from the last `open-items.md` deferred follow-up: warm text output
+(T-042 serves `--json` warm, text stays in-process in v1 — D-059).
+
+### What I did
+- Claimed T-086 first (`docs/TASKS.md` detail block as WIP, committed `3d5876c`
+  before coding). Took the text-wire option (D-059): the daemon renders plain
+  text server-side into an extra envelope field, so no client-side model
+  reconstruction.
+- `index/.../service/RpcDispatch.kt`: new `JdxService.dispatchJson`
+  (dispatch + serialise) + `ServiceOutcome.toJsonWithWarmText(command, params)`
+  + `injectWarmText`. Without `warmText=true` the bytes are exactly
+  `toJson(wire)`; with it, plain `renderText(false)` (`renderBriefText` under
+  `warmBrief=true`, `TokenBudget.capLines` under a valid `warmMaxLines >= 0`)
+  is injected before the trailing `"warnings"` marker (last occurrence, so a
+  result payload containing the marker cannot misplace it). Hostile
+  presentation params degrade to the plain rendering; a missing marker returns
+  the envelope unmodified. Never throws.
+- `server/.../DaemonDispatch.kt`: `jdxServiceHandler` answers both the Ready
+  and the Failed (exit 4/5) paths through the new serialisation, so warm text
+  works for root failures too.
+- `cli/.../DaemonClient.kt`: `shouldAttempt` no longer refuses text; new
+  `WarmTextHit` + `tryWarmText` + `parseWarmText` (string-only, never throws);
+  `serveWarmIfReady` takes `brief`/`warmMaxLines` (defaults cold-correct) and
+  on the text path forwards `warmText`/`warmBrief`/`warmMaxLines` params,
+  prints the `text` field verbatim, and carries the envelope exit code. A
+  missing `text` field (pre-T-086 daemon) degrades to in-process. Warm text is
+  always plain (no ANSI — the daemon has no TTY); piped output is identical.
+- `cli/.../commands/ReadCommands.kt`: `members`/`outline` forward
+  `--brief`/`--max-lines` to the warm path (the only text-only flags; every
+  other text-affecting flag already rides the wire as a query param).
+- Tests: `DaemonClientTest` +5 (text may-go-warm, text print + exit carriage,
+  missing-text fallback incl. non-string `text`, brief/max-lines param
+  forwarding, `parseWarmText` 1000-case hostile property) with the stale
+  `no-daemon and text stay in-process` guard split; `RpcDispatchTest` +4
+  (JSON immunity, text pin, brief/cap shaping, failure text) + `dispatchJson`
+  totality inside the hostile property (L-114: the first immunity assertion
+  used substring absence and tripped on `BodyBlock`'s own `"text"` field —
+  replaced with byte-identity); `DaemonWarmTest`: text-cold test rewritten to
+  warm-text parity (all-17 JSON loop untouched), new every-command warm-text
+  parity + brief/cap test, hostile parity now expects `dispatchJson` (hostile
+  params may carry `warmText`).
+- Verified: `./gradlew check -Ptier1.budget=10000` green (1m39s; the bare
+  `verifyTier1Budget` stays red at the default 30 s budget — pre-existing
+  machine variance, 0 failures). Live proof against the built binary with a
+  real daemon (`warm-t` workspace, since removed): cold-vs-warm `show`
+  byte-identical, warm `--json` still verbatim vs `--no-daemon`, warm
+  `--brief --max-lines 2` byte-identical to cold. Restored workspace state
+  (`warm-t` removed, default cleared — `fx`/`serve-proof` remain).
+
+### Decisions made
+- **D-067** — warm text output via a server-rendered `text` envelope field
+  (text wire, not a JSON→Outcome parser; presentation-only params; inject
+  before trailing `warnings`; plain always; only `members`/`outline` forward
+  presentation flags).
+
+### Tasks moved
+- T-086: TODO → WIP (`3d5876c`) → DONE. Board empty again (T-001…T-086, all
+  DONE); no deferred follow-ups left.
+
+### Lessons distilled
+- **L-114** — pin envelope-field absence with byte-identity, not substring
+  absence (`testing`).
+
+### What works now (and how to verify it yourself)
+```bash
+./gradlew check -Ptier1.budget=10000  # green (tiers 1-2 + lint + coverage)
+./gradlew :cli:test --tests "dev.jdx.cli.DaemonClientTest" -Ptier1.budget=10000
+./gradlew :index:tier2Test --tests "dev.jdx.index.service.RpcDispatchTest" -Ptier1.budget=10000
+./gradlew :cli:tier2Test --tests "dev.jdx.cli.DaemonWarmTest" -Ptier1.budget=10000
+./gradlew :app:installDist -q && XDG_RUNTIME_DIR=/tmp/opencode/jdx-rt app/build/jdx daemon start --workspace <ws>  # then diff text/json vs --no-daemon
+```
+
+### What is broken / half-done
+- Nothing from this task. Known: warm text is plain (no ANSI) even on a TTY —
+  documented in D-067 §4; piped output is byte-identical.
+
+### Open questions / blockers
+- None.
+
+### Next action
+- **Board empty** — new work gets the next free number (T-087), or owner
+  direction.
+
+---
+
 ## Session 84 — 2026-09-24 — T-085 `cache gc` daemon-log sweep done (one follow-up left)
 
 **Agent/Author:** Muse Spark 1.3 Free · **Commits:** `90e2ab9` (claim) + closing commit (this session)
