@@ -122,6 +122,37 @@ class LauncherScriptTest {
     private fun recordedArgs(argsFile: File): List<String> =
         if (argsFile.exists()) argsFile.readLines() else emptyList()
 
+    private fun realToolPath(name: String): String {
+        val result = runCommand(listOf("sh", "-c", "command -v $name"), projectDir)
+        assumeTrue(result.exitCode == 0 && result.stdout.isNotBlank(), "$name not found on PATH")
+        return result.stdout.trim()
+    }
+
+    /**
+     * A PATH overlay emulating macOS/BSD `readlink`: no `-f`, no `--` — any GNU-only
+     * flag is a hard error. Everything else delegates to the real binary, so a passing
+     * run proves the launcher resolves symlinks without GNU coreutils (#47).
+     */
+    private fun bsdStubBin(): File {
+        val dir = tempDir("jdx-bsdbin-")
+        val realReadlink = realToolPath("readlink")
+        File(dir, "readlink").apply {
+            writeText(
+                """
+                #!/bin/sh
+                for a in "${'$'}@"; do
+                    case "${'$'}a" in
+                        -f|--*) printf 'readlink: illegal option %s\n' "${'$'}a" >&2; exit 1 ;;
+                    esac
+                done
+                exec "$realReadlink" "${'$'}@"
+                """.trimIndent(),
+            )
+            setExecutable(true, false)
+        }
+        return dir
+    }
+
     /**
      * A PATH containing only the external tools the launcher calls (readlink, sed, dirname)
      * and no `java`, so PATH resolution can be exercised or forced to fail deterministically
@@ -216,6 +247,31 @@ class LauncherScriptTest {
         val result = runLauncher(
             symlink, binDir, args = listOf("--version"),
             environment = mapOf("JAVA_HOME" to stubJdk.absolutePath) + stubEnvironment(argsFile),
+        )
+
+        result.exitCode shouldBe 0
+        recordedArgs(argsFile) shouldContain File(install, "libs/jdx-0.0.0-all.jar").absolutePath
+    }
+
+    @Test
+    fun `a symlinked launcher resolves to the real fat jar without GNU readlink -f`() {
+        // macOS/BSD `readlink` has no `-f`: the stub rejects it (and `--`), so the
+        // launcher must fall back to its plain-readlink loop. The two-hop chain proves
+        // the loop walks more than one link (#47).
+        val install = newFakeInstall()
+        val stubJdk = newStubJdk()
+        val argsFile = File(install, "stub-args.txt")
+        val binDir = tempDir("jdx-userbin-")
+        val firstLink = File(binDir, "jdx")
+        Files.createSymbolicLink(firstLink.toPath(), File(install, "jdx").toPath())
+        val secondLink = File(binDir, "jdx-alias")
+        Files.createSymbolicLink(secondLink.toPath(), firstLink.toPath())
+
+        val result = runLauncher(
+            secondLink, binDir, args = listOf("--version"),
+            environment = mapOf("JAVA_HOME" to stubJdk.absolutePath) + stubEnvironment(argsFile) + mapOf(
+                "PATH" to bsdStubBin().absolutePath + File.pathSeparator + System.getenv("PATH"),
+            ),
         )
 
         result.exitCode shouldBe 0
