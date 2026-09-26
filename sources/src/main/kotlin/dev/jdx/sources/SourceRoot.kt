@@ -50,8 +50,23 @@ public sealed interface SourceRoot : Closeable {
      * index will lift this when source queries go indexed (PROPOSAL.md §10.4).
      */
     public fun findSource(binaryName: String): String? {
-        val available = sourcePaths().toSet()
-        return sourceCandidatesFor(binaryName).firstOrNull { it in available }
+        val paths = sourcePaths()
+        val available = paths.toSet()
+        val candidates = sourceCandidatesFor(binaryName)
+        candidates.forEach { candidate ->
+            if (candidate in available) return candidate
+        }
+        // JDK `src.zip` nests every file under its module directory
+        // (`java.base/java/util/ArrayList.java`, JEP 201), so a flat candidate
+        // never matches literally there. An entry minus one leading segment
+        // that equals a candidate is the same file. Flat entries always win;
+        // among prefixed ones the sorted-first wins, so the choice stays
+        // deterministic. Only previously-unresolvable lookups can newly
+        // resolve — flat `-sources.jar` behaviour is unchanged.
+        candidates.forEach { candidate ->
+            paths.firstOrNull { it.substringAfter('/') == candidate }?.let { return it }
+        }
+        return null
     }
 }
 

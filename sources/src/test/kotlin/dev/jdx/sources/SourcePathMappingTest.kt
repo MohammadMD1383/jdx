@@ -45,6 +45,39 @@ class SourcePathMappingTest {
         sourceCandidatesFor("\$Orphan") shouldBe emptyList()
     }
 
+    @Test
+    fun `jdk src zip module prefix resolves to the nested file`() {
+        // JDK 9+ src.zip nests entries under the module directory
+        // (`java.base/java/util/ArrayList.java`, JEP 201); the flat candidate
+        // misses, so findSource strips one leading segment as fallback.
+        MemorySourceRoot(
+            mapOf("java.base/java/util/ArrayList.java" to "class ArrayList {}"),
+        ).use { root ->
+            root.findSource("java.util.ArrayList") shouldBe "java.base/java/util/ArrayList.java"
+            root.findSource("java.util.ArrayList\$SubList") shouldBe "java.base/java/util/ArrayList.java"
+        }
+    }
+
+    @Test
+    fun `flat entries win over module-prefixed ones and ties sort first`() {
+        MemorySourceRoot(
+            mapOf(
+                "com/example/Foo.java" to "flat",
+                "zeta/com/example/Foo.java" to "prefixed",
+            ),
+        ).use { root ->
+            root.findSource("com.example.Foo") shouldBe "com/example/Foo.java"
+        }
+        MemorySourceRoot(
+            mapOf(
+                "zeta/Top.java" to "z",
+                "alpha/Top.java" to "a",
+            ),
+        ).use { root ->
+            root.findSource("Top") shouldBe "alpha/Top.java"
+        }
+    }
+
     private fun arbPackage(): Arb<List<String>> =
         Arb.list(Arb.of("com", "example", "a", "b2", "_x"), 0..3)
 
