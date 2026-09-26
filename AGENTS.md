@@ -210,7 +210,21 @@ round-tripping.
 - docs/COMMANDS.md is the user-facing catalogue; every shipped flag must appear in
   `jdx <cmd> --help`, the docs/COMMANDS.md table, and Appendix B.
 
-## 10. Environment notes (this machine)
+## 10. Dogfood rule — built by agents, for agents
+
+`jdx` is its own proof of work: when working on this repo, use `jdx` on this
+repo first (own source dirs / built jars, third-party jars, the JDK) instead of
+`javap` / `grep` / `unzip` / full-file reads for structural questions.
+
+- A wrong answer, crash, or missing capability found while dogfooding is a bug
+  or feature gap in `jdx` — file it as a GitHub Issue in the same session
+  (`gh issue create`), with: the exact `jdx` command + inputs, when/where/why
+  it happened, expected vs actual, the fallback used, and the proposed fix.
+- Never block on the fix: fall back to whatever works (`javap`, `grep`, direct
+  reads) and finish the task. Never work around silently without filing — an
+  unfiled dogfood bug is an incomplete task.
+
+## 11. Environment notes (this machine)
 
 - Arch Linux. JDK at `/usr/lib/jvm/default` (`java`, `javac`, `javap`, `jar`, `jdeps`).
   `JAVA_HOME` is **unset** — the launcher must resolve the JDK itself and not assume it.
