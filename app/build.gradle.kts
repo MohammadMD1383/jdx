@@ -64,7 +64,15 @@ val fatJar = tasks.register<Jar>("fatJar") {
 //
 // Config-cache rule (T-067): only plain values cross into task actions — the
 // java executable path and file locations are captured below as locals.
-val buildJavaExe: String = File(System.getProperty("java.home"), "bin/java").absolutePath
+//
+// The `.exe` branch is the Windows half of Phase 2a (#46): java.home layouts
+// are `bin/java` on POSIX and `bin/java.exe` on Windows, so CDS training must
+// probe the `.exe` name first or :app:installDist fails on a Windows host.
+val buildJavaExe: String = run {
+    val home = File(System.getProperty("java.home"))
+    val windowsExe = File(home, "bin/java.exe")
+    if (windowsExe.isFile) windowsExe.absolutePath else File(home, "bin/java").absolutePath
+}
 val cdsClassList = layout.buildDirectory.file("cds/jdx.lst")
 val cdsArchive = layout.buildDirectory.file("libs/jdx.jsa")
 
@@ -107,8 +115,10 @@ val createCdsArchive = tasks.register<Exec>("createCdsArchive") {
     )
 }
 
-// `./gradlew :app:installDist` -> app/build/jdx (executable) + app/build/libs/jdx-*-all.jar.
-// The launcher finds the jar by glob relative to its own resolved path, so the pair can be
+// `./gradlew :app:installDist` -> app/build/jdx (+ jdx.bat/jdx.ps1 on every
+// host) + app/build/libs/jdx-*-all.jar.
+// The POSIX launcher finds the jar by glob relative to its own resolved path,
+// and the Windows launchers via %~dp0 / $MyInvocation, so the trio can be
 // symlinked anywhere (install.sh) and keeps working.
 //
 // Deliberately NOT a `Copy` task: `Copy` into the build-directory root declares the whole
@@ -116,22 +126,36 @@ val createCdsArchive = tasks.register<Exec>("createCdsArchive") {
 // implicit-dependency validation. A one-file task with an explicit output keeps `build/jdx`
 // (the path named in T-004's acceptance) without claiming anything else.
 val launcherScript = layout.projectDirectory.file("src/main/scripts/jdx")
+val launcherBat = layout.projectDirectory.file("src/main/scripts/jdx.bat")
+val launcherPs1 = layout.projectDirectory.file("src/main/scripts/jdx.ps1")
 val installDist = tasks.register("installDist") {
     group = "distribution"
-    description = "Installs the jdx launcher next to its fat jar in app/build."
+    description = "Installs the jdx launchers (POSIX jdx + Windows jdx.bat/jdx.ps1) next to the fat jar in app/build."
     dependsOn(fatJar)
     dependsOn(createCdsArchive)
     inputs.file(launcherScript)
+    inputs.file(launcherBat)
+    inputs.file(launcherPs1)
     outputs.file(layout.buildDirectory.file("jdx"))
+    outputs.file(layout.buildDirectory.file("jdx.bat"))
+    outputs.file(layout.buildDirectory.file("jdx.ps1"))
     // Resolved here, at configuration time: touching `layout` (i.e. the project)
     // from `doLast` captures the project in the action and breaks the
     // configuration cache (T-067). Plain Files serialize fine.
     val launcherFile = launcherScript.asFile
+    val launcherBatFile = launcherBat.asFile
+    val launcherPs1File = launcherPs1.asFile
     val installedFile = layout.buildDirectory.file("jdx").get().asFile
+    val installedBatFile = layout.buildDirectory.file("jdx.bat").get().asFile
+    val installedPs1File = layout.buildDirectory.file("jdx.ps1").get().asFile
     doLast {
         installedFile.parentFile.mkdirs()
         installedFile.writeText(launcherFile.readText())
         installedFile.setExecutable(true, false)
+        // setExecutable stays POSIX-only: the bit is meaningless for .bat/.ps1
+        // and a no-op on NTFS, so the Windows launchers are copied without it.
+        installedBatFile.writeText(launcherBatFile.readText())
+        installedPs1File.writeText(launcherPs1File.readText())
     }
 }
 
