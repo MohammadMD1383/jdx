@@ -203,6 +203,11 @@ jobs:
     needs: build
     runs-on: ubuntu-latest
     steps:
+      # `gh release create` resolves the repo from the git remote — without a
+      # checkout it dies with `fatal: not a git repository` (v1.2.0 proved it).
+      - name: Check out the tag
+        uses: actions/checkout@v4
+
       - name: Download all per-OS assets
         uses: actions/download-artifact@v4
         with:
