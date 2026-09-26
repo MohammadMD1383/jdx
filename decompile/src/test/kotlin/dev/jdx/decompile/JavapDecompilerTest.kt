@@ -10,6 +10,8 @@ import kotlin.time.Duration.Companion.seconds
 import org.junit.jupiter.api.Assumptions.assumeTrue
 import org.junit.jupiter.api.Tag
 import org.junit.jupiter.api.Test
+import org.junit.jupiter.api.condition.DisabledOnOs
+import org.junit.jupiter.api.condition.OS
 import org.junit.jupiter.api.io.TempDir
 
 /**
@@ -137,7 +139,12 @@ class JavapDecompilerTest {
         result.message shouldContain bogus
     }
 
+    // The hanging fake is a Bourne script: Windows cannot exec it
+    // (CreateProcess error=193 — the same reason the POSIX launcher suites
+    // stay @DisabledOnOs(WINDOWS)). Subprocess-timeout logic is covered on
+    // every OS by the Vineflower twin of this test.
     @Test
+    @DisabledOnOs(OS.WINDOWS)
     fun `an expired budget fails as a timeout, not a hang`() {
         // Answers `-version` instantly, hangs on anything else.
         val wrapper = tempDir.resolve("hanging-javap.sh")

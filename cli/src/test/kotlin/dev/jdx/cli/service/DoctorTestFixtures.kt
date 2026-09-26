@@ -1,5 +1,6 @@
 package dev.jdx.cli.service
 
+import dev.jdx.core.paths.JdxPaths
 import java.io.IOException
 import java.nio.file.Files
 import java.nio.file.Path
@@ -68,7 +69,12 @@ internal fun fakeEnvironment(
     val cacheRoot = home.resolve(".cache/jdx").also { Files.createDirectories(it) }
     cacheSetup(cacheRoot)
     if (kotlinSidecarPresent) {
-        val sidecar = dev.jdx.sources.kotlinSidecarJar(home)
+        // Under the injected cache root (see envVars below), never
+        // kotlinSidecarJar(home) — that resolves per ambient OS/env, so on
+        // Windows (%LOCALAPPDATA% set) the sidecar would land in the real
+        // machine's cache instead of the fixture.
+        val sidecar = cacheRoot.resolve("kotlin")
+            .resolve(dev.jdx.sources.KOTLIN_COMPILER_JAR)
         Files.createDirectories(sidecar.parent)
         Files.write(sidecar, ByteArray(64) { 0x50 })
     }
@@ -107,6 +113,15 @@ internal fun fakeEnvironment(
         workingDir = cwd,
         workspaceEnv = workspaceEnv,
         osName = osName,
+        // Pin cache/config to the fixture on every OS: macOS resolves
+        // ~/Library/... unconditionally (XDG_* is a Linux convention the
+        // macOS branch ignores by design), and Windows falls back past
+        // %LOCALAPPDATA% only when it is unset. JDX_* wins on all three, so
+        // the fixture reads identically everywhere.
+        envVars = mapOf(
+            JdxPaths.ENV_CACHE_DIR to cacheRoot.toString(),
+            JdxPaths.ENV_CONFIG_DIR to home.resolve(".config/jdx").toString(),
+        ),
         runtime = RuntimeInfo(
             version = "26.0.2.1-test",
             jrtReachable = jrtReachable,

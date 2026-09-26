@@ -137,6 +137,12 @@ public fun kotlinSidecarDownloadUrl(artifact: KotlinSidecarArtifact, repoBaseUrl
  *
  * [fetcher] defaults to live HTTP; tests inject a fake serving canned bytes,
  * so fetch tests never touch the network (T-019 precedent).
+ *
+ * Destination seam: production resolves [userHome] per OS and ambient
+ * environment (D-044); tests aim [fetchKotlinSidecarToDir] at a temp dir
+ * instead, so no test ever reads or writes the real machine's cache — on
+ * Windows the ambient `%LOCALAPPDATA%` would otherwise win over any injected
+ * home and tests would pollute (and read) each other through it.
  */
 public fun fetchKotlinSidecar(
     userHome: Path,
@@ -145,9 +151,19 @@ public fun fetchKotlinSidecar(
     force: Boolean = false,
 ): KotlinSidecarOutcome {
     return try {
-        fetchKotlinSidecarOrThrow(userHome, fetcher, repoBaseUrls.ifEmpty {
-            listOf(MavenCoords.CENTRAL_BASE_URL)
-        }, force)
+        val dir = try {
+            kotlinSidecarDir(userHome)
+        } catch (e: Exception) {
+            return KotlinSidecarOutcome.Failed(
+                "cannot install the Kotlin sidecar set: ${e.message ?: e.javaClass.simpleName}",
+            )
+        }
+        installSidecarSet(
+            dir,
+            fetcher,
+            repoBaseUrls.ifEmpty { listOf(MavenCoords.CENTRAL_BASE_URL) },
+            force,
+        )
     } catch (e: Exception) {
         KotlinSidecarOutcome.Failed(
             "cannot install the Kotlin sidecar set: ${e.message ?: e.javaClass.simpleName}",
@@ -155,19 +171,37 @@ public fun fetchKotlinSidecar(
     }
 }
 
-private fun fetchKotlinSidecarOrThrow(
-    userHome: Path,
+/**
+ * Installs the sidecar set into [dir] (tests: a temp dir; production: the
+ * resolved cache-root sidecar dir). Same outcome contract as
+ * [fetchKotlinSidecar]; never throws.
+ */
+public fun fetchKotlinSidecarToDir(
+    dir: Path,
+    fetcher: MavenFetch.Fetcher = MavenFetch.httpFetcher(),
+    repoBaseUrls: List<String> = listOf(MavenCoords.CENTRAL_BASE_URL),
+    force: Boolean = false,
+): KotlinSidecarOutcome {
+    return try {
+        installSidecarSet(
+            dir,
+            fetcher,
+            repoBaseUrls.ifEmpty { listOf(MavenCoords.CENTRAL_BASE_URL) },
+            force,
+        )
+    } catch (e: Exception) {
+        KotlinSidecarOutcome.Failed(
+            "cannot install the Kotlin sidecar set: ${e.message ?: e.javaClass.simpleName}",
+        )
+    }
+}
+
+private fun installSidecarSet(
+    dir: Path,
     fetcher: MavenFetch.Fetcher,
     repoBaseUrls: List<String>,
     force: Boolean,
 ): KotlinSidecarOutcome {
-    val dir = try {
-        kotlinSidecarDir(userHome)
-    } catch (e: Exception) {
-        return KotlinSidecarOutcome.Failed(
-            "cannot install the Kotlin sidecar set: ${e.message ?: e.javaClass.simpleName}",
-        )
-    }
     try {
         Files.createDirectories(dir)
     } catch (e: Exception) {

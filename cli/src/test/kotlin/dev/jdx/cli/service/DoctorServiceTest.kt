@@ -254,7 +254,8 @@ class DoctorServiceTest {
 
         val sources = report.checks.first { it.name == "jdk-sources" }
         sources.status shouldBe DoctorStatus.WARN
-        sources.detail shouldContain "lib/src.zip"
+        // Separator-aware: the detail names a real searched path.
+        sources.detail shouldContain "lib${java.io.File.separator}src.zip"
         sources.detail shouldContain "JDK sources unavailable"
         exitCodeFor(report) shouldBe 0
     }
@@ -401,7 +402,15 @@ class DoctorServiceTest {
     @Test
     fun `the daemon row is deterministic and single-line over hostile socket layouts`() = runBlocking<Unit> {
         val root = tempDir("jdx-doctor-daemon-prop-")
-        val hostileName = Arb.string(1..12).filter { it.none { c -> c == '/' || c == '\u0000' } }
+        // NUL never forms a file name; on Windows the DOS-illegal set cannot
+        // exist either - the OS refuses the path outside the probe contract,
+        // so the generator stays within host-spellable names.
+        val illegalNames = if (System.getProperty("os.name", "").lowercase().contains("win")) {
+            "<>:\"/\\|?*\u0000"
+        } else {
+            "/\u0000"
+        }
+        val hostileName = Arb.string(1..12).filter { name -> name.none { it in illegalNames } }
         checkAll(100, Arb.list(hostileName, 0..4), Arb.string(0..20)) { names, workspace ->
             val caseRoot = Files.createDirectory(root.resolve("case-${System.nanoTime()}"))
             val env = fakeEnvironment(caseRoot)

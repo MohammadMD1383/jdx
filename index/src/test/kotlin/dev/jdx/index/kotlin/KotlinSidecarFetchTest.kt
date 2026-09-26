@@ -3,7 +3,6 @@ package dev.jdx.index.kotlin
 import dev.jdx.index.maven.MavenCoords
 import dev.jdx.index.maven.MavenFetch
 import dev.jdx.sources.KOTLIN_COMPILER_VERSION
-import dev.jdx.sources.kotlinSidecarDir
 import io.kotest.matchers.shouldBe
 import io.kotest.matchers.string.shouldContain
 import io.kotest.property.Arb
@@ -25,6 +24,14 @@ import org.junit.jupiter.api.io.TempDir
  */
 @Tag("tier2")
 class KotlinSidecarFetchTest {
+
+    private val isWindowsHost: Boolean =
+        System.getProperty("os.name", "").lowercase().contains("win")
+
+    // Hermetic destination: a temp dir, never kotlinSidecarDir(home) — that
+    // resolves per ambient OS/env, so on Windows (%LOCALAPPDATA% set) tests
+    // would read and write the real machine's cache through each other.
+    private fun sidecarDir(home: Path): Path = home.resolve("sidecar")
 
     /** Serves [jars] (file name → bytes) with matching `.sha1` bodies, like Maven Central. */
     private fun centralFetcher(jars: Map<String, ByteArray>): MavenFetch.Fetcher =
@@ -74,13 +81,13 @@ class KotlinSidecarFetchTest {
     fun `a full fetch installs every jar with exact bytes`(@TempDir home: Path) {
         val jars = cannedJars()
 
-        val outcome = fetchKotlinSidecar(home, centralFetcher(jars))
+        val outcome = fetchKotlinSidecarToDir(sidecarDir(home), centralFetcher(jars))
 
         (outcome is KotlinSidecarOutcome.Ok) shouldBe true
         val report = (outcome as KotlinSidecarOutcome.Ok).report
         report.installed shouldBe KOTLIN_SIDECAR_ARTIFACTS.map { it.fileName }
         report.alreadyPresent shouldBe emptyList()
-        val dir = kotlinSidecarDir(home)
+        val dir = sidecarDir(home)
         for ((name, bytes) in jars) {
             Files.readAllBytes(dir.resolve(name)) shouldBe bytes
         }
@@ -88,7 +95,7 @@ class KotlinSidecarFetchTest {
 
     @Test
     fun `present jars are skipped without network`(@TempDir home: Path) {
-        val dir = kotlinSidecarDir(home)
+        val dir = sidecarDir(home)
         Files.createDirectories(dir)
         for (artifact in KOTLIN_SIDECAR_ARTIFACTS) {
             Files.write(dir.resolve(artifact.fileName), "old".toByteArray(Charsets.UTF_8))
@@ -99,7 +106,7 @@ class KotlinSidecarFetchTest {
             null
         }
 
-        val outcome = fetchKotlinSidecar(home, counting)
+        val outcome = fetchKotlinSidecarToDir(sidecarDir(home), counting)
 
         (outcome is KotlinSidecarOutcome.Ok) shouldBe true
         val report = (outcome as KotlinSidecarOutcome.Ok).report
@@ -111,14 +118,14 @@ class KotlinSidecarFetchTest {
     @Test
     fun `a re-run resumes after the jars already installed`(@TempDir home: Path) {
         val jars = cannedJars()
-        val dir = kotlinSidecarDir(home)
+        val dir = sidecarDir(home)
         Files.createDirectories(dir)
         val firstTwo = KOTLIN_SIDECAR_ARTIFACTS.take(2)
         for (artifact in firstTwo) {
             Files.write(dir.resolve(artifact.fileName), jars.getValue(artifact.fileName))
         }
 
-        val outcome = fetchKotlinSidecar(home, centralFetcher(jars))
+        val outcome = fetchKotlinSidecarToDir(sidecarDir(home), centralFetcher(jars))
 
         (outcome is KotlinSidecarOutcome.Ok) shouldBe true
         val report = (outcome as KotlinSidecarOutcome.Ok).report
@@ -128,13 +135,13 @@ class KotlinSidecarFetchTest {
 
     @Test
     fun `force re-downloads present jars`(@TempDir home: Path) {
-        val dir = kotlinSidecarDir(home)
+        val dir = sidecarDir(home)
         Files.createDirectories(dir)
         val first = KOTLIN_SIDECAR_ARTIFACTS.first()
         Files.write(dir.resolve(first.fileName), "stale".toByteArray(Charsets.UTF_8))
         val jars = cannedJars()
 
-        val outcome = fetchKotlinSidecar(home, centralFetcher(jars), force = true)
+        val outcome = fetchKotlinSidecarToDir(sidecarDir(home), centralFetcher(jars), force = true)
 
         (outcome is KotlinSidecarOutcome.Ok) shouldBe true
         Files.readAllBytes(dir.resolve(first.fileName)) shouldBe jars.getValue(first.fileName)
@@ -150,19 +157,19 @@ class KotlinSidecarFetchTest {
             }
         }
 
-        val outcome = fetchKotlinSidecar(home, bad)
+        val outcome = fetchKotlinSidecarToDir(sidecarDir(home), bad)
 
         (outcome is KotlinSidecarOutcome.Failed) shouldBe true
         val message = (outcome as KotlinSidecarOutcome.Failed).message
         message shouldContain "kotlin-stdlib"
         message shouldContain "re-run to resume"
-        Files.exists(kotlinSidecarDir(home).resolve("kotlin-stdlib-$KOTLIN_COMPILER_VERSION.jar")) shouldBe false
+        Files.exists(sidecarDir(home).resolve("kotlin-stdlib-$KOTLIN_COMPILER_VERSION.jar")) shouldBe false
     }
 
     @Test
     fun `an unreachable repository fails naming the artifact and the repos`(@TempDir home: Path) {
-        val outcome = fetchKotlinSidecar(
-            home,
+        val outcome = fetchKotlinSidecarToDir(
+            sidecarDir(home),
             MavenFetch.Fetcher { null },
             repoBaseUrls = listOf("https://repo.example.com/maven2"),
         )
@@ -175,15 +182,23 @@ class KotlinSidecarFetchTest {
 
     @Test
     fun `a throwing fetcher never throws the fetch`(@TempDir home: Path) {
-        val outcome = fetchKotlinSidecar(home, MavenFetch.Fetcher { throw IllegalStateException("boom") })
+        val outcome = fetchKotlinSidecarToDir(sidecarDir(home), MavenFetch.Fetcher { throw IllegalStateException("boom") })
 
         (outcome is KotlinSidecarOutcome.Failed) shouldBe true
     }
 
     @Test
     fun `hostile home segments never throw the fetch`() {
+        // `Path.of` itself rejects Windows-illegal names (`<>:"/\|?*`, NUL):
+        // that is the OS refusing a path, outside the fetch contract, so the
+        // generator stays within what this host can spell.
+        val illegal = "<>:\"/\\|?*"
+        val hostileSegment = Arb.string().filter { segment ->
+            segment.none { it.code == 0 } &&
+                (!isWindowsHost || segment.none { it in illegal })
+        }
         runBlocking {
-            checkAll(100, Arb.string().filter { it.none { c -> c.code == 0 } }) { segment ->
+            checkAll(100, hostileSegment) { segment ->
                 val home = Path.of(System.getProperty("java.io.tmpdir"), "jdx-kt-fetch-$segment")
                 try {
                     fetchKotlinSidecar(home, MavenFetch.Fetcher { null })

@@ -62,6 +62,11 @@ public sealed interface KotlinToolchainStatus {
 /**
  * Probes the sidecar jar under [userHome]. Pure filesystem check — no class
  * loading, no network, no parsing — so it is safe on the cold CLI path.
+ *
+ * The home spelling resolves per OS and ambient environment (D-044); callers
+ * with an already-resolved root (an injected test env, an explicit
+ * `--cache-dir`) probe [probeKotlinToolchainAt] instead, so tests never read
+ * the real machine's cache.
  */
 public fun probeKotlinToolchain(userHome: Path): KotlinToolchainStatus {
     val jar = try {
@@ -69,6 +74,14 @@ public fun probeKotlinToolchain(userHome: Path): KotlinToolchainStatus {
     } catch (e: Exception) {
         return KotlinToolchainStatus.Missing(missingJarFallback(userHome))
     }
+    return probeKotlinToolchainAt(jar)
+}
+
+/**
+ * Probes one sidecar jar path: a non-empty regular file reads [Installed],
+ * anything else [Missing]. Never throws.
+ */
+public fun probeKotlinToolchainAt(jar: Path): KotlinToolchainStatus {
     return try {
         if (!Files.isRegularFile(jar)) return KotlinToolchainStatus.Missing(jar)
         val bytes = Files.size(jar)

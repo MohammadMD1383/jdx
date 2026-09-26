@@ -5,6 +5,8 @@ import io.kotest.assertions.throwables.shouldThrow
 import io.kotest.matchers.shouldBe
 import io.kotest.matchers.string.shouldContain
 import org.junit.jupiter.api.Test
+import org.junit.jupiter.api.condition.DisabledOnOs
+import org.junit.jupiter.api.condition.OS
 import org.junit.jupiter.api.io.TempDir
 import java.io.ByteArrayOutputStream
 import java.nio.file.Files
@@ -104,7 +106,12 @@ class UpgradeExtractionTest {
         Files.isRegularFile(root.resolve("libs").resolve("jdx-1.1.0-all.jar")) shouldBe true
     }
 
+    // No POSIX executable bit on Windows: every file reads executable, so a
+    // bit-less tarball installs (correct there) and setExecutable(false) is a
+    // no-op. Windows proves the shim path instead (`hasLauncher accepts
+    // windows shims…` below plus the real jdx.bat smokes in CI).
     @Test
+    @DisabledOnOs(OS.WINDOWS)
     fun `a tarball without an executable launcher is refused`(@TempDir tmp: Path) {
         val root = releaseInstall(tmp.resolve("jdx"))
         val service = serviceFor(root, releaseTarball(executableMode = false))
@@ -142,7 +149,10 @@ class UpgradeExtractionTest {
         UpgradeService.hasLauncher(tmp) shouldBe true
     }
 
+    // Same no-exec-bit reason as above: setExecutable(false) cannot make a
+    // file read non-executable on Windows.
     @Test
+    @DisabledOnOs(OS.WINDOWS)
     fun `hasLauncher refuses a non-executable bare launcher`(@TempDir tmp: Path) {
         Files.writeString(tmp.resolve("jdx"), "fake")
         tmp.resolve("jdx").toFile().setExecutable(false)

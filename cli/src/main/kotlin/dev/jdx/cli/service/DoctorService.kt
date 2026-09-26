@@ -302,7 +302,11 @@ class DoctorService(
         // T-038: the side-loaded compiler (D-008) is a versioned sidecar under the cache
         // root. Present reads OK; absent is a WARN — Kotlin binaries still render via
         // @Metadata (T-035), only `.kt` sources need the sidecar (T-039).
-        return when (val status = dev.jdx.sources.probeKotlinToolchain(environment.userHome)) {
+        // Probed under the resolved (possibly injected) cache root — never the
+        // ambient home — so tests exercise the fixture, not the real machine.
+        val jar = dev.jdx.sources.kotlinSidecarDirForCache(environment.resolvedCacheRoot())
+            .resolve(dev.jdx.sources.KOTLIN_COMPILER_JAR)
+        return when (val status = dev.jdx.sources.probeKotlinToolchainAt(jar)) {
             is dev.jdx.sources.KotlinToolchainStatus.Installed -> check(
                 "kotlin",
                 DoctorStatus.OK,
