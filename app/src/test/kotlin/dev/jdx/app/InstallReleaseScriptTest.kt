@@ -4,6 +4,8 @@ import io.kotest.matchers.shouldBe
 import io.kotest.matchers.string.shouldContain
 import io.kotest.matchers.string.shouldStartWith
 import org.junit.jupiter.api.Test
+import org.junit.jupiter.api.condition.DisabledOnOs
+import org.junit.jupiter.api.condition.OS
 import java.io.File
 import java.nio.file.Files
 
@@ -17,6 +19,11 @@ import java.nio.file.Files
  * from it via `--tarball`, so no network and no real build output is needed.
  * HOME points at a temp directory, so the developer's own home is untouched.
  */
+@DisabledOnOs(
+    OS.WINDOWS,
+    disabledReason = "Drives install-release.sh through sh with POSIX ln/tar/readlink assumptions " +
+        "(tar treats C: as a remote host); Windows installs from the -windows.zip asset instead",
+)
 class InstallReleaseScriptTest {
 
     private val projectDir = File(System.getProperty("user.dir"))

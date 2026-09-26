@@ -17,6 +17,8 @@ import kotlinx.coroutines.runBlocking
 import org.junit.jupiter.api.Assumptions.assumeTrue
 import org.junit.jupiter.api.Tag
 import org.junit.jupiter.api.Test
+import org.junit.jupiter.api.condition.DisabledOnOs
+import org.junit.jupiter.api.condition.OS
 import java.io.File
 import java.nio.file.Files
 
@@ -30,6 +32,11 @@ import java.nio.file.Files
  * family (TESTING.md §2/§4): versions are generated, never hand-picked.
  */
 @Tag("tier2")
+@DisabledOnOs(
+    OS.WINDOWS,
+    disabledReason = "Execs the #!/bin/sh launcher directly (CreateProcess error=193 on Win); " +
+        "Windows is covered by WindowsLauncherScriptTest + the jdx.bat smokes",
+)
 class LauncherScriptTest {
 
     private val projectDir = File(System.getProperty("user.dir"))

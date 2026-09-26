@@ -4,6 +4,8 @@ import io.kotest.matchers.shouldBe
 import io.kotest.matchers.string.shouldContain
 import io.kotest.matchers.string.shouldStartWith
 import org.junit.jupiter.api.Test
+import org.junit.jupiter.api.condition.DisabledOnOs
+import org.junit.jupiter.api.condition.OS
 import java.io.File
 import java.nio.file.Files
 
@@ -13,6 +15,11 @@ import java.nio.file.Files
  * build output (app/build/jdx — the test task depends on :app:installDist) with HOME pointed
  * at a temp directory, so the developer's own ~/.local/bin is never touched.
  */
+@DisabledOnOs(
+    OS.WINDOWS,
+    disabledReason = "Drives install.sh through sh with POSIX ln/tar/readlink assumptions " +
+        "(C: paths, symlinks); Windows has no shell-installer equivalent to cover",
+)
 class InstallScriptTest {
 
     private val projectDir = File(System.getProperty("user.dir"))

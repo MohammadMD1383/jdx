@@ -1,11 +1,13 @@
 name: windows
 
 # Windows verification for the multiplatform slices (issue #52, part of #43).
-# The POSIX launcher + installer suites can only stub Windows behaviour on Linux
-# (static `.bat` pins, pwsh-against-a-sh-stub); this job runs the real thing on
-# a real Windows runner: the app suites (incl. the tier-2 `jdx.bat` smokes that
-# skip elsewhere), a `jdx.bat version` + `doctor` smoke through the real
-# cmd.exe batch interpreter, and the `gradlew.bat` entry point itself.
+# The POSIX launcher + installer suites (LauncherScriptTest, InstallScriptTest,
+# InstallReleaseScriptTest) are @DisabledOnOs(WINDOWS): they exec #!/bin/sh
+# scripts directly (CreateProcess error=193 on Win) and assume POSIX ln/tar
+# (tar treats C: as a remote host). This job runs the real thing on a real
+# Windows runner instead: WindowsLauncherScriptTest (static .bat/.ps1 pins +
+# tier-2 jdx.bat smokes through the real cmd.exe batch interpreter), a
+# jdx.bat version + doctor smoke, and the gradlew.bat entry point itself.
 #
 # Mirrors `.github/workflows/macos.yml` (issue #47): macOS proves the BSD
 # userland path, Windows proves the batch/PowerShell path. Both run on every
@@ -38,6 +40,8 @@ jobs:
 
       # The Windows leg builds through gradlew.bat (cmd) — that IS the proof
       # the Windows wrapper entry point works. POSIX legs use ./gradlew.
+      # POSIX-only suites skip here by @DisabledOnOs(WINDOWS); Windows coverage
+      # is WindowsLauncherScriptTest (pins + tier-2 jdx.bat smokes).
       - name: App tests (launcher + installer suites, incl. tier-2 jdx.bat smokes)
         shell: cmd
         run: gradlew.bat :app:check
