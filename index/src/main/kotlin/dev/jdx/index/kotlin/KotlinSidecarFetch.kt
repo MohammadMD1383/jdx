@@ -202,7 +202,7 @@ public fun fetchKotlinSidecarToDir(
 }
 
 /** The ambient OS, defaulting to Linux when `os.name` is unreadable (never throws). */
-private fun ambientSidecarOs(): JdxOs = runCatching {
+internal fun ambientSidecarOs(): JdxOs = runCatching {
     JdxPaths.detectOs(System.getProperty("os.name", ""))
 }.getOrDefault(JdxOs.LINUX)
 

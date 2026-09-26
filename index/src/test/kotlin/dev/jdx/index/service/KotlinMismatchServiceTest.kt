@@ -36,6 +36,13 @@ class KotlinMismatchServiceTest {
 
     private fun textOf(outcome: ServiceOutcome): String = outcome.renderText(false)
 
+    // Pinned hermetic sidecar context: LINUX + empty env resolves the sidecar
+    // under the temp home on every host OS. Ambient resolution would ignore
+    // the temp home on Windows (%LOCALAPPDATA%) and macOS (~/Library) and
+    // share the real machine's cache across parallel tests.
+    private val ktOs: dev.jdx.core.paths.JdxOs = dev.jdx.core.paths.JdxOs.LINUX
+    private val ktEnv: Map<String, String> = emptyMap()
+
     /** Borrowed from the Gradle module cache via the shared [SidecarJars] helper. */
     private fun cachedRuntimeJars(): Map<String, Path> =
         dev.jdx.testsupport.fixtures.SidecarJars.cachedRuntimeJars()
@@ -50,7 +57,7 @@ class KotlinMismatchServiceTest {
         // Product-resolved (ambient OS/env), exactly where the service looks:
         // a hardcoded `.cache/jdx` misses on macOS (`~/Library/Caches`)
         // and Windows (`%LOCALAPPDATA%`). Still hermetic: under @TempDir.
-        val dir = dev.jdx.sources.kotlinSidecarDir(home)
+        val dir = dev.jdx.sources.kotlinSidecarDir(home, ktOs, ktEnv)
         Files.createDirectories(dir)
         // Link, copying where the host cannot symlink (Windows without
         // Developer Mode): skipping there would hollow the suite and the
@@ -105,7 +112,7 @@ class KotlinMismatchServiceTest {
             "dev.jdx.fixtures.KotlinData#greeting",
         )
         for (ref in bodies) {
-            val outcome = JdxService.body(ref, fixtureRoots(), BodyOptions(kotlinUserHome = kotlinHome))
+            val outcome = JdxService.body(ref, fixtureRoots(), BodyOptions(kotlinUserHome = kotlinHome, kotlinSidecarOs = ktOs, kotlinSidecarEnv = ktEnv))
             outcome.exitCode shouldBe 0
             textOf(outcome) shouldNotContain "SOURCES_VERSION_MISMATCH"
             outcome.toJson("body") shouldNotContain "SOURCES_VERSION_MISMATCH"
@@ -123,7 +130,7 @@ class KotlinMismatchServiceTest {
             "dev.jdx.fixtures.KotlinShapesKt",
         )
         for (ref in types) {
-            val outcome = JdxService.source(ref, fixtureRoots(), SourceOptions(kotlinUserHome = kotlinHome))
+            val outcome = JdxService.source(ref, fixtureRoots(), SourceOptions(kotlinUserHome = kotlinHome, kotlinSidecarOs = ktOs, kotlinSidecarEnv = ktEnv))
             outcome.exitCode shouldBe 0
             textOf(outcome) shouldNotContain "SOURCES_VERSION_MISMATCH"
             outcome.toJson("source") shouldNotContain "SOURCES_VERSION_MISMATCH"
@@ -144,7 +151,7 @@ class KotlinMismatchServiceTest {
         val body = JdxService.body(
             "dev.jdx.fixtures.KotlinMembers#fetch",
             roots,
-            BodyOptions(kotlinUserHome = kotlinHome),
+            BodyOptions(kotlinUserHome = kotlinHome, kotlinSidecarOs = ktOs, kotlinSidecarEnv = ktEnv),
         )
         body.exitCode shouldBe 0
         textOf(body) shouldContain "warning SOURCES_VERSION_MISMATCH"
@@ -154,7 +161,7 @@ class KotlinMismatchServiceTest {
         val source = JdxService.source(
             "dev.jdx.fixtures.KotlinMembers",
             roots,
-            SourceOptions(kotlinUserHome = kotlinHome),
+            SourceOptions(kotlinUserHome = kotlinHome, kotlinSidecarOs = ktOs, kotlinSidecarEnv = ktEnv),
         )
         source.exitCode shouldBe 0
         textOf(source) shouldContain "warning SOURCES_VERSION_MISMATCH"
@@ -170,7 +177,7 @@ class KotlinMismatchServiceTest {
         val outcome = JdxService.body(
             "dev.jdx.fixtures.KotlinMembers#fetch",
             roots,
-            BodyOptions(kotlinUserHome = kotlinHome),
+            BodyOptions(kotlinUserHome = kotlinHome, kotlinSidecarOs = ktOs, kotlinSidecarEnv = ktEnv),
         )
         outcome.exitCode shouldBe 0
         val text = textOf(outcome)
@@ -190,7 +197,7 @@ class KotlinMismatchServiceTest {
         )
         val roots = staleKotlinPair(home, stale)
         val ref = "dev.jdx.fixtures.KotlinMembers#fetch"
-        val options = BodyOptions(kotlinUserHome = kotlinHome)
+        val options = BodyOptions(kotlinUserHome = kotlinHome, kotlinSidecarOs = ktOs, kotlinSidecarEnv = ktEnv)
         textOf(JdxService.body(ref, roots, options)) shouldBe textOf(JdxService.body(ref, roots, options))
         JdxService.body(ref, roots, options).toJson("body") shouldBe
             JdxService.body(ref, roots, options).toJson("body")

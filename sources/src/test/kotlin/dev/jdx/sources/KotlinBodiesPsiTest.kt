@@ -2,6 +2,7 @@ package dev.jdx.sources
 
 import dev.jdx.core.model.MemberSymbolRef
 import dev.jdx.core.model.typeNameFromBinaryName
+import dev.jdx.core.paths.JdxOs
 import dev.jdx.testsupport.paths.symlinkOrCopy
 import io.kotest.matchers.collections.shouldHaveSize
 import io.kotest.matchers.shouldBe
@@ -58,14 +59,19 @@ class KotlinBodiesPsiTest {
     private fun cachedRuntimeJars(): Map<String, Path> =
         dev.jdx.testsupport.fixtures.SidecarJars.cachedRuntimeJars()
 
-    /** A temp home with the sidecar set symlinked in, plus an opened parser. */
+    // Pinned hermetic sidecar context (same seam as the index suites):
+    // LINUX + empty env resolves under the temp home on every host OS.
+    private val ktOs: JdxOs = JdxOs.LINUX
+    private val ktEnv: Map<String, String> = emptyMap()
+
+    /** A temp home with the sidecar set staged in, plus an opened parser. */
     private fun withParser(home: Path, block: (KotlinSourceParser) -> Unit) {
         val jars = cachedRuntimeJars()
         assumeTrue(
             jars.containsKey(KOTLIN_COMPILER_JAR),
             "kotlin-compiler-embeddable $KOTLIN_COMPILER_VERSION not in the Gradle cache",
         )
-        val dir = kotlinSidecarDir(home)
+        val dir = kotlinSidecarDir(home, ktOs, ktEnv)
         Files.createDirectories(dir)
         // Link, copying where the host cannot symlink (Windows without
         // Developer Mode): skipping there would hollow the suite and the
@@ -73,7 +79,7 @@ class KotlinBodiesPsiTest {
         for ((jarName, cached) in jars) {
             symlinkOrCopy(dir.resolve(jarName), cached)
         }
-        openKotlinParser(home).use(block)
+        openKotlinParser(home, ktOs, ktEnv).use(block)
     }
 
     private fun fixtureSourcesRoot(): JarSourceRoot {

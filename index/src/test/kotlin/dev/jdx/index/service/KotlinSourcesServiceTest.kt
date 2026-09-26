@@ -42,6 +42,13 @@ class KotlinSourcesServiceTest {
 
     private fun textOf(outcome: ServiceOutcome): String = outcome.renderText(false)
 
+    // Pinned hermetic sidecar context: LINUX + empty env resolves the sidecar
+    // under the temp home on every host OS. Ambient resolution would ignore
+    // the temp home on Windows (%LOCALAPPDATA%) and macOS (~/Library) and
+    // share the real machine's cache across parallel tests.
+    private val ktOs: dev.jdx.core.paths.JdxOs = dev.jdx.core.paths.JdxOs.LINUX
+    private val ktEnv: Map<String, String> = emptyMap()
+
     /** Borrowed from the Gradle module cache via the shared [SidecarJars] helper. */
     private fun cachedRuntimeJars(): Map<String, Path> =
         dev.jdx.testsupport.fixtures.SidecarJars.cachedRuntimeJars()
@@ -56,7 +63,7 @@ class KotlinSourcesServiceTest {
         // Product-resolved (ambient OS/env), exactly where the service looks:
         // a hardcoded `.cache/jdx` misses on macOS (`~/Library/Caches`)
         // and Windows (`%LOCALAPPDATA%`). Still hermetic: under @TempDir.
-        val dir = dev.jdx.sources.kotlinSidecarDir(home)
+        val dir = dev.jdx.sources.kotlinSidecarDir(home, ktOs, ktEnv)
         Files.createDirectories(dir)
         // Link, copying where the host cannot symlink (Windows without
         // Developer Mode): skipping there would hollow the suite and the
@@ -78,7 +85,7 @@ class KotlinSourcesServiceTest {
         val outcome = JdxService.body(
             "dev.jdx.fixtures.KotlinMembers#fetch",
             roots,
-            BodyOptions(kotlinUserHome = kotlinHome(home)),
+            BodyOptions(kotlinUserHome = kotlinHome(home), kotlinSidecarOs = ktOs, kotlinSidecarEnv = ktEnv),
         )
         outcome.exitCode shouldBe 0
         val text = textOf(outcome)
@@ -96,14 +103,14 @@ class KotlinSourcesServiceTest {
         val jvm = JdxService.body(
             "dev.jdx.fixtures.KotlinMembers#renamedForJvm(int)",
             fixtureRoots(),
-            BodyOptions(kotlinUserHome = kotlinHome),
+            BodyOptions(kotlinUserHome = kotlinHome, kotlinSidecarOs = ktOs, kotlinSidecarEnv = ktEnv),
         )
         jvm.exitCode shouldBe 0
         textOf(jvm) shouldContain "value * 2"
         val kotlin = JdxService.body(
             "dev.jdx.fixtures.KotlinMembers#originalName(int)",
             fixtureRoots(),
-            BodyOptions(kotlinUserHome = kotlinHome),
+            BodyOptions(kotlinUserHome = kotlinHome, kotlinSidecarOs = ktOs, kotlinSidecarEnv = ktEnv),
         )
         kotlin.exitCode shouldBe 0
         textOf(kotlin) shouldContain "value * 2"
@@ -114,7 +121,7 @@ class KotlinSourcesServiceTest {
         val outcome = JdxService.body(
             "dev.jdx.fixtures.KotlinData#nickname",
             fixtureRoots(),
-            BodyOptions(kotlinUserHome = kotlinHome(home)),
+            BodyOptions(kotlinUserHome = kotlinHome(home), kotlinSidecarOs = ktOs, kotlinSidecarEnv = ktEnv),
         )
         outcome.exitCode shouldBe 0
         textOf(outcome) shouldContain "nickname"
@@ -126,7 +133,7 @@ class KotlinSourcesServiceTest {
         val outcome = JdxService.body(
             "dev.jdx.fixtures.KotlinMembers#internalHelper",
             fixtureRoots(),
-            BodyOptions(kotlinUserHome = kotlinHome(home)),
+            BodyOptions(kotlinUserHome = kotlinHome(home), kotlinSidecarOs = ktOs, kotlinSidecarEnv = ktEnv),
         )
         outcome.exitCode shouldBe 0
         textOf(outcome) shouldContain "internal fun internalHelper()"
@@ -137,7 +144,7 @@ class KotlinSourcesServiceTest {
         val outcome = JdxService.body(
             "dev.jdx.fixtures.KotlinMembers#absent",
             fixtureRoots(),
-            BodyOptions(kotlinUserHome = kotlinHome(home)),
+            BodyOptions(kotlinUserHome = kotlinHome(home), kotlinSidecarOs = ktOs, kotlinSidecarEnv = ktEnv),
         )
         outcome.exitCode shouldBe 1
         textOf(outcome) shouldContain "dev.jdx.fixtures.KotlinMembers#absent"
@@ -150,7 +157,7 @@ class KotlinSourcesServiceTest {
         val outcome = JdxService.doc(
             "dev.jdx.fixtures.KotlinShapesKt#extensionGreeting",
             fixtureRoots(),
-            DocOptions(kotlinUserHome = kotlinHome(home)),
+            DocOptions(kotlinUserHome = kotlinHome(home), kotlinSidecarOs = ktOs, kotlinSidecarEnv = ktEnv),
         )
         outcome.exitCode shouldBe 0
         val text = textOf(outcome)
@@ -163,7 +170,7 @@ class KotlinSourcesServiceTest {
         val outcome = JdxService.doc(
             "dev.jdx.fixtures.KotlinData#nickname",
             fixtureRoots(),
-            DocOptions(kotlinUserHome = kotlinHome(home)),
+            DocOptions(kotlinUserHome = kotlinHome(home), kotlinSidecarOs = ktOs, kotlinSidecarEnv = ktEnv),
         )
         outcome.exitCode shouldBe 1
         val text = textOf(outcome)
@@ -176,7 +183,7 @@ class KotlinSourcesServiceTest {
         val outcome = JdxService.doc(
             "dev.jdx.fixtures.UserIdBox",
             fixtureRoots(),
-            DocOptions(kotlinUserHome = kotlinHome(home)),
+            DocOptions(kotlinUserHome = kotlinHome(home), kotlinSidecarOs = ktOs, kotlinSidecarEnv = ktEnv),
         )
         outcome.exitCode shouldBe 0
         textOf(outcome) shouldContain "erased to its underlying type"
@@ -189,7 +196,7 @@ class KotlinSourcesServiceTest {
         val outcome = JdxService.source(
             "dev.jdx.fixtures.KotlinMembers",
             fixtureRoots(),
-            SourceOptions(kotlinUserHome = kotlinHome(home)),
+            SourceOptions(kotlinUserHome = kotlinHome(home), kotlinSidecarOs = ktOs, kotlinSidecarEnv = ktEnv),
         )
         outcome.exitCode shouldBe 0
         val text = textOf(outcome)
@@ -202,7 +209,7 @@ class KotlinSourcesServiceTest {
         val outcome = JdxService.source(
             "dev.jdx.fixtures.KotlinShapesKt",
             fixtureRoots(),
-            SourceOptions(kotlinUserHome = kotlinHome(home)),
+            SourceOptions(kotlinUserHome = kotlinHome(home), kotlinSidecarOs = ktOs, kotlinSidecarEnv = ktEnv),
         )
         outcome.exitCode shouldBe 0
         textOf(outcome) shouldContain "fun KotlinMembers.extensionGreeting()"
@@ -215,7 +222,7 @@ class KotlinSourcesServiceTest {
             fixtureRoots(),
             SourceOptions(
                 aroundRef = "dev.jdx.fixtures.KotlinMembers#fetch",
-                kotlinUserHome = kotlinHome(home),
+                kotlinUserHome = kotlinHome(home), kotlinSidecarOs = ktOs, kotlinSidecarEnv = ktEnv,
             ),
         )
         outcome.exitCode shouldBe 0
@@ -235,7 +242,7 @@ class KotlinSourcesServiceTest {
         val outcome = JdxService.body(
             "dev.jdx.fixtures.KotlinMembers#fetch",
             fixtureRoots(),
-            BodyOptions(kotlinUserHome = home, decompiler = tempEngine(cache)),
+            BodyOptions(kotlinUserHome = home, kotlinSidecarOs = ktOs, kotlinSidecarEnv = ktEnv, decompiler = tempEngine(cache)),
         )
         outcome.exitCode shouldBe 0
         textOf(outcome) shouldContain "reconstructed"
@@ -249,7 +256,7 @@ class KotlinSourcesServiceTest {
         val outcome = JdxService.doc(
             "dev.jdx.fixtures.KotlinShapesKt#extensionGreeting",
             fixtureRoots(),
-            DocOptions(kotlinUserHome = home),
+            DocOptions(kotlinUserHome = home, kotlinSidecarOs = ktOs, kotlinSidecarEnv = ktEnv),
         )
         outcome.exitCode shouldBe 1
         val text = textOf(outcome)

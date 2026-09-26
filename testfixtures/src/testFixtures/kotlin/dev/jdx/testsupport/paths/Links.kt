@@ -24,6 +24,7 @@ public fun symlinkOrCopy(link: Path, target: Path) {
     } catch (e: SecurityException) {
         // Fall through to the copy below.
     }
-    runCatching { Files.deleteIfExists(link) }
-    Files.copy(target, link)
+    // REPLACE_EXISTING, never delete-then-copy: the delete opens a window in
+    // which a concurrent stager fails or a reader sees a half-written file.
+    Files.copy(target, link, java.nio.file.StandardCopyOption.REPLACE_EXISTING)
 }

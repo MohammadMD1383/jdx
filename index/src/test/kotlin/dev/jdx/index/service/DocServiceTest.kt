@@ -35,6 +35,13 @@ class DocServiceTest {
 
     private fun textOf(outcome: ServiceOutcome): String = outcome.renderText(false)
 
+    // Pinned hermetic sidecar context: LINUX + empty env resolves the sidecar
+    // under the temp home on every host OS. Ambient resolution would ignore
+    // the temp home on Windows (%LOCALAPPDATA%) and macOS (~/Library) and
+    // share the real machine's cache across parallel tests.
+    private val ktOs: dev.jdx.core.paths.JdxOs = dev.jdx.core.paths.JdxOs.LINUX
+    private val ktEnv: Map<String, String> = emptyMap()
+
     // -- fixture types ---------------------------------------------------------
 
     @Test
@@ -283,7 +290,7 @@ class DocServiceTest {
         val outcome = JdxService.doc(
             "dev.jdx.fixtures.Generics#identity(U)",
             roots,
-            DocOptions(kotlinUserHome = tempDir),
+            DocOptions(kotlinUserHome = tempDir, kotlinSidecarOs = ktOs, kotlinSidecarEnv = ktEnv),
         )
         outcome.exitCode shouldBe 1
         textOf(outcome) shouldContain "kotlin-compiler-embeddable-2.4.20.jar not installed under <cache-dir>/kotlin"
@@ -500,7 +507,7 @@ class DocServiceTest {
         val outcome = JdxService.doc(
             "dev.jdx.fixtures.Generics",
             roots,
-            DocOptions(kotlinUserHome = tempDir),
+            DocOptions(kotlinUserHome = tempDir, kotlinSidecarOs = ktOs, kotlinSidecarEnv = ktEnv),
         )
         outcome.exitCode shouldBe 1
         textOf(outcome) shouldContain "kotlin-compiler-embeddable-2.4.20.jar not installed under <cache-dir>/kotlin"

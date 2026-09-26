@@ -40,6 +40,13 @@ class BodyServiceTest {
 
     private fun textOf(outcome: ServiceOutcome): String = outcome.renderText(false)
 
+    // Pinned hermetic sidecar context: LINUX + empty env resolves the sidecar
+    // under the temp home on every host OS. Ambient resolution would ignore
+    // the temp home on Windows (%LOCALAPPDATA%) and macOS (~/Library) and
+    // share the real machine's cache across parallel tests.
+    private val ktOs: dev.jdx.core.paths.JdxOs = dev.jdx.core.paths.JdxOs.LINUX
+    private val ktEnv: Map<String, String> = emptyMap()
+
     /** A failing reconstruction engine that counts its invocations. */
     private class FailingDecompiler(val message: String = "boom") : DecompilerEngine {
         override val id: DecompilerId = DecompilerId.VINEFLOWER
@@ -205,7 +212,7 @@ class BodyServiceTest {
         // `tempDir` doubles as the Kotlin home: it holds no sidecar, so the
         // unavailable path pins hermetically even on machines with a real
         // sidecar installed.
-        val options = BodyOptions(decompiler = tempEngine(tempDir), kotlinUserHome = tempDir)
+        val options = BodyOptions(decompiler = tempEngine(tempDir), kotlinUserHome = tempDir, kotlinSidecarOs = ktOs, kotlinSidecarEnv = ktEnv)
         val outcome = JdxService.body("dev.jdx.fixtures.Generics#identity(java.lang.Object)", roots, options)
         outcome.exitCode shouldBe 0
         textOf(outcome) shouldContain "decompiled by vineflower"

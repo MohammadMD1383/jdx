@@ -1,6 +1,7 @@
 package dev.jdx.index.service
 
 import dev.jdx.core.model.AccessFlag
+import dev.jdx.core.paths.JdxOs
 import dev.jdx.core.model.ClassInfo
 import dev.jdx.core.model.FieldInfo
 import dev.jdx.core.model.JvmDescriptor
@@ -415,10 +416,17 @@ public object JdxService {
         /**
          * Home directory the Kotlin sidecar is probed under (T-039).
          * Defaults to the real user home; tests point it at a temp home
-         * with a symlinked compiler set so no test writes to the real
-         * `~/.cache`.
+         * with a staged compiler set so no test writes to the real cache.
+         *
+         * Resolution follows the ambient OS/environment unless
+         * [kotlinSidecarOs]/[kotlinSidecarEnv] pin it (tests: `LINUX` with an
+         * empty env resolves under the temp home on every host OS — ambient
+         * `%LOCALAPPDATA%`/`~/Library` would otherwise ignore the temp home
+         * and share the real machine's cache across parallel tests).
          */
         public val kotlinUserHome: Path? = null,
+        public val kotlinSidecarOs: JdxOs? = null,
+        public val kotlinSidecarEnv: Map<String, String>? = null,
     )
 
     /**
@@ -552,10 +560,17 @@ public object JdxService {
         /**
          * Home directory the Kotlin sidecar is probed under (T-039).
          * Defaults to the real user home; tests point it at a temp home
-         * with a symlinked compiler set so no test writes to the real
-         * `~/.cache`.
+         * with a staged compiler set so no test writes to the real cache.
+         *
+         * Resolution follows the ambient OS/environment unless
+         * [kotlinSidecarOs]/[kotlinSidecarEnv] pin it (tests: `LINUX` with an
+         * empty env resolves under the temp home on every host OS — ambient
+         * `%LOCALAPPDATA%`/`~/Library` would otherwise ignore the temp home
+         * and share the real machine's cache across parallel tests).
          */
         public val kotlinUserHome: Path? = null,
+        public val kotlinSidecarOs: JdxOs? = null,
+        public val kotlinSidecarEnv: Map<String, String>? = null,
     )
 
     /**
@@ -803,10 +818,17 @@ public object JdxService {
         /**
          * Home directory the Kotlin sidecar is probed under (T-039).
          * Defaults to the real user home; tests point it at a temp home
-         * with a symlinked compiler set so no test writes to the real
-         * `~/.cache`.
+         * with a staged compiler set so no test writes to the real cache.
+         *
+         * Resolution follows the ambient OS/environment unless
+         * [kotlinSidecarOs]/[kotlinSidecarEnv] pin it (tests: `LINUX` with an
+         * empty env resolves under the temp home on every host OS — ambient
+         * `%LOCALAPPDATA%`/`~/Library` would otherwise ignore the temp home
+         * and share the real machine's cache across parallel tests).
          */
         public val kotlinUserHome: Path? = null,
+        public val kotlinSidecarOs: JdxOs? = null,
+        public val kotlinSidecarEnv: Map<String, String>? = null,
     )
 
     /**
@@ -4158,7 +4180,11 @@ public object JdxService {
         val opened = openRoots(roots)
         // One Kotlin parser per command (T-039): cheap to open, and the
         // ~1 s PSI init happens at most once, on the first `.kt` parse.
-        val ktParser = openKotlinParserFor(options.kotlinUserHome)
+        val ktParser = openKotlinParserFor(
+            options.kotlinUserHome,
+            options.kotlinSidecarOs,
+            options.kotlinSidecarEnv,
+        )
         try {
             val binariesByRoot = opened.map { it.root.classEntryPaths().map(::entryToBinary).toSet() }
             val providers = mutableMapOf<String, MutableList<Int>>()
@@ -4653,6 +4679,8 @@ public object JdxService {
         // [kotlinHome] (the `kotlinUserHome` test seam) for the Kotlin attempt.
         ktParser: dev.jdx.sources.KotlinSourceParser? = null,
         kotlinHome: Path? = null,
+        kotlinOs: JdxOs? = null,
+        kotlinEnv: Map<String, String>? = null,
     ): Warning? {
         when (val listed = dev.jdx.sources.listJavaMembers(sources, binary)) {
             is dev.jdx.sources.JavaMemberList.Listed ->
@@ -4664,7 +4692,8 @@ public object JdxService {
             if (ktParser != null) {
                 kotlinMismatchWarning(target, sources, binary, ktParser)
             } else {
-                openKotlinParserFor(kotlinHome).use { kotlinMismatchWarning(target, sources, binary, it) }
+                openKotlinParserFor(kotlinHome, kotlinOs, kotlinEnv)
+                    .use { kotlinMismatchWarning(target, sources, binary, it) }
             }
         }.getOrNull()
     }
@@ -4916,7 +4945,11 @@ public object JdxService {
         val opened = openRoots(roots)
         // One Kotlin parser per command (T-039): cheap to open, and the
         // ~1 s PSI init happens at most once, on the first `.kt` parse.
-        val ktParser = openKotlinParserFor(options.kotlinUserHome)
+        val ktParser = openKotlinParserFor(
+            options.kotlinUserHome,
+            options.kotlinSidecarOs,
+            options.kotlinSidecarEnv,
+        )
         try {
             val binariesByRoot = opened.map { it.root.classEntryPaths().map(::entryToBinary).toSet() }
             val providers = mutableMapOf<String, MutableList<Int>>()
@@ -5224,16 +5257,29 @@ public object JdxService {
 
     /**
      * Opens the Kotlin source parser for one command (T-039): [userHome]
-     * overrides the ambient home (the `kotlinUserHome` test seam). Never
-     * throws — absence reads as an unavailable value the callers degrade.
-     * Cheap until the first parse (the ~1 s PSI init is lazy per parser),
-     * so one parser is opened per command and shared across its lookups.
+     * overrides the ambient home (the `kotlinUserHome` test seam), [os]/[env]
+     * pin the per-OS resolution (null selects ambient). Never throws —
+     * absence reads as an unavailable value the callers degrade. Cheap until
+     * the first parse (the ~1 s PSI init is lazy per parser), so one parser
+     * is opened per command and shared across its lookups.
      */
-    private fun openKotlinParserFor(userHome: Path?): dev.jdx.sources.KotlinSourceParser {
+    private fun openKotlinParserFor(
+        userHome: Path?,
+        os: JdxOs? = null,
+        env: Map<String, String>? = null,
+    ): dev.jdx.sources.KotlinSourceParser {
         val home = userHome
             ?: runCatching { Path.of(System.getProperty("user.home")) }.getOrNull()
             ?: Path.of(".")
-        return dev.jdx.sources.openKotlinParser(home)
+        return if (os == null && env == null) {
+            dev.jdx.sources.openKotlinParser(home)
+        } else {
+            dev.jdx.sources.openKotlinParser(
+                home,
+                os ?: dev.jdx.index.kotlin.ambientSidecarOs(),
+                env ?: System.getenv(),
+            )
+        }
     }
 
     /** Kotlin source spellings of one bytecode match for `.kt` lookup (T-039). */
@@ -6053,14 +6099,25 @@ public object JdxService {
         // wins over a `.kt` direct hit per T-074).
         val path = dev.jdx.sources.findJavaSourcePath(sources, binary)
             ?.takeIf { !it.endsWith(".kt") }
-            ?: openKotlinParserFor(options.kotlinUserHome).use { kt ->
+            ?: openKotlinParserFor(
+                options.kotlinUserHome,
+                options.kotlinSidecarOs,
+                options.kotlinSidecarEnv,
+            ).use { kt ->
                 dev.jdx.sources.findKotlinSourcePath(sources, binary, kt)
             }
             ?: return noSourceFileOutcome(binary, rawRef, label, sources)
         val fileLines = readSourceLines(sources, path)
             ?: return failure(5, rawRef, "source read error: cannot read $path")
         val allWarnings = warnings + listOfNotNull(
-            mismatchWarning(target, sources, binary, kotlinHome = options.kotlinUserHome),
+            mismatchWarning(
+                target,
+                sources,
+                binary,
+                kotlinHome = options.kotlinUserHome,
+                kotlinOs = options.kotlinSidecarOs,
+                kotlinEnv = options.kotlinSidecarEnv,
+            ),
         )
         return fileSourceOutcome(
             binary = binary,
@@ -6199,7 +6256,11 @@ public object JdxService {
         val ktAliases = kotlinSourceAliases(target, matched.matches.singleOrNull())
         // One `--around` parser (T-039): cheap to open, parsed only when a
         // `.kt` member actually centers the slice.
-        val ktParser = openKotlinParserFor(options.kotlinUserHome)
+        val ktParser = openKotlinParserFor(
+            options.kotlinUserHome,
+            options.kotlinSidecarOs,
+            options.kotlinSidecarEnv,
+        )
         try {
             var memberNotFound = false
             for (lookupRef in lookupRefs) {
