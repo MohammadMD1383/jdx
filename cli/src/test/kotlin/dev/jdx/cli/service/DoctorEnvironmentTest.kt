@@ -35,10 +35,15 @@ class DoctorEnvironmentTest {
     )
 
     // `root` cannot make a directory unreadable to itself; drop that state there.
-    private val cacheStates = if (System.getProperty("user.name") == "root") {
-        CacheState.entries - CacheState.UNREADABLE
-    } else {
-        CacheState.entries
+    // Windows has no POSIX view, so `setPosixFilePermissions` throws there —
+    // drop UNREADABLE there too and skip with a reason instead of erroring (#52).
+    private val cacheStates = buildList {
+        val all = CacheState.entries.toMutableList()
+        if (System.getProperty("user.name") == "root") all.remove(CacheState.UNREADABLE)
+        if (!java.nio.file.FileSystems.getDefault().supportedFileAttributeViews().contains("posix")) {
+            all.remove(CacheState.UNREADABLE)
+        }
+        addAll(all)
     }
 
     @Test

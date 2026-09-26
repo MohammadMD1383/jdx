@@ -36,6 +36,9 @@ class DoctorServiceTest {
         "config", "index", "kotlin", "daemon", "workspace",
     )
 
+    private fun isPosixFs(): Boolean =
+        java.nio.file.FileSystems.getDefault().supportedFileAttributeViews().contains("posix")
+
     @Test
     fun `a healthy environment reports ten rows and exits zero`() {
         val service = DoctorService(fakeEnvironment(tempDir("jdx-doctor-test-")))
@@ -156,6 +159,7 @@ class DoctorServiceTest {
     @Test
     fun `an unwritable cache is a FAIL`() {
         assumeTrue(System.getProperty("user.name") != "root", "root can write anywhere")
+        assumeTrue(isPosixFs(), "POSIX permissions need a POSIX filesystem (skipped on Windows, #52)")
         val root = tempDir("jdx-doctor-test-")
         val service = DoctorService(
             fakeEnvironment(root, cacheSetup = {

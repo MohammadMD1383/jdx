@@ -59,6 +59,24 @@ class LauncherScriptTest {
     // the resolved jar path must start from the real path (#47).
     private fun tempDir(prefix: String): File = Files.createTempDirectory(prefix).toRealPath().toFile()
 
+    /**
+     * Creates a symlink, or skips with a reason when the host forbids it.
+     * Windows needs Developer Mode / SeCreateSymbolicLinkPrivilege — without
+     * it `createSymbolicLink` throws, and the symlinked-launcher suites must
+     * skip, not error (issue #52; Windows CI proves the `jdx.bat` path instead).
+     */
+    private fun symlinkOrAssume(link: File, target: File) {
+        try {
+            Files.createSymbolicLink(link.toPath(), target.toPath())
+        } catch (e: UnsupportedOperationException) {
+            assumeTrue(false, "symlinks unsupported on this host/filesystem: ${e.message}")
+        } catch (e: java.io.IOException) {
+            assumeTrue(false, "symlinks need privilege on this host (Windows Developer Mode): ${e.message}")
+        } catch (e: SecurityException) {
+            assumeTrue(false, "symlinks blocked by security manager: ${e.message}")
+        }
+    }
+
     /** A minimal `build/jdx` + `build/libs/jdx-*-all.jar` layout; the jar is never opened. */
     private fun newFakeInstall(withCdsArchive: Boolean = false): File {
         val dir = tempDir("jdx-install-")
@@ -166,9 +184,7 @@ class LauncherScriptTest {
         for (tool in listOf("readlink", "sed", "dirname")) {
             val location = runCommand(listOf("sh", "-c", "command -v $tool"), bin)
             assumeTrue(location.exitCode == 0 && location.stdout.isNotBlank(), "$tool not found on PATH")
-            File(bin, tool).let { symlink ->
-                Files.createSymbolicLink(symlink.toPath(), File(location.stdout.trim()).toPath())
-            }
+            symlinkOrAssume(File(bin, tool), File(location.stdout.trim()))
         }
         return bin.absolutePath
     }
@@ -276,7 +292,7 @@ class LauncherScriptTest {
         val argsFile = File(install, "stub-args.txt")
         val binDir = tempDir("jdx-userbin-")
         val symlink = File(binDir, "jdx")
-        Files.createSymbolicLink(symlink.toPath(), File(install, "jdx").toPath())
+        symlinkOrAssume(symlink, File(install, "jdx"))
 
         val result = runLauncher(
             symlink, binDir, args = listOf("--version"),
@@ -297,9 +313,9 @@ class LauncherScriptTest {
         val argsFile = File(install, "stub-args.txt")
         val binDir = tempDir("jdx-userbin-")
         val firstLink = File(binDir, "jdx")
-        Files.createSymbolicLink(firstLink.toPath(), File(install, "jdx").toPath())
+        symlinkOrAssume(firstLink, File(install, "jdx"))
         val secondLink = File(binDir, "jdx-alias")
-        Files.createSymbolicLink(secondLink.toPath(), firstLink.toPath())
+        symlinkOrAssume(secondLink, firstLink)
 
         val result = runLauncher(
             secondLink, binDir, args = listOf("--version"),

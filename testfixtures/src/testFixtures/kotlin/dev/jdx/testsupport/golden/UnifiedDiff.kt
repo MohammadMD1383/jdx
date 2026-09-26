@@ -20,7 +20,8 @@ object UnifiedDiff {
      * Renders [expected] vs [actual] as a unified diff, or `""` when they are
      * equal. Line model: empty text is zero lines; otherwise lines split on
      * `"\n"` (callers compare file bytes with the trailing newline stripped,
-     * so no `\ No newline` marker is needed).
+     * so no `\ No newline` marker is needed). CRLF (and lone CR) is normalised
+     * to LF first, so Windows `autocrlf` checkouts diff cleanly (issue #52).
      */
     fun diff(
         expected: String,
@@ -89,8 +90,10 @@ object UnifiedDiff {
         data class Insert(override val expectedIndex: Int, override val actualIndex: Int) : Op
     }
 
-    private fun splitLines(text: String): List<String> =
-        if (text.isEmpty()) emptyList() else text.split("\n")
+    private fun splitLines(text: String): List<String> {
+        val normalised = text.replace("\r\n", "\n").replace("\r", "\n")
+        return if (normalised.isEmpty()) emptyList() else normalised.split("\n")
+    }
 
     private fun commonPrefix(first: List<String>, second: List<String>): Int {
         var prefix = 0

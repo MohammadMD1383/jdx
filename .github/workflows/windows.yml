@@ -1,0 +1,58 @@
+name: windows
+
+# Windows verification for the multiplatform slices (issue #52, part of #43).
+# The POSIX launcher + installer suites can only stub Windows behaviour on Linux
+# (static `.bat` pins, pwsh-against-a-sh-stub); this job runs the real thing on
+# a real Windows runner: the app suites (incl. the tier-2 `jdx.bat` smokes that
+# skip elsewhere), a `jdx.bat version` + `doctor` smoke through the real
+# cmd.exe batch interpreter, and the `gradlew.bat` entry point itself.
+#
+# Mirrors `.github/workflows/macos.yml` (issue #47): macOS proves the BSD
+# userland path, Windows proves the batch/PowerShell path. Both run on every
+# push to main and every PR, plus on-demand via workflow_dispatch.
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  app:
+    runs-on: windows-latest
+    steps:
+      - name: Check out
+        uses: actions/checkout@v4
+
+      - name: Set up JDK 21
+        uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: "21"
+
+      - name: Set up Gradle
+        uses: gradle/actions/setup-gradle@v4
+
+      # The Windows leg builds through gradlew.bat (cmd) — that IS the proof
+      # the Windows wrapper entry point works. POSIX legs use ./gradlew.
+      - name: App tests (launcher + installer suites, incl. tier-2 jdx.bat smokes)
+        shell: cmd
+        run: gradlew.bat :app:check
+
+      - name: Build distribution (Windows)
+        shell: cmd
+        run: gradlew.bat :app:installDist
+
+      # Each smoke runs its OWN launcher through the real batch interpreter.
+      - name: Windows launcher smoke (jdx.bat version)
+        run: |
+          $reported = (cmd.exe /c "app\build\jdx.bat version" | ForEach-Object { $_.Trim() }) -join "`n"
+          if (-not ($reported -match "jdx version")) { Write-Error "jdx.bat version failed: $reported"; exit 1 }
+        shell: powershell
+
+      - name: Doctor smoke (jdx.bat doctor)
+        shell: cmd
+        run: app\build\jdx.bat doctor

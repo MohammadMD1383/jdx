@@ -113,4 +113,20 @@ class GoldenFilesTest {
         assertTrue(GoldenFiles.isUpdateMode(getProperty = { if (it == "jdx.golden.update") "true" else null }))
         assertFalse(GoldenFiles.isUpdateMode(getProperty = { "false" }))
     }
+
+    @Test
+    fun `verify mode tolerates CRLF on disk (autocrlf checkout)`() {
+        // A Windows `core.autocrlf=true` checkout reads LF-pinned goldens back
+        // as CRLF — comparison normalises, so no phantom mismatch (issue #52).
+        val dir = File(workDir, "golden").apply { mkdirs() }
+        File(dir, "a.txt").writeBytes("hello\r\nworld\r\n".toByteArray(Charsets.UTF_8))
+        GoldenFiles.verifyAll(dir, mapOf("a.txt" to "hello\nworld"), updateMode = false)
+    }
+
+    @Test
+    fun `verify mode tolerates CRLF in actual text`() {
+        val dir = File(workDir, "golden").apply { mkdirs() }
+        File(dir, "a.txt").writeText("hello\nworld\n")
+        GoldenFiles.verifyAll(dir, mapOf("a.txt" to "hello\r\nworld"), updateMode = false)
+    }
 }

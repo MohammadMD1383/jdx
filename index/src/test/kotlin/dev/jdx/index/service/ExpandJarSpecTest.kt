@@ -7,6 +7,7 @@ import io.kotest.property.Arb
 import io.kotest.property.arbitrary.string
 import io.kotest.property.checkAll
 import kotlinx.coroutines.runBlocking
+import org.junit.jupiter.api.Assumptions.assumeTrue
 import org.junit.jupiter.api.Test
 import org.junit.jupiter.api.io.TempDir
 import java.nio.file.Files
@@ -85,7 +86,15 @@ class ExpandJarSpecTest {
     fun `a symlink loop degrades to an error, never a hang`() {
         val dir = tempDir.resolve("loop")
         Files.createDirectories(dir.resolve("sub"))
-        Files.createSymbolicLink(dir.resolve("sub/back"), dir)
+        try {
+            Files.createSymbolicLink(dir.resolve("sub/back"), dir)
+        } catch (e: UnsupportedOperationException) {
+            assumeTrue(false, "symlinks unsupported on this host/filesystem: ${e.message}")
+        } catch (e: java.io.IOException) {
+            assumeTrue(false, "symlinks need privilege on this host (Windows Developer Mode): ${e.message}")
+        } catch (e: SecurityException) {
+            assumeTrue(false, "symlinks blocked by security manager: ${e.message}")
+        }
         jar(dir, "a.jar")
         // `*` matches the loop link itself; the walk must terminate.
         val hits = JdxService.expandJarSpec(dir.resolve("*").toString(), tempDir.toString())

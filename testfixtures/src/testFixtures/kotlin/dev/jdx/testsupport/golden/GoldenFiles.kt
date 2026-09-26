@@ -18,9 +18,20 @@ import java.io.File
  *
  * Golden files are plain text (`.txt`/`.json`), committed, and readable in a
  * PR diff. Comparisons strip one trailing newline, so editors that ensure a
- * final newline never cause phantom mismatches.
+ * final newline never cause phantom mismatches. Comparisons also normalise
+ * CRLF (and lone CR) to LF before comparing, so a `core.autocrlf=true`
+ * checkout on Windows never causes phantom mismatches (issue #52) — goldens
+ * stay LF on disk via `.gitattributes` (`*.sh eol=lf`, `*.bat eol=crlf`).
  */
 object GoldenFiles {
+
+    /**
+     * Normalises line endings for comparison: CRLF (and lone CR) become LF.
+     * Golden files are LF-pinned; without this a Windows `autocrlf` checkout
+     * reads back CRLF and every golden spuriously mismatches (#52).
+     */
+    fun normaliseLineEndings(text: String): String =
+        text.replace("\r\n", "\n").replace("\r", "\n")
 
     /** System property carrying `-Pgolden.update` into the test JVM. */
     const val UPDATE_PROPERTY: String = "jdx.golden.update"
@@ -76,11 +87,12 @@ object GoldenFiles {
                 "missing golden file: ${file.path} (run with -Pgolden.update=true to create it)",
             )
         }
-        val expected = file.readText().removeSuffix("\n")
-        if (expected != actual) {
+        val expected = normaliseLineEndings(file.readText()).removeSuffix("\n")
+        val normalisedActual = normaliseLineEndings(actual)
+        if (expected != normalisedActual) {
             throw AssertionError(
                 "golden mismatch: ${file.path}\n" +
-                    UnifiedDiff.diff(expected, actual, "${file.name} (expected)", "${file.name} (actual)"),
+                    UnifiedDiff.diff(expected, normalisedActual, "${file.name} (expected)", "${file.name} (actual)"),
             )
         }
         return false

@@ -94,7 +94,15 @@ class KotlinBodiesPsiTest {
         val dir = kotlinSidecarDir(home)
         Files.createDirectories(dir)
         for ((jarName, cached) in jars) {
-            Files.createSymbolicLink(dir.resolve(jarName), cached)
+            try {
+                Files.createSymbolicLink(dir.resolve(jarName), cached)
+            } catch (e: UnsupportedOperationException) {
+                assumeTrue(false, "symlinks unsupported on this host/filesystem: ${e.message}")
+            } catch (e: java.io.IOException) {
+                assumeTrue(false, "symlinks need privilege on this host (Windows Developer Mode): ${e.message}")
+            } catch (e: SecurityException) {
+                assumeTrue(false, "symlinks blocked by security manager: ${e.message}")
+            }
         }
         openKotlinParser(home).use(block)
     }

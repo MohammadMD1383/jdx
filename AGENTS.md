@@ -211,6 +211,13 @@ round-tripping.
 
 - Arch Linux. JDK at `/usr/lib/jvm/default` (`java`, `javac`, `javap`, `jar`, `jdeps`).
   `JAVA_HOME` is **unset** — the launcher must resolve the JDK itself and not assume it.
+  Other OSes (CI-verified via `windows.yml` / `macos.yml`, issue #52): macOS JDK via
+  `/usr/libexec/java_home -v 21` (override with `$JDX_JAVA_HOME_HELPER` in tests);
+  Windows JDK via `%JAVA_HOME%\bin\java.exe` → `where java.exe` → registry
+  (`JavaSoft` / `Adoptium`) → `%ProgramFiles%\Java` (see `app/AGENTS.md`). Windows
+  symlinks need Developer Mode, otherwise launcher/installer symlink suites skip
+  with a reason; goldens stay LF (`*.sh eol=lf`, `*.bat eol=crlf`) with CRLF-tolerant
+  compare (`GoldenFiles.normaliseLineEndings`, `UnifiedDiff.splitLines`).
 - **No `mvn`/`gradle` on PATH.** Use the Gradle **wrapper**.
 - Maven Central and GitHub are reachable. `git` and `gh` are installed.
 - Rich local test corpus: ~2183 jars in `~/.gradle/caches`, including `-sources.jar`

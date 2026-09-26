@@ -25,6 +25,12 @@ class UnifiedDiffTest {
     }
 
     @Test
+    fun `CRLF normalises to LF before diffing (autocrlf checkout)`() {
+        assertEquals("", UnifiedDiff.diff("a\r\nb\r\nc", "a\nb\nc"))
+        assertEquals("", UnifiedDiff.diff("a\rb\rc", "a\nb\nc"))
+    }
+
+    @Test
     fun `a single changed line renders one hunk with context`() {
         val expected = listOf("a", "b", "c", "d", "e").joinToString("\n")
         val actual = listOf("a", "b", "X", "d", "e").joinToString("\n")

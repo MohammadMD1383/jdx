@@ -197,6 +197,8 @@ class InstallReleaseScriptTest {
      * A hermetic PATH dir: symlinks to the real tools the installer needs, plus fake
      * entries from [fakes]. Anything not symlinked or faked (notably sha256sum/shasum
      * unless the caller adds them) is invisible — `command -v` fails for it.
+     * Symlink creation needs privilege on Windows (Developer Mode) — without it
+     * the suite skips with a reason instead of erroring (issue #52).
      */
     private fun hermeticToolPath(fakes: Map<String, String>): File {
         val dir = tempDir("jdx-tools-")
@@ -205,7 +207,15 @@ class InstallReleaseScriptTest {
             "sed", "cut", "tr", "mktemp", "readlink", "ln", "basename",
         )
         for (tool in tools) {
-            Files.createSymbolicLink(File(dir, tool).toPath(), File(realToolPath(tool)).toPath())
+            try {
+                Files.createSymbolicLink(File(dir, tool).toPath(), File(realToolPath(tool)).toPath())
+            } catch (e: UnsupportedOperationException) {
+                org.junit.jupiter.api.Assumptions.assumeTrue(false, "symlinks unsupported: ${e.message}")
+            } catch (e: java.io.IOException) {
+                org.junit.jupiter.api.Assumptions.assumeTrue(false, "symlinks need privilege (Windows Developer Mode): ${e.message}")
+            } catch (e: SecurityException) {
+                org.junit.jupiter.api.Assumptions.assumeTrue(false, "symlinks blocked: ${e.message}")
+            }
         }
         for ((name, content) in fakes) {
             File(dir, name).apply {

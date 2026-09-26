@@ -75,17 +75,29 @@ class JavapDecompilerTest {
     fun `a cache hit never re-runs the disassembly`() {
         // A counting wrapper proves the spawn count: version probe + one
         // disassembly on the first call, then silence on the repeat.
+        // On Windows the wrapper is a `.bat` (cmd.exe interprets it); elsewhere
+        // a POSIX shell script (issue #52 — `.sh` shims never execute on Win).
         val realJavap = systemJavap()
         val counter = tempDir.resolve("spawns.txt")
         Files.writeString(counter, "0")
-        val wrapper = tempDir.resolve("counting-javap.sh")
-        Files.writeString(
-            wrapper,
-            "#!/bin/sh\n" +
-                "echo x >> \"${counter.toAbsolutePath()}\"\n" +
-                "exec \"$realJavap\" \"\$@\"\n",
-        )
-        wrapper.toFile().setExecutable(true)
+        val isWindows = System.getProperty("os.name", "").lowercase().contains("win")
+        val wrapper = tempDir.resolve(if (isWindows) "counting-javap.bat" else "counting-javap.sh")
+        if (isWindows) {
+            Files.writeString(
+                wrapper,
+                "@echo off\r\n" +
+                    "echo x>> \"${counter.toAbsolutePath()}\"\r\n" +
+                    "\"$realJavap\" %*\r\n",
+            )
+        } else {
+            Files.writeString(
+                wrapper,
+                "#!/bin/sh\n" +
+                    "echo x >> \"${counter.toAbsolutePath()}\"\n" +
+                    "exec \"$realJavap\" \"\$@\"\n",
+            )
+            wrapper.toFile().setExecutable(true)
+        }
         val bytes = genericsBytes()
         val first = engine(wrapper.toString()).decompileClass(bytes, "dev.jdx.fixtures.Generics")
         first.shouldBeInstanceOf<DecompileResult.Decompiled>()

@@ -1,4 +1,7 @@
 * text=auto
 gradlew text eol=lf
+app/src/main/scripts/jdx text eol=lf
+*.sh text eol=lf
+*.ps1 text eol=lf
 *.bat text eol=crlf
 *.jar binary
