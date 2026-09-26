@@ -38,6 +38,21 @@ java.util.HashMap#get(java.lang.Object)
 No sources jar? It decompiles with Vineflower — and **says so**, so the agent knows it is
 reading a reconstruction (pass `--engine javap` for raw opcodes instead).
 
+Same task, two agents — left does it with `javap`/`grep`, right with `jdx`:
+
+![baseline vs jdx: find all System.exit call sites in java.base](docs/demo-callsites.gif)
+
+<details>
+<summary>More side-by-side demos (method body · implementors · Maven coordinates)</summary>
+
+![baseline vs jdx: show only the body of HashMap#get](docs/demo-method-body.gif)
+
+![baseline vs jdx: who implements java.util.Map](docs/demo-implementors.gif)
+
+![baseline vs jdx: inspect Gson from a Maven coordinate](docs/demo-maven-deps.gif)
+
+</details>
+
 ## Install
 
 Requires **JDK 21+** (the launcher resolves `JAVA_HOME` → `java` on `PATH` →
