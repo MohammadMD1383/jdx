@@ -73,7 +73,13 @@ pitest {
         "-Djdx.fixturesDir=" +
             project(":testfixtures").layout.buildDirectory.dir("libs").get().asFile.absolutePath,
     )
-    timeoutConstInMillis.set(10_000)
+    // #57: same CI relaxation as :core — slow shared runners must not read as
+    // killed mutants. Local runs keep the 10 s gate.
+    val isCi: Boolean =
+        (findProperty("ci")?.toString()?.let { it != "false" } ?: false) ||
+            System.getenv("CI") != null ||
+            System.getenv("GITHUB_ACTIONS") == "true"
+    timeoutConstInMillis.set(if (isCi) 60_000 else 10_000)
     outputFormats.set(setOf("XML", "HTML"))
     timestampedReports.set(false)
     threads.set(maxOf(2, Runtime.getRuntime().availableProcessors() - 1))

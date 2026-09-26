@@ -39,6 +39,13 @@ pitest {
     junit5PluginVersion.set(libs.versions.pitestJunitPlugin.get())
     targetClasses.set(setOf("dev.jdx.sources.*"))
     targetTests.set(setOf("dev.jdx.sources.*"))
+    // #57: CI relaxation shared with :core/:index (slow runners must not read as
+    // killed mutants). Local default matches core/index at 10 s.
+    val isCi: Boolean =
+        (findProperty("ci")?.toString()?.let { it != "false" } ?: false) ||
+            System.getenv("CI") != null ||
+            System.getenv("GITHUB_ACTIONS") == "true"
+    timeoutConstInMillis.set(if (isCi) 60_000 else 10_000)
     outputFormats.set(setOf("XML", "HTML"))
     timestampedReports.set(false)
     // Same Intrinsics rationale as :core; applies once M3 lands real code here.

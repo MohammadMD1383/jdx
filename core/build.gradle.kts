@@ -44,7 +44,14 @@ pitest {
         targetTests.set(setOf(scope))
     }
     // Property tests run 1,000 cases each; give slow mutants room before calling them kills.
-    timeoutConstInMillis.set(10_000)
+    // #57: CI runners are slow and shared — lift the timeout there (report-only budgets
+    // elsewhere); local runs keep the 10 s gate. Product timeouts (Vineflower/javap,
+    // Maven) are degradation behavior and stay intact.
+    val isCi: Boolean =
+        (findProperty("ci")?.toString()?.let { it != "false" } ?: false) ||
+            System.getenv("CI") != null ||
+            System.getenv("GITHUB_ACTIONS") == "true"
+    timeoutConstInMillis.set(if (isCi) 60_000 else 10_000)
     outputFormats.set(setOf("XML", "HTML"))
     timestampedReports.set(false)
     threads.set(maxOf(2, Runtime.getRuntime().availableProcessors() - 1))

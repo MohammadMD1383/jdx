@@ -87,6 +87,17 @@ with `-Ptier1.budget=<seconds>`). When it fires, the fix is to move the slowest 
 tier 2 with `@Tag("tier2")` — never to raise the budget without a note in the session log
 saying why.
 
+**CI mode (`-Pci`, issues #57/#61).** CI runners are slow, shared, and variable — the
+same suite passes locally and reds on CI with 0 test failures (issue #2). CI workflows
+pass `-Pci` (also auto-detected via `CI`/`GITHUB_ACTIONS` env), which relaxes *only*
+wall-clock test gates: `verifyTier1Budget` becomes report-only (a slow runner with 0
+failures stays green) and PIT `timeoutConstInMillis` lifts from 10 s to 60 s in every
+gated module. No per-task `Test` timeout is set in either mode (fail-open by policy).
+Real product timeouts (Vineflower/javap 30 s, Maven connect/read) are degradation
+behavior and stay intact — never weaken product behavior to green CI. A local
+`verifyTier1Budget` red (issue #2) is a machine-variance signal to move a suite to
+tier 2; a CI-infra red is a runner problem — do not confuse the two.
+
 ---
 
 ## 3. TDD — where it is mandatory
@@ -421,6 +432,7 @@ Testing time is finite; spend it where bugs live.
 ```bash
 ./gradlew test                       # tier 1 — fast, the TDD loop (<30s)
 ./gradlew check                      # tier 2 — + property, golden, fault injection (<3min)
+./gradlew check -Pci                 # CI mode: budgets relaxed (report-only), same gates otherwise
 ./gradlew test -Pgolden.update=true  # rewrite golden files — THEN READ THE DIFF
 ./gradlew soak                       # tier 3 — corpus, needs local jars
 ./gradlew soak -Pcorpus=~/.m2        # ...against your own corpus

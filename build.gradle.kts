@@ -42,6 +42,15 @@ val jacocoToolVersion = libs.versions.jacoco.get()
 // every tag a runner; the root tasks at the bottom of this file give every tier a command.
 val tier1BudgetSeconds = (findProperty("tier1.budget") as String?)?.toDoubleOrNull() ?: 30.0
 val corpusDir = (findProperty("corpus") as String?) ?: "${System.getProperty("user.home")}/.gradle/caches"
+// CI mode (#57): `-Pci` (bare or `=true`) or `CI`/`GITHUB_ACTIONS` env. Relaxes
+// wall-clock test gates (tier-1 budget report-only, PIT timeouts lifted) so slow
+// runners never produce false-positive reds. Product timeouts (Vineflower/javap,
+// Maven) are untouched. NOTE: a bare `-Pci` does not yield the string "true" from
+// `findProperty`, so presence (anything but explicit `=false`) means CI here.
+val isCi: Boolean =
+    (findProperty("ci")?.toString()?.let { it != "false" } ?: false) ||
+        System.getenv("CI") != null ||
+        System.getenv("GITHUB_ACTIONS") == "true"
 
 // Prints the tier-1 total test time and the 10 slowest tests, and fails the build when the
 // total exceeds the tier-1 budget (override with `-Ptier1.budget=<seconds>`). Wired as a
@@ -60,6 +69,7 @@ tasks.register("verifyTier1Budget") {
     val tier1ResultsDirs: List<java.io.File> =
         subprojects.map { it.layout.buildDirectory.dir("test-results/test").get().asFile }
     val tier1Budget: Double = tier1BudgetSeconds
+    val ciMode: Boolean = isCi
     doLast {
         var totalTime = 0.0
         var testCount = 0
@@ -105,10 +115,20 @@ tasks.register("verifyTier1Budget") {
             logger.lifecycle("[tier1] slowest: %6.2fs %s — %s".format(time, className, name))
         }
         if (failureCount == 0 && totalTime > tier1Budget) {
-            throw GradleException(
-                "Tier-1 budget exceeded: %.1fs > %.1fs. Move the slowest suite to tier 2 " +
-                    "(@Tag(\"tier2\"), docs/TESTING.md §2).".format(totalTime, tier1Budget),
-            )
+            if (ciMode) {
+                // #57: report-only on CI — a slow runner with 0 failures stays green.
+                logger.lifecycle(
+                    "[tier1] CI mode (-Pci): budget exceeded (%.1fs > %.1fs) — report only, build stays green.".format(
+                        totalTime,
+                        tier1Budget,
+                    ),
+                )
+            } else {
+                throw GradleException(
+                    ("Tier-1 budget exceeded: %.1fs > %.1fs. Move the slowest suite to tier 2 " +
+                        "(@Tag(\"tier2\"), docs/TESTING.md §2).").format(totalTime, tier1Budget),
+                )
+            }
         }
     }
 }
@@ -276,6 +296,10 @@ subprojects {
 
     // Every Test task uses JUnit Platform and the same failure-focused logging. Tag filters
     // are set per task below — never here — so each tier reads as one self-contained block.
+    // #57 CI policy: no per-task `timeout` is set here or in CI — Test tasks stay
+    // fail-open on wall-clock so slow runners never produce false-positive reds.
+    // Only the tier-1 budget gate (`verifyTier1Budget`, report-only under `-Pci`)
+    // and PIT `timeoutConstInMillis` (lifted under `-Pci`) are wall-clock gates.
     tasks.withType<Test>().configureEach {
         useJUnitPlatform()
         testLogging {

@@ -170,6 +170,9 @@ round-tripping.
   validation red mid-churn is stale state until proven otherwise — retry clean first.
 - `-Pgolden.update=true` is the most dangerous command here: **read every golden diff
   before committing it.** An unread golden update is a deleted test.
+- CI mode `-Pci` (also auto-detected via `CI`/`GITHUB_ACTIONS`): wall-clock test gates
+  relax on slow runners — tier-1 budget report-only, PIT timeouts 10 s → 60 s.
+  Local loop unchanged. Product timeouts untouched. See `docs/TESTING.md` §2.
 - Line counting is POSIX: one trailing `\n` is a terminator, not a line.
 
 ## 8. Working agreements
