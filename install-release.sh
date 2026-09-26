@@ -75,7 +75,13 @@ command -v tar >/dev/null 2>&1 || die "the 'tar' tool is required but not on PAT
 download() {
     # download <url> <dest>
     if command -v curl >/dev/null 2>&1; then
-        curl -fsSL --proto '=https' --tlsv1.2 --retry 3 -o "$2" "$1" || return 1
+        if curl --help 2>/dev/null | grep -q ' --proto'; then
+            curl -fsSL --proto '=https' --tlsv1.2 --retry 3 -o "$2" "$1" || return 1
+        else
+            # Older curl (stock macOS before --proto existed): same fetch, without
+            # the protocol pin the old binary does not understand.
+            curl -fsSL --retry 3 -o "$2" "$1" || return 1
+        fi
     elif command -v wget >/dev/null 2>&1; then
         wget -q -O "$2" "$1" || return 1
     else
@@ -83,10 +89,54 @@ download() {
     fi
 }
 
+# Portable temp creation: bare `mktemp` / `mktemp -d` need `-t prefix` on older
+# macOS, so every call tries the plain form first and falls back to `-t`.
+make_temp_file() {
+    mktemp 2>/dev/null || mktemp -t jdx 2>/dev/null
+}
+
+make_temp_dir() {
+    mktemp -d 2>/dev/null || mktemp -d -t jdx 2>/dev/null
+}
+
+verify_checksum() {
+    # verify_checksum <dir> <checksum-file>: check a .sha256 file with whatever
+    # verifier exists — sha256sum, shasum (macOS), or Windows CertUtil (Git-Bash).
+    # A published checksum that cannot be checked is a loud failure, never a
+    # silent skip: an unverified binary is worse than no binary.
+    v_dir=$1
+    v_sum=$2
+    v_status=1
+    if command -v sha256sum >/dev/null 2>&1; then
+        (cd "$v_dir" && sha256sum -c "$v_sum")
+        v_status=$?
+    elif command -v shasum >/dev/null 2>&1; then
+        (cd "$v_dir" && shasum -a 256 -c "$v_sum")
+        v_status=$?
+    elif command -v CertUtil >/dev/null 2>&1 || command -v certutil >/dev/null 2>&1; then
+        if command -v CertUtil >/dev/null 2>&1; then v_cert=CertUtil; else v_cert=certutil; fi
+        # CertUtil prints the hex digest alone on its second line (upper-case,
+        # space-padded); the .sha256 file carries "<hex>  <name>".
+        v_expected=$(cut -d ' ' -f 1 "$v_sum")
+        v_actual=$("$v_cert" -hashfile "$tarball" SHA256 2>/dev/null \
+            | sed -n '2p' | tr -d ' \r' | tr 'A-Z' 'a-z')
+        if [ -n "$v_expected" ] && [ -n "$v_actual" ] && [ "$v_expected" = "$v_actual" ]; then
+            v_status=0
+        else
+            v_status=1
+        fi
+        unset v_cert v_expected v_actual
+    else
+        die "cannot verify '$v_sum' — no sha256sum, shasum, or CertUtil on PATH"
+    fi
+    unset v_dir v_sum
+    return "$v_status"
+}
+
 resolve_latest() {
     # resolve_latest: print the latest release tag via the GitHub API (no jq).
     api="https://api.github.com/repos/$repo/releases/latest"
-    tmp=$(mktemp) || die "cannot create temp file"
+    tmp=$(make_temp_file) || die "cannot create temp file"
     download "$api" "$tmp" || die "could not query '$api' — pass --version explicitly"
     tag=$(sed -n 's/.*"tag_name"[[:space:]]*:[[:space:]]*"\([^"]*\)".*/\1/p' "$tmp" | head -n 1)
     rm -f -- "$tmp"
@@ -94,7 +144,7 @@ resolve_latest() {
     printf '%s' "$tag"
 }
 
-tmp_dir=$(mktemp -d) || die "cannot create temp directory"
+tmp_dir=$(make_temp_dir) || die "cannot create temp directory"
 trap 'rm -rf -- "$tmp_dir"' EXIT INT TERM
 
 tarball=
@@ -103,7 +153,7 @@ if [ -n "$tarball_override" ]; then
     tarball=$tarball_override
     # Offline installs carry no release tag; recover it from the asset name
     # (jdx-<bare>.tar.gz) so the .jdx-release marker stays truthful.
-    base=$(basename -- "$tarball_override")
+    base=$(basename "$tarball_override")
     case $base in
         jdx-*.tar.gz)
             bare=${base#jdx-}
@@ -134,15 +184,8 @@ else
     download "$base_url/jdx-$bare.tar.gz" "$tarball" \
         || die "could not download '$base_url/jdx-$bare.tar.gz' — does release $version exist?"
     if download "$base_url/jdx-$bare.tar.gz.sha256" "$tarball.sha256" 2>/dev/null; then
-        if command -v sha256sum >/dev/null 2>&1; then
-            (cd "$tmp_dir" && sha256sum -c "$tarball.sha256") \
-                || die "checksum mismatch for 'jdx-$bare.tar.gz'"
-        elif command -v shasum >/dev/null 2>&1; then
-            (cd "$tmp_dir" && shasum -a 256 -c "$tarball.sha256") \
-                || die "checksum mismatch for 'jdx-$bare.tar.gz'"
-        else
-            printf 'warning: no sha256sum/shasum — skipping checksum verification\n' >&2
-        fi
+        verify_checksum "$tmp_dir" "$tarball.sha256" \
+            || die "checksum mismatch for 'jdx-$bare.tar.gz'"
     else
         printf 'warning: no checksum file published — skipping verification\n' >&2
     fi
@@ -174,7 +217,7 @@ printf 'repo=%s\ntag=%s\n' "$repo" "$version" > "$install_dir/.jdx-release" \
 mkdir -p -- "$bin_dir" || die "cannot create '$bin_dir'"
 target=$bin_dir/jdx
 if [ -e "$target" ] || [ -L "$target" ]; then
-    if [ -L "$target" ] && [ "$(readlink -- "$target")" = "$install_dir/jdx" ]; then
+    if [ -L "$target" ] && [ "$(readlink "$target")" = "$install_dir/jdx" ]; then
         : # already ours; fall through and re-link (idempotent refresh)
     elif [ -d "$target" ]; then
         die "'$target' is a directory — refusing to replace it even with --force"

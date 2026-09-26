@@ -5,7 +5,7 @@ Fat-jar assembly + the `jdx` POSIX launcher + AppCDS archive.
 ## Key files
 
 - `src/main/scripts/jdx` — resolves the JDK (`JAVA_HOME` → `java` on `PATH` →
-  `/usr/lib/jvm/default`; one human-readable line + exit 6 when unusable, never
+  `/usr/libexec/java_home` on macOS → `/usr/lib/jvm/default` or `$JDX_JVM_DEFAULT_DIR`; one human-readable line + exit 6 when unusable, never
   assumes `JAVA_HOME`), applies one-shot flags
   (`-TieredStopAtLevel=1`, serial GC, `-Xshare:auto`), passes
   `-XX:SharedArchiveFile=<fixed jdx.jsa path>` only when the archive exists next

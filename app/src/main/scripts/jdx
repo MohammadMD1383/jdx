@@ -4,7 +4,8 @@
 # This script is the only supported entry point for end users. It is intentionally dumb:
 # no config, no colour, no argument parsing — the JVM owns all of that. Its three jobs:
 #
-#   1. find a Java 21+ runtime:  $JAVA_HOME  ->  `java` on PATH  ->  $JDX_JVM_DEFAULT_DIR
+#   1. find a Java 21+ runtime:  $JAVA_HOME  ->  `java` on PATH  ->
+#      `/usr/libexec/java_home` (macOS only)  ->  $JDX_JVM_DEFAULT_DIR
 #      (default /usr/lib/jvm/default, the Arch layout; JDX_JVM_DEFAULT_DIR exists mainly so
 #      the no-JDK error path is testable on a machine that always has a JDK, and secondarily
 #      for non-Arch users — see D-026)
@@ -19,8 +20,9 @@
 #      no version probing.
 #
 # install.sh symlinks this file into ~/.local/bin, so the fat jar is located relative to
-# the *resolved* script path, not $0 (GNU `readlink -f`; without it, $0 must be the real
-# path — direct execution always is).
+# the *resolved* script path, not $0: GNU `readlink -f` when it works, otherwise a
+# portable loop over plain `readlink` (BSD/macOS `readlink` has no `-f`, and rejects
+# `--`, so neither flag is used here).
 
 minimum_java_major=21
 
@@ -35,8 +37,27 @@ die() {
 command -v sed >/dev/null 2>&1 || die "the 'sed' tool is required but not on PATH"
 
 self=$0
-if resolved=$(readlink -f -- "$self" 2>/dev/null) && [ -n "$resolved" ]; then
+# Portable symlink resolution: prefer GNU `readlink -f` when the readlink at hand
+# supports it; otherwise walk the chain with plain POSIX `readlink`, resolving
+# relative targets against the link's own directory. Bounded (32 hops) so a link
+# cycle degrades to using $0, never to an infinite loop.
+if resolved=$(readlink -f "$self" 2>/dev/null) && [ -n "$resolved" ]; then
     self=$resolved
+else
+    depth=0
+    while [ "$depth" -lt 32 ] && link=$(readlink "$self" 2>/dev/null) && [ -n "$link" ]; do
+        case $link in
+            /*) self=$link ;;
+            *)
+                case $self in
+                    */*) self=${self%/*}/$link ;;
+                    *) self=./$link ;;
+                esac
+                ;;
+        esac
+        depth=$((depth + 1))
+    done
+    unset link depth resolved
 fi
 # $0 always contains a slash for an exec'd script (absolute path or resolved from PATH).
 case $self in
@@ -62,9 +83,21 @@ if [ -n "${JAVA_HOME:-}" ]; then
 elif command -v java >/dev/null 2>&1; then
     java_exe=$(command -v java)
 else
-    default_jvm_dir=${JDX_JVM_DEFAULT_DIR:-/usr/lib/jvm/default}
-    [ -x "$default_jvm_dir/bin/java" ] || die "no Java runtime found — set JAVA_HOME, add java to PATH, or point JDX_JVM_DEFAULT_DIR at a JDK (jdx needs Java $minimum_java_major+)"
-    java_exe=$default_jvm_dir/bin/java
+    # macOS has no /usr/lib/jvm/default (that fallback is the Arch layout): ask the
+    # system helper first, then fall through to the JDX_JVM_DEFAULT_DIR escape hatch.
+    if [ -x /usr/libexec/java_home ]; then
+        mac_home=$(/usr/libexec/java_home -v "$minimum_java_major" 2>/dev/null \
+            || /usr/libexec/java_home 2>/dev/null)
+        if [ -n "$mac_home" ] && [ -x "$mac_home/bin/java" ]; then
+            java_exe=$mac_home/bin/java
+        fi
+        unset mac_home
+    fi
+    if [ -z "$java_exe" ]; then
+        default_jvm_dir=${JDX_JVM_DEFAULT_DIR:-/usr/lib/jvm/default}
+        [ -x "$default_jvm_dir/bin/java" ] || die "no Java runtime found — set JAVA_HOME, add java to PATH, or point JDX_JVM_DEFAULT_DIR at a JDK (jdx needs Java $minimum_java_major+)"
+        java_exe=$default_jvm_dir/bin/java
+    fi
 fi
 
 version_output=$("$java_exe" -version 2>&1) || die "could not run '$java_exe -version' — is it a working JDK?"

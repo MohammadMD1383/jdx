@@ -42,7 +42,7 @@ mkdir -p "$bin_dir" || die "cannot create '$bin_dir'"
 
 target=$bin_dir/jdx
 if [ -e "$target" ] || [ -L "$target" ]; then
-    if [ -L "$target" ] && [ "$(readlink -- "$target")" = "$launcher" ]; then
+    if [ -L "$target" ] && [ "$(readlink "$target")" = "$launcher" ]; then
         : # already ours; fall through and re-link (idempotent refresh)
     elif [ -d "$target" ]; then
         die "'$target' is a directory — refusing to replace it even with --force"

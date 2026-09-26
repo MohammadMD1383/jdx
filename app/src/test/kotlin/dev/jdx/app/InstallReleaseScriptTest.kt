@@ -28,10 +28,14 @@ class InstallReleaseScriptTest {
     private fun runInstallRelease(
         home: File,
         extraArgs: List<String> = emptyList(),
+        extraEnv: Map<String, String> = emptyMap(),
     ): ProcessResult {
         val process = ProcessBuilder(listOf("sh", installScript.absolutePath) + extraArgs)
             .directory(home)
-            .apply { environment()["HOME"] = home.absolutePath }
+            .apply {
+                environment()["HOME"] = home.absolutePath
+                environment().putAll(extraEnv)
+            }
             .start()
         val stdout = process.inputStream.bufferedReader().readText()
         val stderr = process.errorStream.bufferedReader().readText()
@@ -41,6 +45,151 @@ class InstallReleaseScriptTest {
     private fun tempDir(prefix: String): File = Files.createTempDirectory(prefix).toFile()
 
     private fun userBin(home: File): File = File(home, ".local/bin").apply { mkdirs() }
+
+    private fun realToolPath(name: String): String {
+        val process = ProcessBuilder("sh", "-c", "command -v $name").start()
+        val path = process.inputStream.bufferedReader().readText().trim()
+        require(process.waitFor() == 0 && path.isNotBlank()) { "$name not found on PATH" }
+        return path
+    }
+
+    /**
+     * A PATH overlay emulating macOS/BSD tools (#47): `readlink` and `basename` reject
+     * GNU-only `-f`/`--` flags, and `mktemp` requires a `-t` template the way older
+     * macOS releases do. Anything else delegates to the real binary, so a passing run
+     * proves install-release.sh uses no GNU-only flag.
+     */
+    private fun bsdStubBin(): File {
+        val dir = tempDir("jdx-bsd-")
+        val realReadlink = realToolPath("readlink")
+        File(dir, "readlink").apply {
+            writeText(
+                """
+                #!/bin/sh
+                for a in "${'$'}@"; do
+                    case "${'$'}a" in
+                        -f|--*) printf 'readlink: illegal option %s\n' "${'$'}a" >&2; exit 1 ;;
+                    esac
+                done
+                exec "$realReadlink" "${'$'}@"
+                """.trimIndent(),
+            )
+            setExecutable(true, false)
+        }
+        val realBasename = realToolPath("basename")
+        File(dir, "basename").apply {
+            writeText(
+                """
+                #!/bin/sh
+                for a in "${'$'}@"; do
+                    case "${'$'}a" in
+                        --*) printf 'basename: illegal option %s\n' "${'$'}a" >&2; exit 1 ;;
+                    esac
+                done
+                exec "$realBasename" "${'$'}@"
+                """.trimIndent(),
+            )
+            setExecutable(true, false)
+        }
+        val realMktemp = realToolPath("mktemp")
+        File(dir, "mktemp").apply {
+            writeText(
+                """
+                #!/bin/sh
+                # Old-macOS mktemp: bare `mktemp` and `mktemp -d` fail; `-t prefix` required.
+                tmpl=
+                is_dir=0
+                prev=
+                for a in "${'$'}@"; do
+                    if [ "${'$'}prev" = "-t" ]; then tmpl=${'$'}a; prev=; continue; fi
+                    case "${'$'}a" in
+                        -t) prev=-t ;;
+                        -d) is_dir=1 ;;
+                    esac
+                done
+                if [ -z "${'$'}tmpl" ]; then
+                    printf 'mktemp: BSD mktemp requires -t prefix\n' >&2
+                    exit 1
+                fi
+                dest=${'$'}{TMPDIR:-/tmp}/${'$'}tmpl.XXXXXX
+                if [ "${'$'}is_dir" -eq 1 ]; then exec "$realMktemp" -d "${'$'}dest"
+                else exec "$realMktemp" "${'$'}dest"; fi
+                """.trimIndent(),
+            )
+            setExecutable(true, false)
+        }
+        return dir
+    }
+
+    private fun bsdPathEnv(): Map<String, String> = mapOf(
+        "PATH" to bsdStubBin().absolutePath + File.pathSeparator + System.getenv("PATH"),
+    )
+
+    private fun sha256Hex(file: File): String {
+        val digest = java.security.MessageDigest.getInstance("SHA-256").digest(file.readBytes())
+        return digest.joinToString("") { "%02x".format(it) }
+    }
+
+    /**
+     * A fake `curl` serving release assets from [serveDir] by URL basename. Understands
+     * `-o <dest> <url>` and ignores the hardening flags (`--proto`, `--tlsv1.2`,
+     * `--retry`), so the download path runs offline.
+     */
+    private fun fakeCurlScript(serveDir: File): String =
+        """
+        #!/bin/sh
+        dest=
+        url=
+        prev=
+        for a in "${'$'}@"; do
+            if [ "${'$'}prev" = "-o" ]; then dest=${'$'}a; prev=; continue; fi
+            case "${'$'}a" in -o) prev=-o;; -*) ;; *) url=${'$'}a;; esac
+        done
+        case "${'$'}url" in
+            *.sha256) cp "${serveDir.absolutePath}/jdx-0.0.0.tar.gz.sha256" "${'$'}dest" ;;
+            *.tar.gz) cp "${serveDir.absolutePath}/jdx-0.0.0.tar.gz" "${'$'}dest" ;;
+            *) exit 1 ;;
+        esac
+        """.trimIndent()
+
+    /**
+     * A fake Windows `CertUtil` hashing via the real sha256sum but printing the
+     * two-line `CertUtil -hashfile` layout (upper-case hex on line 2), so the
+     * checksum branch for Git-Bash is exercised without Windows.
+     */
+    private fun fakeCertUtilScript(): String {
+        val realSha256sum = realToolPath("sha256sum")
+        val realCut = realToolPath("cut")
+        val realTr = realToolPath("tr")
+        return """
+            #!/bin/sh
+            hex=$("$realSha256sum" "${'$'}2" | "$realCut" -d ' ' -f1 | "$realTr" 'a-z' 'A-Z')
+            printf 'SHA256 hash of %s:\r\n%s\r\nCertUtil: -hashfile command completed successfully.\r\n' "${'$'}2" "${'$'}hex"
+            """.trimIndent()
+    }
+
+    /**
+     * A hermetic PATH dir: symlinks to the real tools the installer needs, plus fake
+     * entries from [fakes]. Anything not symlinked or faked (notably sha256sum/shasum
+     * unless the caller adds them) is invisible — `command -v` fails for it.
+     */
+    private fun hermeticToolPath(fakes: Map<String, String>): File {
+        val dir = tempDir("jdx-tools-")
+        val tools = listOf(
+            "sh", "id", "tar", "gzip", "mkdir", "rm", "cp", "chmod", "grep", "head",
+            "sed", "cut", "tr", "mktemp", "readlink", "ln", "basename",
+        )
+        for (tool in tools) {
+            Files.createSymbolicLink(File(dir, tool).toPath(), File(realToolPath(tool)).toPath())
+        }
+        for ((name, content) in fakes) {
+            File(dir, name).apply {
+                writeText(content)
+                setExecutable(true, false)
+            }
+        }
+        return dir
+    }
 
     /** Builds a minimal tarball in the release layout and returns its path. */
     private fun fakeTarball(): File {
@@ -149,5 +298,129 @@ class InstallReleaseScriptTest {
 
         result.exitCode shouldBe 1
         result.stderr shouldContain "not found"
+    }
+
+    @Test
+    fun `offline install works with BSD-only mktemp, basename and readlink`() {
+        // The stub dir shadows the real tools: bare `mktemp`/`mktemp -d` fail (old
+        // macOS needs `-t`), and any `--`/`-f` passed to readlink/basename is a hard
+        // error — so this fails unless the script avoids every GNU-only flag (#47).
+        val home = tempDir("jdx-home-")
+        val tarball = fakeTarball()
+
+        val result =
+            runInstallRelease(home, listOf("--tarball", tarball.absolutePath), extraEnv = bsdPathEnv())
+
+        result.exitCode shouldBe 0
+        val target = File(home, ".local/bin/jdx")
+        Files.isSymbolicLink(target.toPath()) shouldBe true
+        target.canonicalPath shouldBe File(home, ".local/share/jdx/jdx").canonicalPath
+        File(home, ".local/share/jdx/libs/jdx-0.0.0-all.jar").exists() shouldBe true
+    }
+
+    @Test
+    fun `re-running against our own install is idempotent with BSD-only readlink`() {
+        val home = tempDir("jdx-home-")
+        val tarball = fakeTarball()
+        runInstallRelease(home, listOf("--tarball", tarball.absolutePath))
+
+        val result =
+            runInstallRelease(home, listOf("--tarball", tarball.absolutePath), extraEnv = bsdPathEnv())
+
+        result.exitCode shouldBe 0
+        File(home, ".local/bin/jdx").canonicalPath shouldBe
+            File(home, ".local/share/jdx/jdx").canonicalPath
+    }
+
+    @Test
+    fun `a matching published checksum installs cleanly`() {
+        val home = tempDir("jdx-home-")
+        val tarball = fakeTarball()
+        val serveDir = tarball.parentFile
+        File(serveDir, "jdx-0.0.0.tar.gz.sha256")
+            .writeText("${sha256Hex(tarball)}  jdx-0.0.0.tar.gz\n")
+        val curlDir = tempDir("jdx-fakecurl-")
+        File(curlDir, "curl").apply {
+            writeText(fakeCurlScript(serveDir))
+            setExecutable(true, false)
+        }
+        val pathEnv = mapOf(
+            "PATH" to curlDir.absolutePath + File.pathSeparator + System.getenv("PATH"),
+        )
+
+        val result = runInstallRelease(home, listOf("--version", "0.0.0"), extraEnv = pathEnv)
+
+        result.exitCode shouldBe 0
+        File(home, ".local/share/jdx/libs/jdx-0.0.0-all.jar").exists() shouldBe true
+    }
+
+    @Test
+    fun `a published checksum that mismatches fails loudly`() {
+        val home = tempDir("jdx-home-")
+        val tarball = fakeTarball()
+        val serveDir = tarball.parentFile
+        File(serveDir, "jdx-0.0.0.tar.gz.sha256")
+            .writeText("${"0".repeat(64)}  jdx-0.0.0.tar.gz\n")
+        val curlDir = tempDir("jdx-fakecurl-")
+        File(curlDir, "curl").apply {
+            writeText(fakeCurlScript(serveDir))
+            setExecutable(true, false)
+        }
+        val pathEnv = mapOf(
+            "PATH" to curlDir.absolutePath + File.pathSeparator + System.getenv("PATH"),
+        )
+
+        val result = runInstallRelease(home, listOf("--version", "0.0.0"), extraEnv = pathEnv)
+
+        result.exitCode shouldBe 1
+        result.stderr shouldContain "checksum mismatch"
+    }
+
+    @Test
+    fun `a published checksum with no verifier on PATH is a loud failure, not a silent skip`() {
+        // Hermetic PATH: every tool the installer needs except sha256sum/shasum/
+        // CertUtil — so a correct published checksum still cannot be checked (#47).
+        val home = tempDir("jdx-home-")
+        val tarball = fakeTarball()
+        val serveDir = tarball.parentFile
+        File(serveDir, "jdx-0.0.0.tar.gz.sha256")
+            .writeText("${sha256Hex(tarball)}  jdx-0.0.0.tar.gz\n")
+        val tools = hermeticToolPath(mapOf("curl" to fakeCurlScript(serveDir)))
+
+        val result = runInstallRelease(
+            home,
+            listOf("--version", "0.0.0"),
+            extraEnv = mapOf("PATH" to tools.absolutePath),
+        )
+
+        result.exitCode shouldBe 1
+        result.stderr shouldContain "cannot verify"
+        result.stderr shouldStartWith("install-release.sh: ")
+    }
+
+    @Test
+    fun `a published checksum verifies through the CertUtil branch`() {
+        // Hermetic PATH with no sha256sum/shasum but a fake Windows CertUtil: success
+        // proves the Git-Bash branch parses CertUtil output and compares digests (#47).
+        val home = tempDir("jdx-home-")
+        val tarball = fakeTarball()
+        val serveDir = tarball.parentFile
+        File(serveDir, "jdx-0.0.0.tar.gz.sha256")
+            .writeText("${sha256Hex(tarball)}  jdx-0.0.0.tar.gz\n")
+        val tools = hermeticToolPath(
+            mapOf(
+                "curl" to fakeCurlScript(serveDir),
+                "certutil" to fakeCertUtilScript(),
+            ),
+        )
+
+        val result = runInstallRelease(
+            home,
+            listOf("--version", "0.0.0"),
+            extraEnv = mapOf("PATH" to tools.absolutePath),
+        )
+
+        result.exitCode shouldBe 0
+        File(home, ".local/share/jdx/libs/jdx-0.0.0-all.jar").exists() shouldBe true
     }
 }
