@@ -289,7 +289,13 @@ public object ProjectDiscovery {
             val classDirs = existing
                 // Keep deepest only: `build/classes/java/main` is the package root, while
                 // plain `build/classes` above it would list `java/main/…`-prefixed garbage.
-                .filter { candidate -> existing.none { other -> other != candidate && other.startsWith("$candidate/") } }
+                // `Path.startsWith` (not a `"$candidate/"` string prefix) so `C:\a\b`
+                // nests under `C:\a` on Windows and `..`-shaped names never fake it.
+                .filter { candidate ->
+                    existing.none { other ->
+                        other != candidate && Path.of(other).startsWith(Path.of(candidate))
+                    }
+                }
                 .sorted()
             val coordinates = coordinatesOf(root)
             val dependencyJars = resolveDependencyJars(coordinates, gradleFilesRoot, m2Repo)

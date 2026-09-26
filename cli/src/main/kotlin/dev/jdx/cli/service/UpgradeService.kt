@@ -2,10 +2,12 @@ package dev.jdx.cli.service
 
 import dev.jdx.index.maven.MavenFetch
 import kotlinx.serialization.Serializable
+import java.io.EOFException
 import java.nio.file.Files
 import java.nio.file.Path
 import java.nio.file.StandardCopyOption
 import java.security.MessageDigest
+import java.util.zip.GZIPInputStream
 
 /**
  * Self-update from GitHub Releases (`jdx upgrade`).
@@ -132,12 +134,18 @@ class UpgradeService(
             Files.write(archive, tarball)
             val unpacked = work.resolve("unpacked")
             Files.createDirectories(unpacked)
-            val outcome = processRunner.run(Path.of("tar"), listOf("-xzf", "$archive", "-C", "$unpacked"))
-            if (outcome.exitCode != 0) {
-                return UpgradeOutcome.Failed("could not extract jdx-$bare.tar.gz (tar exits ${outcome.exitCode})")
+            // Pure-Java extraction first (no system `tar` on Windows); the
+            // external `tar` stays as a fallback for tarballs the minimal
+            // reader cannot parse (sparse/longlink extensions).
+            val pureOk = runCatching { extractTarGz(archive, unpacked) }.isSuccess
+            if (!pureOk) {
+                val outcome = processRunner.run(Path.of("tar"), listOf("-xzf", "$archive", "-C", "$unpacked"))
+                if (outcome.exitCode != 0) {
+                    return UpgradeOutcome.Failed("could not extract jdx-$bare.tar.gz (tar exits ${outcome.exitCode})")
+                }
             }
             val staged = unpacked.resolve("jdx")
-            if (!Files.isExecutable(staged.resolve("jdx")) || !hasFatJar(staged)) {
+            if (!hasLauncher(staged) || !hasFatJar(staged)) {
                 return UpgradeOutcome.Failed("unexpected tarball layout — expected jdx/jdx + jdx/libs/jdx-*-all.jar")
             }
             swapTree(root, staged)
@@ -294,6 +302,22 @@ class UpgradeService(
             Files.walk(path).sorted(Comparator.reverseOrder()).forEach { Files.deleteIfExists(it) }
         }
 
+        /**
+         * The staged release launcher: `jdx` on Unix (which needs its
+         * executable bit), `jdx.exe`/`.cmd`/`.bat` on Windows (which has no
+         * executable bit — a regular file is enough). Pure — unit-tested.
+         */
+        internal fun hasLauncher(staged: Path): Boolean {
+            if (isRunnableLauncher(staged.resolve("jdx"))) return true
+            return listOf("jdx.exe", "jdx.cmd", "jdx.bat").any { name ->
+                runCatching { Files.isRegularFile(staged.resolve(name)) }.getOrDefault(false)
+            }
+        }
+
+        private fun isRunnableLauncher(file: Path): Boolean = runCatching {
+            Files.isRegularFile(file) && Files.isExecutable(file)
+        }.getOrDefault(false)
+
         internal fun sha256Hex(bytes: ByteArray): String {
             val digest = MessageDigest.getInstance("SHA-256").digest(bytes)
             return digest.joinToString("") { "%02x".format(it) }
@@ -303,6 +327,102 @@ class UpgradeService(
 
 /** The `.jdx-release` marker: which repo this install tracks. */
 internal data class ReleaseMarker(val repo: String, val tag: String)
+
+/**
+ * Extracts a gzip-compressed tar [archive] under [dest] in pure Java — the
+ * no-`tar`-on-Windows path for `upgrade`. Handles regular files and
+ * directories (the release layout); anything else (longname/sparse
+ * extensions, malformed headers) throws so the caller falls back to the
+ * external `tar`. Entry paths are confined to [dest] (zip-slip throws).
+ * Never returns partially on failure — throws, and the caller discards [dest].
+ */
+internal fun extractTarGz(archive: Path, dest: Path) {
+    Files.createDirectories(dest)
+    val base = dest.toAbsolutePath().normalize()
+    GZIPInputStream(Files.newInputStream(archive)).use { gzip ->
+        while (true) {
+            val header = readBlock(gzip) ?: break
+            if (header.all { it == 0.toByte() }) break
+            val name = headerName(header)
+            val size = headerSize(header)
+            val type = header[156].toInt().toChar()
+            val target = base.resolve(name).normalize()
+            if (!target.startsWith(base)) {
+                throw java.io.IOException("tar entry escapes its directory: '$name'")
+            }
+            when (type) {
+                '0', '\u0000' -> {
+                    Files.createDirectories(target.parent)
+                    Files.newOutputStream(target).use { out ->
+                        var remaining = size
+                        val buf = ByteArray(8192)
+                        while (remaining > 0) {
+                            val want = minOf(buf.size.toLong(), remaining).toInt()
+                            val read = gzip.read(buf, 0, want)
+                            if (read < 0) throw EOFException("truncated tar entry '$name'")
+                            out.write(buf, 0, read)
+                            remaining -= read
+                        }
+                    }
+                    // Faithful tar behaviour: the release `jdx` launcher ships
+                    // mode 0755, and the staged check below needs its bit.
+                    if (headerMode(header) and 0x40 != 0) {
+                        target.toFile().setExecutable(true)
+                    }
+                    skipPadding(gzip, size)
+                }
+                '5' -> {
+                    Files.createDirectories(target)
+                }
+                else -> throw java.io.IOException("unsupported tar entry '$name' (type '$type')")
+            }
+        }
+    }
+}
+
+private const val TAR_BLOCK: Int = 512
+
+private fun readBlock(input: java.io.InputStream): ByteArray? {
+    val block = ByteArray(TAR_BLOCK)
+    var filled = 0
+    while (filled < TAR_BLOCK) {
+        val read = input.read(block, filled, TAR_BLOCK - filled)
+        if (read < 0) {
+            if (filled == 0) return null
+            throw EOFException("truncated tar header")
+        }
+        filled += read
+    }
+    return block
+}
+
+private fun headerName(header: ByteArray): String {
+    val end = header.indexOfFirst { it == 0.toByte() }.takeIf { it >= 0 } ?: 100
+    return header.copyOfRange(0, end).toString(Charsets.UTF_8)
+}
+
+private fun headerSize(header: ByteArray): Long {
+    val raw = header.copyOfRange(124, 136).toString(Charsets.US_ASCII).trim().trimEnd('\u0000').trim()
+    if (raw.isEmpty()) return 0
+    return raw.toLongOrNull(8)
+        ?: throw java.io.IOException("malformed tar size '$raw'")
+}
+
+private fun headerMode(header: ByteArray): Int {
+    val raw = header.copyOfRange(100, 108).toString(Charsets.US_ASCII).trim().trimEnd('\u0000').trim()
+    return raw.toIntOrNull(8) ?: 0
+}
+
+private fun skipPadding(input: java.io.InputStream, size: Long) {
+    val pad = ((TAR_BLOCK - size % TAR_BLOCK) % TAR_BLOCK).toInt()
+    var remaining = pad
+    val buf = ByteArray(512)
+    while (remaining > 0) {
+        val read = input.read(buf, 0, minOf(buf.size, remaining))
+        if (read < 0) throw EOFException("truncated tar padding")
+        remaining -= read
+    }
+}
 
 /** Exit-code mapping (D-015): 0 ok · 1 release not found · 3 not a release install · 5 fetch/IO failure. */
 internal fun exitCodeFor(outcome: UpgradeService.UpgradeOutcome): Int = when (outcome) {

@@ -9,7 +9,8 @@ Decompilation engines behind one seam. Vineflower is the default (readable Java)
 - `DecompilerEngine` — the interface; `VineflowerDecompiler` (single-class, workspace
   jars as library context, on-disk cache, wall-clock timeout, lazy isolated loading)
   and `JavapDecompiler` (`javap -c -p -s` over staged class bytes; JDK resolved
-  `JAVA_HOME` → `java.home` → `PATH`, mirroring `doctor`).
+  `JAVA_HOME` → `java.home` → `PATH`, mirroring `doctor`, with `javap.exe`/`.cmd`/`.bat`
+  probed first on Windows via `toolNames`).
 - `DecompileCache` — on-disk cache of reconstructions. `Staging` — materialises the
   winning class bytes for engine input. `JavapOutput` — disassembly shaping.
 
