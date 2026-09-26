@@ -28,6 +28,15 @@ class ExpandJarSpecTest {
         return Files.write(dir.resolve(name), byteArrayOf(0x50, 0x4b))
     }
 
+    /**
+     * A glob spec under [dir] built by string concat, never `resolve`:
+     * `resolve` parses the string into a `Path`, and `*?[{` are illegal path
+     * characters on Windows (`InvalidPathException`) while legal on POSIX —
+     * the spec under test is a string, not a path, until expansion splits it.
+     */
+    private fun globSpec(dir: Path, pattern: String): String =
+        dir.toString() + java.io.File.separator + pattern
+
     @Test
     fun `tilde slash expands to the injected home`() {
         JdxService.expandUser("~/lib/a.jar", "/fake/home") shouldBe "/fake/home/lib/a.jar"
@@ -68,7 +77,7 @@ class ExpandJarSpecTest {
             JdxService.expandJarSpec(tempDir.resolve("nope.jar").toString(), tempDir.toString())
         }
         shouldThrow<ArtifactReadException> {
-            JdxService.expandJarSpec(tempDir.resolve("nothing/*.jar").toString(), tempDir.toString())
+            JdxService.expandJarSpec(globSpec(tempDir.resolve("nothing"), "*.jar"), tempDir.toString())
         }
     }
 
@@ -78,7 +87,7 @@ class ExpandJarSpecTest {
         jar(dir, "FOO.JAR")
         jar(dir, "bar.ZIP")
         jar(dir, "notes.txt")
-        val hits = JdxService.expandJarSpec(dir.resolve("*").toString(), tempDir.toString())
+        val hits = JdxService.expandJarSpec(globSpec(dir, "*"), tempDir.toString())
         hits.map { it.fileName.toString() }.sorted() shouldBe listOf("FOO.JAR", "bar.ZIP")
     }
 
@@ -97,7 +106,7 @@ class ExpandJarSpecTest {
         }
         jar(dir, "a.jar")
         // `*` matches the loop link itself; the walk must terminate.
-        val hits = JdxService.expandJarSpec(dir.resolve("*").toString(), tempDir.toString())
+        val hits = JdxService.expandJarSpec(globSpec(dir, "*"), tempDir.toString())
         (hits.map { it.fileName.toString() }.contains("a.jar")) shouldBe true
     }
 
@@ -107,7 +116,7 @@ class ExpandJarSpecTest {
         jar(dir, "c.jar")
         jar(dir, "a.jar")
         jar(dir, "b.jar")
-        val hits = JdxService.expandJarSpec(dir.resolve("*.jar").toString(), tempDir.toString())
+        val hits = JdxService.expandJarSpec(globSpec(dir, "*.jar"), tempDir.toString())
         hits.map { it.fileName.toString() } shouldBe listOf("a.jar", "b.jar", "c.jar")
     }
 

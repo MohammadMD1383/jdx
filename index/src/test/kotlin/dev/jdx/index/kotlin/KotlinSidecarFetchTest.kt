@@ -25,9 +25,6 @@ import org.junit.jupiter.api.io.TempDir
 @Tag("tier2")
 class KotlinSidecarFetchTest {
 
-    private val isWindowsHost: Boolean =
-        System.getProperty("os.name", "").lowercase().contains("win")
-
     // Hermetic destination: a temp dir, never kotlinSidecarDir(home) — that
     // resolves per ambient OS/env, so on Windows (%LOCALAPPDATA% set) tests
     // would read and write the real machine's cache through each other.
@@ -189,19 +186,23 @@ class KotlinSidecarFetchTest {
 
     @Test
     fun `hostile home segments never throw the fetch`() {
-        // `Path.of` itself rejects Windows-illegal names (`<>:"/\|?*`, NUL):
-        // that is the OS refusing a path, outside the fetch contract, so the
-        // generator stays within what this host can spell.
-        val illegal = "<>:\"/\\|?*"
-        val hostileSegment = Arb.string().filter { segment ->
-            segment.none { it.code == 0 } &&
-                (!isWindowsHost || segment.none { it in illegal })
-        }
         runBlocking {
-            checkAll(100, hostileSegment) { segment ->
-                val home = Path.of(System.getProperty("java.io.tmpdir"), "jdx-kt-fetch-$segment")
+            checkAll(100, Arb.string().filter { it.none { c -> c.code == 0 } }) { segment ->
+                // `Path.of` itself rejects host-unspellable names (DOS-illegal
+                // chars, trailing spaces/dots on Windows): the OS refusing a
+                // path is outside the fetch contract, so those skip the case.
+                val home = runCatching {
+                    Path.of(System.getProperty("java.io.tmpdir"), "jdx-kt-fetch-$segment")
+                }.getOrNull() ?: return@checkAll
                 try {
-                    fetchKotlinSidecar(home, MavenFetch.Fetcher { null })
+                    // Pinned Linux + empty env: the fetch stays under the
+                    // injected home on every host OS, never the ambient cache.
+                    fetchKotlinSidecar(
+                        home,
+                        MavenFetch.Fetcher { null },
+                        os = dev.jdx.core.paths.JdxOs.LINUX,
+                        env = emptyMap(),
+                    )
                 } catch (e: Exception) {
                     throw AssertionError("fetch threw on $segment: $e")
                 }

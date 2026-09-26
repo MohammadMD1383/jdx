@@ -6,7 +6,9 @@ import io.kotest.property.Arb
 import io.kotest.property.arbitrary.filter
 import io.kotest.property.arbitrary.string
 import io.kotest.property.checkAll
+import dev.jdx.core.paths.JdxOs
 import java.nio.file.Files
+import java.nio.file.Path
 import javax.tools.ToolProvider
 import kotlinx.coroutines.runBlocking
 import org.junit.jupiter.api.Assumptions.assumeTrue
@@ -22,10 +24,29 @@ import org.junit.jupiter.api.io.TempDir
 @Tag("tier2")
 class KotlinToolchainTest {
 
+    // Pinned resolution context: Linux + empty env resolves under the injected
+    // home on every host OS — never the ambient machine's cache (`~/Library`
+    // on macOS, `%LOCALAPPDATA%` on Windows), which parallel tests would share.
+    private val testOs = JdxOs.LINUX
+    private val testEnv: Map<String, String> = emptyMap()
+
     @Test
     fun `the sidecar path is versioned under the cache root`(@TempDir home: java.nio.file.Path) {
-        kotlinSidecarJar(home) shouldBe
+        kotlinSidecarJar(home, testOs, testEnv) shouldBe
             home.resolve(".cache/jdx/kotlin").resolve(KOTLIN_COMPILER_JAR)
+    }
+
+    @Test
+    fun `the sidecar path follows the per-OS cache root`(@TempDir home: java.nio.file.Path) {
+        // D-044: macOS ignores XDG and uses ~/Library/Caches; Windows honours
+        // LOCALAPPDATA. Pinned here so a Linux-layout assumption reds on mac/Windows.
+        kotlinSidecarDir(home, JdxOs.MACOS, testEnv) shouldBe
+            home.resolve("Library/Caches/jdx/kotlin")
+        kotlinSidecarDir(
+            home,
+            JdxOs.WINDOWS,
+            mapOf("LOCALAPPDATA" to "C:/Users/ada/AppData/Local"),
+        ) shouldBe Path.of("C:/Users/ada/AppData/Local/jdx/cache/kotlin")
     }
 
     @Test
@@ -35,19 +56,19 @@ class KotlinToolchainTest {
 
     @Test
     fun `an absent sidecar probes Missing at the versioned path`(@TempDir home: java.nio.file.Path) {
-        val status = probeKotlinToolchain(home)
+        val status = probeKotlinToolchain(home, testOs, testEnv)
         (status is KotlinToolchainStatus.Missing) shouldBe true
-        (status as KotlinToolchainStatus.Missing).jar shouldBe kotlinSidecarJar(home)
+        (status as KotlinToolchainStatus.Missing).jar shouldBe kotlinSidecarJar(home, testOs, testEnv)
     }
 
     @Test
     fun `a non-empty sidecar probes Installed with its size`(@TempDir home: java.nio.file.Path) {
-        val jar = kotlinSidecarJar(home).also {
+        val jar = kotlinSidecarJar(home, testOs, testEnv).also {
             Files.createDirectories(it.parent)
             Files.write(it, ByteArray(64) { 0x50 })
         }
 
-        val status = probeKotlinToolchain(home)
+        val status = probeKotlinToolchain(home, testOs, testEnv)
         (status is KotlinToolchainStatus.Installed) shouldBe true
         status as KotlinToolchainStatus.Installed
         status.jar shouldBe jar
@@ -56,31 +77,31 @@ class KotlinToolchainTest {
 
     @Test
     fun `a directory at the sidecar path probes Missing`(@TempDir home: java.nio.file.Path) {
-        Files.createDirectories(kotlinSidecarJar(home))
+        Files.createDirectories(kotlinSidecarJar(home, testOs, testEnv))
 
-        (probeKotlinToolchain(home) is KotlinToolchainStatus.Missing) shouldBe true
+        (probeKotlinToolchain(home, testOs, testEnv) is KotlinToolchainStatus.Missing) shouldBe true
     }
 
     @Test
     fun `an empty file at the sidecar path probes Missing`(@TempDir home: java.nio.file.Path) {
-        kotlinSidecarJar(home).also {
+        kotlinSidecarJar(home, testOs, testEnv).also {
             Files.createDirectories(it.parent)
             Files.createFile(it)
         }
 
-        (probeKotlinToolchain(home) is KotlinToolchainStatus.Missing) shouldBe true
+        (probeKotlinToolchain(home, testOs, testEnv) is KotlinToolchainStatus.Missing) shouldBe true
     }
 
     @Test
     fun `probing is deterministic`(@TempDir home: java.nio.file.Path) {
-        probeKotlinToolchain(home) shouldBe probeKotlinToolchain(home)
+        probeKotlinToolchain(home, testOs, testEnv) shouldBe probeKotlinToolchain(home, testOs, testEnv)
     }
 
     @Test
     fun `opening the parser without a sidecar is unavailable with the install hint`(
         @TempDir home: java.nio.file.Path,
     ) {
-        openKotlinParser(home).use { parser ->
+        openKotlinParser(home, testOs, testEnv).use { parser ->
             parser.available shouldBe false
             parser.detail shouldContain "not installed"
             parser.detail shouldContain KOTLIN_COMPILER_VERSION
@@ -92,12 +113,12 @@ class KotlinToolchainTest {
     fun `opening the parser over a garbage jar is unavailable, never a throw`(
         @TempDir home: java.nio.file.Path,
     ) {
-        kotlinSidecarJar(home).also {
+        kotlinSidecarJar(home, testOs, testEnv).also {
             Files.createDirectories(it.parent)
             Files.write(it, ByteArray(128) { it.toByte() })
         }
 
-        openKotlinParser(home).use { parser ->
+        openKotlinParser(home, testOs, testEnv).use { parser ->
             parser.available shouldBe false
             parser.detail shouldContain "unusable"
         }
@@ -105,7 +126,7 @@ class KotlinToolchainTest {
 
     @Test
     fun `opening the parser over a non-compiler zip is unavailable`(@TempDir home: java.nio.file.Path) {
-        kotlinSidecarJar(home).also {
+        kotlinSidecarJar(home, testOs, testEnv).also {
             Files.createDirectories(it.parent)
             java.util.zip.ZipOutputStream(Files.newOutputStream(it)).use { zip ->
                 zip.putNextEntry(java.util.zip.ZipEntry("com/example/NotACompiler.txt"))
@@ -114,7 +135,7 @@ class KotlinToolchainTest {
             }
         }
 
-        openKotlinParser(home).use { parser ->
+        openKotlinParser(home, testOs, testEnv).use { parser ->
             parser.available shouldBe false
             parser.detail shouldContain "unusable"
         }
@@ -126,9 +147,9 @@ class KotlinToolchainTest {
             ToolProvider.getSystemJavaCompiler() != null,
             "needs a JDK compiler to stub the presence class",
         )
-        craftPresenceStubJar(kotlinSidecarJar(home))
+        craftPresenceStubJar(kotlinSidecarJar(home, testOs, testEnv))
 
-        openKotlinParser(home).use { parser ->
+        openKotlinParser(home, testOs, testEnv).use { parser ->
             parser.available shouldBe true
             parser.detail shouldContain KOTLIN_COMPILER_VERSION
         }
@@ -136,7 +157,7 @@ class KotlinToolchainTest {
 
     @Test
     fun `closing an unavailable parser never throws`(@TempDir home: java.nio.file.Path) {
-        val parser = openKotlinParser(home)
+        val parser = openKotlinParser(home, testOs, testEnv)
         parser.close()
         parser.close()
     }
@@ -158,9 +179,14 @@ class KotlinToolchainTest {
     fun `hostile home segments never throw the probe`() {
         runBlocking {
             checkAll(200, Arb.string().filter { it.none { c -> c.code == 0 } }) { segment ->
-                val home = java.nio.file.Path.of(System.getProperty("java.io.tmpdir"), "jdx-kt-$segment")
+                // `Path.of` itself rejects host-unspellable names (DOS-illegal
+                // chars, trailing spaces/dots on Windows): the OS refusing a
+                // path is outside the probe contract, so those skip the case.
+                val home = runCatching {
+                    java.nio.file.Path.of(System.getProperty("java.io.tmpdir"), "jdx-kt-$segment")
+                }.getOrNull() ?: return@checkAll
                 try {
-                    probeKotlinToolchain(home)
+                    probeKotlinToolchain(home, testOs, testEnv)
                 } catch (e: Exception) {
                     throw AssertionError("probe threw on $segment: $e")
                 }

@@ -1,5 +1,7 @@
 package dev.jdx.index.kotlin
 
+import dev.jdx.core.paths.JdxOs
+import dev.jdx.core.paths.JdxPaths
 import dev.jdx.index.maven.MavenCoords
 import dev.jdx.index.maven.MavenFetch
 import dev.jdx.sources.KOTLIN_COMPILER_VERSION
@@ -140,19 +142,22 @@ public fun kotlinSidecarDownloadUrl(artifact: KotlinSidecarArtifact, repoBaseUrl
  *
  * Destination seam: production resolves [userHome] per OS and ambient
  * environment (D-044); tests aim [fetchKotlinSidecarToDir] at a temp dir
- * instead, so no test ever reads or writes the real machine's cache — on
- * Windows the ambient `%LOCALAPPDATA%` would otherwise win over any injected
- * home and tests would pollute (and read) each other through it.
+ * instead, or pin [os]/[env] (e.g. `LINUX` + empty env), so no test ever
+ * reads or writes the real machine's cache — on Windows the ambient
+ * `%LOCALAPPDATA%` would otherwise win over any injected home and tests
+ * would pollute (and read) each other through it.
  */
 public fun fetchKotlinSidecar(
     userHome: Path,
     fetcher: MavenFetch.Fetcher = MavenFetch.httpFetcher(),
     repoBaseUrls: List<String> = listOf(MavenCoords.CENTRAL_BASE_URL),
     force: Boolean = false,
+    os: JdxOs = ambientSidecarOs(),
+    env: Map<String, String> = System.getenv(),
 ): KotlinSidecarOutcome {
     return try {
         val dir = try {
-            kotlinSidecarDir(userHome)
+            kotlinSidecarDir(userHome, os, env)
         } catch (e: Exception) {
             return KotlinSidecarOutcome.Failed(
                 "cannot install the Kotlin sidecar set: ${e.message ?: e.javaClass.simpleName}",
@@ -195,6 +200,11 @@ public fun fetchKotlinSidecarToDir(
         )
     }
 }
+
+/** The ambient OS, defaulting to Linux when `os.name` is unreadable (never throws). */
+private fun ambientSidecarOs(): JdxOs = runCatching {
+    JdxPaths.detectOs(System.getProperty("os.name", ""))
+}.getOrDefault(JdxOs.LINUX)
 
 private fun installSidecarSet(
     dir: Path,

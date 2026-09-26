@@ -183,7 +183,9 @@ class ArtifactShapeFaultTest {
 
     @Test
     fun `a glob matching nothing exits 5 naming the spec`(@TempDir temp: Path) {
-        val spec = temp.resolve("nothing-matches-*.jar").toString()
+        // String concat, never `resolve`: `*` is an illegal path character on
+        // Windows, so `resolve` throws there before the spec is even built.
+        val spec = temp.toString() + java.io.File.separator + "nothing-matches-*.jar"
         val rendered = FaultSupport.checkShow(
             "com.acme.Anything",
             JdxService.RootsSpec(jarSpecs = listOf(spec), includeJdk = false),

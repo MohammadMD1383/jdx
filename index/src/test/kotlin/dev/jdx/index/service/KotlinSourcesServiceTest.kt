@@ -79,7 +79,10 @@ class KotlinSourcesServiceTest {
             jars.containsKey("kotlin-compiler-embeddable-2.4.20.jar"),
             "kotlin-compiler-embeddable 2.4.20 not in the Gradle cache",
         )
-        val dir = home.resolve(".cache/jdx/kotlin")
+        // Product-resolved (ambient OS/env), exactly where the service looks:
+        // a hardcoded `.cache/jdx` misses on macOS (`~/Library/Caches`)
+        // and Windows (`%LOCALAPPDATA%`). Still hermetic: under @TempDir.
+        val dir = dev.jdx.sources.kotlinSidecarDir(home)
         Files.createDirectories(dir)
         for ((jarName, cached) in jars) {
             try {

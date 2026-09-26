@@ -1,5 +1,6 @@
 package dev.jdx.sources
 
+import dev.jdx.core.paths.JdxOs
 import dev.jdx.core.paths.JdxPaths
 import java.nio.file.Files
 import java.nio.file.Path
@@ -19,22 +20,38 @@ public const val KOTLIN_COMPILER_JAR: String = "kotlin-compiler-embeddable-2.4.2
  * cache root (D-044), versioned so an upgrade never talks to a stale jar.
  * Fetched and verified on first use (T-080 wires the fetch); until then its
  * absence is routine, not an error.
+ *
+ * [os]/[env] default to the ambient machine (production); tests inject an
+ * explicit pair (e.g. `LINUX` + empty env) so the resolved dir stays under a
+ * temp home on every OS instead of leaking into the real machine's cache
+ * (`%LOCALAPPDATA%` wins over any injected home on Windows, `~/Library` on
+ * macOS — both ambient, both shared across parallel tests).
  */
-public fun kotlinSidecarJar(userHome: Path): Path =
-    kotlinSidecarDir(userHome).resolve(KOTLIN_COMPILER_JAR)
+public fun kotlinSidecarJar(
+    userHome: Path,
+    os: JdxOs = ambientOs(),
+    env: Map<String, String> = System.getenv(),
+): Path = kotlinSidecarDir(userHome, os, env).resolve(KOTLIN_COMPILER_JAR)
 
-/** The directory holding the sidecar plus its runtime jars (T-039). */
-public fun kotlinSidecarDir(userHome: Path): Path =
-    defaultCacheRootFor(userHome).resolve("kotlin")
+/** The directory holding the sidecar plus its runtime jars (T-039). Same [os]/[env] seam. */
+public fun kotlinSidecarDir(
+    userHome: Path,
+    os: JdxOs = ambientOs(),
+    env: Map<String, String> = System.getenv(),
+): Path = cacheRootFor(userHome, os, env).resolve("kotlin")
 
 /** The sidecar directory under an explicit cache root (`--cache-dir` wins). */
 public fun kotlinSidecarDirForCache(cacheRoot: Path): Path = cacheRoot.resolve("kotlin")
 
 /** Resolves the per-OS cache root for [userHome] (D-044; never throws). */
-private fun defaultCacheRootFor(userHome: Path): Path = runCatching {
-    val os = JdxPaths.detectOs(System.getProperty("os.name", ""))
-    JdxPaths.cacheRoot(userHome, os, System.getenv())
+private fun cacheRootFor(userHome: Path, os: JdxOs, env: Map<String, String>): Path = runCatching {
+    JdxPaths.cacheRoot(userHome, os, env)
 }.getOrDefault(JdxPaths.legacyCacheRoot(userHome))
+
+/** The ambient OS, defaulting to Linux when `os.name` is unreadable (never throws). */
+internal fun ambientOs(): JdxOs = runCatching {
+    JdxPaths.detectOs(System.getProperty("os.name", ""))
+}.getOrDefault(JdxOs.LINUX)
 
 /**
  * The user-facing hint naming the missing sidecar without absolute paths
@@ -63,14 +80,19 @@ public sealed interface KotlinToolchainStatus {
  * Probes the sidecar jar under [userHome]. Pure filesystem check — no class
  * loading, no network, no parsing — so it is safe on the cold CLI path.
  *
- * The home spelling resolves per OS and ambient environment (D-044); callers
- * with an already-resolved root (an injected test env, an explicit
- * `--cache-dir`) probe [probeKotlinToolchainAt] instead, so tests never read
- * the real machine's cache.
+ * The home spelling resolves per OS and ambient environment by default (D-044);
+ * inject [os]/[env] to pin it (tests: `LINUX` + empty env stays under a temp
+ * home). Callers with an already-resolved root (an injected test env, an
+ * explicit `--cache-dir`) probe [probeKotlinToolchainAt] instead, so tests
+ * never read the real machine's cache.
  */
-public fun probeKotlinToolchain(userHome: Path): KotlinToolchainStatus {
+public fun probeKotlinToolchain(
+    userHome: Path,
+    os: JdxOs = ambientOs(),
+    env: Map<String, String> = System.getenv(),
+): KotlinToolchainStatus {
     val jar = try {
-        kotlinSidecarJar(userHome)
+        kotlinSidecarJar(userHome, os, env)
     } catch (e: Exception) {
         return KotlinToolchainStatus.Missing(missingJarFallback(userHome))
     }

@@ -64,9 +64,16 @@ public sealed interface KotlinParse {
  * The returned parser holds the isolated loader open; closing it releases the
  * jar handle. Callers that only need the status bit should prefer the cheaper
  * [probeKotlinToolchain].
+ *
+ * Same [os]/[env] seam as [probeKotlinToolchain]: ambient by default, pinned
+ * in tests.
  */
-public fun openKotlinParser(userHome: Path): KotlinSourceParser {
-    val status = probeKotlinToolchain(userHome)
+public fun openKotlinParser(
+    userHome: Path,
+    os: dev.jdx.core.paths.JdxOs = ambientOs(),
+    env: Map<String, String> = System.getenv(),
+): KotlinSourceParser {
+    val status = probeKotlinToolchain(userHome, os, env)
     if (status is KotlinToolchainStatus.Missing) {
         return UnavailableKotlinParser(
             "kotlin-compiler-embeddable $KOTLIN_COMPILER_VERSION not installed " +

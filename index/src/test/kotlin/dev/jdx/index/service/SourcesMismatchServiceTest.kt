@@ -33,6 +33,9 @@ class SourcesMismatchServiceTest {
     private fun realSourceText(path: String): String =
         ZipFile(FixtureJars.sourcesJar()).use { zip ->
             zip.getInputStream(zip.getEntry(path)).readBytes().toString(StandardCharsets.UTF_8)
+                // LF-pinned surgery below: checkouts on Windows carry CRLF
+                // (`* text=auto`), which would silently defeat `\n` replaces.
+                .replace("\r\n", "\n")
         }
 
     private fun stalePair(tempDir: Path, sourcesText: String): RootsSpec {
