@@ -54,7 +54,7 @@ paired; `--engine javap` shows raw bytecode. Decompiled output is always labelle
 | `jdx doctor` | Self-diagnosis | One `ok`/`warn`/`fail` row per check: JDK, `jrt:/`, `javap`, JDK sources, cache, config, index DB, Kotlin sidecar, daemon (probed live: running vs stale), workspace. Exits 6 if any check fails. |
 | `jdx ws create\|list\|info\|remove\|use\|add` | Project & library configuration | `create <name> --jars … --src … --coord … --repo … [--jdk\|--no-jdk]`; `add <name> <root>`; `use <name> [--clear]` sets the default; `list` / `info <name>` / `remove <name>` |
 | `jdx cache info\|gc\|clear` | Index and cache maintenance | `info` (DB location, size, schema, counts); `gc [--dry-run] [--cache-dir …]` (evicts unreferenced + stale artifacts + orphan daemon logs); `clear` (wipes regenerable cache) |
-| `jdx kotlin install` | Fetch the Kotlin PSI sidecar | `--repo …` (repeatable), `--force` (re-download). 7 jars, SHA-1 verified, into `~/.cache/jdx/kotlin/`; present jars are skipped, re-runs resume. |
+| `jdx kotlin install` | Fetch the Kotlin PSI sidecar | `--repo …` (repeatable), `--force` (re-download). 7 jars, SHA-1 verified, into `<cache-dir>/kotlin/` (`~/.cache/jdx/kotlin/` on Linux; per-OS defaults in `docs/PROPOSAL.md` §17.1); present jars are skipped, re-runs resume. |
 | `jdx help [--agent] [--json]` | Cheat sheet | `--agent` prints the paste-ready agent block |
 | `jdx bench` | Benchmark the read path | `--iterations N` (default 3, median reported), classpath flags. Fixed `load`/`show`/`members`/`search`/`hierarchy` workload with §15 advisory targets; always exits 0 on success. Falls back to the local `minecraft-client.jar` when no roots are given. |
 
@@ -62,7 +62,7 @@ paired; `--engine javap` shows raw bytecode. Decompiled output is always labelle
 
 | Command | Purpose | Notes |
 |---|---|---|
-| `jdx daemon start\|stop\|status\|restart` | Warm background JVM | Per-workspace unix socket at `$XDG_RUNTIME_DIR/jdx/<hash>-v1.sock`; `--idle 5m` default (0 disables); `start` is idempotent. `status`: uptime, memory, query count. `run` (foreground) is the internal spawn target. |
+| `jdx daemon start\|stop\|status\|restart` | Warm background JVM | Per-workspace unix socket under the OS runtime dir (`$XDG_RUNTIME_DIR/jdx/<hash>-v1.sock` on Linux; macOS `$TMPDIR/jdx-$UID`, Windows `%LOCALAPPDATA%/jdx/run` — full table in `docs/PROPOSAL.md` §17.1; a missing `XDG_RUNTIME_DIR` falls back, never `exit 3`); `--idle 5m` default (0 disables); `start` is idempotent. `status`: uptime, memory, query count. `run` (foreground) is the internal spawn target. |
 | `jdx mcp [-w name]` | MCP stdio server | One typed `jdx_*` tool per query (20 tools) with generated schemas; per-call workspace override; answers byte-identical to `--json`. |
 | `jdx serve [-w name] [--port 7070] [--bind 127.0.0.1]` | Local HTTP/JSON API | `GET /v1/<command>?query=…&<param>=…`, `POST /v1/batch` (NDJSON), `GET /v1/health`. Localhost by default; blocks until interrupted. Bodies byte-identical to `--json`. |
 | `jdx batch` | Many queries, one process | NDJSON `RpcRequest` lines on stdin (`{"command":"members","query":"…","params":{…}}`), one envelope per line on stdout; exit code is the max query exit code. Roots resolved once. `--json` accepted and ignored (output is always envelopes). |
@@ -72,7 +72,7 @@ paired; `--engine javap` shows raw bytecode. Decompiled output is always labelle
 `--jars <jar|dir|glob>` (repeatable, merged in front of the workspace) ·
 `--coord group:artifact:version` (repeatable; local `~/.gradle/caches` + `~/.m2` first) ·
 `--repo <url>` (repeatable Maven mirror, tried before Central) ·
-`--fetch` (allow downloads incl. `-sources.jar`, checksum-verified into `~/.cache/jdx/m2/`) ·
+`--fetch` (allow downloads incl. `-sources.jar`, checksum-verified into `<cache-dir>/m2/` (`~/.cache/jdx/m2/` on Linux)) ·
 `--no-jdk` (exclude the running JDK stdlib, included by default via `jrt:/` + `src.zip`) ·
 `-w/--workspace <name>` (also `JDX_WORKSPACE` env or `jdx ws use` default; Gradle/Maven
 project roots auto-discover from the working directory) ·

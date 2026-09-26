@@ -237,7 +237,8 @@ Ordering matters: earlier roots shadow later ones, exactly like a JVM classpath,
 `jdx` reports the class the JVM would actually load and **warns on duplicate FQNs across
 artifacts** (`shaded`/`relocated` jars are a real and frequent source of agent confusion).
 
-Stored as TOML in `~/.config/jdx/workspaces/<name>.toml`. Human-editable and diffable.
+Stored as TOML in `<config-dir>/workspaces/<name>.toml` (`~/.config/jdx/...` on Linux;
+per-OS config defaults in §17.1). Human-editable and diffable.
 
 ### 5.4 Symbol
 A type, method, field, constructor, package, or module — each with a **canonical reference**
@@ -592,7 +593,8 @@ what makes camel-hump symbol search viable.
 
 ### 10.2 Storage: SQLite, content-hash keyed, globally shared
 
-One database: `~/.cache/jdx/index/v1.db` (WAL mode — many readers, one writer).
+One database: `<cache-dir>/index/v1.db` (`~/.cache/jdx/index/v1.db` on Linux;
+per-OS cache defaults in §17.1) in WAL mode — many readers, one writer.
 
 Every row is scoped by `artifact_id`, which is the **content hash of the binary jar**.
 Consequences, all good:
@@ -767,7 +769,8 @@ Resolution order when a command runs. First match wins; `--jars`/`--src` always 
      falling back to a broader cache scan with a warning if the reference set can't be
      determined (we do not run Gradle — see N3);
    - the JDK.
-   The derived workspace is cached under `~/.cache/jdx/auto/<project-hash>.toml` and
+   The derived workspace is cached under `<cache-dir>/auto/<project-hash>.toml`
+   (`~/.cache/jdx/auto/...` on Linux; per-OS cache defaults in §17.1) and
    invalidated when the build files change.
 5. **JDK stdlib** via `jrt-fs` on the running JDK — always appended unless `--no-jdk`, with
    `$JAVA_HOME/lib/src.zip` paired as its sources root, so `jdx members java.util.HashMap`
@@ -776,7 +779,8 @@ Resolution order when a command runs. First match wins; `--jars`/`--src` always 
 **Maven coordinates** (`--coord g:a:v`, or a `g:a:v/` ref prefix) are resolved against
 `~/.gradle/caches` and `~/.m2` first; if absent, fetched from the configured
 repositories (`--repo` mirrors in flag order, Maven Central last) into
-`~/.cache/jdx/m2/`, **including the `-sources.jar`**, with checksum
+`<cache-dir>/m2/` (`~/.cache/jdx/m2/` on Linux; per-OS cache defaults in §17.1),
+**including the `-sources.jar`**, with checksum
 verification. This lets an agent evaluate a library the project does not yet depend on.
 Network fetching is opt-in per invocation via `--fetch` (or `fetch = true` in config) so the
 tool never surprises anyone with network traffic.
@@ -807,7 +811,9 @@ per-session daemon, and repeated queries are instant.
 
 ### 14.3 Daemon — `jdx daemon`
 A background JVM holding a hot index (and, once touched, a warm Kotlin PSI environment),
-listening on a **unix domain socket** at `$XDG_RUNTIME_DIR/jdx/<workspace-hash>.sock`.
+listening on a **unix domain socket** at `<runtime-dir>/jdx/<workspace-hash>.sock`
+(`$XDG_RUNTIME_DIR/jdx/…` on Linux; per-OS runtime dirs in §17.1 — a missing
+`XDG_RUNTIME_DIR` falls back per table, never `exit 3`).
 
 - The CLI auto-spawns it on first use and becomes a thin client: per-query latency drops from
   ~250 ms to ~10–20 ms.
@@ -916,7 +922,7 @@ all surface as named warning codes in both text and JSON.
 ## 17. Security and safety
 
 - **Strictly read-only** with respect to user code. `jdx` writes only inside its own cache
-  (`~/.cache/jdx`) and config (`~/.config/jdx`) directories.
+  and config directories (per-OS defaults in §17.1).
 - **No code from an inspected jar is ever executed.** ASM parses; it does not load. Class
   initialisers never run. This is a meaningful property — agents inspect untrusted artifacts.
 - **Zip-slip / zip-bomb hardened**: entry-name normalisation, path traversal rejection,
@@ -926,6 +932,39 @@ all surface as named warning codes in both text and JSON.
 - **Resource limits**: decompilation and source parsing run under a wall-clock timeout, so a
   pathological class cannot hang an agent's tool call.
 - **No telemetry.**
+
+### 17.1 Platform directories (D-044, issue #44)
+
+Phase-0 decision; Phase 1 implements it. Per-OS defaults for every location `jdx`
+writes. Supersedes D-013/D-027 and removes the `no XDG_RUNTIME_DIR → exit 3`
+contract: every OS has a defined fallback, so a missing `XDG_RUNTIME_DIR` (the norm
+on macOS/Windows) is never an error.
+
+| Root | Linux | macOS | Windows |
+|---|---|---|---|
+| cache | `~/.cache/jdx` (`$XDG_CACHE_HOME` when set) | `~/Library/Caches/jdx` | `%LOCALAPPDATA%/jdx/cache` |
+| config | `~/.config/jdx` (`$XDG_CONFIG_HOME` when set) | `~/Library/Application Support/jdx` | `%APPDATA%/jdx` |
+| daemon socket dir | `$XDG_RUNTIME_DIR/jdx`, else `$TMPDIR/jdx-$UID`, else `<cache-dir>/run` | `$TMPDIR/jdx-$UID`, else `<cache-dir>/run` | `%LOCALAPPDATA%/jdx/run` (AF_UNIX, Win10 17063+ floor) |
+| install | `~/.local/share/jdx` + `~/.local/bin` | same as Linux | `%LOCALAPPDATA%/Programs/jdx` + PATH shim |
+
+`<cache-dir>` / `<config-dir>` / `<runtime-dir>` below mean the resolved values of
+the cache / config / socket-dir rows. The daemon socket keeps its version-stamped
+name (`<runtime-dir>/jdx/<workspace-hash>-v1.sock`).
+
+**Override precedence** (first match wins; Phase 1 implements):
+
+1. Explicit CLI flags (`--cache-dir` for the cache root, which covers the index DB,
+   `m2/`, the Kotlin sidecar, and `auto/` workspaces).
+2. `JDX_*` env (`JDX_CACHE_DIR`, `JDX_CONFIG_DIR`, `JDX_RUNTIME_DIR`).
+3. Platform env: `XDG_CACHE_HOME` / `XDG_CONFIG_HOME` / `XDG_RUNTIME_DIR` on Linux,
+   `TMPDIR` for the macOS socket dir, `LOCALAPPDATA` / `APPDATA` on Windows.
+4. OS default from the table above (with the socket-dir `else` fallbacks).
+
+**Migration:** on first run under the new defaults, if the OS-default location is
+absent/empty and the old location (`~/.cache/jdx`, `~/.config/jdx`) exists with
+content, move it (rename, never copy-merge) to the new location and print an info
+line; if both exist, keep the new location and warn naming the old one. Linux
+defaults are unchanged, so Linux installs never migrate.
 
 ---
 
@@ -1134,7 +1173,7 @@ the authoritative machine-readable version.)*
 -v, --verbose / -q, --quiet
     --no-daemon             force in-process execution
     --timeout <duration>    per-operation wall-clock cap
-    --cache-dir <path>      override ~/.cache/jdx
+    --cache-dir <path>      override the OS cache default (§17.1; ~/.cache/jdx on Linux)
 ```
 
 ### Per-command highlights

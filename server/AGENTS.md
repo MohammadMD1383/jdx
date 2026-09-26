@@ -5,8 +5,10 @@ are `toJson` bytes verbatim, no second shape. `explicitApi()` is on.
 
 ## Key files
 
-- `DaemonPaths` — version-stamped socket + pid/log siblings at
-  `$XDG_RUNTIME_DIR/jdx/<workspace-hash>-v1.sock`; no `XDG_RUNTIME_DIR` → exit 3.
+- `DaemonPaths` — version-stamped socket + pid/log siblings under the OS runtime dir:
+  `$XDG_RUNTIME_DIR/jdx/<workspace-hash>-v1.sock` on Linux, `$TMPDIR/jdx-$UID/…` on
+  macOS, `%LOCALAPPDATA%/jdx/run/…` on Windows (full table in `docs/PROPOSAL.md`
+  §17.1; D-044). A missing `XDG_RUNTIME_DIR` falls back per table, never exit 3.
 - `DaemonServer` — strict 1:1 NDJSON line mapping, per-request idle reset,
   `health` handshake with protocol-version refusal. `DaemonIdle` — 5-minute idle
   shutdown (`--idle`, `0` disables); `parseIdleDuration` never throws.
