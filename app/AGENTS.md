@@ -34,10 +34,14 @@ Fat-jar assembly + the `jdx` launchers (POSIX + Windows) + AppCDS archive.
 - `install.sh` (repo root) stays per-user: refuses root, refuses to clobber an
   unrelated `jdx` without `--force`.
 - Releases: pushing tag `vX.Y.Z` on `main` runs `.github/workflows/release.yml`
-  (version via `-PjdxVersion`, tarball `jdx-<version>.tar.gz` with the launcher +
-  `libs/` layout this module builds, checksums, `gh release create`). The remote
+  as a three-OS matrix (Windows builds via `gradlew.bat`, each leg smokes its
+  own launcher), publishing per-OS `jdx-<version>-<os>.{tar.gz,zip}` + `.sha256`
+  (plus bare Linux aliases for the `install-release.sh` / `jdx upgrade` default
+  URLs) with a per-leg `jdx.jsa` trained on that runner; releases are unsigned
+  (SmartScreen/Gatekeeper unblock notes in `docs/PROPOSAL.md` §17.2). The remote
   installer `install-release.sh` (repo root) follows the same per-user rules as
-  `install.sh` and is pinned by `InstallReleaseScriptTest` (fake `--tarball`).
+  `install.sh`, accepts `.tar.gz` and `.zip` through `--tarball`, and is pinned
+  by `InstallReleaseScriptTest` for both extensions.
 - Launcher behaviour is pinned by present/absent exec-args tests — flag order
   (`-Xshare:auto` before `-XX:SharedArchiveFile`) is what makes stale archives
   degrade instead of fail. The Windows launchers carry the same pin

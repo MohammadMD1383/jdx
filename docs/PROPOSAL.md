@@ -974,6 +974,39 @@ content, move it (rename, never copy-merge) to the new location and print an inf
 line; if both exist, keep the new location and warn naming the old one. Linux
 defaults are unchanged, so Linux installs never migrate.
 
+### 17.2 Release assets and signing (issue #48)
+
+Tagged pushes (`vX.Y.Z` on `main`) build in `.github/workflows/release.yml` on a
+three-OS matrix (`ubuntu` / `windows` / `macos` — the Windows leg builds through
+`gradlew.bat`, and each leg smoke-tests its own launcher: `jdx.bat` on Windows,
+`./app/build/jdx` elsewhere). Each leg publishes two bundles plus checksums:
+
+| Asset | Contents |
+|---|---|
+| `jdx-<version>-<os>.tar.gz` (+ `.sha256`) | `jdx/` + `jdx/libs/` layout: `jdx`, `jdx.bat`, `jdx.ps1`, `libs/jdx-*-all.jar`, `libs/jdx.jsa` |
+| `jdx-<version>-<os>.zip` (+ `.sha256`) | Same membership (Explorer/Defender-first for Windows) |
+
+`<os>` is `linux`, `macos`, or `windows`. The `linux` leg additionally publishes
+bare `jdx-<version>.tar.gz/.zip` aliases (byte copies): that is the URL
+`install-release.sh` and `jdx upgrade` fetch by default, so old clients keep
+working. Checksums are `<hex>  <filename>` lines verified with `sha256sum`,
+`shasum -a 256`, or Windows `CertUtil` — a published checksum that cannot be
+checked fails the install loudly, never silently. `install-release.sh`
+`--tarball` accepts either extension (re-applying `+x` to the POSIX launcher
+after unzip, since repacked zips may lose it).
+
+The `jdx.jsa` AppCDS archive in each bundle is trained by that leg's own JDK:
+the archive format is host-specific and a foreign one is ignored via
+`-Xshare:auto`, so per-OS training is what makes the ≤ 250 ms cold-start budget
+(§15) hold on every OS instead of only Linux. `jdx upgrade` keeps tracking the
+bare `.tar.gz` (portable layout, pure-Java extraction, all launchers inside —
+it upgrades Windows installs without any external `tar`).
+
+**Signing: releases are unsigned** (no SmartScreen / Gatekeeper notarization).
+First-run warnings are expected: `Unblock-File` (PowerShell) on Windows,
+`xattr -d com.apple.quarantine <install-dir>/jdx` on macOS. Adding signing is
+tracked in #31 (packaging), not here.
+
 ---
 
 ## 18. Testing strategy

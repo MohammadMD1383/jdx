@@ -13,7 +13,14 @@
 #
 # Env overrides: JDX_VERSION (a tag like v0.2.0, or `latest`), JDX_REPO
 # (default MohammadMD1383/jdx), JDX_INSTALL_DIR, JDX_BIN_DIR, JDX_TARBALL
-# (local .tar.gz for offline installs and tests — skips the download).
+# (local .tar.gz or .zip for offline installs and tests — skips the download).
+#
+# Release assets ship per OS as `jdx-<version>-<os>.{tar.gz,zip}` (os = linux,
+# macos, windows; see docs/PROPOSAL.md §17.2). The default download below is the
+# bare `jdx-<version>.tar.gz` (the Linux asset, kept for backward compatibility
+# — it carries every launcher, so it installs anywhere with a JDK); Windows and
+# macOS users who prefer an Explorer/Defender-first bundle can fetch the `-<os>`
+# `.zip` from the release page and install it via `--tarball`.
 #
 # Writes a `.jdx-release` marker (repo + tag) into the install dir: that is
 # how `jdx upgrade` knows this is a release install and which repo it tracks.
@@ -75,7 +82,9 @@ done
 
 [ "$(id -u)" -ne 0 ] || die "refusing to run as root — jdx installs per-user into ~/.local/bin"
 
-command -v tar >/dev/null 2>&1 || die "the 'tar' tool is required but not on PATH"
+# No hard `tar`/`unzip` requirement up front: `--tarball file.zip` needs only
+# `unzip`, a `.tar.gz` needs only `tar`. Each extraction path fails loudly when
+# its own tool is missing.
 
 download() {
     # download <url> <dest>
@@ -155,14 +164,24 @@ trap 'rm -rf "$tmp_dir"' EXIT INT TERM
 tarball=
 if [ -n "$tarball_override" ]; then
     [ -f "$tarball_override" ] || die "tarball '$tarball_override' not found"
+    case $tarball_override in
+        *.tar.gz|*.zip) ;;
+        *) die "tarball '$tarball_override' must end in .tar.gz or .zip" ;;
+    esac
     tarball=$tarball_override
     # Offline installs carry no release tag; recover it from the asset name
-    # (jdx-<bare>.tar.gz) so the .jdx-release marker stays truthful.
+    # (jdx-<bare>.tar.gz, jdx-<bare>.zip, or a per-OS jdx-<bare>-<os>.* asset —
+    # the -<os> suffix is stripped back to the bare version) so the
+    # .jdx-release marker stays truthful.
     base=$(basename "$tarball_override")
     case $base in
-        jdx-*.tar.gz)
+        jdx-*.tar.gz|jdx-*.zip)
             bare=${base#jdx-}
             bare=${bare%.tar.gz}
+            bare=${bare%.zip}
+            case $bare in
+                *-linux|*-macos|*-windows) bare=${bare%-*} ;;
+            esac
             case $bare in
                 ''|*[!0-9.]*) ;;
                 *) version="v$bare" ;;
@@ -196,13 +215,34 @@ else
     fi
 fi
 
-# The tarball carries a top-level `jdx/` directory (launcher + libs/), matching
-# the layout `:app:installDist` produces under app/build.
-tar -tzf "$tarball" | head -n 1 | grep -q '^jdx/' \
-    || die "unexpected tarball layout — expected a top-level 'jdx/' directory"
+# The bundles carry a top-level `jdx/` directory (launchers + libs/),
+# matching the layout `:app:installDist` produces under app/build.
+case $tarball in
+    *.zip)
+        command -v unzip >/dev/null 2>&1 || die "the 'unzip' tool is required to install '$tarball' but not on PATH"
+        unzip -Z1 "$tarball" 2>/dev/null | head -n 1 | grep -q '^jdx/' \
+            || die "unexpected archive layout — expected a top-level 'jdx/' directory"
+        ;;
+    *)
+        command -v tar >/dev/null 2>&1 || die "the 'tar' tool is required to install '$tarball' but not on PATH"
+        tar -tzf "$tarball" | head -n 1 | grep -q '^jdx/' \
+            || die "unexpected tarball layout — expected a top-level 'jdx/' directory"
+        ;;
+esac
 
 mkdir -p "$install_dir" || die "cannot create '$install_dir'"
-tar -xzf "$tarball" -C "$tmp_dir" || die "cannot extract '$tarball'"
+case $tarball in
+    *.zip)
+        unzip -q -o "$tarball" -d "$tmp_dir" || die "cannot extract '$tarball'"
+        # Zips repacked outside the release workflow may have lost the POSIX
+        # launcher's exec bit (Info-ZIP stores it, Explorer copies do not) —
+        # re-apply it; harmless when already set.
+        [ -f "$tmp_dir/jdx/jdx" ] && chmod +x "$tmp_dir/jdx/jdx"
+        ;;
+    *)
+        tar -xzf "$tarball" -C "$tmp_dir" || die "cannot extract '$tarball'"
+        ;;
+esac
 [ -x "$tmp_dir/jdx/jdx" ] || die "tarball has no executable 'jdx/jdx' launcher"
 jar_found=0
 for jar in "$tmp_dir"/jdx/libs/jdx-*-all.jar; do

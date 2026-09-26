@@ -235,6 +235,26 @@ class InstallReleaseScriptTest {
         return tarball
     }
 
+    /**
+     * Builds the same release layout as a `.zip` (issue #48) via
+     * `java.util.zip` — no external `zip` binary needed, and the entries
+     * deliberately carry no POSIX exec bit (like an Explorer-repacked zip),
+     * so a passing install proves the installer re-applies `+x` itself.
+     */
+    private fun fakeZipTarball(name: String = "jdx-0.0.0.zip"): File {
+        val work = tempDir("jdx-relzip-")
+        val zip = File(work, name)
+        java.util.zip.ZipOutputStream(zip.outputStream().buffered()).use { out ->
+            out.putNextEntry(java.util.zip.ZipEntry("jdx/jdx"))
+            out.write("#!/bin/sh\necho \"jdx version 0.0.0-test\"\n".toByteArray())
+            out.closeEntry()
+            out.putNextEntry(java.util.zip.ZipEntry("jdx/libs/jdx-0.0.0-all.jar"))
+            out.write("fake".toByteArray())
+            out.closeEntry()
+        }
+        return zip
+    }
+
     @Test
     fun `fresh install unpacks the tarball and symlinks the launcher`() {
         val home = tempDir("jdx-home-")
@@ -323,6 +343,68 @@ class InstallReleaseScriptTest {
 
         result.exitCode shouldBe 1
         result.stderr shouldContain "not found"
+    }
+
+    @Test
+    fun `fresh install unpacks a zip archive and symlinks the launcher`() {
+        // The per-OS `.zip` bundle (issue #48): same `jdx/` layout as the
+        // tarball, installed through the same `--tarball` seam. The fixture
+        // zip stores no exec bit, so success also proves the installer
+        // re-applies `+x` to the POSIX launcher itself.
+        val home = tempDir("jdx-home-")
+        val tarball = fakeZipTarball()
+
+        val result = runInstallRelease(home, listOf("--tarball", tarball.absolutePath))
+
+        result.exitCode shouldBe 0
+        val target = File(home, ".local/bin/jdx")
+        Files.isSymbolicLink(target.toPath()) shouldBe true
+        target.canonicalPath shouldBe File(home, ".local/share/jdx/jdx").canonicalPath
+        File(home, ".local/share/jdx/jdx").canExecute() shouldBe true
+        File(home, ".local/share/jdx/libs/jdx-0.0.0-all.jar").exists() shouldBe true
+        result.stdout shouldContain "installed:"
+    }
+
+    @Test
+    fun `a per-OS zip name still recovers the release tag`() {
+        // `jdx-<bare>-<os>.zip` offline installs must stamp the bare version
+        // into `.jdx-release`, or `jdx upgrade` later compares against garbage.
+        val home = tempDir("jdx-home-")
+        val tarball = fakeZipTarball("jdx-0.0.0-windows.zip")
+
+        val result = runInstallRelease(home, listOf("--tarball", tarball.absolutePath))
+
+        result.exitCode shouldBe 0
+        File(home, ".local/share/jdx/.jdx-release").readText() shouldContain "tag=v0.0.0"
+    }
+
+    @Test
+    fun `a zip without the launcher is a clean error`() {
+        val home = tempDir("jdx-home-")
+        val work = tempDir("jdx-relzip-")
+        val tarball = File(work, "jdx-0.0.0.zip")
+        java.util.zip.ZipOutputStream(tarball.outputStream().buffered()).use { out ->
+            out.putNextEntry(java.util.zip.ZipEntry("jdx/libs/jdx-0.0.0-all.jar"))
+            out.write("fake".toByteArray())
+            out.closeEntry()
+        }
+
+        val result = runInstallRelease(home, listOf("--tarball", tarball.absolutePath))
+
+        result.exitCode shouldBe 1
+        result.stderr shouldContain "no executable 'jdx/jdx' launcher"
+    }
+
+    @Test
+    fun `a --tarball that is neither tar gz nor zip is rejected`() {
+        val home = tempDir("jdx-home-")
+        val other = tempDir("jdx-other-")
+        val notArchive = File(other, "jdx-0.0.0.tar.bz2").apply { writeText("fake") }
+
+        val result = runInstallRelease(home, listOf("--tarball", notArchive.absolutePath))
+
+        result.exitCode shouldBe 1
+        result.stderr shouldContain "must end in .tar.gz or .zip"
     }
 
     @Test

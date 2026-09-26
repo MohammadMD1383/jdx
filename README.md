@@ -78,18 +78,29 @@ Same task, two agents — left does it with `javap`/`grep`, right with `jdx`:
 
 ## Install
 
-Requires **JDK 21+**. Linux x64 tarballs are published as
-[GitHub Releases](https://github.com/MohammadMD1383/jdx/releases):
+Requires **JDK 21+**. Every push of a `vX.Y.Z` tag publishes per-OS bundles as
+[GitHub Releases](https://github.com/MohammadMD1383/jdx/releases) —
+`jdx-<version>-<os>.tar.gz` and `jdx-<version>-<os>.zip` (`<os>` is `linux`,
+`macos`, or `windows`), each with a `.sha256` checksum and a `jdx.jsa`
+trained on that OS:
 
 ```bash
 curl -fsSL https://raw.githubusercontent.com/MohammadMD1383/jdx/main/install-release.sh | bash
 ```
 
 Installs per-user into `~/.local/share/jdx` and links `~/.local/bin/jdx`.
+Prefer the `.zip` on Windows (Explorer/Defender are zip-first) — download the
+`-windows.zip` asset and install it with
+`sh install-release.sh --tarball jdx-<version>-windows.zip`.
 Verify with `jdx version` (`jdx doctor` reports JDK, cache, index, Kotlin
 sidecar, daemon, and workspace status). Release installs self-update with
 `jdx upgrade`. Building from source: `./gradlew :app:installDist && ./install.sh`
 (see [`CONTRIBUTING.md`](CONTRIBUTING.md)).
+
+> Releases are **unsigned**: Windows SmartScreen and macOS Gatekeeper will warn
+> on first run. `Unblock-File jdx.bat` (PowerShell) or
+> `xattr -d com.apple.quarantine <install-dir>/jdx` clears it. Details and the
+> asset table live in `docs/PROPOSAL.md` §17.2.
 
 ## Quickstart
 

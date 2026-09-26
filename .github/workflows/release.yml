@@ -1,7 +1,9 @@
 name: release
 
-# Auto-release: pushing a tag `vX.Y.Z` (on main) builds the distribution and
-# publishes it as a GitHub Release with a versioned tarball + checksums.
+# Per-OS release matrix (issue #48, part of #43).
+#
+# Pushing a tag `vX.Y.Z` (on main) builds the distribution on all three OSes and
+# publishes per-OS assets as one GitHub Release:
 #
 #   git tag v0.2.0 && git push origin v0.2.0
 #
@@ -9,6 +11,20 @@ name: release
 # reachable from `main` — otherwise the job fails with a human-readable error.
 # The project version (`BuildInfo.version`, fat-jar manifest) comes from the
 # tag via `-PjdxVersion`, never from a hand-edited source file.
+#
+# Assets per OS (`<os>` is `linux`, `macos`, or `windows`):
+#   jdx-<version>-<os>.tar.gz (+ .sha256)   POSIX-first bundle
+#   jdx-<version>-<os>.zip (+ .sha256)       Explorer/Defender-first bundle
+# Every bundle keeps the `jdx/` + `jdx/libs/` layout (`jdx`, `jdx.bat`,
+# `jdx.ps1`, `libs/jdx-*-all.jar`, plus `libs/jdx.jsa` trained on THAT runner —
+# the AppCDS archive is host-JDK-specific and a foreign one is ignored via
+# `-Xshare:auto`, so each OS ships the archive its own JDK trained).
+# The `linux` leg additionally publishes bare `jdx-<version>.tar.gz/.zip`
+# aliases (byte copies): that is the URL `install-release.sh` and
+# `jdx upgrade` fetch by default, so old clients keep working.
+#
+# Releases are UNSIGNED (no SmartScreen / Gatekeeper notarization — see
+# docs/PROPOSAL.md §17.2 for the unblock instructions we point users at).
 
 on:
   push:
@@ -18,9 +34,17 @@ on:
 permissions:
   contents: write
 
+defaults:
+  run:
+    shell: bash
+
 jobs:
-  release:
-    runs-on: ubuntu-latest
+  build:
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [ubuntu-latest, windows-latest, macos-latest]
+    runs-on: ${{ matrix.os }}
     steps:
       - name: Check out the tag
         uses: actions/checkout@v4
@@ -46,8 +70,15 @@ jobs:
               exit 1
               ;;
           esac
+          case "$RUNNER_OS" in
+            Linux) asset_os=linux ;;
+            macOS) asset_os=macos ;;
+            Windows) asset_os=windows ;;
+            *) echo "release: unknown runner OS '$RUNNER_OS'" >&2; exit 1 ;;
+          esac
           echo "tag=$tag" >> "$GITHUB_OUTPUT"
           echo "version=$version" >> "$GITHUB_OUTPUT"
+          echo "asset_os=$asset_os" >> "$GITHUB_OUTPUT"
 
       - name: Tag must be on main
         run: |
@@ -66,10 +97,32 @@ jobs:
       - name: Set up Gradle
         uses: gradle/actions/setup-gradle@v4
 
-      - name: Build distribution
+      # The Windows leg builds through gradlew.bat (cmd) — that IS the proof the
+      # Windows wrapper entry point works. POSIX legs use ./gradlew.
+      - name: Build distribution (Windows)
+        if: runner.os == 'Windows'
+        shell: cmd
+        run: gradlew.bat :app:installDist -PjdxVersion="${{ steps.version.outputs.version }}"
+
+      - name: Build distribution (POSIX)
+        if: runner.os != 'Windows'
         run: ./gradlew :app:installDist -PjdxVersion="${{ steps.version.outputs.version }}"
 
-      - name: Verify version
+      # Each asset's smoke test runs its OWN launcher: jdx.bat on Windows (via
+      # cmd.exe so the real batch interpreter parses it), ./app/build/jdx
+      # elsewhere. CR stripping: cmd echoes CRLF.
+      - name: Smoke the Windows launcher
+        if: runner.os == 'Windows'
+        run: |
+          reported="$(cmd.exe //c 'app\build\jdx.bat version' | tr -d '\r')"
+          expected="jdx version ${{ steps.version.outputs.version }}"
+          if [ "$reported" != "$expected" ]; then
+            echo "release: version mismatch: got '$reported', want '$expected'" >&2
+            exit 1
+          fi
+
+      - name: Smoke the POSIX launcher
+        if: runner.os != 'Windows'
         run: |
           reported="$(./app/build/jdx version)"
           expected="jdx version ${{ steps.version.outputs.version }}"
@@ -78,29 +131,94 @@ jobs:
             exit 1
           fi
 
-      - name: Assemble tarball
+      # Both bundles, both checksums, every OS. `zip` is NOT assumed (absent
+      # from Windows Git-Bash) and neither is `sha256sum` (absent from macOS /
+      # Windows runners), so the zip + all digests are produced by python —
+      # preinstalled on all three runner images (`python3`, else `python`).
+      - name: Assemble per-OS assets
         run: |
           version="${{ steps.version.outputs.version }}"
+          asset_os="${{ steps.version.outputs.asset_os }}"
           stage="dist/jdx"
           rm -rf dist
           mkdir -p "$stage/libs"
           cp app/build/jdx "$stage/jdx"
           chmod +x "$stage/jdx"
+          cp app/build/jdx.bat app/build/jdx.ps1 "$stage/"
           cp app/build/libs/jdx-*-all.jar "$stage/libs/"
           if [ -f app/build/libs/jdx.jsa ]; then
             cp app/build/libs/jdx.jsa "$stage/libs/"
           fi
-          tar -czf "jdx-$version.tar.gz" -C dist jdx
-          sha256sum "jdx-$version.tar.gz" > "jdx-$version.tar.gz.sha256"
+          if command -v python3 >/dev/null 2>&1; then PY=python3; else PY=python; fi
+          "$PY" - "$stage" "$version" "$asset_os" <<'EOF'
+          import hashlib, os, sys, zipfile
+          stage, version, asset_os = sys.argv[1], sys.argv[2], sys.argv[3]
+          names = []
+          # The zip mirrors the tarball layout byte-for-byte in membership;
+          # sorted entries + fixed mtime keep it deterministic, and the POSIX
+          # launcher keeps its exec bit (install-release.sh re-applies it
+          # anyway after unzip, for zips repacked by other tools).
+          for ext in ("tar.gz", "zip"):
+              names.append("jdx-%s-%s.%s" % (version, asset_os, ext))
+          if asset_os == "linux":
+              # Bare aliases: the default download URLs (install-release.sh,
+              # `jdx upgrade`) stay working.
+              names.append("jdx-%s.tar.gz" % version)
+              names.append("jdx-%s.zip" % version)
+          for name in names:
+              if name.endswith(".zip"):
+                  with zipfile.ZipFile(name, "w", zipfile.ZIP_DEFLATED) as zf:
+                      for root, _, files in os.walk(stage):
+                          for fn in sorted(files):
+                              full = os.path.join(root, fn)
+                              rel = os.path.relpath(full, os.path.dirname(stage))
+                              zi = zipfile.ZipInfo(rel.replace(os.sep, "/"), (2020, 1, 1, 0, 0, 0))
+                              zi.external_attr = (0o755 if rel.endswith("/jdx") else 0o644) << 16
+                              with open(full, "rb") as fh:
+                                  zf.writestr(zi, fh.read())
+          print("zip assets written")
+          EOF
+          tar -czf "jdx-$version-$asset_os.tar.gz" -C dist jdx
+          if [ "$asset_os" = "linux" ]; then
+            cp "jdx-$version-$asset_os.tar.gz" "jdx-$version.tar.gz"
+            cp "jdx-$version-$asset_os.zip" "jdx-$version.zip"
+          fi
+          for f in jdx-*.tar.gz jdx-*.zip; do
+            "$PY" -c "import hashlib,sys; print(hashlib.sha256(open(sys.argv[1],'rb').read()).hexdigest() + '  ' + sys.argv[1])" "$f" > "$f.sha256"
+          done
+          ls -la jdx-*
+
+      - name: Upload per-OS assets
+        uses: actions/upload-artifact@v4
+        with:
+          name: jdx-${{ steps.version.outputs.version }}-${{ steps.version.outputs.asset_os }}
+          path: |
+            jdx-*.tar.gz
+            jdx-*.tar.gz.sha256
+            jdx-*.zip
+            jdx-*.zip.sha256
+          if-no-files-found: error
+
+  publish:
+    needs: build
+    runs-on: ubuntu-latest
+    steps:
+      - name: Download all per-OS assets
+        uses: actions/download-artifact@v4
+        with:
+          path: assets
+          merge-multiple: true
 
       - name: Publish GitHub Release
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         run: |
-          tag="${{ steps.version.outputs.tag }}"
-          version="${{ steps.version.outputs.version }}"
+          tag="${GITHUB_REF_NAME}"
+          (cd assets && sha256sum -c jdx-*.sha256)
           gh release create "$tag" \
             --title "$tag" \
             --generate-notes \
-            "jdx-$version.tar.gz" \
-            "jdx-$version.tar.gz.sha256"
+            assets/jdx-*.tar.gz \
+            assets/jdx-*.tar.gz.sha256 \
+            assets/jdx-*.zip \
+            assets/jdx-*.zip.sha256
