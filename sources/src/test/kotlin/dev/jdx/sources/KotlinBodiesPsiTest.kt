@@ -246,6 +246,58 @@ class KotlinBodiesPsiTest {
     }
 
     @Test
+    fun `crlf kotlin sources resolve bodies and kdoc like lf sources`(@TempDir home: Path) {
+        // Windows checkouts carry CRLF (`* text=auto`), and the PSI
+        // doc-comment association misses every KDoc under CRLF while bodies
+        // still slice — the read seam normalises, pinned here through the
+        // full product path (jar → find → slice), not the raw parse API.
+        // Shapes mirror the real reds: KDoc above annotations (UserIdBox)
+        // and a directly-documented facade function (extensionGreeting).
+        withParser(home) { parser ->
+            val lf = "package demo\n\n" +
+                "/** A box, erased on the JVM. */\n" +
+                "@Deprecated(\"old\")\n" +
+                "class Box(val id: String)\n\n" +
+                "/** Greets. */\n" +
+                "fun greet(): String = \"hi\"\n"
+            JarSourceRoot(craftTextJar(home.resolve("crlf-sources.jar"), "demo/Demo.kt", lf)).use { lfRoot ->
+                val lfType = findKotlinTypeDoc(lfRoot, "demo.Box", parser)
+                    .shouldBeInstanceOf<JavaDocResult.Found>().docs
+                lfType shouldHaveSize 1
+            }
+            JarSourceRoot(
+                craftTextJar(home.resolve("crlf-sources.jar"), "demo/Demo.kt", lf.replace("\n", "\r\n")),
+            ).use { root ->
+                val typeDocs = findKotlinTypeDoc(root, "demo.Box", parser)
+                    .shouldBeInstanceOf<JavaDocResult.Found>().docs
+                typeDocs shouldHaveSize 1
+                typeDocs.single().rawComment shouldContain "erased on the JVM"
+                val memberDocs = findKotlinMemberDocs(root, ref("demo.DemoKt", "greet"), parser)
+                    .shouldBeInstanceOf<JavaDocResult.Found>().docs
+                memberDocs shouldHaveSize 1
+                memberDocs.single().rawComment shouldContain "Greets."
+                // Offsets index the normalised text: the body slice is exact,
+                // proving normalisation did not shift anything.
+                val bodies = findKotlinBodies(root, ref("demo.DemoKt", "greet"), parser)
+                    .shouldBeInstanceOf<JavaBodyResult.Found>().bodies
+                bodies shouldHaveSize 1
+                bodies.single().text shouldBe "fun greet(): String = \"hi\""
+            }
+        }
+    }
+
+    /** A one-entry sources jar: [text] stored verbatim (LF or CRLF as given). */
+    private fun craftTextJar(jar: Path, entry: String, text: String): Path {
+        Files.createDirectories(jar.parent)
+        java.util.zip.ZipOutputStream(Files.newOutputStream(jar)).use { zip ->
+            zip.putNextEntry(java.util.zip.ZipEntry(entry))
+            zip.write(text.toByteArray(Charsets.UTF_8))
+            zip.closeEntry()
+        }
+        return jar
+    }
+
+    @Test
     fun `member listing names Kotlin declarations`(@TempDir home: Path) {
         withParser(home) { parser ->
             fixtureSourcesRoot().use { root ->

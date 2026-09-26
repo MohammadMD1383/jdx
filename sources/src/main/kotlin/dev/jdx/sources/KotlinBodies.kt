@@ -735,6 +735,13 @@ internal fun containsWord(text: String, word: String): Boolean {
 
 private fun readKotlinText(root: SourceRoot, path: String): String? = try {
     root.openSource(path).use { it.readBytes().toString(Charsets.UTF_8) }
+        // LF-pinned: the PSI doc-comment association (`getDocComment`) misses
+        // every KDoc when the text carries CRLF (Windows checkouts,
+        // `* text=auto`), while bodies and navigation read fine — so without
+        // this, CRLF sources silently lose all Kotlin KDoc. Normalising at
+        // the single read seam keeps parse offsets, line splits and served
+        // text on one spelling (a no-op for LF inputs).
+        .replace("\r\n", "\n").replace('\r', '\n')
 } catch (_: Exception) {
     null
 }
