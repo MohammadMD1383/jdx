@@ -205,7 +205,21 @@ tasks.register("lint") {
     val lintRoot: java.io.File = rootDir
     val lintExtensions = listOf(".kt", ".kts")
     val libModules = listOf("core", "index", "sources", "decompile")
-    inputs.files(fileTree(lintRoot) { include("**/*.kt", "**/*.kts") })
+    // Hardened inputs (issue: one-build `:lint` validation red "uses this output of
+    // :core:compileKotlin" after build-logic change amid --rerun-tasks/stash churn).
+    // Root cause: the old `fileTree(lintRoot) { include(...) }` declared every
+    // `**/build/**` path as an input, overlapping `compileKotlin` outputs (e.g.
+    // `core/build/...`). Gradle's task-dependency validation then demanded an
+    // explicit dependency that a source-only style gate must never have. The
+    // excludes below mirror the runtime skips in `doLast`, so declared inputs
+    // match actual reads and can never overlap task outputs. Do NOT re-add
+    // `build/` to lint inputs to fix a wiring flake; the 4 lint rules are unchanged.
+    inputs.files(
+        fileTree(lintRoot) {
+            include("**/*.kt", "**/*.kts")
+            exclude("**/build/**", "**/.git/**", "**/.gradle/**", "**/.kotlin/**")
+        },
+    ).withPropertyName("sources").withPathSensitivity(org.gradle.api.tasks.PathSensitivity.RELATIVE)
     doLast {
         val taskRef = Regex("T-\\d+")
         val violations = mutableListOf<String>()
