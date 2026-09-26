@@ -166,8 +166,7 @@ round-tripping.
   metamorphic / fault-injection / corpus), not just examples.
 - Root `lint` (runs in every `check`): no trailing whitespace, no tabs, no bare
   `TODO`/`FIXME` without a reference, no `println`/`System.exit`/`printStackTrace` in
-  library mains, `allWarningsAsErrors` on main + test compiles. A lone `:lint`
-  validation red mid-churn is stale state until proven otherwise — retry clean first.
+  library mains, `allWarningsAsErrors` on main + test compiles.
 - `-Pgolden.update=true` is the most dangerous command here: **read every golden diff
   before committing it.** An unread golden update is a deleted test.
 - CI mode `-Pci` (also auto-detected via `CI`/`GITHUB_ACTIONS`): wall-clock test gates
