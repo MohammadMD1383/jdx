@@ -84,7 +84,13 @@ class BodyGoldenTest {
                         endLine = body.endLine,
                         provenance = provenance,
                     )
+                    // Golden keys must survive a Windows checkout: `<init>` and
+                    // friends carry `<`/`>`, which Win32 forbids in file names
+                    // (the v1.2.0 release matrix proved it — checkout fails
+                    // before any step runs). Flatten those, keep this suite's
+                    // dotted naming otherwise (`#` and `.` are Win32-legal).
                     val key = "${member.binary.replace('$', '_')}#${member.name}"
+                        .replace(Regex("[^A-Za-z0-9_.#]"), "_")
                     put("$key.txt", plain.renderText())
                     put("$key.json", plain.toJson(command = "body"))
                     if (member == members.first()) {
