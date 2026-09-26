@@ -42,36 +42,9 @@ class KotlinSourcesServiceTest {
 
     private fun textOf(outcome: ServiceOutcome): String = outcome.renderText(false)
 
-    private fun cachedRuntimeJars(): Map<String, Path> {
-        val home = System.getProperty("user.home") ?: return emptyMap()
-        val root = File(home, ".gradle/caches/modules-2/files-2.1")
-        if (!root.isDirectory) return emptyMap()
-        val wanted = mapOf(
-            "kotlin-compiler-embeddable-2.4.20.jar" to
-                "org.jetbrains.kotlin/kotlin-compiler-embeddable",
-            "kotlin-stdlib-2.4.20.jar" to
-                "org.jetbrains.kotlin/kotlin-stdlib",
-            "kotlin-script-runtime-2.4.20.jar" to
-                "org.jetbrains.kotlin/kotlin-script-runtime",
-            "kotlin-reflect-1.6.10.jar" to
-                "org.jetbrains.kotlin/kotlin-reflect",
-            "kotlin-daemon-embeddable-2.4.20.jar" to
-                "org.jetbrains.kotlin/kotlin-daemon-embeddable",
-            "kotlinx-coroutines-core-jvm-1.8.0.jar" to
-                "org.jetbrains.kotlinx/kotlinx-coroutines-core-jvm",
-            "annotations-13.0.jar" to
-                "org.jetbrains/annotations",
-        )
-        return wanted.mapNotNull { (jarName, groupPath) ->
-            val dir = File(root, groupPath)
-            val found = if (dir.isDirectory) {
-                dir.walkTopDown().firstOrNull { it.isFile && it.name == jarName }?.toPath()
-            } else {
-                null
-            }
-            if (found != null) jarName to found else null
-        }.toMap()
-    }
+    /** Borrowed from the Gradle module cache via the shared [SidecarJars] helper. */
+    private fun cachedRuntimeJars(): Map<String, Path> =
+        dev.jdx.testsupport.fixtures.SidecarJars.cachedRuntimeJars()
 
     /** A temp home with the sidecar set symlinked in (the `kotlinUserHome` seam). */
     private fun kotlinHome(home: Path): Path {
