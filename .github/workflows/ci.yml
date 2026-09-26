@@ -1,0 +1,67 @@
+name: ci
+
+# Main Linux check (issue #55, part of #61).
+# Runs the full pre-commit gate (`./gradlew check` = tier-1 `test` + tier-2
+# `tier2Test` + `lint` + `jacocoTestCoverageVerification`) on ubuntu-latest,
+# where the project is developed. Coverage gates (#58) ride along for free:
+# `check` already pulls `jacocoTestCoverageVerification`, so a below-gate PR
+# reds here. CI wall-clock gates are relaxed via `-Pci` (#57): tier-1 budget
+# report-only, PIT timeouts lifted; local runs keep the strict loop.
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: ci-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  check:
+    runs-on: ubuntu-latest
+    timeout-minutes: 60
+    steps:
+      - name: Check out
+        uses: actions/checkout@v4
+
+      - name: Set up JDK 21
+        uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: "21"
+
+      - name: Set up Gradle
+        uses: gradle/actions/setup-gradle@v4
+
+      - name: Full check (tests + lint + coverage gates)
+        run: ./gradlew check -Pci
+
+      - name: Aggregated test report
+        if: always()
+        run: ./gradlew testReport -Pci
+
+      - name: Upload JUnit results
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: junit-results-linux
+          path: |
+            **/build/test-results/**
+          if-no-files-found: warn
+
+      - name: Upload HTML test + coverage reports
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: reports-linux
+          path: |
+            build/reports/allTests/
+            **/build/reports/tests/
+            **/build/reports/jacoco/
+            **/build/reports/lint/
+          if-no-files-found: warn
