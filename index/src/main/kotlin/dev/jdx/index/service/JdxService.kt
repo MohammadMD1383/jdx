@@ -111,6 +111,7 @@ import dev.jdx.index.maven.productionMavenResolve
 import dev.jdx.index.refs.ReferenceExtractor
 import java.nio.file.FileSystems
 import java.nio.file.Files
+import java.nio.file.InvalidPathException
 import java.nio.file.Path
 import kotlin.io.path.isDirectory
 import kotlin.io.path.isRegularFile
@@ -1242,7 +1243,13 @@ public object JdxService {
     internal fun expandJarSpec(spec: String, userHome: String): List<Path> {
         val expanded = expandUser(spec, userHome)
         if (!hasGlobChars(expanded)) {
-            val path = Path.of(expanded)
+            // Never let a malformed spelling escape as InvalidPathException:
+            // the contract is ArtifactReadException (exit 5), never a throw.
+            val path = try {
+                Path.of(expanded)
+            } catch (e: InvalidPathException) {
+                throw ArtifactReadException("artifact read error: no such artifact: $spec")
+            }
             if (!path.isRegularFile() && !path.isDirectory()) {
                 throw ArtifactReadException("artifact read error: no such artifact: $spec")
             }
@@ -1251,18 +1258,29 @@ public object JdxService {
         // Slash-normalised before any string math: on Windows the absolute
         // path holds `\` separators, which are `glob:` escape characters —
         // matching against `/` reads identically on both filesystems while
-        // `lastIndexOf('/')` stays meaningful for drive (`C:/…`) and UNC
-        // (`//host/…`) roots alike.
-        val absPath = Path.of(expanded).toAbsolutePath().normalize()
-        val absolute = absPath.toString().replace('\\', '/')
-        val matcher = FileSystems.getDefault().getPathMatcher("glob:$absolute")
-        val firstGlob = absolute.indexOfFirst { it == '*' || it == '?' || it == '[' || it == '{' }
-        val slash = absolute.lastIndexOf('/', firstGlob)
-        val walkRoot = if (slash <= 0) {
-            absPath.root ?: Path.of("/")
-        } else {
-            Path.of(absolute.substring(0, slash))
+        // splitting the static prefix stays meaningful for drive (`C:/…`)
+        // and UNC (`//host/…`) roots alike. Never Path.of the raw spec:
+        // `*?[{` are illegal path chars on Windows (InvalidPathException)
+        // while legal on POSIX — the static prefix splits off with string
+        // math first, and only the glob-free prefix ever becomes a Path.
+        val firstGlob = expanded.indexOfFirst { it == '*' || it == '?' || it == '[' || it == '{' }
+        val sep = maxOf(expanded.lastIndexOf('/', firstGlob), expanded.lastIndexOf('\\', firstGlob))
+        val prefix = if (sep < 0) "." else expanded.substring(0, sep)
+        val rest = if (sep < 0) expanded else expanded.substring(sep + 1)
+        val absPrefix = try {
+            Path.of(prefix).toAbsolutePath().normalize()
+        } catch (e: InvalidPathException) {
+            throw ArtifactReadException("artifact read error: no artifacts match: $spec")
         }
+        val absolute = absPrefix.toString().replace('\\', '/') + "/" + rest.replace('\\', '/')
+        val matcher = try {
+            FileSystems.getDefault().getPathMatcher("glob:$absolute")
+        } catch (e: IllegalArgumentException) {
+            throw ArtifactReadException("artifact read error: no artifacts match: $spec")
+        } catch (e: InvalidPathException) {
+            throw ArtifactReadException("artifact read error: no artifacts match: $spec")
+        }
+        val walkRoot = absPrefix
         if (!Files.isDirectory(walkRoot)) {
             throw ArtifactReadException("artifact read error: no artifacts match: $spec")
         }
@@ -1273,15 +1291,28 @@ public object JdxService {
             // pins that even a loop-reporting filesystem degrades, not throws.
             Files.walk(walkRoot).use { walk ->
                 walk.filter { candidate ->
-                    matcher.matches(candidate) &&
+                    // Re-parse slash-normalised: the walked candidate holds
+                    // the platform separator (`\` on Windows) while the
+                    // pattern reads `/` — compare one spelling.
+                    val slashCandidate = try {
+                        Path.of(candidate.toString().replace('\\', '/'))
+                    } catch (e: InvalidPathException) {
+                        return@filter false
+                    }
+                    matcher.matches(slashCandidate) &&
                         (candidate.isDirectory() || isJarFile(candidate))
                 }.forEach { hits.add(it) }
             }
         } catch (e: java.nio.file.FileSystemLoopException) {
             throw ArtifactReadException("artifact read error: no artifacts match: $spec")
+        } catch (e: InvalidPathException) {
+            throw ArtifactReadException("artifact read error: no artifacts match: $spec")
         }
         if (hits.isEmpty()) throw ArtifactReadException("artifact read error: no artifacts match: $spec")
-        return hits.sorted()
+        // String sort, never Path.compareTo: path ordering is
+        // filesystem-sensitive (Windows orders case-insensitively) while the
+        // agent-facing hit order must read identically everywhere (D-007).
+        return hits.sortedBy { it.toString() }
     }
 
     /**

@@ -12,6 +12,7 @@ import dev.jdx.index.workspace.WorkspaceStore
 import java.io.IOException
 import java.nio.file.Files
 import java.nio.file.Path
+import java.util.Comparator
 import kotlin.io.path.isDirectory
 import kotlin.io.path.isRegularFile
 
@@ -307,7 +308,10 @@ public class CacheService(
             if (!Files.isDirectory(dir)) return DaemonLogSweep()
             Files.list(dir).use { stream ->
                 stream.filter { it.fileName.toString().endsWith(".log") && it.isRegularFile() }
-                    .sorted().toList()
+                    // Sort by name string, never Path.compareTo: path ordering
+                    // is filesystem-sensitive (Windows orders case-insensitively),
+                    // while the report promises deterministic sorted names (D-007).
+                    .sorted(Comparator.comparing { path: Path -> path.fileName.toString() }).toList()
             }
         } catch (e: Exception) {
             return DaemonLogSweep()
@@ -360,14 +364,18 @@ public class CacheService(
         }
     }
 
+    // String sort, never Path.compareTo (see sweepDaemonLogs): path ordering
+    // is filesystem-sensitive while reports promise deterministic order (D-007).
     private fun listFilesRecursively(root: Path): List<Path> =
         Files.walk(root).use { walk ->
-            walk.filter { it.isRegularFile() }.sorted().toList()
+            walk.filter { it.isRegularFile() }
+                .sorted(Comparator.comparing { path: Path -> path.toString() }).toList()
         }
 
     private fun listDirsBottomUp(root: Path): List<Path> =
         Files.walk(root).use { walk ->
-            walk.filter { it.isDirectory() }.sorted(Comparator.reverseOrder()).toList()
+            walk.filter { it.isDirectory() }
+                .sorted(Comparator.comparing { path: Path -> path.toString() }.reversed()).toList()
         }
 
     private fun fileBytes(path: Path): Long =

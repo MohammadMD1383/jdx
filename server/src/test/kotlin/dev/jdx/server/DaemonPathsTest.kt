@@ -47,9 +47,10 @@ class DaemonPathsTest {
 
     @Test
     fun `pid and log files are siblings of the socket`() {
+        // resolveSibling, never string literals: Windows parses /a/b as \a\b.
         val socket = Paths.get("/run/user/1000/jdx/abcdef0123456789-v1.sock")
-        DaemonPaths.pidPath(socket).toString() shouldBe "/run/user/1000/jdx/abcdef0123456789-v1.pid"
-        DaemonPaths.logPath(socket).toString() shouldBe "/run/user/1000/jdx/abcdef0123456789-v1.log"
+        DaemonPaths.pidPath(socket) shouldBe socket.resolveSibling("abcdef0123456789-v1.pid")
+        DaemonPaths.logPath(socket) shouldBe socket.resolveSibling("abcdef0123456789-v1.log")
     }
 
     @Test
@@ -148,7 +149,7 @@ class DaemonPathsTest {
     @Test
     fun `lock file is a sibling of the socket with the version stamp`() {
         val socket = Paths.get("/run/user/1000/jdx/abcdef0123456789-v1.sock")
-        DaemonPaths.lockPath(socket).toString() shouldBe "/run/user/1000/jdx/abcdef0123456789-v1.lock"
+        DaemonPaths.lockPath(socket) shouldBe socket.resolveSibling("abcdef0123456789-v1.lock")
         DaemonPaths.lockFileName("default") shouldBe
             "${DaemonPaths.workspaceHash("default")}-v$RPC_VERSION.lock"
     }

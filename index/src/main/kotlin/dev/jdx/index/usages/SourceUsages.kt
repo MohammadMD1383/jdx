@@ -68,7 +68,11 @@ public object SourceUsages {
                     val lines = runCatching {
                         java.nio.file.Files.readAllLines(path, Charsets.UTF_8)
                     }.getOrNull() ?: return@forEach
-                    val relative = runCatching { root.relativize(path).toString() }.getOrNull() ?: name
+                    // Slash-joined, never toString: Windows renders `\`
+                    // separators, while jdx paths read `/` everywhere else
+                    // (zip entries, class names) — agents get one spelling.
+                    val relative = runCatching { root.relativize(path).joinToString("/") }
+                        .getOrNull() ?: name
                     for (line in mentionsInLines(lines, simpleName)) {
                         out.add(SourceMention(relative, line))
                     }

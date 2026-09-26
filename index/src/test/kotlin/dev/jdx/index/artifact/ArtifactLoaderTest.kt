@@ -103,7 +103,8 @@ class ArtifactLoaderTest {
     fun `missing artifact names itself in the error`() {
         val missing = Path.of("/no/such/jdx-artifact.jar")
         val ex = shouldThrow<ArtifactReadException> { ArtifactLoader.open(missing) }
-        (ex.message?.contains("/no/such/jdx-artifact.jar") ?: false) shouldBe true
+        // Path math, never a string literal: Windows renders backslashes.
+        (ex.message?.contains(missing.toString()) ?: false) shouldBe true
         // No stack trace reaches the caller unasked — the contract is message-only (T-057
         // asserts the same over stdout/stderr once commands exist).
         (ex.message?.contains("at dev.jdx") ?: false).shouldBeFalse()

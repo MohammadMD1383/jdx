@@ -103,7 +103,9 @@ class CacheServiceTest {
         val result = failing.info()
         (result is CacheResult.Failure) shouldBe true
         (result as CacheResult.Failure).exitCode shouldBe 6
-        result.message shouldBe "cannot open the index database (/fake/cache/index/v1.db): disk is gone"
+        // Path math, never a string literal: Windows renders backslashes.
+        val db = Path.of("/fake/cache").resolve("index").resolve("v1.db")
+        result.message shouldBe "cannot open the index database ($db): disk is gone"
     }
 
     // -- gc -------------------------------------------------------------------
