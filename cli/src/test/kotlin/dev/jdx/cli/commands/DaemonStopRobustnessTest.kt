@@ -3,6 +3,7 @@ package dev.jdx.cli.commands
 import dev.jdx.server.DaemonPaths
 import dev.jdx.server.DaemonProbe
 import dev.jdx.server.DaemonServer
+import dev.jdx.testsupport.paths.shortSocketDir
 import io.kotest.matchers.shouldBe
 import io.kotest.matchers.shouldNotBe
 import java.nio.file.Files
@@ -24,8 +25,12 @@ class DaemonStopRobustnessTest {
     @TempDir
     lateinit var tempDir: Path
 
+    // Short socket scope: sun_path caps binds (104 macOS) while @TempDir
+    // reads /var/folders/... there. Lazy — one control per test.
+    private val socketScope: Path by lazy { shortSocketDir("stop") }
+
     private fun control(workspace: String = "stop-ws"): DaemonControl {
-        val socket = DaemonPaths.socketPath(tempDir, workspace)
+        val socket = DaemonPaths.socketPath(socketScope, workspace)
         return DaemonControl(socket, DaemonPaths.pidPath(socket), DaemonPaths.logPath(socket))
     }
 

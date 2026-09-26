@@ -15,6 +15,7 @@ import dev.jdx.server.DaemonPaths
 import dev.jdx.server.DaemonProbe
 import dev.jdx.server.DaemonServer
 import dev.jdx.server.jdxServiceHandler
+import dev.jdx.testsupport.paths.shortSocketDir
 import io.kotest.matchers.shouldBe
 import io.kotest.matchers.shouldNotBe
 import io.kotest.matchers.string.shouldContain
@@ -66,7 +67,11 @@ class DaemonWarmTest {
     private fun fixtureRoots(): JdxService.RootsSpec =
         JdxService.RootsSpec(jarSpecs = listOf(fixtureJar().absolutePath), includeJdk = false)
 
-    private fun socket(): Path = DaemonPaths.socketPathIn(tempDir, "fx")
+    // Short socket scope: sun_path caps binds (104 macOS) while @TempDir
+    // reads /var/folders/... there. Lazy — socket() must stay stable in-test.
+    private val socketScope: Path by lazy { shortSocketDir("warm") }
+
+    private fun socket(): Path = DaemonPaths.socketPathIn(socketScope, "fx")
 
     /** A server running the production dispatch handler over the `fx` workspace. */
     private fun warmServer(store: InMemoryWorkspaceStore = fixtureStore()): DaemonServer {
@@ -141,7 +146,7 @@ class DaemonWarmTest {
                         terminate = { throw DaemonExit(it) },
                         store = InMemoryWorkspaceStore(),
                         getenv = { null },
-                        runtimeDir = tempDir,
+                        runtimeDir = socketScope,
                         printer = { printed.add(it) },
                     )
                     assert(served) { "warm failed for ${request.command} ${request.query} ${request.params}" }
@@ -174,7 +179,7 @@ class DaemonWarmTest {
                     terminate = { throw DaemonExit(it) },
                     store = InMemoryWorkspaceStore(),
                     getenv = { null },
-                    runtimeDir = tempDir,
+                    runtimeDir = socketScope,
                     printer = { printed.add(it) },
                 )
                 fail("warm exit 1 must terminate the caller")
@@ -204,7 +209,7 @@ class DaemonWarmTest {
                 terminate = { throw DaemonExit(it) },
                 store = InMemoryWorkspaceStore(),
                 getenv = { null },
-                runtimeDir = tempDir,
+                runtimeDir = socketScope,
                 printer = printer,
             )
         }
@@ -227,7 +232,7 @@ class DaemonWarmTest {
                 terminate = { throw DaemonExit(it) },
                 store = InMemoryWorkspaceStore(),
                 getenv = { null },
-                runtimeDir = tempDir,
+                runtimeDir = socketScope,
                 roundTrip = { socket, request -> probed = true; DaemonProbe.roundTrip(socket, request) },
                 printer = { fail("warm must not print under --no-daemon") },
             )
@@ -254,7 +259,7 @@ class DaemonWarmTest {
                 val served = DaemonClient.serveWarmIfReady(
                     request = request, flagWorkspace = "fx", roots = WarmRoots(),
                     noDaemon = false, json = false, terminate = { throw DaemonExit(it) },
-                    store = InMemoryWorkspaceStore(), getenv = { null }, runtimeDir = tempDir,
+                    store = InMemoryWorkspaceStore(), getenv = { null }, runtimeDir = socketScope,
                     printer = { printed.add(it) },
                 )
                 assert(served) { "warm text failed for ${request.command} ${request.query}" }
@@ -269,7 +274,7 @@ class DaemonWarmTest {
             val explicit = DaemonClient.serveWarmIfReady(
                 request = request, flagWorkspace = "fx", roots = WarmRoots(jars = listOf("extra.jar")),
                 noDaemon = false, json = true, terminate = { throw DaemonExit(it) },
-                store = InMemoryWorkspaceStore(), getenv = { null }, runtimeDir = tempDir,
+                store = InMemoryWorkspaceStore(), getenv = { null }, runtimeDir = socketScope,
                 roundTrip = { socket, req -> probed = true; DaemonProbe.roundTrip(socket, req) },
                 printer = { fail("explicit roots must stay cold") },
             )
@@ -306,7 +311,7 @@ class DaemonWarmTest {
                         terminate = { throw DaemonExit(it) },
                         store = InMemoryWorkspaceStore(),
                         getenv = { null },
-                        runtimeDir = tempDir,
+                        runtimeDir = socketScope,
                         printer = { printed.add(it) },
                     )
                     assert(served) { "warm text failed for ${request.command} ${request.query}" }
@@ -323,7 +328,7 @@ class DaemonWarmTest {
             val briefServed = DaemonClient.serveWarmIfReady(
                 request = warmRequest(), flagWorkspace = "fx", roots = WarmRoots(),
                 noDaemon = false, json = false, terminate = { throw DaemonExit(it) },
-                store = InMemoryWorkspaceStore(), getenv = { null }, runtimeDir = tempDir,
+                store = InMemoryWorkspaceStore(), getenv = { null }, runtimeDir = socketScope,
                 printer = { briefPrinted.add(it) }, brief = true, warmMaxLines = 2,
             )
             briefServed shouldBe true

@@ -3,6 +3,7 @@ package dev.jdx.server
 import dev.jdx.core.rpc.RPC_VERSION
 import dev.jdx.core.rpc.RpcCommand
 import dev.jdx.core.rpc.RpcRequest
+import dev.jdx.testsupport.paths.shortSocketDir
 import io.kotest.matchers.shouldBe
 import io.kotest.matchers.shouldNotBe
 import io.kotest.matchers.string.shouldContain
@@ -35,8 +36,13 @@ class DaemonServerTest {
     @TempDir
     lateinit var tempDir: Path
 
+    // Socket binds cap sun_path (104 macOS): @TempDir roots read
+    // /var/folders/... there, so sockets live under a short dir. Lazy per
+    // test instance — control() must return the same path every call.
+    private val socketScope: Path by lazy { shortSocketDir("server") }
+
     private fun control(workspace: String = "test-ws", version: Int = RPC_VERSION): DaemonControlPaths {
-        val socket = DaemonPaths.socketPath(tempDir, workspace, version)
+        val socket = DaemonPaths.socketPath(socketScope, workspace, version)
         return DaemonControlPaths(socket, DaemonPaths.pidPath(socket))
     }
 

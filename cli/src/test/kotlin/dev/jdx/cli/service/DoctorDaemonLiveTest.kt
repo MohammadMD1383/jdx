@@ -2,6 +2,7 @@ package dev.jdx.cli.service
 
 import dev.jdx.server.DaemonPaths
 import dev.jdx.server.DaemonServer
+import dev.jdx.testsupport.paths.shortSocketDir
 import io.kotest.matchers.shouldBe
 import io.kotest.matchers.string.shouldContain
 import io.kotest.matchers.string.shouldNotContain
@@ -27,7 +28,9 @@ class DoctorDaemonLiveTest {
     @Test
     fun `a live daemon socket is running and a dead file is stale`() {
         val home = tempDir.resolve("home").also { Files.createDirectories(it) }
-        val runtime = tempDir.resolve("run").also { Files.createDirectories(it) }
+        // Short runtime dir: binds cap sun_path (104 macOS) while @TempDir
+        // reads /var/folders/... there.
+        val runtime = shortSocketDir("doctor-live")
         val socket = DaemonPaths.socketPathIn(runtime, "live-ws")
         val server = DaemonServer(
             workspace = "live-ws",
@@ -58,7 +61,7 @@ class DoctorDaemonLiveTest {
 
     @Test
     fun `after the daemon stops its socket reads stale`() {
-        val runtime = tempDir.resolve("run2").also { Files.createDirectories(it) }
+        val runtime = shortSocketDir("doctor-stale")
         val socket = DaemonPaths.socketPathIn(runtime, "gone-ws")
         val server = DaemonServer(
             workspace = "gone-ws",

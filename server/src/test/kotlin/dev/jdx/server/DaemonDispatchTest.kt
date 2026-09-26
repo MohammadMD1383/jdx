@@ -7,6 +7,7 @@ import dev.jdx.index.service.JdxService
 import dev.jdx.index.service.dispatch
 import dev.jdx.index.workspace.InMemoryWorkspaceStore
 import dev.jdx.index.workspace.WorkspaceDefinition
+import dev.jdx.testsupport.paths.shortSocketDir
 import io.kotest.matchers.shouldBe
 import io.kotest.matchers.shouldNotBe
 import io.kotest.matchers.string.shouldContain
@@ -34,6 +35,10 @@ class DaemonDispatchTest {
     @TempDir
     lateinit var tempDir: Path
 
+    // Short socket scope: sun_path caps binds (104 macOS) while @TempDir
+    // reads /var/folders/... there. Lazy — socket() must stay stable in-test.
+    private val socketScope: Path by lazy { shortSocketDir("dispatch") }
+
     private fun fixtureJar(): File {
         val dir = System.getProperty("jdx.fixturesDir")?.let { File(it) }
             ?: fail("jdx.fixturesDir not set (server build wires it; see server/build.gradle.kts)")
@@ -47,7 +52,7 @@ class DaemonDispatchTest {
 
     /** A server running the production dispatch handler over the `fx` workspace. */
     private fun dispatchServer(store: InMemoryWorkspaceStore = fixtureStore()): DaemonServer {
-        val socket = DaemonPaths.socketPath(tempDir, "fx")
+        val socket = DaemonPaths.socketPath(socketScope, "fx")
         lateinit var server: DaemonServer
         val handler = jdxServiceHandler(
             workspace = "fx",
@@ -71,7 +76,7 @@ class DaemonDispatchTest {
             it.save(WorkspaceDefinition(name = "fx", jars = listOf(fixtureJar().absolutePath), includeJdk = false))
         }
 
-    private fun socket(): Path = DaemonPaths.socketPath(tempDir, "fx")
+    private fun socket(): Path = DaemonPaths.socketPath(socketScope, "fx")
 
     private fun req(command: RpcCommand, query: String = "", vararg params: Pair<String, String>): RpcRequest =
         RpcRequest(command, query, params.toMap())
