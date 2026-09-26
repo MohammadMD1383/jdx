@@ -60,7 +60,16 @@ get an explicit reversal, record it here and in the commit message)
 - **Truth model:** structure from bytecode, flesh (bodies, param names, docs) from
   sources; disagreement warns `SOURCES_VERSION_MISMATCH`, never silently wins.
 - **Read-only:** parse with ASM, never load inspected classes (no static init ever
-  runs). Write only to `~/.cache/jdx` and `~/.config/jdx`.
+  runs). Write only inside the platform dirs (`docs/PROPOSAL.md` §17.1 table).
+- **Per-OS dirs (D-044, issue #44):** cache/config/socket/install defaults per OS —
+  Linux `~/.cache|~/.config|$XDG_RUNTIME_DIR` (honouring `XDG_*`); macOS
+  `~/Library/Caches|~/Library/Application Support|$TMPDIR/jdx-$UID`; Windows
+  `%LOCALAPPDATA%/jdx/cache|%APPDATA%/jdx|%LOCALAPPDATA%/jdx/run` (AF_UNIX,
+  Win10 17063+ floor); install `~/.local/share/jdx` + `~/.local/bin` (same on macOS),
+  `%LOCALAPPDATA%/Programs/jdx` + PATH shim on Windows. Supersedes D-013/D-027; a
+  missing `XDG_RUNTIME_DIR` falls back per table, never `exit 3`. Precedence: CLI flag
+  > `JDX_*` > `XDG_*` > OS default. Migration: move (never merge) the old location on
+  first run, warn if both exist. Full table in `docs/PROPOSAL.md` §17.1.
 - **Output:** text default, `--json` envelope complete (no text-only information).
 - **Exit codes are a public contract** — changing them breaks agents.
 - **Graph queries are live-roots-first:** `usages`/`hierarchy`/`callers`/`calls`/
