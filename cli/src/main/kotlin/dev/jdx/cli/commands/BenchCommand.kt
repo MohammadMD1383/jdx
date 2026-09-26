@@ -204,9 +204,11 @@ class BenchCommand(
  * Finds the newest `minecraft-client.jar` under the fabric-loom cache
  * (`~/.gradle/caches/fabric-loom/<version>/minecraft-client.jar`), or `null`
  * when absent. Never throws — a missed probe reads as "no default jar".
+ * [getenv] is injectable so tests script `HOME`-unset Windows layouts
+ * (`USERPROFILE`) without environment surgery.
  */
-fun defaultMinecraftProbe(): Path? = runCatching {
-    val home = System.getenv("HOME") ?: System.getProperty("user.home")
+fun defaultMinecraftProbe(getenv: (String) -> String? = System::getenv): Path? = runCatching {
+    val home = getenv("HOME") ?: getenv("USERPROFILE") ?: System.getProperty("user.home")
     val loom = Path.of(home, ".gradle", "caches", "fabric-loom")
     if (!Files.isDirectory(loom)) return@runCatching null
     val hits = ArrayList<Path>()

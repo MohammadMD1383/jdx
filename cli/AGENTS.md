@@ -17,7 +17,10 @@ is the CLI surface, pinned by help/parity goldens.)
   plain — the daemon has no TTY); `--json` bytes are untouched by budgets.
 - `bench/BenchRunner` + `render/BenchSheet` — fixed workload, median of iterations,
   advisory targets (never gate). `service/DoctorService` — injectable probes
-  (workspace store, socket health) so tests never touch the real home.
+  (workspace store, socket health) so tests never touch the real home; `javap`
+  probing covers `$JAVA_HOME/bin` and Windows `.exe`/`.cmd`/`.bat` (`osName`
+  seam). `service/UpgradeService` — pure-Java `tar.gz` extraction first
+  (external `tar` is the fallback), `.exe`-aware launcher check.
 - `parity/AdapterParityTest` — the §9 contract: CLI `--json` == MCP == HTTP bytes
   over all 17 read commands + failure branches + a hostile-property case.
 

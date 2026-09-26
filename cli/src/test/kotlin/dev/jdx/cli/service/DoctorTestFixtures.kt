@@ -49,6 +49,8 @@ internal fun fakeEnvironment(
     activeWorkspace: String? = null,
     /** A stub sidecar jar standing in for the D-008 compiler (T-038); false means absent. */
     kotlinSidecarPresent: Boolean = false,
+    /** OS name for `.exe` tool probing; tests inject `"Windows 11"`. */
+    osName: String = System.getProperty("os.name", ""),
 ): DoctorEnvironment {
     val home = root.resolve("home").also { Files.createDirectories(it) }
     val javaHome = root.resolve("jdk").also { Files.createDirectories(it) }
@@ -105,6 +107,7 @@ internal fun fakeEnvironment(
         runtimeDir = runtimeDir,
         workingDir = cwd,
         workspaceEnv = workspaceEnv,
+        osName = osName,
         runtime = RuntimeInfo(
             version = "26.0.2.1-test",
             jrtReachable = jrtReachable,

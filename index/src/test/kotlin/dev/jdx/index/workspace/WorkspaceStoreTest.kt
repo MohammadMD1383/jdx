@@ -111,4 +111,21 @@ class WorkspaceStoreTest {
         store.delete("mc") shouldBe true
         store.activeName() shouldBe "mc"
     }
+
+    @Test
+    fun `the active file is LF-terminated, never CRLF`(@TempDir config: Path) {
+        // Pinned byte-exact: `activeName` must read identically on Windows and
+        // Unix checkouts, so the writer never uses `lineSeparator()`.
+        val store = FileWorkspaceStore(config)
+        store.setActive("mc")
+        val bytes = Files.readAllBytes(config.resolve("active-workspace"))
+        bytes shouldBe "mc\n".toByteArray(Charsets.UTF_8)
+    }
+
+    @Test
+    fun `a CRLF active file still selects the workspace`(@TempDir config: Path) {
+        Files.createDirectories(config)
+        Files.write(config.resolve("active-workspace"), "mc\r\n".toByteArray(Charsets.UTF_8))
+        FileWorkspaceStore(config).activeName() shouldBe "mc"
+    }
 }

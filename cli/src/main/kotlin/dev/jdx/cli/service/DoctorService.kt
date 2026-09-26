@@ -94,6 +94,8 @@ data class DoctorEnvironment(
     val processRunner: ProcessRunner,
     /** `$JDX_WORKSPACE` when set — the named-workspace override (T-015). Null means unset. */
     val workspaceEnv: String? = null,
+    /** OS name for `.exe` tool probing (tests inject `"Windows 11"`). */
+    val osName: String = System.getProperty("os.name", ""),
 ) {
     companion object {
         /**
@@ -179,9 +181,18 @@ class DoctorService(
 
     private fun javapCheck(): DoctorCheck {
         val environment = environment
-        val candidates = listOf(environment.javaHome.resolve("bin/javap")) +
-            environment.pathDirs.map { it.resolve("javap") }
-        val executable = candidates.firstOrNull { Files.isRegularFile(it) && Files.isExecutable(it) }
+        // `$JAVA_HOME/bin` participates like `java.home/bin` (a JRE-bundled
+        // launcher's `java.home` may lack tools while `JAVA_HOME` names the
+        // full JDK); on Windows each dir probes `javap.exe`/`.cmd`/`.bat`.
+        val baseDirs = listOfNotNull(
+            environment.javaHomeEnv?.resolve("bin"),
+            environment.javaHome.resolve("bin"),
+        ) + environment.pathDirs
+        val executable = baseDirs.firstNotNullOfOrNull { dir ->
+            toolFileNames("javap", environment.osName)
+                .map { dir.resolve(it) }
+                .firstOrNull { Files.isRegularFile(it) && Files.isExecutable(it) }
+        }
             ?: return check(
                 "javap",
                 DoctorStatus.FAIL,
@@ -377,6 +388,15 @@ class DoctorService(
         const val MINIMUM_JAVAP_MAJOR: Int = 21
     }
 }
+
+/** Candidate file names for a JDK tool probe (`javap`): `PATHEXT` shims on
+ * Windows, the bare name elsewhere. Pure — unit-tested. */
+internal fun toolFileNames(base: String, osName: String): List<String> =
+    if (osName.lowercase().contains("win")) {
+        listOf("$base.exe", "$base.cmd", "$base.bat", base)
+    } else {
+        listOf(base)
+    }
 
 /** D-015 mapping for doctor: 0 when no check failed, 6 on any FAIL. Pure — tested directly. */
 internal fun exitCodeFor(report: DoctorReport): Int = if (report.hasFailures) 6 else 0

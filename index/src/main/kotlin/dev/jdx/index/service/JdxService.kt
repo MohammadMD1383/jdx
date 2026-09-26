@@ -1202,7 +1202,12 @@ public object JdxService {
             val seen = mutableSetOf<String>()
             for (jarSpec in spec.jarSpecs) {
                 for (path in expandJarSpec(jarSpec)) {
-                    if (!seen.add(path.toAbsolutePath().normalize().toString())) continue
+                    // `toRealPath` canonicalises case and symlinks (Windows
+                    // `C:\Foo` vs `c:\foo` index once, not twice); missing or
+                    // unreadable paths fall back to the absolute spelling.
+                    val key = runCatching { path.toRealPath().toString() }
+                        .getOrElse { path.toAbsolutePath().normalize().toString() }
+                    if (!seen.add(key)) continue
                     opened.add(OpenRoot(ArtifactLoader.open(path)))
                 }
             }
@@ -1219,48 +1224,83 @@ public object JdxService {
 
     /**
      * Expands one `--jars` value: a plain jar/dir path, or a glob (`*`, `?`,
-     * `[`, `{`). A leading `~` expands to the home directory. An empty glob
+     * `[`, `{`). A leading `~` expands to the home directory (`~/` and
+     * `~\` alike, so Windows shells pass through). An empty glob
      * match is an artifact error, not silence — the agent asked for something
      * that names nothing.
      *
      * Public (not internal) so `jdx bench` (T-050) samples the same roots the
      * queries read — one expansion rule, no drift between the cases.
      */
-    public fun expandJarSpec(spec: String): List<Path> {
-        val expanded = if (spec.startsWith("~/") || spec == "~") {
-            System.getProperty("user.home") + spec.substring(1)
-        } else {
-            spec
-        }
-        if (!expanded.any { it == '*' || it == '?' || it == '[' || it == '{' }) {
+    public fun expandJarSpec(spec: String): List<Path> =
+        expandJarSpec(spec, System.getProperty("user.home", ""))
+
+    /**
+     * [expandJarSpec] with the home directory injected (tests script
+     * `~\`-on-Windows layouts without environment surgery).
+     */
+    internal fun expandJarSpec(spec: String, userHome: String): List<Path> {
+        val expanded = expandUser(spec, userHome)
+        if (!hasGlobChars(expanded)) {
             val path = Path.of(expanded)
             if (!path.isRegularFile() && !path.isDirectory()) {
                 throw ArtifactReadException("artifact read error: no such artifact: $spec")
             }
             return listOf(path)
         }
-        val absolute = Path.of(expanded).toAbsolutePath().normalize().toString()
+        // Slash-normalised before any string math: on Windows the absolute
+        // path holds `\` separators, which are `glob:` escape characters —
+        // matching against `/` reads identically on both filesystems while
+        // `lastIndexOf('/')` stays meaningful for drive (`C:/…`) and UNC
+        // (`//host/…`) roots alike.
+        val absPath = Path.of(expanded).toAbsolutePath().normalize()
+        val absolute = absPath.toString().replace('\\', '/')
         val matcher = FileSystems.getDefault().getPathMatcher("glob:$absolute")
         val firstGlob = absolute.indexOfFirst { it == '*' || it == '?' || it == '[' || it == '{' }
         val slash = absolute.lastIndexOf('/', firstGlob)
-        val walkRoot = if (slash <= 0) Path.of("/") else Path.of(absolute.substring(0, slash))
+        val walkRoot = if (slash <= 0) {
+            absPath.root ?: Path.of("/")
+        } else {
+            Path.of(absolute.substring(0, slash))
+        }
         if (!Files.isDirectory(walkRoot)) {
             throw ArtifactReadException("artifact read error: no artifacts match: $spec")
         }
         val hits = mutableListOf<Path>()
-        Files.walk(walkRoot).use { walk ->
-            walk.filter { candidate ->
-                matcher.matches(candidate) &&
-                    (candidate.isDirectory() || isJarFile(candidate))
-            }.forEach { hits.add(it) }
+        try {
+            // No FOLLOW_LINKS: symlinked dirs read as entries, never as
+            // descents — a symlink loop cannot hang the walk. The catch below
+            // pins that even a loop-reporting filesystem degrades, not throws.
+            Files.walk(walkRoot).use { walk ->
+                walk.filter { candidate ->
+                    matcher.matches(candidate) &&
+                        (candidate.isDirectory() || isJarFile(candidate))
+                }.forEach { hits.add(it) }
+            }
+        } catch (e: java.nio.file.FileSystemLoopException) {
+            throw ArtifactReadException("artifact read error: no artifacts match: $spec")
         }
         if (hits.isEmpty()) throw ArtifactReadException("artifact read error: no artifacts match: $spec")
         return hits.sorted()
     }
 
+    /**
+     * `~`/`~/…`/`~\…` expand to [userHome]; everything else is untouched.
+     * Pure — unit-tested, including the `~\` Windows spelling.
+     */
+    internal fun expandUser(spec: String, userHome: String): String =
+        if (spec == "~" || spec.startsWith("~/") || spec.startsWith("~\\")) {
+            userHome + spec.substring(1)
+        } else {
+            spec
+        }
+
+    private fun hasGlobChars(spec: String): Boolean =
+        spec.any { it == '*' || it == '?' || it == '[' || it == '{' }
+
     private fun isJarFile(path: Path): Boolean {
         if (!path.isRegularFile()) return false
-        val name = path.fileName.toString()
+        val name = path.fileName.toString().lowercase()
         return name.endsWith(".jar") || name.endsWith(".zip")
     }
 
@@ -2419,7 +2459,7 @@ public object JdxService {
                 val wanted = if (memberName != null && memberName != "<init>") memberName else declaring.simpleName
                 val seenDirs = LinkedHashSet<String>()
                 for (spec in roots.srcSpecs) {
-                    val dir = java.nio.file.Paths.get(spec)
+                    val dir = java.nio.file.Paths.get(expandUser(spec, System.getProperty("user.home", "")))
                     if (!java.nio.file.Files.isDirectory(dir)) {
                         return failure(5, rawRef, "artifact read error: source dir '$spec' does not exist or is not a directory")
                     }

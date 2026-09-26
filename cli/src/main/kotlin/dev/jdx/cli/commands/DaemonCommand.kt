@@ -59,11 +59,35 @@ data class DaemonEnv(
             val javaHome = System.getProperty("java.home")
             return DaemonEnv(
                 runtimeDir = DaemonPaths.systemRuntimeDir(),
-                javaExe = "$javaHome${File.separator}bin${File.separator}java",
+                javaExe = resolveJavaExe(javaHome),
                 classpath = System.getProperty("java.class.path", ""),
             )
         }
     }
+}
+
+/**
+ * The `java` launcher under [javaHome]/bin: `java.exe` first on Windows
+ * (the bare name has no executable bit there), the bare name elsewhere —
+ * falling back to whichever name exists, then the platform default. Pure
+ * apart from the existence probes; tests point it at fake homes.
+ */
+internal fun resolveJavaExe(
+    javaHome: String,
+    osName: String = System.getProperty("os.name", ""),
+): String {
+    val candidates = if (osName.lowercase().contains("win")) {
+        listOf("java.exe", "java.cmd", "java.bat", "java")
+    } else {
+        listOf("java")
+    }
+    for (name in candidates) {
+        val candidate = "$javaHome${File.separator}bin${File.separator}$name"
+        if (runCatching { Files.isRegularFile(Path.of(candidate)) }.getOrDefault(false)) {
+            return candidate
+        }
+    }
+    return "$javaHome${File.separator}bin${File.separator}java"
 }
 
 /**

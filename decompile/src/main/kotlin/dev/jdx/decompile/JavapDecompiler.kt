@@ -25,22 +25,33 @@ public data class JavapEnvironment(
     /** `PATH` entries searched last. */
     public val pathDirs: List<String> =
         (System.getenv("PATH") ?: "").split(File.pathSeparatorChar).filter { it.isNotEmpty() },
+    /** OS name for executable-suffix probing (tests inject `"Windows 11"`); never read twice. */
+    public val osName: String = System.getProperty("os.name", ""),
 ) {
     /**
      * The `javap` executable to run, or `null` when none resolves. An
      * explicit override is returned as-is (a bogus path fails at spawn with
      * the path named, which is exactly the fault the tests pin); every other
-     * candidate must be a runnable file. Never throws.
+     * candidate must be a runnable file. On Windows each directory is probed
+     * for `javap.exe`/`.cmd`/`.bat` first (a bare `javap` has no executable
+     * bit there), falling back to the extensionless name. Never throws.
      */
     public fun resolveExecutable(): String? {
         explicitExecutable?.let { return it }
-        val homeCandidates = listOfNotNull(javaHomeEnv, javaHome)
-            .map { Path.of(it, "bin", "javap").toString() }
-        for (candidate in homeCandidates) {
-            if (isRunnable(candidate)) return candidate
+        val homeBases = listOfNotNull(javaHomeEnv, javaHome)
+            .map { Path.of(it, "bin").toString() }
+        for (base in homeBases) {
+            firstRunnable(base)?.let { return it }
         }
         for (dir in pathDirs) {
-            val candidate = Path.of(dir, "javap").toString()
+            firstRunnable(dir)?.let { return it }
+        }
+        return null
+    }
+
+    private fun firstRunnable(dir: String): String? {
+        for (name in toolNames("javap", osName)) {
+            val candidate = Path.of(dir, name).toString()
             if (isRunnable(candidate)) return candidate
         }
         return null
@@ -56,6 +67,18 @@ private fun isRunnable(path: String): Boolean = runCatching {
     val file = Path.of(path)
     Files.isRegularFile(file) && Files.isExecutable(file)
 }.getOrDefault(false)
+
+/**
+ * Candidate file names for a JDK tool: on Windows the `PATHEXT`
+ * executables (`.exe` first, then the script shims) before the bare name,
+ * elsewhere the bare name alone. Pure — unit-tested.
+ */
+internal fun toolNames(base: String, osName: String): List<String> =
+    if (osName.lowercase().contains("win")) {
+        listOf("$base.exe", "$base.cmd", "$base.bat", base)
+    } else {
+        listOf(base)
+    }
 
 /**
  * The raw-opcode engine (PROPOSAL.md §11.2, T-027): the IDE's *Show Bytecode*

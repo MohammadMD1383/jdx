@@ -18,8 +18,12 @@ behaviour lives here** (adapters call in, never the reverse). `explicitApi()` is
 - `store/` — `IndexStore` interface + `sqlite/SqliteIndexStore` (WAL, single global
   `~/.cache/jdx/index/v1.db`, artifact-scoped rows). No SQL outside the impl package.
 - `workspace/` — TOML workspaces, classpath-order shadowing, `DUPLICATE_FQN`,
-  `ProjectDiscovery` (walk up for build files; **never run Gradle/Maven**),
+  `ProjectDiscovery` (walk up for build files; **never run Gradle/Maven**;
+  nesting checks use `Path.startsWith`, never a `"$candidate/"` prefix),
   `WorkspaceResolver` (explicit `--jars` merge in front of stored roots).
+  `--jars` expansion (`JdxService.expandJarSpec`): `~`/`~\` home, slash-normalised
+  glob roots (drive/UNC-safe), case-insensitive `.jar`/`.zip`, `toRealPath`
+  dedupe, symlink-loop-safe walk; the `active-workspace` file is LF-pinned.
 - `maven/` — `MavenResolver` (local caches first) + `MavenFetch` (opt-in `--fetch`,
   checksum-verified into `~/.cache/jdx/m2/`); `--repo` mirrors tried before Central.
 - `kotlin/` — `KotlinMetadata` (never-throws `@Metadata` decode), `KotlinMembers`
