@@ -1,5 +1,6 @@
 package dev.jdx.decompile
 
+import dev.jdx.core.paths.JdxPaths
 import java.nio.file.Files
 import java.nio.file.Path
 import java.nio.file.StandardCopyOption
@@ -62,12 +63,17 @@ public data class DecompileCache(public val dir: Path) {
 
     public companion object {
         /**
-         * The production cache: `~/.cache/jdx/decompile` (the literal
-         * `~/.cache/jdx` root per D-027 — no `XDG_*` fallback, mirroring the
-         * index and auto-discovery caches).
+         * The production cache: `<cache-dir>/decompile` (per-OS cache root,
+         * D-044 — honouring `JDX_CACHE_DIR` / `XDG_CACHE_HOME`).
          */
-        public fun system(): DecompileCache =
-            DecompileCache(Path.of(System.getProperty("user.home"), ".cache", "jdx", "decompile"))
+        public fun system(cacheRoot: Path? = null): DecompileCache {
+            val root = cacheRoot ?: runCatching {
+                val home = Path.of(System.getProperty("user.home"))
+                val os = JdxPaths.detectOs(System.getProperty("os.name", ""))
+                JdxPaths.cacheRoot(home, os, System.getenv())
+            }.getOrDefault(Path.of(System.getProperty("user.home"), ".cache", "jdx"))
+            return DecompileCache(root.resolve("decompile"))
+        }
 
         private fun safeSegment(raw: String): String {
             val mapped = raw.map { if (it.isLetterOrDigit() || it == '.' || it == '-') it else '_' }

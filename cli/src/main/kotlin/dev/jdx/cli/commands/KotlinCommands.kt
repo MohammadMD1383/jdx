@@ -23,7 +23,7 @@ import kotlin.system.exitProcess
  *
  * `install` downloads the side-loaded compiler set (`kotlin-compiler-embeddable`
  * plus its stdlib/script/reflect/daemon/coroutines/annotations runtimes, at
- * pinned versions with SHA-1 verification) into `~/.cache/jdx/kotlin`, so
+ * pinned versions with SHA-1 verification) into `<cache-dir>/kotlin`, so
  * `body`/`source`/`doc` can serve `.kt` member bodies and KDoc. Thin by rule
  * (D-004): the artifact table and download policy live in
  * `index/.../kotlin/KotlinSidecarFetch.kt`; here is flag parsing, rendering,
@@ -105,7 +105,7 @@ class KotlinInstallCommand(
     override fun help(context: Context): String =
         "Download and verify the Kotlin PSI sidecar set " +
             "(kotlin-compiler-embeddable plus its runtime jars, at pinned versions " +
-            "with SHA-1 verification) into ~/.cache/jdx/kotlin. Jars already present " +
+            "with SHA-1 verification) into <cache-dir>/kotlin. Jars already present " +
             "are skipped without network; re-run resumes after a failure. " +
             "Exits 5 when a download, checksum or write fails."
 
@@ -177,7 +177,7 @@ class KotlinInstallCommand(
 /** Renders the install outcome: file names only, never absolute paths (AGENTS.md). */
 internal fun renderInstallText(installed: List<String>, alreadyPresent: List<String>): String = buildString {
     val total = installed.size + alreadyPresent.size
-    appendLine("kotlin sidecar installed ($total jar(s) in ~/.cache/jdx/kotlin)")
+    appendLine("kotlin sidecar installed ($total jar(s) in <cache-dir>/kotlin)")
     for (name in installed) appendLine("  installed: $name")
     for (name in alreadyPresent) appendLine("  present: $name")
     if (installed.isEmpty()) append("  already complete — nothing to download")

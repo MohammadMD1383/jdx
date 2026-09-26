@@ -286,7 +286,7 @@ class DocServiceTest {
             DocOptions(kotlinUserHome = tempDir),
         )
         outcome.exitCode shouldBe 1
-        textOf(outcome) shouldContain "kotlin-compiler-embeddable-2.4.20.jar not installed under ~/.cache/jdx/kotlin"
+        textOf(outcome) shouldContain "kotlin-compiler-embeddable-2.4.20.jar not installed under <cache-dir>/kotlin"
     }
 
     @Test
@@ -503,7 +503,7 @@ class DocServiceTest {
             DocOptions(kotlinUserHome = tempDir),
         )
         outcome.exitCode shouldBe 1
-        textOf(outcome) shouldContain "kotlin-compiler-embeddable-2.4.20.jar not installed under ~/.cache/jdx/kotlin"
+        textOf(outcome) shouldContain "kotlin-compiler-embeddable-2.4.20.jar not installed under <cache-dir>/kotlin"
     }
 
     @Test

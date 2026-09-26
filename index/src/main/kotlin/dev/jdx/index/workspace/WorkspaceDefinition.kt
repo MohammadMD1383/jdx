@@ -9,7 +9,7 @@ package dev.jdx.index.workspace
  * `--jars` values always merge *in front of* these roots (PROPOSAL.md §13), so a flag
  * beats the workspace for the same class.
  *
- * Persisted as TOML in `~/.config/jdx/workspaces/<name>.toml` (see [WorkspaceToml]);
+ * Persisted as TOML in `<config-dir>/workspaces/<name>.toml` (see [WorkspaceToml]);
  * read and written only through [WorkspaceStore]. Produced by `jdx ws create`, consumed
  * by `jdx -w <name>` / `JDX_WORKSPACE` / `jdx ws use` via [WorkspaceResolver].
  *

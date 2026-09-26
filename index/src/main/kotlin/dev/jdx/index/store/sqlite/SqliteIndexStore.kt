@@ -15,6 +15,7 @@ import dev.jdx.core.model.ReferenceKind
 import dev.jdx.core.model.TypeKind
 import dev.jdx.core.model.TypeName
 import dev.jdx.core.model.typeNameFromBinaryName
+import dev.jdx.index.cache.CacheService
 import dev.jdx.index.store.ClassHit
 import dev.jdx.index.store.IndexStore
 import dev.jdx.index.store.NewArtifact
@@ -97,9 +98,9 @@ public class SqliteIndexStore private constructor(
             return store
         }
 
-        /** The shared database path (D-013): `~/.cache/jdx/index/v1.db`. */
+        /** The shared database path (D-044): `<cache-dir>/index/v1.db`. */
         public fun defaultDbFile(): Path =
-            Path.of(System.getProperty("user.home"), ".cache", "jdx", "index", "v1.db")
+            CacheService.defaultCacheRoot().resolve("index/v1.db")
     }
 
     private fun configure() {

@@ -273,7 +273,7 @@ class KotlinSourcesServiceTest {
         )
         outcome.exitCode shouldBe 1
         val text = textOf(outcome)
-        text shouldContain "kotlin-compiler-embeddable-2.4.20.jar not installed under ~/.cache/jdx/kotlin"
+        text shouldContain "kotlin-compiler-embeddable-2.4.20.jar not installed under <cache-dir>/kotlin"
         text shouldNotContain home.toString()
     }
 }

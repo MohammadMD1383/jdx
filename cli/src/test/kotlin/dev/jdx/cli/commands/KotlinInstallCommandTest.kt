@@ -54,7 +54,7 @@ class KotlinInstallCommandTest {
         output shouldContain "installed: a.jar"
         output shouldContain "installed: b.jar"
         output shouldContain "present: c.jar"
-        output shouldContain "~/.cache/jdx/kotlin"
+        output shouldContain "<cache-dir>/kotlin"
     }
 
     @Test

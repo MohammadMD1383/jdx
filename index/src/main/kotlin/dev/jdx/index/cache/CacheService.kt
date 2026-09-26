@@ -1,5 +1,7 @@
 package dev.jdx.index.cache
 
+import dev.jdx.core.paths.JdxOs
+import dev.jdx.core.paths.JdxPaths
 import dev.jdx.index.service.JdxService
 import dev.jdx.index.store.IndexStore
 import dev.jdx.index.store.StoredArtifact
@@ -16,7 +18,7 @@ import kotlin.io.path.isRegularFile
 /**
  * The behaviour behind `jdx cache info|gc|clear` (T-018, PROPOSAL.md §7.4 and §10.2).
  *
- * The cache root (`~/.cache/jdx`, D-013) holds the index database
+ * The cache root (per-OS default in `docs/PROPOSAL.md` §17.1, D-044) holds the index database
  * (`index/v1.db*`) and the derived project cache (`auto/`, T-016) — everything
  * in it is regenerable, which is what makes `clear` safe. This service owns the
  * policy (what counts as referenced, what `clear` removes); the CLI adapter
@@ -43,7 +45,7 @@ import kotlin.io.path.isRegularFile
  * stay in the JSON payload only.
  */
 public class CacheService(
-    /** The cache root (production: `~/.cache/jdx`). */
+    /** The cache root (production: per-OS default, `docs/PROPOSAL.md` §17.1). */
     public val cacheRoot: Path,
     /** Named workspaces consulted by `gc`; injectable so tests avoid the real home. */
     public val workspaceStore: WorkspaceStore = FileWorkspaceStore.system(),
@@ -62,7 +64,7 @@ public class CacheService(
      */
     public val isDbPresent: () -> Boolean = { Files.isRegularFile(cacheRoot.resolve("index/v1.db")) },
     /**
-     * Daemon socket directory (`$XDG_RUNTIME_DIR/jdx`, T-041) whose orphan
+     * Daemon socket directory (per-OS runtime dir, `docs/PROPOSAL.md` §17.1) whose orphan
      * `.log` files `gc` sweeps (T-085). `null` (the default) skips the sweep —
      * today's behaviour; production wires the real directory in the CLI
      * adapter, which already depends on `:server`.
@@ -83,12 +85,27 @@ public class CacheService(
 
     public companion object {
         /**
-         * The production service: [cacheRoot] defaults to `~/.cache/jdx` off
-         * this process's home (mirroring `doctor`'s literal roots, D-027).
+         * The production service: [cacheRoot] defaults to the per-OS cache root
+         * (`docs/PROPOSAL.md` §17.1, D-044) off this process's home, honouring
+         * `--cache-dir` (explicit) / `JDX_CACHE_DIR` / `XDG_CACHE_HOME`.
+         * Migrates the legacy dot-dir once (move, never merge).
          */
         public fun system(cacheRoot: Path? = null): CacheService {
-            val root = cacheRoot ?: Path.of(System.getProperty("user.home"), ".cache", "jdx")
+            val root = cacheRoot ?: defaultCacheRoot()
+            if (cacheRoot == null) {
+                runCatching {
+                    val home = Path.of(System.getProperty("user.home"))
+                    PlatformMigration.migrateOnce(JdxPaths.legacyCacheRoot(home), root, "cache")
+                }
+            }
             return CacheService(root)
+        }
+
+        /** The resolved per-OS cache root for this process (explicit override wins). */
+        public fun defaultCacheRoot(explicit: Path? = null): Path {
+            val home = Path.of(System.getProperty("user.home"))
+            val os: JdxOs = JdxPaths.detectOs(System.getProperty("os.name", ""))
+            return JdxPaths.cacheRoot(home, os, System.getenv(), explicit)
         }
     }
 
@@ -273,8 +290,8 @@ public class CacheService(
     }
 
     /**
-     * Orphan daemon `.log` sweep (T-085, D-066): the `$XDG_RUNTIME_DIR/jdx`
-     * directory collects one `.log` sibling per spawned daemon, and neither
+     * Orphan daemon `.log` sweep (T-085, D-066): the runtime socket directory
+     * collects one `.log` sibling per spawned daemon, and neither
      * idle shutdown nor `daemon stop` removes them. `gc` owns them now: a log
      * is orphaned when its sibling `.sock` is absent or no daemon answers
      * there; logs of live daemons are kept as running evidence.

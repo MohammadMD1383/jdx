@@ -109,7 +109,7 @@ class HierarchyCommand(
         "--coord",
         help = "Maven coordinate root group:artifact:version (repeatable). Resolved from " +
             "~/.gradle/caches and ~/.m2 first; with --fetch, downloaded from Maven repositories " +
-            "into ~/.cache/jdx/m2 with checksum verification. Merges in front of the workspace.",
+            "into <cache-dir>/m2 with checksum verification. Merges in front of the workspace.",
     ).multiple()
 
     private val repo by option(
@@ -279,7 +279,7 @@ class ImplementorsCommand(
         "--coord",
         help = "Maven coordinate root group:artifact:version (repeatable). Resolved from " +
             "~/.gradle/caches and ~/.m2 first; with --fetch, downloaded from Maven repositories " +
-            "into ~/.cache/jdx/m2 with checksum verification. Merges in front of the workspace.",
+            "into <cache-dir>/m2 with checksum verification. Merges in front of the workspace.",
     ).multiple()
 
     private val repo by option(

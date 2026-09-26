@@ -284,9 +284,9 @@ internal object ReadCommandSupport {
         )
     }
 
-    /** Default `~/.cache/jdx/auto` off the process home. */
+    /** Default `<cache-dir>/auto` off the per-OS cache root (D-044). */
     internal fun defaultAutoCacheBase(): Path =
-        Paths.get(System.getProperty("user.home")).resolve(".cache/jdx/auto")
+        dev.jdx.index.cache.CacheService.defaultCacheRoot().resolve("auto")
 
     /** Default `~/.gradle/caches/modules-2/files-2.1`, or null when the property is absent. */
     internal fun defaultGradleFilesRoot(): Path? = runCatching {

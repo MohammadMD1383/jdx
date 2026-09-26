@@ -1,5 +1,7 @@
 package dev.jdx.index.workspace
 
+import dev.jdx.core.paths.JdxPaths
+import dev.jdx.index.cache.PlatformMigration
 import java.io.IOException
 import java.nio.file.Files
 import java.nio.file.Path
@@ -7,7 +9,7 @@ import java.nio.file.Path
 /**
  * Persistence for [WorkspaceDefinition]s (T-015).
  *
- * Layout under [configDir] (production: `~/.config/jdx`, D-027 — no XDG fallback):
+ * Layout under [configDir] (production: per-OS config default, D-044):
  * `workspaces/<name>.toml` per workspace plus an `active-workspace` file holding the single
  * name set by `jdx ws use` (absent or blank means none). The interface exists so CLI
  * commands stay testable without touching the real home directory: tier-1 tests inject the
@@ -143,9 +145,21 @@ public class FileWorkspaceStore(public val configDir: Path) : WorkspaceStore {
         /** File holding the `jdx ws use` selection (one name, trailing newline). */
         public const val ACTIVE_FILE: String = "active-workspace"
 
-        /** The production store: `~/.config/jdx` off the given home (default: this process's). */
-        public fun system(home: Path = Path.of(System.getProperty("user.home"))): FileWorkspaceStore =
-            FileWorkspaceStore(home.resolve(".config/jdx"))
+        /** The production store: per-OS config root off the given home (D-044). */
+        public fun system(home: Path = Path.of(System.getProperty("user.home"))): FileWorkspaceStore {
+            val os = JdxPaths.detectOs(System.getProperty("os.name", ""))
+            val resolved = JdxPaths.configRoot(home, os, System.getenv())
+            runCatching {
+                PlatformMigration.migrateOnce(JdxPaths.legacyConfigRoot(home), resolved, "config")
+            }
+            return FileWorkspaceStore(resolved)
+        }
+
+        /** The resolved per-OS config root for this process (env overrides win). */
+        public fun defaultConfigDir(home: Path = Path.of(System.getProperty("user.home"))): Path {
+            val os = JdxPaths.detectOs(System.getProperty("os.name", ""))
+            return JdxPaths.configRoot(home, os, System.getenv())
+        }
     }
 }
 

@@ -9,6 +9,7 @@ import com.github.ajalt.clikt.parameters.options.option
 import dev.jdx.cli.effectiveJson
 import dev.jdx.cli.render.JdxJson
 import dev.jdx.cli.render.envelopeJson
+import dev.jdx.core.paths.JdxPaths
 import dev.jdx.index.cache.CacheInfo
 import dev.jdx.index.cache.CacheResult
 import dev.jdx.index.cache.CacheService
@@ -71,9 +72,12 @@ fun testCacheGroup(
 /** Thrown by [testCacheGroup]'s terminator instead of killing the test JVM (L-026). */
 class CacheExit(val code: Int) : RuntimeException()
 
-/** The production cache root, mirroring `doctor`'s literal `~/.cache/jdx` (D-027). */
-internal fun defaultCacheRoot(): Path =
-    Path.of(System.getProperty("user.home"), ".cache", "jdx")
+/** The production cache root (per-OS default, D-044; `--cache-dir` overrides). */
+internal fun defaultCacheRoot(): Path {
+    val home = Path.of(System.getProperty("user.home"))
+    val os = JdxPaths.detectOs(System.getProperty("os.name", ""))
+    return JdxPaths.cacheRoot(home, os, System.getenv())
+}
 
 @Serializable
 private data class CacheInfoPayload(
@@ -139,7 +143,7 @@ class CacheInfoCommand(
 
     private val cacheDir by option(
         "--cache-dir",
-        help = "Cache root to report (default ~/.cache/jdx).",
+        help = "Cache root to report (default per-OS cache dir, PROPOSAL.md §17.1).",
     ).default(defaultCacheRoot().toString())
 
     private val json by option(
@@ -198,7 +202,7 @@ class CacheGcCommand(
 
     private val cacheDir by option(
         "--cache-dir",
-        help = "Cache root to collect (default ~/.cache/jdx).",
+        help = "Cache root to collect (default per-OS cache dir, PROPOSAL.md §17.1).",
     ).default(defaultCacheRoot().toString())
 
     private val dryRun by option(
@@ -253,7 +257,7 @@ class CacheClearCommand(
 
     private val cacheDir by option(
         "--cache-dir",
-        help = "Cache root to wipe (default ~/.cache/jdx).",
+        help = "Cache root to wipe (default per-OS cache dir, PROPOSAL.md §17.1).",
     ).default(defaultCacheRoot().toString())
 
     private val json by option(

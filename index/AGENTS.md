@@ -16,7 +16,7 @@ behaviour lives here** (adapters call in, never the reverse). `explicitApi()` is
 - `refs/ReferenceExtractor` — bytecode → reference edges (`call`/`read`/`write`/
   `ref`/`new`/`throw`/`annotation`); no line numbers on bytecode edges by design.
 - `store/` — `IndexStore` interface + `sqlite/SqliteIndexStore` (WAL, single global
-  `~/.cache/jdx/index/v1.db`, artifact-scoped rows). No SQL outside the impl package.
+  `<cache-dir>/index/v1.db`, artifact-scoped rows). No SQL outside the impl package.
 - `workspace/` — TOML workspaces, classpath-order shadowing, `DUPLICATE_FQN`,
   `ProjectDiscovery` (walk up for build files; **never run Gradle/Maven**;
   nesting checks use `Path.startsWith`, never a `"$candidate/"` prefix),
@@ -25,13 +25,14 @@ behaviour lives here** (adapters call in, never the reverse). `explicitApi()` is
   glob roots (drive/UNC-safe), case-insensitive `.jar`/`.zip`, `toRealPath`
   dedupe, symlink-loop-safe walk; the `active-workspace` file is LF-pinned.
 - `maven/` — `MavenResolver` (local caches first) + `MavenFetch` (opt-in `--fetch`,
-  checksum-verified into `~/.cache/jdx/m2/`); `--repo` mirrors tried before Central.
+  checksum-verified into `<cache-dir>/m2/`); `--repo` mirrors tried before Central.
 - `kotlin/` — `KotlinMetadata` (never-throws `@Metadata` decode), `KotlinMembers`
   (suspend/`@JvmName`/`internal` repair, property folding, default-arg `= ...`),
   `KotlinSidecarFetch` (7-artifact table, SHA-1, skip-present/resume).
 - `usages/SourceUsages` — textual whole-word mentions (`ref` kind, file:line).
 - `cache/CacheService` — `info`/`gc`/`clear`; JDK rows kept while any workspace
   includes the JDK; orphan daemon `.log`s swept when no daemon answers.
+  `cache/PlatformMigration` — one-shot legacy dot-dir → per-OS move (never merge).
 
 ## Rules
 

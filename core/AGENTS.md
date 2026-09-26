@@ -17,6 +17,9 @@ via `JsonEscape` — reuse it, never a second escaper). `explicitApi()` is on.
   `TokenBudget`, `Ansi`). `--json` must carry everything text shows.
 - `rpc/RpcProtocol` — v1 wire: NDJSON requests, deterministic key order, responses
   **are** the `--json` envelope (no second shape). `decode` never throws.
+- `paths/JdxPaths` — per-OS cache/config/runtime dirs (D-044; table in
+  `docs/PROPOSAL.md` §17.1). Pure path math over explicit `home`/`os`/`env`
+  inputs — the single `os.name` branch; production callers pass `System` values.
 - Test generators live in `src/test/.../gen/` — reuse across families.
 
 ## Grammar rules (`SymbolRefParser`, pinned by property tests)

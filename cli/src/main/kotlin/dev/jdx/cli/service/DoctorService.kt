@@ -1,5 +1,7 @@
 package dev.jdx.cli.service
 
+import dev.jdx.core.paths.JdxOs
+import dev.jdx.core.paths.JdxPaths
 import dev.jdx.index.artifact.JdkLayout
 import dev.jdx.server.DaemonProbe
 import dev.jdx.server.DaemonStatusSnapshot
@@ -96,11 +98,32 @@ data class DoctorEnvironment(
     val workspaceEnv: String? = null,
     /** OS name for `.exe` tool probing (tests inject `"Windows 11"`). */
     val osName: String = System.getProperty("os.name", ""),
+    /**
+     * Platform env for per-OS dirs (D-044): `XDG_*`, `JDX_*`, `LOCALAPPDATA`,
+     * `APPDATA`, `TMPDIR`. Tests inject fakes; production passes
+     * `System.getenv()`. Empty means OS defaults.
+     */
+    val envVars: Map<String, String> = emptyMap(),
+    /** Explicit cache/config overrides (tests pin resolved roots without env). */
+    val cacheRootOverride: Path? = null,
+    val configRootOverride: Path? = null,
 ) {
+    /** The OS family for per-OS dirs — the single `os.name` branch lives in [JdxPaths]. */
+    val os: JdxOs get() = JdxPaths.detectOs(osName)
+
+    /** Resolved cache root (D-044): explicit > `JDX_CACHE_DIR` > platform env > OS default. */
+    fun resolvedCacheRoot(): Path =
+        cacheRootOverride ?: JdxPaths.cacheRoot(userHome, os, envVars)
+
+    /** Resolved config root (D-044): explicit > `JDX_CONFIG_DIR` > platform env > OS default. */
+    fun resolvedConfigRoot(): Path =
+        configRootOverride ?: JdxPaths.configRoot(userHome, os, envVars)
+
     companion object {
         /**
-         * The real environment. Cache/config roots are the literal `~/.cache/jdx` and
-         * `~/.config/jdx` from D-013/T-015 — no XDG fallback (D-027).
+         * The real environment. Cache/config roots resolve per OS (D-044,
+         * `docs/PROPOSAL.md` §17.1) — honouring `JDX_*` / `XDG_*` /
+         * `LOCALAPPDATA` / `APPDATA`.
          */
         fun system(): DoctorEnvironment {
             val userHome = Paths.get(System.getProperty("user.home"))
@@ -124,6 +147,7 @@ data class DoctorEnvironment(
                 runtime = RuntimeInfo.current(),
                 processRunner = RealProcessRunner,
                 workspaceEnv = System.getenv("JDX_WORKSPACE"),
+                envVars = System.getenv(),
             )
         }
     }
@@ -237,7 +261,7 @@ class DoctorService(
     }
 
     private fun cacheCheck(): DoctorCheck {
-        val root = environment.userHome.resolve(".cache/jdx")
+        val root = environment.resolvedCacheRoot()
         if (!Files.exists(root)) {
             return check("cache", DoctorStatus.WARN, "absent ($root) — created on first use")
         }
@@ -247,21 +271,27 @@ class DoctorService(
         val size = Files.walk(root).use { stream ->
             stream.filter { Files.isRegularFile(it) }.mapToLong { Files.size(it) }.sum()
         }
-        return check("cache", DoctorStatus.OK, "present ($root, ${formatBytes(size)}, writable)")
+        val migration = migrationNote(
+            JdxPaths.legacyCacheRoot(environment.userHome), root, "cache",
+        )
+        return check("cache", DoctorStatus.OK, "present ($root, ${formatBytes(size)}, writable)$migration")
     }
 
     private fun configCheck(): DoctorCheck {
-        val root = environment.userHome.resolve(".config/jdx")
+        val root = environment.resolvedConfigRoot()
+        val migration = migrationNote(
+            JdxPaths.legacyConfigRoot(environment.userHome), root, "config",
+        )
         return if (Files.exists(root)) {
-            check("config", DoctorStatus.OK, "present ($root)")
+            check("config", DoctorStatus.OK, "present ($root)$migration")
         } else {
-            check("config", DoctorStatus.WARN, "absent ($root) — created on first use")
+            check("config", DoctorStatus.WARN, "absent ($root) — created on first use$migration")
         }
     }
 
     private fun indexCheck(): DoctorCheck {
         // The index itself lands in M2 (T-013); until then this row only reports presence.
-        val db = environment.userHome.resolve(".cache/jdx/index/v1.db")
+        val db = environment.resolvedCacheRoot().resolve("index/v1.db")
         return if (Files.isRegularFile(db)) {
             check("index", DoctorStatus.WARN, "present ($db) — schema check lands with the index (M2)")
         } else {
@@ -349,7 +379,7 @@ class DoctorService(
         // facts — the §13 selection, the project root, the stored count. Read-only: a
         // garbage active file reads as none, a missing dir as zero, and discovery never
         // writes the auto-cache from here (queries own that).
-        val store = dev.jdx.index.workspace.FileWorkspaceStore(environment.userHome.resolve(".config/jdx"))
+        val store = dev.jdx.index.workspace.FileWorkspaceStore(environment.resolvedConfigRoot())
         val envName = environment.workspaceEnv?.trim().orEmpty().ifEmpty { null }
         val activeName = try {
             store.activeName()
@@ -382,6 +412,20 @@ class DoctorService(
 
     private fun check(name: String, status: DoctorStatus, detail: String): DoctorCheck =
         DoctorCheck(name, status, detail.oneLine())
+
+    /**
+     * Names the legacy dot-dir when it still exists alongside a different
+     * resolved root (D-044 migration): `; old location <legacy> exists`.
+     * Empty when no migration applies (same path, or legacy absent).
+     */
+    private fun migrationNote(legacy: Path, resolved: Path, kind: String): String {
+        if (!JdxPaths.needsMigration(legacy, resolved)) return ""
+        return try {
+            if (Files.exists(legacy)) "; old $kind location $legacy exists (D-044 move pending)" else ""
+        } catch (e: Exception) {
+            ""
+        }
+    }
 
     companion object {
         /** `javap` must read our fixture classes (bytecode 65): older is a WARN, absent is a FAIL. */

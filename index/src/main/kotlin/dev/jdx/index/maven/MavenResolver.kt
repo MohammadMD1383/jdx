@@ -2,6 +2,7 @@ package dev.jdx.index.maven
 
 import dev.jdx.core.model.MavenCoordinate
 import dev.jdx.index.artifact.SourcesPairing
+import dev.jdx.index.cache.CacheService
 import java.nio.file.Files
 import java.nio.file.Path
 import java.nio.file.Paths
@@ -10,10 +11,10 @@ import java.nio.file.Paths
  * Resolves `group:artifact:version` to jar files (PROPOSAL.md §13, T-019).
  *
  * Lookup order:
- * 1. the fetch cache (`~/.cache/jdx/m2`, `~/.m2`-shaped — our own past downloads);
+ * 1. the fetch cache (`<cache-dir>/m2`, `~/.m2`-shaped — our own past downloads);
  * 2. the Gradle files cache (`modules-2/files-2.1/<group>/<name>/<version>/…`);
  * 3. the local Maven repository (`~/.m2/repository`);
- * 4. remote repositories into `~/.cache/jdx/m2` — **only when [allowFetch]**,
+ * 4. remote repositories into `<cache-dir>/m2` — **only when [allowFetch]**,
  *    opt-in per invocation via `--fetch` (D-006), tried in [Repositories.repoBaseUrls]
  *    order (custom `--repo` values first, Maven Central last by default), with
  *    SHA-1 verification and the `-sources.jar` fetched alongside the binary.
@@ -72,9 +73,9 @@ public object MavenResolver {
         Paths.get(System.getProperty("user.home")).resolve(".m2/repository")
     }.getOrNull()
 
-    /** Default `~/.cache/jdx/m2` — the fetch cache, mirroring `doctor`'s cache literals. */
+    /** Default `<cache-dir>/m2` — the fetch cache (per-OS cache root, D-044). */
     public fun defaultFetchCacheRoot(): Path? = runCatching {
-        Paths.get(System.getProperty("user.home")).resolve(".cache/jdx/m2")
+        CacheService.defaultCacheRoot().resolve("m2")
     }.getOrNull()
 
     /**
@@ -105,7 +106,7 @@ public object MavenResolver {
                 return Outcome.Unresolved(
                     "Maven coordinate '${MavenCoords.format(coordinate)}' is not in the local " +
                         "caches (${describeRoots(repositories)}). Re-run with --fetch to download " +
-                        "it (and its -sources.jar) from ${describeRemotes(repositories)} into ~/.cache/jdx/m2 " +
+                        "it (and its -sources.jar) from ${describeRemotes(repositories)} into <cache-dir>/m2 " +
                         "with checksum verification.",
                     fetchHint = true,
                 )
@@ -288,7 +289,7 @@ public object MavenResolver {
         val roots = listOfNotNull(
             repositories.gradleFilesRoot?.let { "~/.gradle/caches" },
             repositories.m2Repo?.let { "~/.m2/repository" },
-            repositories.fetchCacheRoot?.let { "~/.cache/jdx/m2" },
+            repositories.fetchCacheRoot?.let { "<cache-dir>/m2" },
         )
         return if (roots.isEmpty()) "no local repositories readable" else roots.joinToString(", ")
     }

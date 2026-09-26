@@ -26,7 +26,7 @@ import kotlin.system.exitProcess
  * `jdx ws ...` — named workspace management (T-015, PROPOSAL.md §7.4).
  *
  * A workspace is an ordered list of binary roots stored as TOML in
- * `~/.config/jdx/workspaces/<name>.toml`. Read commands consume it via `-w <name>`
+ * `<config-dir>/workspaces/<name>.toml` (per-OS config default, D-044). Read commands consume it via `-w <name>`
  * (or `JDX_WORKSPACE`, or the `jdx ws use` default); explicit `--jars` always merge
  * in front of it, and the first root providing a class wins (`DUPLICATE_FQN`
  * otherwise — the shadowing itself lives in `JdxService`, this group only stores order).

@@ -1,5 +1,6 @@
 package dev.jdx.sources
 
+import dev.jdx.core.paths.JdxPaths
 import java.nio.file.Files
 import java.nio.file.Path
 
@@ -14,17 +15,26 @@ public const val KOTLIN_COMPILER_VERSION: String = "2.4.20"
 public const val KOTLIN_COMPILER_JAR: String = "kotlin-compiler-embeddable-2.4.20.jar"
 
 /**
- * Where the side-loaded Kotlin compiler lives (D-008 §3): under the cache
- * root, versioned so an upgrade never talks to a stale jar. Fetched and
- * verified on first use (T-080 wires the fetch); until then its absence is
- * routine, not an error.
+ * Where the side-loaded Kotlin compiler lives (D-008 §3): under the per-OS
+ * cache root (D-044), versioned so an upgrade never talks to a stale jar.
+ * Fetched and verified on first use (T-080 wires the fetch); until then its
+ * absence is routine, not an error.
  */
 public fun kotlinSidecarJar(userHome: Path): Path =
     kotlinSidecarDir(userHome).resolve(KOTLIN_COMPILER_JAR)
 
 /** The directory holding the sidecar plus its runtime jars (T-039). */
 public fun kotlinSidecarDir(userHome: Path): Path =
-    userHome.resolve(".cache").resolve("jdx").resolve("kotlin")
+    defaultCacheRootFor(userHome).resolve("kotlin")
+
+/** The sidecar directory under an explicit cache root (`--cache-dir` wins). */
+public fun kotlinSidecarDirForCache(cacheRoot: Path): Path = cacheRoot.resolve("kotlin")
+
+/** Resolves the per-OS cache root for [userHome] (D-044; never throws). */
+private fun defaultCacheRootFor(userHome: Path): Path = runCatching {
+    val os = JdxPaths.detectOs(System.getProperty("os.name", ""))
+    JdxPaths.cacheRoot(userHome, os, System.getenv())
+}.getOrDefault(JdxPaths.legacyCacheRoot(userHome))
 
 /**
  * The user-facing hint naming the missing sidecar without absolute paths
@@ -33,7 +43,7 @@ public fun kotlinSidecarDir(userHome: Path): Path =
  * [KotlinSourceParser.detail].
  */
 public fun kotlinMissingHint(): String =
-    "$KOTLIN_COMPILER_JAR not installed under ~/.cache/jdx/kotlin " +
+    "$KOTLIN_COMPILER_JAR not installed under <cache-dir>/kotlin " +
         "(Kotlin sources unavailable — run `jdx kotlin install` to fetch it, see `jdx doctor`)"
 
 /**

@@ -370,7 +370,7 @@ public object ProjectDiscovery {
 /**
  * On-disk cache for derived project workspaces (PROPOSAL.md §13 step 4).
  *
- * Layout under [cacheBase] (production: `~/.cache/jdx/auto`): `<hash>.toml` holds the
+ * Layout under [cacheBase] (production: `<cache-dir>/auto`): `<hash>.toml` holds the
  * derived [WorkspaceDefinition] (name == hash, per the [WorkspaceToml] stem rule) and
  * `<hash>.fingerprint` holds [ProjectDiscovery.computeFingerprint]. A cache entry loads
  * only when the fingerprint still matches — any build-file change invalidates it.

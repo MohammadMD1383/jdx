@@ -80,7 +80,7 @@ public object MavenCoords {
         coordinate.group.replace('.', '/') +
             "/${coordinate.artifact}/${coordinate.version}"
 
-    /** `<artifact>-<version>.jar` — the binary file name in `~/.m2` and `~/.cache/jdx/m2`. */
+    /** `<artifact>-<version>.jar` — the binary file name in `~/.m2` and `<cache-dir>/m2`. */
     public fun binaryFileName(coordinate: MavenCoordinate): String =
         "${coordinate.artifact}-${coordinate.version}.jar"
 
