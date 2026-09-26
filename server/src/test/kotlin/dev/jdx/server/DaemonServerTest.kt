@@ -238,6 +238,88 @@ class DaemonServerTest {
         java.nio.file.Files.exists(paths.pid) shouldBe false
     }
 
+    @Test
+    fun `over-long socket path fails fast naming the escape hatch`() {
+        val longDir = tempDir.resolve("a".repeat(200))
+        val socket = DaemonPaths.socketPathIn(longDir, "ws-long")
+        val server = DaemonServer(
+            workspace = "ws-long",
+            socketPath = socket,
+            pidPath = DaemonPaths.pidPath(socket),
+            idleTimeout = null,
+            appVersion = "test-0.0.0",
+        )
+        var failed: Exception? = null
+        try {
+            server.start()
+        } catch (e: Exception) {
+            failed = e
+        } finally {
+            server.stop()
+        }
+        (failed is SocketPathTooLongException) shouldBe true
+        failed!!.message shouldContain "JDX_RUNTIME_DIR"
+    }
+
+    @Test
+    fun `checkSocketPathLength trips on macOS earlier than Linux`() {
+        val path = java.nio.file.Paths.get("/" + "a".repeat(106))
+        // 106 bytes binds on Linux (cap 108) but not on macOS (cap 104).
+        checkSocketPathLength(path, "Linux")
+        var failed = false
+        try {
+            checkSocketPathLength(path, "Mac OS X")
+        } catch (e: SocketPathTooLongException) {
+            failed = true
+        }
+        failed shouldBe true
+    }
+
+    @Test
+    fun `the lock is held while running and released on stop`() {
+        val paths = control()
+        val lockFile = DaemonPaths.lockPath(paths.socket)
+        val server = testServer()
+        server.start()
+        try {
+            java.nio.file.Files.exists(lockFile) shouldBe true
+            var locked = false
+            try {
+                java.nio.channels.FileChannel.open(lockFile, java.nio.file.StandardOpenOption.WRITE).use { ch ->
+                    val attempt = try {
+                        ch.tryLock()
+                    } catch (_: java.nio.channels.OverlappingFileLockException) {
+                        null
+                    }
+                    locked = attempt == null
+                    attempt?.release()
+                }
+            } catch (_: Exception) {
+                locked = true
+            }
+            locked shouldBe true
+        } finally {
+            server.stop()
+        }
+        // Released: an external holder can now lock, and a fresh server binds clean.
+        java.nio.channels.FileChannel.open(
+            lockFile,
+            java.nio.file.StandardOpenOption.CREATE,
+            java.nio.file.StandardOpenOption.WRITE,
+        ).use { ch ->
+            val attempt = ch.tryLock()
+            attempt shouldNotBe null
+            attempt?.release()
+        }
+        val second = testServer()
+        second.start()
+        try {
+            DaemonProbe.health(control().socket) shouldNotBe null
+        } finally {
+            second.stop()
+        }
+    }
+
     private val hostileChars: List<Char> = listOf(
         '"', '\\', '/', '\n', '\r', '\t', '\b', '\u000C', '\u0000', '\u0001', '\u001F',
         ' ', 'a', 'Z', '0', '9', '{', '}', '[', ']', ':', ',', '-', 'e',

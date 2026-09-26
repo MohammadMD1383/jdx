@@ -1,5 +1,6 @@
 package dev.jdx.server
 
+import dev.jdx.core.paths.JdxPaths
 import dev.jdx.core.render.JsonEscape
 import dev.jdx.core.rpc.RPC_VERSION
 import dev.jdx.core.rpc.RpcCommand
@@ -15,6 +16,9 @@ import java.net.StandardProtocolFamily
 import java.net.UnixDomainSocketAddress
 import java.nio.ByteBuffer
 import java.nio.channels.ClosedChannelException
+import java.nio.channels.FileChannel
+import java.nio.channels.FileLock
+import java.nio.channels.OverlappingFileLockException
 import java.nio.channels.SelectionKey
 import java.nio.channels.Selector
 import java.nio.channels.ServerSocketChannel
@@ -22,6 +26,7 @@ import java.nio.channels.SocketChannel
 import java.nio.charset.StandardCharsets
 import java.nio.file.Files
 import java.nio.file.Path
+import java.nio.file.StandardOpenOption
 import java.time.Duration
 import java.util.concurrent.CountDownLatch
 import java.util.concurrent.Executors
@@ -120,6 +125,25 @@ internal fun healthResultJson(snapshot: DaemonStatusSnapshot): String = buildStr
 }
 
 /**
+ * The socket path cannot `bind` on this OS: its UTF-8 bytes exceed `sun_path`
+ * (104 on macOS, 108 elsewhere). Carries the actionable message (dir, byte
+ * count, `JDX_RUNTIME_DIR` hint) so CLI layers report exit 3 instead of a
+ * generic bind failure or a silent cold fallback.
+ */
+public class SocketPathTooLongException(message: String) : IOException(message)
+
+/** Throws [SocketPathTooLongException] when [socketPath] cannot `bind` on [osName]. */
+internal fun checkSocketPathLength(
+    socketPath: Path,
+    osName: String = System.getProperty("os.name", ""),
+) {
+    val os = JdxPaths.detectOs(osName)
+    if (DaemonPaths.socketPathTooLong(socketPath, os)) {
+        throw SocketPathTooLongException(DaemonPaths.describeSocketPathTooLong(socketPath, os))
+    }
+}
+
+/**
  * A background JVM holding a hot process, listening on a version-stamped
  * unix-domain socket (T-041; PROPOSAL.md §14.3).
  *
@@ -157,6 +181,8 @@ public class DaemonServer(
     private var channel: ServerSocketChannel? = null
     private var acceptThread: Thread? = null
     private var idleFuture: ScheduledFuture<*>? = null
+    private var lockChannel: FileChannel? = null
+    private var fileLock: FileLock? = null
     private val pool = Executors.newVirtualThreadPerTaskExecutor()
     private val scheduler: ScheduledExecutorService = Executors.newSingleThreadScheduledExecutor { task ->
         Thread(task, "jdx-daemon-idle").apply { isDaemon = true }
@@ -167,16 +193,44 @@ public class DaemonServer(
     public fun start() {
         if (!running.compareAndSet(false, true)) return
         try {
+            checkSocketPathLength(socketPath)
             if (DaemonProbe.roundTrip(socketPath, RpcRequest(RpcCommand.HEALTH)) != null) {
                 throw IOException("daemon already running at $socketPath")
             }
             Files.createDirectories(socketPath.parent)
-            Files.deleteIfExists(socketPath)
+            // Mutual exclusion before touching the socket: the probe above can
+            // race a concurrent `start`, but only one holder gets the lock.
+            val lockFile = DaemonPaths.lockPath(socketPath)
+            Files.createDirectories(lockFile.parent)
+            val opened = FileChannel.open(
+                lockFile,
+                StandardOpenOption.CREATE,
+                StandardOpenOption.WRITE,
+            )
+            val acquired: FileLock? = try {
+                opened.tryLock()
+            } catch (_: OverlappingFileLockException) {
+                null
+            }
+            if (acquired == null) {
+                runCatching { opened.close() }
+                throw IOException("another daemon holds the socket lock at $lockFile")
+            }
+            lockChannel = opened
+            fileLock = acquired
+            // Tolerate Windows delete-while-bound semantics: a stale file that
+            // refuses deletion still fails below at `bind` with a clear error.
+            runCatching { Files.deleteIfExists(socketPath) }
             channel = ServerSocketChannel.open(StandardProtocolFamily.UNIX).also { server ->
-                server.bind(UnixDomainSocketAddress.of(socketPath))
+                try {
+                    server.bind(UnixDomainSocketAddress.of(socketPath))
+                } catch (e: IOException) {
+                    throw IOException("cannot bind daemon socket at $socketPath: ${e.message}", e)
+                }
             }
             Files.writeString(pidPath, ProcessHandle.current().pid().toString(), StandardCharsets.UTF_8)
         } catch (e: Exception) {
+            releaseLock()
             running.set(false)
             if (e is IOException) throw e
             throw IOException("cannot start daemon at $socketPath: ${e.message}", e)
@@ -216,10 +270,19 @@ public class DaemonServer(
         scheduler.shutdownNow()
         runCatching { Files.deleteIfExists(socketPath) }
         runCatching { Files.deleteIfExists(pidPath) }
+        releaseLock()
+        runCatching { Files.deleteIfExists(DaemonPaths.lockPath(socketPath)) }
         stoppedLatch.countDown()
     }
 
     override fun close(): Unit = stop()
+
+    private fun releaseLock() {
+        runCatching { fileLock?.release() }
+        fileLock = null
+        runCatching { lockChannel?.close() }
+        lockChannel = null
+    }
 
     private fun acceptLoop() {
         val server = channel ?: return

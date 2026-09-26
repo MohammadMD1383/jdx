@@ -144,4 +144,60 @@ class DaemonCommandTest {
         nullDeviceName("Linux") shouldBe "/dev/null"
         nullDeviceName("Mac OS X") shouldBe "/dev/null"
     }
+
+    @Test
+    fun `control paths exit 3 on an over-long socket dir`() {
+        var code = -1
+        val longDir = java.nio.file.Paths.get("/" + "a".repeat(200))
+        val out = capturedStdout {
+            try {
+                controlPaths(DaemonEnv(longDir, "java-stub", "cp-stub"), "ws1", false, { throw DaemonExit(it) })
+            } catch (e: DaemonExit) {
+                code = e.code
+            }
+        }
+        code shouldBe 3
+        out shouldContain "JDX_RUNTIME_DIR"
+    }
+
+    @Test
+    fun `control paths json on an over-long socket dir is an ok-false envelope`() {
+        var code = -1
+        val longDir = java.nio.file.Paths.get("/" + "a".repeat(200))
+        val out = capturedStdout {
+            try {
+                controlPaths(
+                    DaemonEnv(longDir, "java-stub", "cp-stub"), "ws1", true,
+                    { throw DaemonExit(it) }, osName = "Linux",
+                )
+            } catch (e: DaemonExit) {
+                code = e.code
+            }
+        }
+        code shouldBe 3
+        val root = Json.parseToJsonElement(out.trim()).jsonObject
+        root["ok"]!!.jsonPrimitive.content shouldBe "false"
+        root["command"]!!.jsonPrimitive.content shouldBe "daemon"
+    }
+
+    @Test
+    fun `daemon ownership needs the daemon run argv`() {
+        isJdxDaemonCommandLine("/usr/lib/jvm/java -cp x dev.jdx.cli.JdxCliKt daemon run --workspace ws", emptyList()) shouldBe true
+        isJdxDaemonCommandLine("", listOf("dev.jdx.cli.JdxCliKt", "daemon", "run", "--workspace", "ws")) shouldBe true
+        isJdxDaemonCommandLine("", listOf("dev.jdx.cli.JdxCliKt", "daemon", "status")) shouldBe false
+        isJdxDaemonCommandLine("/usr/bin/sleep 30", listOf("30")) shouldBe false
+        isJdxDaemonCommandLine("", emptyList()) shouldBe false
+    }
+
+    @Test
+    fun `stop on a missing daemon sweeps stale files and exits 1`() {
+        val socket = tempDir.resolve("abcdef0123456789-v1.sock")
+        val pidFile = tempDir.resolve("abcdef0123456789-v1.pid")
+        java.nio.file.Files.writeString(socket, "stale")
+        java.nio.file.Files.writeString(pidFile, "stale")
+        val outcome = stopDaemon(dev.jdx.cli.commands.DaemonControl(socket, pidFile, tempDir.resolve("x.log")))
+        outcome shouldBe StopOutcome.NOT_RUNNING
+        java.nio.file.Files.exists(socket) shouldBe false
+        java.nio.file.Files.exists(pidFile) shouldBe false
+    }
 }

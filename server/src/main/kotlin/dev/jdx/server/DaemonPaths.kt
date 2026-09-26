@@ -28,6 +28,36 @@ public object DaemonPaths {
     /** The directory directly under `$XDG_RUNTIME_DIR` that holds daemon sockets. */
     public const val DIR_NAME: String = "jdx"
 
+    /** `sun_path` byte cap on Linux (and Windows AF_UNIX): over this `bind` fails. */
+    public const val MAX_SOCKET_PATH_BYTES_LINUX: Int = 108
+
+    /** `sun_path` byte cap on macOS: over this `bind` fails. */
+    public const val MAX_SOCKET_PATH_BYTES_MACOS: Int = 104
+
+    /** The `sun_path` byte cap for [os]: 104 on macOS, 108 elsewhere. */
+    public fun maxSocketPathBytes(os: JdxOs): Int =
+        if (os == JdxOs.MACOS) MAX_SOCKET_PATH_BYTES_MACOS else MAX_SOCKET_PATH_BYTES_LINUX
+
+    /** UTF-8 byte length of the full socket path — what `sun_path` enforces. */
+    public fun socketPathByteLength(socketPath: Path): Int =
+        socketPath.toString().toByteArray(StandardCharsets.UTF_8).size
+
+    /** True when [socketPath] cannot `bind` on [os] (macOS `/var/folders/…` hits this). */
+    public fun socketPathTooLong(socketPath: Path, os: JdxOs): Boolean =
+        socketPathByteLength(socketPath) > maxSocketPathBytes(os)
+
+    /**
+     * Actionable message for an over-long socket path: names the dir, the byte
+     * count, the OS cap, and the `JDX_RUNTIME_DIR` escape hatch. Callers report
+     * it with exit 3 — never a generic bind failure or a silent cold fallback.
+     */
+    public fun describeSocketPathTooLong(socketPath: Path, os: JdxOs): String {
+        val bytes = socketPathByteLength(socketPath)
+        val cap = maxSocketPathBytes(os)
+        return "daemon socket path is $bytes bytes (limit $cap on $os): '$socketPath' — " +
+            "set JDX_RUNTIME_DIR to a shorter directory"
+    }
+
     /** `$XDG_RUNTIME_DIR` from the environment, or `null` when unset or empty. */
     public fun systemRuntimeDir(): Path? =
         System.getenv("XDG_RUNTIME_DIR")
@@ -90,6 +120,17 @@ public object DaemonPaths {
 
     /** Sibling of [socketPath] with a `.log` suffix (the spawned daemon's output). */
     public fun logPath(socketPath: Path): Path = siblingWithSuffix(socketPath, ".log")
+
+    /**
+     * Sibling of [socketPath] with a `.lock` suffix (`<hash>-v1.lock`): the
+     * start-mutual-exclusion file held via `FileChannel.tryLock` by the serving
+     * daemon. Short by construction — the hashed stem, never the workspace name.
+     */
+    public fun lockPath(socketPath: Path): Path = siblingWithSuffix(socketPath, ".lock")
+
+    /** `<hash>-v<version>.lock` — the lock-file stem mirrors the socket stamp. */
+    public fun lockFileName(workspace: String, version: Int = RPC_VERSION): String =
+        "${workspaceHash(workspace)}-v$version.lock"
 
     private fun siblingWithSuffix(socketPath: Path, suffix: String): Path {
         val name = socketPath.fileName.toString().removeSuffix(".sock")

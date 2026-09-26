@@ -10,11 +10,13 @@ import dev.jdx.cli.BuildInfo
 import dev.jdx.cli.effectiveJson
 import dev.jdx.cli.render.JdxJson
 import dev.jdx.cli.render.envelopeJson
+import dev.jdx.core.paths.JdxPaths
 import dev.jdx.server.DEFAULT_IDLE_TEXT
 import dev.jdx.server.DaemonPaths
 import dev.jdx.server.DaemonProbe
 import dev.jdx.server.DaemonServer
 import dev.jdx.server.DaemonStatusSnapshot
+import dev.jdx.server.SocketPathTooLongException
 import dev.jdx.server.jdxServiceHandler
 import dev.jdx.server.parseIdleDuration
 import kotlinx.serialization.Serializable
@@ -40,7 +42,9 @@ import kotlin.system.exitProcess
  * Exits: 0 ok (including idempotent `start` on a running daemon) · 1 valid
  * query with nothing to report (`status`/`stop` on a stopped daemon) ·
  * 3 usage error (bad `--idle`; unresolvable socket dir — unreachable in
- * production since the per-OS fallback always resolves) · 6 spawn/IO failure.
+ * production since the per-OS fallback always resolves; over-long `sun_path`
+ * past 104 bytes on macOS / 108 elsewhere) · 6 spawn/IO failure (including a
+ * pid file that does not belong to a `daemon run` child — never kills it).
  */
 class DaemonCommand : CoreCliktCommand(name = "daemon") {
     override fun help(context: Context): String =
@@ -209,6 +213,7 @@ internal fun controlPaths(
     workspace: String,
     json: Boolean,
     terminate: (Int) -> Nothing,
+    osName: String = System.getProperty("os.name", ""),
 ): DaemonControl? {
     val runtimeDir = env.runtimeDir
         ?: run {
@@ -221,6 +226,16 @@ internal fun controlPaths(
             return null
         }
     val socket = DaemonPaths.socketPathIn(runtimeDir, workspace)
+    val os = JdxPaths.detectOs(osName)
+    if (DaemonPaths.socketPathTooLong(socket, os)) {
+        val message = DaemonPaths.describeSocketPathTooLong(socket, os)
+        finishDaemon(
+            "usage error: $message",
+            DaemonPayload(workspace = workspace, message = message),
+            json, 3, terminate,
+        )
+        return null
+    }
     return DaemonControl(socket, DaemonPaths.pidPath(socket), DaemonPaths.logPath(socket))
 }
 
@@ -253,27 +268,74 @@ internal fun waitForHealth(socket: Path, timeoutMs: Long = 5000): DaemonStatusSn
 }
 
 /**
- * Best-effort stop used by `stop` and `restart`: destroys the pid-file
- * process when there is one, sweeps stale files, and reports whether a
- * daemon answered at the end. Never throws — callers decide the exit code.
+ * Pure pid-ownership check: true when a process command line / argv pair belongs
+ * to a `jdx daemon run` child (the exact argv `start` spawns). The pid file can
+ * go stale across crashes and pid reuse can hand the number to an unrelated
+ * process — killing without this check can kill the wrong process.
  */
-internal fun stopDaemon(control: DaemonControl): StopOutcome {
+internal fun isJdxDaemonCommandLine(commandLine: String, arguments: List<String>): Boolean {
+    if (commandLine.contains("daemon run")) return true
+    val daemonAt = arguments.indexOf("daemon")
+    return daemonAt >= 0 && arguments.getOrNull(daemonAt + 1) == "run"
+}
+
+/** [isJdxDaemonCommandLine] over a live [ProcessHandle]; false on any missing info. */
+internal fun isJdxDaemonProcess(handle: ProcessHandle): Boolean {
+    val info = handle.info()
+    val commandLine = info.commandLine().orElse("")
+    val arguments = info.arguments().map { it.toList() }.orElse(emptyList())
+    return isJdxDaemonCommandLine(commandLine, arguments)
+}
+
+/**
+ * Best-effort stop used by `stop` and `restart`: validates the pid-file owner
+ * before signalling (never kills a reused pid), escalates `destroy()` to
+ * `destroyForcibly()`, and sweeps stale files so a killed daemon restarts
+ * clean — including Windows delete-while-bound leftovers. Never throws —
+ * callers decide the exit code.
+ */
+internal fun stopDaemon(
+    control: DaemonControl,
+    lookup: (Long) -> ProcessHandle? = { pid -> ProcessHandle.of(pid).orElse(null) },
+    isDaemon: (ProcessHandle) -> Boolean = ::isJdxDaemonProcess,
+): StopOutcome {
     if (DaemonProbe.health(control.socket) == null) {
-        Files.deleteIfExists(control.socket)
-        Files.deleteIfExists(control.pidFile)
+        // No live daemon: sweep stale files (a killed daemon's leftovers) so
+        // the next `start` binds clean, tolerating files bound on Windows.
+        runCatching { Files.deleteIfExists(control.socket) }
+        runCatching { Files.deleteIfExists(control.pidFile) }
         return StopOutcome.NOT_RUNNING
     }
     val pid = runCatching { Files.readString(control.pidFile).trim().toLong() }.getOrNull()
         ?: return StopOutcome.NO_PID
-    val handle = ProcessHandle.of(pid).orElse(null)
-    if (handle == null || !handle.destroy()) return StopOutcome.NO_PROCESS
-    val deadline = System.currentTimeMillis() + 5000
+    val handle = lookup(pid)
+    if (handle == null) {
+        runCatching { Files.deleteIfExists(control.socket) }
+        runCatching { Files.deleteIfExists(control.pidFile) }
+        return StopOutcome.NO_PROCESS
+    }
+    if (!isDaemon(handle)) return StopOutcome.PID_REUSED
+    handle.destroy()
+    if (awaitQuiet(control, 2000)) return stopped(control)
+    handle.destroyForcibly()
+    if (awaitQuiet(control, 3000)) return stopped(control)
+    return StopOutcome.TIMED_OUT
+}
+
+/** Polls until no daemon answers or the budget runs out. */
+private fun awaitQuiet(control: DaemonControl, timeoutMs: Long): Boolean {
+    val deadline = System.currentTimeMillis() + timeoutMs
     while (System.currentTimeMillis() < deadline) {
-        if (DaemonProbe.health(control.socket) == null) break
+        if (DaemonProbe.health(control.socket) == null) return true
         Thread.sleep(100)
     }
-    Files.deleteIfExists(control.socket)
-    Files.deleteIfExists(control.pidFile)
+    return DaemonProbe.health(control.socket) == null
+}
+
+/** Sweeps socket + pid after a confirmed stop; TIMED_OUT leaves a live daemon alone. */
+private fun stopped(control: DaemonControl): StopOutcome {
+    runCatching { Files.deleteIfExists(control.socket) }
+    runCatching { Files.deleteIfExists(control.pidFile) }
     return if (DaemonProbe.health(control.socket) == null) StopOutcome.STOPPED else StopOutcome.TIMED_OUT
 }
 
@@ -282,6 +344,7 @@ internal enum class StopOutcome {
     STOPPED,
     NO_PID,
     NO_PROCESS,
+    PID_REUSED,
     TIMED_OUT,
 }
 
@@ -413,6 +476,11 @@ class DaemonStopCommand(
                 DaemonPayload(workspace = workspace, message = "no live process"),
                 json, 6, terminate,
             )
+            StopOutcome.PID_REUSED -> finishDaemon(
+                "cannot stop daemon: pid file does not belong to a jdx daemon (pid reused?) — not stopping it",
+                DaemonPayload(workspace = workspace, message = "pid not a jdx daemon"),
+                json, 6, terminate,
+            )
             StopOutcome.TIMED_OUT -> finishDaemon(
                 "cannot stop daemon: the process ignores the stop signal",
                 DaemonPayload(workspace = workspace, message = "stop timed out"),
@@ -524,6 +592,12 @@ class DaemonRunCommand(
             return
         }
         val socket = DaemonPaths.socketPathIn(runtimeDir, workspace)
+        val os = JdxPaths.detectOs(System.getProperty("os.name", ""))
+        if (DaemonPaths.socketPathTooLong(socket, os)) {
+            echo("usage error: ${DaemonPaths.describeSocketPathTooLong(socket, os)}", err = true)
+            terminate(3)
+            return
+        }
         // The dispatch handler (T-082) answers every read query through the same
         // JdxService the one-shot CLI calls; health/version stay on the transport
         // internals. Roots resolve per request, so `ws create` while the daemon
@@ -546,6 +620,10 @@ class DaemonRunCommand(
         Runtime.getRuntime().addShutdownHook(Thread({ server.stop() }, "jdx-daemon-shutdown"))
         try {
             server.start()
+        } catch (e: SocketPathTooLongException) {
+            echo("usage error: ${e.message}", err = true)
+            terminate(3)
+            return
         } catch (e: Exception) {
             echo("cannot start daemon: ${e.message}", err = true)
             terminate(1)

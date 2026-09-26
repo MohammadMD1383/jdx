@@ -820,6 +820,14 @@ listening on a **unix domain socket** at `<runtime-dir>/jdx/<workspace-hash>.soc
 - **Idle shutdown after 5 minutes** of no requests (user-specified; `--idle <duration>` to
   change, `0` to disable). Simple `ScheduledExecutorService` resetting on each request.
 - Version-stamped socket path, so an upgraded `jdx` never talks to a stale daemon.
+- `sun_path` guard: socket paths past 104 bytes on macOS / 108 elsewhere exit 3
+  naming the dir and the `JDX_RUNTIME_DIR` escape hatch (macOS `/var/folders/…`
+  trips this) — never a generic bind failure or a silent cold fallback.
+- Start mutual exclusion via `<hash>-v1.lock` (`FileChannel.tryLock`, held while
+  serving): a concurrent `start` fails fast naming the holder.
+- `stop` validates the pid file owns a `daemon run` child before signalling
+  (never kills a reused pid), escalates `destroy()` to `destroyForcibly()`, and
+  sweeps stale `.sock`/`.pid` files so a killed daemon restarts clean.
 - `jdx daemon status` reports uptime, workspace, memory, indexed artifacts, query count.
 
 ### 14.4 HTTP/JSON — `jdx serve`
