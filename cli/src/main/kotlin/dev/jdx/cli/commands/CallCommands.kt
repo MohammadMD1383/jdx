@@ -46,7 +46,7 @@ class CallersCommand(
     private val store: WorkspaceStore = FileWorkspaceStore.system(),
     private val getenv: (String) -> String? = { name -> System.getenv(name) },
     private val discover: ProjectDiscoveryFn? = null,
-    private val daemonRuntimeDir: Path? = DaemonPaths.systemRuntimeDir(),
+    private val daemonRuntimeDir: Path? = DaemonPaths.systemSocketDir(),
     private val daemonRoundTrip: DaemonRoundTrip = defaultRoundTrip,
 ) : CoreCliktCommand(name = "callers") {
     override fun help(context: Context): String =
@@ -211,7 +211,7 @@ class CallsCommand(
     private val store: WorkspaceStore = FileWorkspaceStore.system(),
     private val getenv: (String) -> String? = { name -> System.getenv(name) },
     private val discover: ProjectDiscoveryFn? = null,
-    private val daemonRuntimeDir: Path? = DaemonPaths.systemRuntimeDir(),
+    private val daemonRuntimeDir: Path? = DaemonPaths.systemSocketDir(),
     private val daemonRoundTrip: DaemonRoundTrip = defaultRoundTrip,
 ) : CoreCliktCommand(name = "calls") {
     override fun help(context: Context): String =

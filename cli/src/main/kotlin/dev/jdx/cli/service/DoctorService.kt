@@ -3,6 +3,7 @@ package dev.jdx.cli.service
 import dev.jdx.core.paths.JdxOs
 import dev.jdx.core.paths.JdxPaths
 import dev.jdx.index.artifact.JdkLayout
+import dev.jdx.server.DaemonPaths
 import dev.jdx.server.DaemonProbe
 import dev.jdx.server.DaemonStatusSnapshot
 import kotlinx.serialization.SerialName
@@ -133,9 +134,7 @@ data class DoctorEnvironment(
                 ?.filter { it.isNotEmpty() }
                 ?.map { Paths.get(it) }
                 ?: emptyList()
-            val runtimeDir = System.getenv("XDG_RUNTIME_DIR")
-                ?.takeIf { it.isNotEmpty() }
-                ?.let { Paths.get(it) }
+            val runtimeDir = DaemonPaths.systemSocketDir()
             val workingDir = Paths.get("").toAbsolutePath()
             return DoctorEnvironment(
                 userHome = userHome,
@@ -324,11 +323,13 @@ class DoctorService(
         // a running daemon (OK); a silent one is stale (WARN — housekeeping, never FAIL:
         // a stale file blocks no query). Details name file names for stale sockets (the
         // hash carries no workspace name back) and workspace names for running ones.
+        // The socket dir always resolves per OS (D-044 fallback); null only when a
+        // test injects no environment.
         val runtimeDir = environment.runtimeDir
-            ?: return check("daemon", DoctorStatus.OK, "not running (XDG_RUNTIME_DIR is unset)")
-        val socketDir = runtimeDir.resolve("jdx")
+            ?: return check("daemon", DoctorStatus.OK, "not running (daemon socket directory unresolvable)")
+        val socketDir = runtimeDir
         if (!Files.isDirectory(socketDir)) {
-            return check("daemon", DoctorStatus.OK, "not running")
+            return check("daemon", DoctorStatus.OK, "not running (socket dir $socketDir)")
         }
         val sockets = Files.list(socketDir).use { stream ->
             stream.filter { it.fileName.toString().endsWith(".sock") }.sorted().toList()

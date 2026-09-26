@@ -52,7 +52,7 @@ fun cacheGroup(
     services: (Path) -> CacheService = { root ->
         CacheService(
             root,
-            daemonRuntimeDir = DaemonPaths.systemRuntimeDir()?.resolve(DaemonPaths.DIR_NAME),
+            daemonRuntimeDir = DaemonPaths.systemSocketDir(),
             daemonSocketAlive = { socket -> DaemonProbe.health(socket) != null },
         )
     },

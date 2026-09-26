@@ -41,7 +41,7 @@ class SearchCommand(
     private val store: WorkspaceStore = FileWorkspaceStore.system(),
     private val getenv: (String) -> String? = { name -> System.getenv(name) },
     private val discover: ProjectDiscoveryFn? = null,
-    private val daemonRuntimeDir: Path? = DaemonPaths.systemRuntimeDir(),
+    private val daemonRuntimeDir: Path? = DaemonPaths.systemSocketDir(),
     private val daemonRoundTrip: DaemonRoundTrip = defaultRoundTrip,
 ) : CoreCliktCommand(name = "search") {
     override fun help(context: Context): String =
@@ -209,7 +209,7 @@ class ResolveCommand(
     private val store: WorkspaceStore = FileWorkspaceStore.system(),
     private val getenv: (String) -> String? = { name -> System.getenv(name) },
     private val discover: ProjectDiscoveryFn? = null,
-    private val daemonRuntimeDir: Path? = DaemonPaths.systemRuntimeDir(),
+    private val daemonRuntimeDir: Path? = DaemonPaths.systemSocketDir(),
     private val daemonRoundTrip: DaemonRoundTrip = defaultRoundTrip,
 ) : CoreCliktCommand(name = "resolve") {
     override fun help(context: Context): String =
@@ -325,7 +325,7 @@ class LsCommand(
     private val store: WorkspaceStore = FileWorkspaceStore.system(),
     private val getenv: (String) -> String? = { name -> System.getenv(name) },
     private val discover: ProjectDiscoveryFn? = null,
-    private val daemonRuntimeDir: Path? = DaemonPaths.systemRuntimeDir(),
+    private val daemonRuntimeDir: Path? = DaemonPaths.systemSocketDir(),
     private val daemonRoundTrip: DaemonRoundTrip = defaultRoundTrip,
 ) : CoreCliktCommand(name = "ls") {
     override fun help(context: Context): String =
@@ -442,7 +442,7 @@ class TreeCommand(
     private val store: WorkspaceStore = FileWorkspaceStore.system(),
     private val getenv: (String) -> String? = { name -> System.getenv(name) },
     private val discover: ProjectDiscoveryFn? = null,
-    private val daemonRuntimeDir: Path? = DaemonPaths.systemRuntimeDir(),
+    private val daemonRuntimeDir: Path? = DaemonPaths.systemSocketDir(),
     private val daemonRoundTrip: DaemonRoundTrip = defaultRoundTrip,
 ) : CoreCliktCommand(name = "tree") {
     override fun help(context: Context): String =

@@ -81,8 +81,7 @@ internal fun fakeEnvironment(
     }
     val runtimeDir = root.resolve("run").also { Files.createDirectories(it) }
     if (socketCount > 0) {
-        val socketDir = runtimeDir.resolve("jdx").also { Files.createDirectories(it) }
-        repeat(socketCount) { Files.createFile(socketDir.resolve("daemon-$it.sock")) }
+        repeat(socketCount) { Files.createFile(runtimeDir.resolve("daemon-$it.sock")) }
     }
     val cwd = (workingDir ?: root.resolve("cwd")).also { Files.createDirectories(it) }
     val configDir = home.resolve(".config/jdx")

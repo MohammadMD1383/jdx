@@ -101,7 +101,7 @@ class DaemonCommandTest {
             }
         }
         code shouldBe 3
-        out shouldContain "XDG_RUNTIME_DIR"
+        out shouldContain "socket directory"
     }
 
     @Test
@@ -135,5 +135,13 @@ class DaemonCommandTest {
         }
         code shouldBe 6
         out shouldContain "spawner failed"
+    }
+
+    @Test
+    fun `the null device is NUL on Windows and dev-null elsewhere`() {
+        nullDeviceName("Windows 11") shouldBe "NUL"
+        nullDeviceName("Windows 10") shouldBe "NUL"
+        nullDeviceName("Linux") shouldBe "/dev/null"
+        nullDeviceName("Mac OS X") shouldBe "/dev/null"
     }
 }

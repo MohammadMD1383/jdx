@@ -66,7 +66,7 @@ class DaemonWarmTest {
     private fun fixtureRoots(): JdxService.RootsSpec =
         JdxService.RootsSpec(jarSpecs = listOf(fixtureJar().absolutePath), includeJdk = false)
 
-    private fun socket(): Path = DaemonPaths.socketPath(tempDir, "fx")
+    private fun socket(): Path = DaemonPaths.socketPathIn(tempDir, "fx")
 
     /** A server running the production dispatch handler over the `fx` workspace. */
     private fun warmServer(store: InMemoryWorkspaceStore = fixtureStore()): DaemonServer {

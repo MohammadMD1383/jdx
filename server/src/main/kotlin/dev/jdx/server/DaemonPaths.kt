@@ -1,5 +1,7 @@
 package dev.jdx.server
 
+import dev.jdx.core.paths.JdxOs
+import dev.jdx.core.paths.JdxPaths
 import dev.jdx.core.rpc.RPC_VERSION
 import java.nio.charset.StandardCharsets
 import java.nio.file.Path
@@ -9,10 +11,16 @@ import java.security.MessageDigest
  * Where a daemon lives on disk (T-041; PROPOSAL.md §14.3).
  *
  * A daemon listens on a unix-domain socket at
- * `$XDG_RUNTIME_DIR/jdx/<workspace-hash>-v<rpc-version>.sock`, with a pid file
+ * `<socket-dir>/<workspace-hash>-v<rpc-version>.sock`, with a pid file
  * and a log file as siblings. The file name — not the directory — carries the
  * version stamp, so an upgraded `jdx` looks for a different socket and never
  * talks to a stale daemon (D-056 consequences).
+ *
+ * The socket directory resolves per OS (D-044; `docs/PROPOSAL.md` §17.1):
+ * `$XDG_RUNTIME_DIR/jdx`, else `$TMPDIR/jdx-$UID`, else `<cache-dir>/run` on
+ * Linux; `$TMPDIR/jdx-$UID`, else `<cache-dir>/run` on macOS;
+ * `%LOCALAPPDATA%/jdx/run` on Windows. A missing `XDG_RUNTIME_DIR` falls back
+ * per table, never `exit 3`.
  *
  * Pure paths, no IO: resolving them never touches the filesystem.
  */
@@ -25,6 +33,34 @@ public object DaemonPaths {
         System.getenv("XDG_RUNTIME_DIR")
             ?.takeIf { it.isNotEmpty() }
             ?.let { Path.of(it) }
+
+    /**
+     * The daemon socket directory (parent of the version-stamped `<hash>-v1.sock`).
+     * Pure path math over explicit inputs so tests pin Linux/macOS/Windows
+     * defaults with fakes and never touch the real home.
+     */
+    public fun socketDir(
+        home: Path,
+        os: JdxOs,
+        env: Map<String, String>,
+        cacheRoot: Path,
+        uid: String?,
+    ): Path = JdxPaths.runtimeDir(home, os, env, cacheRoot, uid)
+
+    /**
+     * The production socket directory: `JDX_RUNTIME_DIR` > platform env >
+     * OS default (D-044). Never null — a missing `XDG_RUNTIME_DIR` falls back
+     * per table, never `exit 3`.
+     */
+    public fun systemSocketDir(): Path {
+        val home = Path.of(System.getProperty("user.home"))
+        val os = JdxPaths.detectOs(System.getProperty("os.name", ""))
+        val env = System.getenv()
+        val cache = JdxPaths.cacheRoot(home, os, env)
+        val uid = env["UID"]?.takeIf { it.isNotBlank() }
+            ?: System.getProperty("user.name")?.takeIf { it.isNotBlank() }
+        return JdxPaths.runtimeDir(home, os, env, cache, uid)
+    }
 
     /**
      * Stable 16-hex-char identity of a workspace name (SHA-256, truncated).
@@ -44,6 +80,10 @@ public object DaemonPaths {
     /** `$runtimeDir/jdx/<socketFileName>`. */
     public fun socketPath(runtimeDir: Path, workspace: String, version: Int = RPC_VERSION): Path =
         runtimeDir.resolve(DIR_NAME).resolve(socketFileName(workspace, version))
+
+    /** `<socketDir>/<socketFileName>` — [socketDir] is already the resolved OS socket dir. */
+    public fun socketPathIn(socketDir: Path, workspace: String, version: Int = RPC_VERSION): Path =
+        socketDir.resolve(socketFileName(workspace, version))
 
     /** Sibling of [socketPath] with a `.pid` suffix (holds the daemon's pid). */
     public fun pidPath(socketPath: Path): Path = siblingWithSuffix(socketPath, ".pid")

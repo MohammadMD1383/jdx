@@ -58,7 +58,8 @@ public object DaemonClient {
      *   caller added or removed would answer about different roots.
      * - no named workspace — auto-discovered project roots have no daemon
      *   socket; only `-w`/`JDX_WORKSPACE`/`jdx ws use` selections do.
-     * - no runtime dir — without `XDG_RUNTIME_DIR` there is no socket path.
+     * - no runtime dir — the per-OS socket dir always resolves in production
+     *   (D-044 fallback); null only when a test injects no environment.
      *
      * Both `--json` and text may go warm (T-086): the JSON path prints the
      * envelope verbatim, the text path prints the server-rendered `"text"`
@@ -124,7 +125,7 @@ public object DaemonClient {
     ): Boolean {
         val workspaceName = workspaceNameForDaemon(flagWorkspace, getenv, store)
         if (!shouldAttempt(noDaemon, json, roots, workspaceName, runtimeDir)) return false
-        val socket = DaemonPaths.socketPath(runtimeDir!!, workspaceName!!.trim())
+        val socket = DaemonPaths.socketPathIn(runtimeDir!!, workspaceName!!.trim())
         if (json) {
             val hit = tryWarm(request, socket, roundTrip) ?: return false
             printer(hit.line)

@@ -40,7 +40,7 @@ class HierarchyCommand(
     private val store: WorkspaceStore = FileWorkspaceStore.system(),
     private val getenv: (String) -> String? = { name -> System.getenv(name) },
     private val discover: ProjectDiscoveryFn? = null,
-    private val daemonRuntimeDir: Path? = DaemonPaths.systemRuntimeDir(),
+    private val daemonRuntimeDir: Path? = DaemonPaths.systemSocketDir(),
     private val daemonRoundTrip: DaemonRoundTrip = defaultRoundTrip,
 ) : CoreCliktCommand(name = "hierarchy") {
     override fun help(context: Context): String =
@@ -223,7 +223,7 @@ class ImplementorsCommand(
     private val store: WorkspaceStore = FileWorkspaceStore.system(),
     private val getenv: (String) -> String? = { name -> System.getenv(name) },
     private val discover: ProjectDiscoveryFn? = null,
-    private val daemonRuntimeDir: Path? = DaemonPaths.systemRuntimeDir(),
+    private val daemonRuntimeDir: Path? = DaemonPaths.systemSocketDir(),
     private val daemonRoundTrip: DaemonRoundTrip = defaultRoundTrip,
 ) : CoreCliktCommand(name = "implementors") {
     override fun help(context: Context): String =

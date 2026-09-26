@@ -28,7 +28,7 @@ class DoctorDaemonLiveTest {
     fun `a live daemon socket is running and a dead file is stale`() {
         val home = tempDir.resolve("home").also { Files.createDirectories(it) }
         val runtime = tempDir.resolve("run").also { Files.createDirectories(it) }
-        val socket = DaemonPaths.socketPath(runtime, "live-ws")
+        val socket = DaemonPaths.socketPathIn(runtime, "live-ws")
         val server = DaemonServer(
             workspace = "live-ws",
             socketPath = socket,
@@ -38,7 +38,7 @@ class DoctorDaemonLiveTest {
         )
         server.start()
         try {
-            Files.createFile(runtime.resolve("jdx").resolve("dead.sock"))
+            Files.createFile(runtime.resolve("dead.sock"))
             val base = fakeEnvironment(tempDir.resolve("env"))
             val env = base.copy(userHome = home, runtimeDir = runtime)
             // Point the fake home's runtime dir at the live sockets: the probe
@@ -59,7 +59,7 @@ class DoctorDaemonLiveTest {
     @Test
     fun `after the daemon stops its socket reads stale`() {
         val runtime = tempDir.resolve("run2").also { Files.createDirectories(it) }
-        val socket = DaemonPaths.socketPath(runtime, "gone-ws")
+        val socket = DaemonPaths.socketPathIn(runtime, "gone-ws")
         val server = DaemonServer(
             workspace = "gone-ws",
             socketPath = socket,
@@ -71,7 +71,7 @@ class DoctorDaemonLiveTest {
         server.stop()
         // `stop` sweeps the socket file; leave a dead one behind to prove the
         // stale path with the real default probe (no fakes).
-        Files.createFile(runtime.resolve("jdx").resolve("leftover.sock"))
+        Files.createFile(runtime.resolve("leftover.sock"))
         val base = fakeEnvironment(tempDir.resolve("env2"))
         val env = base.copy(runtimeDir = runtime)
         val report = DoctorService(env).probe()

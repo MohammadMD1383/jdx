@@ -401,7 +401,7 @@ class DoctorServiceTest {
         checkAll(100, Arb.list(hostileName, 0..4), Arb.string(0..20)) { names, workspace ->
             val caseRoot = Files.createDirectory(root.resolve("case-${System.nanoTime()}"))
             val env = fakeEnvironment(caseRoot)
-            val socketDir = env.runtimeDir!!.resolve("jdx").also { Files.createDirectories(it) }
+            val socketDir = env.runtimeDir!!.also { Files.createDirectories(it) }
             val files = names.distinct().mapIndexed { index, name -> "$index-$name.sock" }
             files.forEach { Files.createFile(socketDir.resolve(it)) }
             val probe: (Path) -> DaemonStatusSnapshot? = { socket ->

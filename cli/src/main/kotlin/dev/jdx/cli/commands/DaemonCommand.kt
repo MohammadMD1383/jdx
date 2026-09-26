@@ -29,7 +29,9 @@ import kotlin.system.exitProcess
  * `jdx daemon start|stop|status|restart|run` (T-041; PROPOSAL.md §14.3).
  *
  * A background JVM holding a hot process, listening on a version-stamped
- * unix-domain socket (`$XDG_RUNTIME_DIR/jdx/<workspace-hash>-v1.sock`), with
+ * unix-domain socket (`<socket-dir>/<workspace-hash>-v1.sock`, per-OS socket
+ * dir in `docs/PROPOSAL.md` §17.1; a missing `XDG_RUNTIME_DIR` falls back per
+ * table, never `exit 3`), with
  * idle shutdown after `--idle` (default 5m, `0` disables). `run` is the
  * foreground server the spawned child executes; the other four are control
  * commands. Thin by rule (D-004): socket, framing and lifecycle live in
@@ -37,7 +39,8 @@ import kotlin.system.exitProcess
  *
  * Exits: 0 ok (including idempotent `start` on a running daemon) · 1 valid
  * query with nothing to report (`status`/`stop` on a stopped daemon) ·
- * 3 usage error (no `XDG_RUNTIME_DIR`, bad `--idle`) · 6 spawn/IO failure.
+ * 3 usage error (bad `--idle`; unresolvable socket dir — unreachable in
+ * production since the per-OS fallback always resolves) · 6 spawn/IO failure.
  */
 class DaemonCommand : CoreCliktCommand(name = "daemon") {
     override fun help(context: Context): String =
@@ -58,7 +61,7 @@ data class DaemonEnv(
         fun system(): DaemonEnv {
             val javaHome = System.getProperty("java.home")
             return DaemonEnv(
-                runtimeDir = DaemonPaths.systemRuntimeDir(),
+                runtimeDir = DaemonPaths.systemSocketDir(),
                 javaExe = resolveJavaExe(javaHome),
                 classpath = System.getProperty("java.class.path", ""),
             )
@@ -99,13 +102,22 @@ fun interface DaemonSpawner {
     fun spawn(argv: List<String>, logFile: Path): Long?
 }
 
+/**
+ * The OS null device for detaching a spawned daemon's stdin: `NUL` on
+ * Windows (`/dev/null` does not exist there — `Redirect.from` would throw
+ * `FileNotFoundException`), `/dev/null` elsewhere. Pure — unit-tested.
+ * (`Redirect.DISCARD` is output-only and illegal for stdin.)
+ */
+internal fun nullDeviceName(osName: String = System.getProperty("os.name", "")): String =
+    if (osName.lowercase().contains("win")) "NUL" else "/dev/null"
+
 /** [DaemonSpawner] over [ProcessBuilder]: output appended to the log sibling, stdin detached. */
 val RealDaemonSpawner: DaemonSpawner = DaemonSpawner { argv, logFile ->
     Files.createDirectories(logFile.parent)
     val process = ProcessBuilder(argv)
         .redirectOutput(ProcessBuilder.Redirect.appendTo(logFile.toFile()))
         .redirectErrorStream(true)
-        .redirectInput(ProcessBuilder.Redirect.from(File("/dev/null")))
+        .redirectInput(ProcessBuilder.Redirect.from(File(nullDeviceName())))
         .start()
     process.pid()
 }
@@ -201,13 +213,14 @@ internal fun controlPaths(
     val runtimeDir = env.runtimeDir
         ?: run {
             finishDaemon(
-                "usage error: XDG_RUNTIME_DIR is unset — the daemon needs it for its socket",
-                DaemonPayload(message = "XDG_RUNTIME_DIR is unset"),
+                "usage error: cannot resolve daemon socket directory " +
+                    "(checked JDX_RUNTIME_DIR, XDG_RUNTIME_DIR, TMPDIR, LOCALAPPDATA)",
+                DaemonPayload(message = "daemon socket directory unresolvable"),
                 json, 3, terminate,
             )
             return null
         }
-    val socket = DaemonPaths.socketPath(runtimeDir, workspace)
+    val socket = DaemonPaths.socketPathIn(runtimeDir, workspace)
     return DaemonControl(socket, DaemonPaths.pidPath(socket), DaemonPaths.logPath(socket))
 }
 
@@ -502,11 +515,15 @@ class DaemonRunCommand(
         }
         val runtimeDir = env.runtimeDir
         if (runtimeDir == null) {
-            echo("usage error: XDG_RUNTIME_DIR is unset — the daemon needs it for its socket", err = true)
+            echo(
+                "usage error: cannot resolve daemon socket directory " +
+                    "(checked JDX_RUNTIME_DIR, XDG_RUNTIME_DIR, TMPDIR, LOCALAPPDATA)",
+                err = true,
+            )
             terminate(3)
             return
         }
-        val socket = DaemonPaths.socketPath(runtimeDir, workspace)
+        val socket = DaemonPaths.socketPathIn(runtimeDir, workspace)
         // The dispatch handler (T-082) answers every read query through the same
         // JdxService the one-shot CLI calls; health/version stay on the transport
         // internals. Roots resolve per request, so `ws create` while the daemon
