@@ -38,6 +38,17 @@ java.util.HashMap#get(java.lang.Object)
 No sources jar? It decompiles with Vineflower — and **says so**, so the agent knows it is
 reading a reconstruction (pass `--engine javap` for raw opcodes instead).
 
+> **Proof, not promises.** One real task — *list Gson's API, then show only
+> `toJson(Object)`* — measured on gson-2.14.0:
+>
+> | | calls | bytes in context (~tokens) |
+> |---|---|---|
+> | `unzip` + `javap` + `grep` + `sed` | 5 | ~17.5 KB (~4.4k) — and `head -200` misses the method (line 542 of 1265) |
+> | `jdx members` + `jdx body` | **2** | **~4.6 KB (~1.2k)** — exact method, 267 bytes (~67 tokens) |
+>
+> The body alone: **267 bytes vs 60,590 (`javap -c`, 226×) vs 58,251 (full
+> `Gson.java`, 218×)**. Tokens ≈ bytes/4. Reproduce it: `sh docs/bench-compare.sh`.
+
 Same task, two agents — left does it with `javap`/`grep`, right with `jdx`:
 
 ![baseline vs jdx: find all System.exit call sites in java.base](docs/demo-callsites.gif)
