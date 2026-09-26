@@ -8,7 +8,10 @@
 #      `/usr/libexec/java_home` (macOS only)  ->  $JDX_JVM_DEFAULT_DIR
 #      (default /usr/lib/jvm/default, the Arch layout; JDX_JVM_DEFAULT_DIR exists mainly so
 #      the no-JDK error path is testable on a machine that always has a JDK, and secondarily
-#      for non-Arch users — see D-026)
+#      for non-Arch users — see D-026). The macOS helper path itself is overridable via
+#      $JDX_JAVA_HOME_HELPER (default /usr/libexec/java_home) for the same reason: the
+#      no-helper sandbox and the helper branch are otherwise untestable where a real
+#      helper exists.
 #   2. fail with one human-readable line on stderr — never a stack trace — if it cannot
 #      (missing JDK, JDK too old, missing build). Exit code 6 (D-015/D-026).
 #   3. exec the fat jar with the one-shot CLI JVM flags (PROPOSAL.md §15):
@@ -85,9 +88,12 @@ elif command -v java >/dev/null 2>&1; then
 else
     # macOS has no /usr/lib/jvm/default (that fallback is the Arch layout): ask the
     # system helper first, then fall through to the JDX_JVM_DEFAULT_DIR escape hatch.
-    if [ -x /usr/libexec/java_home ]; then
-        mac_home=$(/usr/libexec/java_home -v "$minimum_java_major" 2>/dev/null \
-            || /usr/libexec/java_home 2>/dev/null)
+    # The helper path is a seam for tests ($JDX_JAVA_HOME_HELPER): sandbox tests point
+    # it at nothing, and a fake helper script exercises this branch on any OS.
+    java_home_helper=${JDX_JAVA_HOME_HELPER:-/usr/libexec/java_home}
+    if [ -x "$java_home_helper" ]; then
+        mac_home=$("$java_home_helper" -v "$minimum_java_major" 2>/dev/null \
+            || "$java_home_helper" 2>/dev/null)
         if [ -n "$mac_home" ] && [ -x "$mac_home/bin/java" ]; then
             java_exe=$mac_home/bin/java
         fi

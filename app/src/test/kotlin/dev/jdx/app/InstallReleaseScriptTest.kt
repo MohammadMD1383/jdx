@@ -58,6 +58,11 @@ class InstallReleaseScriptTest {
      * GNU-only `-f`/`--` flags, and `mktemp` requires a `-t` template the way older
      * macOS releases do. Anything else delegates to the real binary, so a passing run
      * proves install-release.sh uses no GNU-only flag.
+     *
+     * `mkdir`, `cp`, `chmod`, `rm` and `ln` reject a `--` operand separator the same
+     * way: BSD takes it only inconsistently (rm/ln/dirname do, mkdir/cp/chmod do
+     * not — proven by the macOS CI run that closed #47), so installer scripts use
+     * no `--` at all and these shims forbid it.
      */
     private fun bsdStubBin(): File {
         val dir = tempDir("jdx-bsd-")
@@ -117,6 +122,26 @@ class InstallReleaseScriptTest {
                 """.trimIndent(),
             )
             setExecutable(true, false)
+        }
+        // BSD mkdir/cp/chmod/rm/ln take `--` only inconsistently: a shim per tool
+        // that fails on `--` and delegates otherwise, so Linux runs prove the
+        // installer stays `--`-free.
+        for (tool in listOf("mkdir", "cp", "chmod", "rm", "ln")) {
+            val realTool = realToolPath(tool)
+            File(dir, tool).apply {
+                writeText(
+                    """
+                    #!/bin/sh
+                    for a in "${'$'}@"; do
+                        case "${'$'}a" in
+                            --) printf '$tool: illegal option --\n' >&2; exit 1 ;;
+                        esac
+                    done
+                    exec "$realTool" "${'$'}@"
+                    """.trimIndent(),
+                )
+                setExecutable(true, false)
+            }
         }
         return dir
     }

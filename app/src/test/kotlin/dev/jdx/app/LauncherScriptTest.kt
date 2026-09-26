@@ -54,7 +54,10 @@ class LauncherScriptTest {
         return ProcessResult(process.waitFor(), stdout, stderr)
     }
 
-    private fun tempDir(prefix: String): File = Files.createTempDirectory(prefix).toFile()
+    // Canonicalised: on macOS $TMPDIR lives under /var, which is a symlink to
+    // /private/var, while the launcher resolves symlinks — comparisons against
+    // the resolved jar path must start from the real path (#47).
+    private fun tempDir(prefix: String): File = Files.createTempDirectory(prefix).toRealPath().toFile()
 
     /** A minimal `build/jdx` + `build/libs/jdx-*-all.jar` layout; the jar is never opened. */
     private fun newFakeInstall(withCdsArchive: Boolean = false): File {
@@ -226,11 +229,42 @@ class LauncherScriptTest {
             environment = stubEnvironment(argsFile) + mapOf(
                 "PATH" to toolsOnlyPath(),
                 "JDX_JVM_DEFAULT_DIR" to stubJdk.absolutePath,
+                // The macOS helper would otherwise defeat the sandbox where it
+                // exists: point the seam at nothing so the last-resort branch
+                // is what actually runs.
+                "JDX_JAVA_HOME_HELPER" to "/nonexistent-jdx-test-helper",
             ),
         )
 
         result.exitCode shouldBe 0
         recordedArgs(argsFile) shouldContain "-jar"
+    }
+
+    @Test
+    fun `the macOS java_home helper branch is used when JAVA_HOME and PATH have no java`() {
+        // The $JDX_JAVA_HOME_HELPER seam makes the macOS-only branch testable on
+        // any OS: a fake helper printing the stub JDK home stands in for
+        // /usr/libexec/java_home, which exists only on macOS (#47).
+        val install = newFakeInstall()
+        val stubJdk = newStubJdk()
+        val argsFile = File(install, "stub-args.txt")
+        val helper = File(install, "fake-java-home").apply {
+            writeText("#!/bin/sh\nprintf '%s\\n' \"${stubJdk.absolutePath}\"\n")
+            setExecutable(true, false)
+        }
+
+        val result = runLauncher(
+            File(install, "jdx"), install, args = listOf("--version"),
+            environment = stubEnvironment(argsFile) + mapOf(
+                "PATH" to toolsOnlyPath(),
+                "JDX_JVM_DEFAULT_DIR" to "/nonexistent-jdx-test-jvm",
+                "JDX_JAVA_HOME_HELPER" to helper.absolutePath,
+            ),
+        )
+
+        result.exitCode shouldBe 0
+        recordedArgs(argsFile) shouldContain "-jar"
+        recordedArgs(argsFile) shouldContain File(install, "libs/jdx-0.0.0-all.jar").absolutePath
     }
 
     @Test
@@ -298,6 +332,9 @@ class LauncherScriptTest {
             environment = mapOf(
                 "PATH" to toolsOnlyPath(),
                 "JDX_JVM_DEFAULT_DIR" to "/nonexistent-jdx-test-jvm",
+                // Same sandboxing as above: a real /usr/libexec/java_home would
+                // find a real JDK and exec the (absent) jar instead of failing.
+                "JDX_JAVA_HOME_HELPER" to "/nonexistent-jdx-test-helper",
             ),
         )
 
