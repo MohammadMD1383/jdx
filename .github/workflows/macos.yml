@@ -1,11 +1,13 @@
 name: macos
 
-# macOS verification for the multiplatform slices (issue #47, part of #52).
+# macOS verification for the multiplatform slices (issue #47, part of #52),
+# promoted to the full product check (issue #56, part of #61).
 # The POSIX launcher + installers assume BSD userland, and unit tests can only
 # stub BSD tools (`readlink` without `-f`, template-requiring `mktemp`) — this
-# job runs the real thing on a real Mac: the app suites (incl. the tier-2
-# real-JVM launcher/installer end-to-end tests), a symlinked-launcher smoke
-# through the true BSD `readlink` fallback, and the `java_home` prerequisite.
+# job runs the real thing on a real Mac: the full `./gradlew check` (product
+# modules, not just `:app`), the app suites (incl. the tier-2 real-JVM
+# launcher/installer end-to-end tests), a symlinked-launcher smoke through
+# the true BSD `readlink` fallback, and the `java_home` prerequisite.
 
 on:
   push:
@@ -16,9 +18,14 @@ on:
 permissions:
   contents: read
 
+concurrency:
+  group: macos-${{ github.ref }}
+  cancel-in-progress: true
+
 jobs:
-  app:
+  check:
     runs-on: macos-latest
+    timeout-minutes: 60
     steps:
       - name: Check out
         uses: actions/checkout@v4
@@ -32,8 +39,32 @@ jobs:
       - name: Set up Gradle
         uses: gradle/actions/setup-gradle@v4
 
-      - name: App tests (launcher + installer suites, incl. tier-2 end-to-end)
-        run: ./gradlew :app:check
+      - name: Full check (product tests + lint + coverage gates)
+        run: ./gradlew check -Pci
+
+      - name: Aggregated test report
+        if: always()
+        run: ./gradlew testReport -Pci
+
+      - name: Upload JUnit results
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: junit-results-macos
+          path: |
+            **/build/test-results/**
+          if-no-files-found: warn
+
+      - name: Upload HTML test + coverage reports
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: reports-macos
+          path: |
+            build/reports/allTests/
+            **/build/reports/tests/
+            **/build/reports/jacoco/
+          if-no-files-found: warn
 
       - name: Build distribution
         run: ./gradlew :app:installDist

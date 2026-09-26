@@ -1,17 +1,22 @@
 name: windows
 
-# Windows verification for the multiplatform slices (issue #52, part of #43).
+# Windows verification for the multiplatform slices (issue #52, part of #43),
+# promoted to the full product check (issue #56, part of #61).
 # The POSIX launcher + installer suites (LauncherScriptTest, InstallScriptTest,
 # InstallReleaseScriptTest) are @DisabledOnOs(WINDOWS): they exec #!/bin/sh
 # scripts directly (CreateProcess error=193 on Win) and assume POSIX ln/tar
 # (tar treats C: as a remote host). This job runs the real thing on a real
-# Windows runner instead: WindowsLauncherScriptTest (static .bat/.ps1 pins +
-# tier-2 jdx.bat smokes through the real cmd.exe batch interpreter), a
-# jdx.bat version + doctor smoke, and the gradlew.bat entry point itself.
+# Windows runner instead: the full `check` (product modules, not just `:app`,
+# with POSIX-only suites skipping by design), WindowsLauncherScriptTest
+# (static .bat/.ps1 pins + tier-2 jdx.bat smokes through the real cmd.exe
+# batch interpreter), a jdx.bat version + doctor smoke, and the gradlew.bat
+# entry point itself.
 #
 # Mirrors `.github/workflows/macos.yml` (issue #47): macOS proves the BSD
 # userland path, Windows proves the batch/PowerShell path. Both run on every
-# push to main and every PR, plus on-demand via workflow_dispatch.
+# push to main and every PR, plus on-demand via workflow_dispatch. The legs
+# are independent workflows, so one OS red never hides the others
+# (`fail-fast: false` equivalent).
 
 on:
   push:
@@ -22,9 +27,14 @@ on:
 permissions:
   contents: read
 
+concurrency:
+  group: windows-${{ github.ref }}
+  cancel-in-progress: true
+
 jobs:
-  app:
+  check:
     runs-on: windows-latest
+    timeout-minutes: 60
     steps:
       - name: Check out
         uses: actions/checkout@v4
@@ -42,9 +52,34 @@ jobs:
       # the Windows wrapper entry point works. POSIX legs use ./gradlew.
       # POSIX-only suites skip here by @DisabledOnOs(WINDOWS); Windows coverage
       # is WindowsLauncherScriptTest (pins + tier-2 jdx.bat smokes).
-      - name: App tests (launcher + installer suites, incl. tier-2 jdx.bat smokes)
+      - name: Full check (product tests + lint + coverage gates)
         shell: cmd
-        run: gradlew.bat :app:check
+        run: gradlew.bat check -Pci
+
+      - name: Aggregated test report
+        if: always()
+        shell: cmd
+        run: gradlew.bat testReport -Pci
+
+      - name: Upload JUnit results
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: junit-results-windows
+          path: |
+            **/build/test-results/**
+          if-no-files-found: warn
+
+      - name: Upload HTML test + coverage reports
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: reports-windows
+          path: |
+            build/reports/allTests/
+            **/build/reports/tests/
+            **/build/reports/jacoco/
+          if-no-files-found: warn
 
       - name: Build distribution (Windows)
         shell: cmd
