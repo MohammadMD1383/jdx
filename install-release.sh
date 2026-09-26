@@ -18,6 +18,11 @@
 # Writes a `.jdx-release` marker (repo + tag) into the install dir: that is
 # how `jdx upgrade` knows this is a release install and which repo it tracks.
 #
+# NOTE (macOS, #47): BSD mkdir/cp/chmod reject `--` (only some BSD tools take
+# it — rm/ln/dirname do, mkdir/cp/chmod do not), so this script uses NO `--`
+# anywhere. All operands are HOME-derived or flag values that never start
+# with `-`; the Linux suite pins this with `--`-rejecting stubs (bsdStubBin).
+#
 # Per-user only: never requires root, and refuses to run as root. Refuses to
 # overwrite an existing, unrelated `jdx` on PATH unless --force is given.
 
@@ -139,13 +144,13 @@ resolve_latest() {
     tmp=$(make_temp_file) || die "cannot create temp file"
     download "$api" "$tmp" || die "could not query '$api' — pass --version explicitly"
     tag=$(sed -n 's/.*"tag_name"[[:space:]]*:[[:space:]]*"\([^"]*\)".*/\1/p' "$tmp" | head -n 1)
-    rm -f -- "$tmp"
+    rm -f "$tmp"
     [ -n "$tag" ] || die "could not parse the latest release tag from '$api' — pass --version explicitly"
     printf '%s' "$tag"
 }
 
 tmp_dir=$(make_temp_dir) || die "cannot create temp directory"
-trap 'rm -rf -- "$tmp_dir"' EXIT INT TERM
+trap 'rm -rf "$tmp_dir"' EXIT INT TERM
 
 tarball=
 if [ -n "$tarball_override" ]; then
@@ -196,7 +201,7 @@ fi
 tar -tzf "$tarball" | head -n 1 | grep -q '^jdx/' \
     || die "unexpected tarball layout — expected a top-level 'jdx/' directory"
 
-mkdir -p -- "$install_dir" || die "cannot create '$install_dir'"
+mkdir -p "$install_dir" || die "cannot create '$install_dir'"
 tar -xzf "$tarball" -C "$tmp_dir" || die "cannot extract '$tarball'"
 [ -x "$tmp_dir/jdx/jdx" ] || die "tarball has no executable 'jdx/jdx' launcher"
 jar_found=0
@@ -205,16 +210,16 @@ for jar in "$tmp_dir"/jdx/libs/jdx-*-all.jar; do
 done
 [ "$jar_found" -eq 1 ] || die "tarball has no 'jdx/libs/jdx-*-all.jar' fat jar"
 
-rm -rf -- "$install_dir" || die "cannot clear '$install_dir'"
-mkdir -p -- "$install_dir" || die "cannot create '$install_dir'"
-cp -r -- "$tmp_dir/jdx/." "$install_dir/" || die "cannot copy into '$install_dir'"
-chmod +x -- "$install_dir/jdx" || die "cannot make '$install_dir/jdx' executable"
+rm -rf "$install_dir" || die "cannot clear '$install_dir'"
+mkdir -p "$install_dir" || die "cannot create '$install_dir'"
+cp -r "$tmp_dir/jdx/." "$install_dir/" || die "cannot copy into '$install_dir'"
+chmod +x "$install_dir/jdx" || die "cannot make '$install_dir/jdx' executable"
 # Marker for `jdx upgrade`: which repo this install tracks (and that it IS a
 # release install — source builds have no marker and are never self-updated).
 printf 'repo=%s\ntag=%s\n' "$repo" "$version" > "$install_dir/.jdx-release" \
     || die "cannot write '$install_dir/.jdx-release'"
 
-mkdir -p -- "$bin_dir" || die "cannot create '$bin_dir'"
+mkdir -p "$bin_dir" || die "cannot create '$bin_dir'"
 target=$bin_dir/jdx
 if [ -e "$target" ] || [ -L "$target" ]; then
     if [ -L "$target" ] && [ "$(readlink "$target")" = "$install_dir/jdx" ]; then
@@ -224,9 +229,9 @@ if [ -e "$target" ] || [ -L "$target" ]; then
     elif [ "$force" -eq 0 ]; then
         die "'$target' already exists and is not this jdx install — rerun with --force to replace it"
     fi
-    rm -f -- "$target" || die "cannot remove '$target'"
+    rm -f "$target" || die "cannot remove '$target'"
 fi
-ln -s -- "$install_dir/jdx" "$target" || die "cannot link '$target' -> '$install_dir/jdx'"
+ln -s "$install_dir/jdx" "$target" || die "cannot link '$target' -> '$install_dir/jdx'"
 
 case ":$PATH:" in
     *":$bin_dir:"*) ;;

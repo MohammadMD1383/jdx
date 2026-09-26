@@ -10,6 +10,8 @@ Fat-jar assembly + the `jdx` POSIX launcher + AppCDS archive.
   (`-TieredStopAtLevel=1`, serial GC, `-Xshare:auto`), passes
   `-XX:SharedArchiveFile=<fixed jdx.jsa path>` only when the archive exists next
   to the fat jar (missing/stale degrades to a plain run, never fatal).
+  `$JDX_JAVA_HOME_HELPER` overrides the macOS helper path (test seam).
+  Installer scripts use no `--` anywhere: BSD mkdir/cp/chmod reject it.
 - `build.gradle.kts` — `generateCdsClassList` + `createCdsArchive` (incremental,
   config-cache safe: plain-`File` captures only), wired into `installDist`.
 

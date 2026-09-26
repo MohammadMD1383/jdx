@@ -1,0 +1,51 @@
+name: macos
+
+# macOS verification for the multiplatform slices (issue #47, part of #52).
+# The POSIX launcher + installers assume BSD userland, and unit tests can only
+# stub BSD tools (`readlink` without `-f`, template-requiring `mktemp`) — this
+# job runs the real thing on a real Mac: the app suites (incl. the tier-2
+# real-JVM launcher/installer end-to-end tests), a symlinked-launcher smoke
+# through the true BSD `readlink` fallback, and the `java_home` prerequisite.
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  app:
+    runs-on: macos-latest
+    steps:
+      - name: Check out
+        uses: actions/checkout@v4
+
+      - name: Set up JDK 21
+        uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: "21"
+
+      - name: Set up Gradle
+        uses: gradle/actions/setup-gradle@v4
+
+      - name: App tests (launcher + installer suites, incl. tier-2 end-to-end)
+        run: ./gradlew :app:check
+
+      - name: Build distribution
+        run: ./gradlew :app:installDist
+
+      - name: Symlinked launcher smoke (BSD readlink path, issue #47)
+        run: |
+          mkdir -p /tmp/jdxlink
+          ln -sf "$PWD/app/build/jdx" /tmp/jdxlink/jdx
+          /tmp/jdxlink/jdx version
+
+      - name: java_home discovery prerequisite (macOS JDK branch, issue #47)
+        run: /usr/libexec/java_home -v 21
+
+      - name: Doctor smoke
+        run: ./app/build/jdx doctor
