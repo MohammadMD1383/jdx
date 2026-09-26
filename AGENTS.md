@@ -91,7 +91,8 @@ get an explicit reversal, record it here and in the commit message)
 ```
 jdx/
 ├── AGENTS.md                  ← you are here
-├── README.md                  user-facing catalogue
+├── README.md                  user-facing intro (hook, demo, install, quickstart, links)
+├── docs/COMMANDS.md           user-facing command catalogue (moved out of README)
 ├── CONTRIBUTING.md            conventions, code style, definition of done
 ├── <module>/AGENTS.md         per-module notes — read only the one(s) you touch
 ├── docs/
@@ -179,7 +180,7 @@ round-tripping.
 - **Definition of done for a command:** behaviour in `core`/`index`/`sources`/`decompile`,
   thin adapter in `cli`, `--help` text, text renderer, JSON renderer, exit codes,
   truncation, golden tests for both renderers, at least one *generative* test family,
-  README table row, Appendix B flag entry, GitHub Issue filed/updated if behaviour or
+  docs/COMMANDS.md table row, Appendix B flag entry, GitHub Issue filed/updated if behaviour or
   limitations changed.
 - **Report honestly.** Failing tests get pasted, not summarised away. Documented
   half-finished work is useful; half-finished work reported as done is a trap.
@@ -194,8 +195,8 @@ round-tripping.
   Appendix B flag reference, §19 licenses). Code cites `PROPOSAL.md §X`; keep true.
 - `docs/TESTING.md` — testing strategy; read before writing tests.
 - GitHub Issues — known limitations + phase-2 backlog (the roadmap).
-- README is the user-facing catalogue; every shipped flag must appear in
-  `jdx <cmd> --help`, the README table, and Appendix B.
+- docs/COMMANDS.md is the user-facing catalogue; every shipped flag must appear in
+  `jdx <cmd> --help`, the docs/COMMANDS.md table, and Appendix B.
 
 ## 10. Environment notes (this machine)
 

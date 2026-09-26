@@ -106,7 +106,7 @@ source of half-done work.
 - [ ] `next:` hint line on single-entity output, where a sensible follow-up exists
 - [ ] **Golden tests** for text and JSON against the fixture corpus
 - [ ] MCP tool entry — generated from shared metadata, not hand-written twice
-- [ ] Row in the README command table
+- [ ] Row in the docs/COMMANDS.md command table
 - [ ] Flag documented in `docs/PROPOSAL.md` Appendix B
 - [ ] GitHub Issue filed/updated if behaviour or limitations changed
 
