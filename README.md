@@ -1,5 +1,9 @@
 # `jdx` — an IDE for AI agents
 
+[![Release](https://img.shields.io/github/v/release/MohammadMD1383/jdx)](https://github.com/MohammadMD1383/jdx/releases)
+[![License](https://img.shields.io/github/license/MohammadMD1383/jdx)](LICENSE)
+[![Build](https://github.com/MohammadMD1383/jdx/actions/workflows/release.yml/badge.svg)](https://github.com/MohammadMD1383/jdx/actions/workflows/release.yml)
+
 ## Try it in 30 seconds
 
 ```bash
