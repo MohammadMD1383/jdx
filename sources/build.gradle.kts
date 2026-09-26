@@ -14,6 +14,9 @@ dependencies {
     implementation(project(":core"))
     implementation(libs.javaparser.core)
     testImplementation(libs.kotest.property)
+    // The symlink-or-copy sidecar stager lives in testfixtures' testFixtures
+    // source set (same pattern as :index/:cli/:server).
+    testImplementation(testFixtures(project(":testfixtures")))
 }
 
 // Fixture `-sources.jar` reads (T-071 tier-2 suite). Depend on the jars so a clean

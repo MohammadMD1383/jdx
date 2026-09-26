@@ -1,5 +1,6 @@
 package dev.jdx.index.fault
 
+import dev.jdx.core.render.JsonEscape
 import dev.jdx.index.service.JdxService
 import io.kotest.assertions.withClue
 import io.kotest.matchers.shouldBe
@@ -117,7 +118,8 @@ internal object FaultSupport {
         val rendered = renderBoth(outcome, "show")
         for (name in names) {
             withClue("show($ref) text names '$name'") { rendered.text shouldContain name }
-            withClue("show($ref) JSON names '$name'") { rendered.json shouldContain name }
+            val jsonName = JsonEscape.quote(name).removeSurrounding("\"")
+            withClue("show($ref) JSON names '$name'") { rendered.json shouldContain jsonName }
         }
         return rendered
     }
@@ -142,7 +144,8 @@ internal object FaultSupport {
         val rendered = renderBoth(outcome, "members")
         for (name in names) {
             withClue("members($ref) text names '$name'") { rendered.text shouldContain name }
-            withClue("members($ref) JSON names '$name'") { rendered.json shouldContain name }
+            val membersJsonName = JsonEscape.quote(name).removeSurrounding("\"")
+            withClue("members($ref) JSON names '$name'") { rendered.json shouldContain membersJsonName }
         }
         return rendered
     }

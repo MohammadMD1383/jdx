@@ -11,6 +11,7 @@ import dev.jdx.index.service.JdxService.RootsSpec
 import dev.jdx.index.service.JdxService.ServiceOutcome
 import dev.jdx.index.service.JdxService.SourceOptions
 import dev.jdx.testsupport.fixtures.FixtureJars
+import dev.jdx.testsupport.paths.symlinkOrCopy
 import io.kotest.matchers.shouldBe
 import io.kotest.matchers.string.shouldContain
 import io.kotest.matchers.string.shouldNotContain
@@ -84,16 +85,11 @@ class KotlinSourcesServiceTest {
         // and Windows (`%LOCALAPPDATA%`). Still hermetic: under @TempDir.
         val dir = dev.jdx.sources.kotlinSidecarDir(home)
         Files.createDirectories(dir)
+        // Link, copying where the host cannot symlink (Windows without
+        // Developer Mode): skipping there would hollow the suite and the
+        // coverage gates counting on it.
         for ((jarName, cached) in jars) {
-            try {
-                Files.createSymbolicLink(dir.resolve(jarName), cached)
-            } catch (e: UnsupportedOperationException) {
-                assumeTrue(false, "symlinks unsupported on this host/filesystem: ${e.message}")
-            } catch (e: java.io.IOException) {
-                assumeTrue(false, "symlinks need privilege on this host (Windows Developer Mode): ${e.message}")
-            } catch (e: SecurityException) {
-                assumeTrue(false, "symlinks blocked by security manager: ${e.message}")
-            }
+            symlinkOrCopy(dir.resolve(jarName), cached)
         }
         return home
     }
