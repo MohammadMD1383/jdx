@@ -8,8 +8,9 @@
 #
 # NOTE: keep the one-shot flag set and their order identical to jdx.bat and
 # the POSIX launcher -- flag order (-Xshare:auto before
-# -XX:SharedArchiveFile) is what makes stale archives degrade instead of
-# fail, and it is pinned by WindowsLauncherScriptTest.
+# -XX:SharedArchiveFile) is what makes stale archives degrade quietly instead
+# of fail (CDS diagnostics stay off via -Xlog:cds=off), and it is pinned by
+# WindowsLauncherScriptTest.
 
 $ErrorActionPreference = 'Stop'
 $JdxMinJava = 21
@@ -20,9 +21,13 @@ function Fail-Jdx([string]$Message) {
 }
 
 $JdxHome = Split-Path -Parent $MyInvocation.MyCommand.Path
-$JdxJar = Get-ChildItem -Path (Join-Path $JdxHome 'libs\jdx-*-all.jar') -File -ErrorAction SilentlyContinue |
-  Select-Object -First 1
-if (-not $JdxJar) { Fail-Jdx "no jdx fat jar in '$JdxHome\libs' -- build it first: gradlew.bat :app:installDist" }
+# More than one fat jar is an ambiguous install, never a guess: the build
+# evicts superseded jars, so this means a stale jar survived (or jars were
+# copied by hand) -- picking one silently once reported the wrong version.
+$JdxJars = @(Get-ChildItem -Path (Join-Path $JdxHome 'libs\jdx-*-all.jar') -File -ErrorAction SilentlyContinue)
+if ($JdxJars.Count -eq 0) { Fail-Jdx "no jdx fat jar in '$JdxHome\libs' -- build it first: gradlew.bat :app:installDist" }
+if ($JdxJars.Count -gt 1) { Fail-Jdx "multiple jdx fat jars in '$JdxHome\libs': $($JdxJars.FullName -join ', ') -- rebuild to leave exactly one: gradlew.bat :app:clean :app:installDist" }
+$JdxJar = $JdxJars[0]
 
 $JavaExe = $null
 
@@ -85,8 +90,9 @@ if (-not [int]::TryParse($Major, [ref]$MajorNum)) { Fail-Jdx "unrecognised Java 
 if ($MajorNum -lt $JdxMinJava) { Fail-Jdx "jdx requires Java $JdxMinJava+, but '$JavaExe' is version '$Ver' -- set JAVA_HOME to a newer JDK" }
 
 # AppCDS archive: presence check only -- -Xshare:auto below makes a stale
-# archive a warning, never a failure, so no version probing here.
-$Flags = @('-XX:TieredStopAtLevel=1', '-XX:+UseSerialGC', '-Xshare:auto')
+# archive degrade silently (CDS diagnostics off), never a failure, so no
+# version probing here.
+$Flags = @('-XX:TieredStopAtLevel=1', '-XX:+UseSerialGC', '-Xshare:auto', '-Xlog:cds=off')
 $Cds = Join-Path $JdxHome 'libs\jdx.jsa'
 if (Test-Path $Cds) { $Flags += "-XX:SharedArchiveFile=$Cds" }
 & $JavaExe @Flags -jar $JdxJar.FullName @args
