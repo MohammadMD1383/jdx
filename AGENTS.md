@@ -242,6 +242,10 @@ repo first (own source dirs / built jars, third-party jars, the JDK) instead of
   compare (`GoldenFiles.normaliseLineEndings`, `UnifiedDiff.splitLines`).
 - **No `mvn`/`gradle` on PATH.** Use the Gradle **wrapper**.
 - Maven Central and GitHub are reachable. `git` and `gh` are installed.
+- In the `/opencode` GitHub Actions job, `GH_TOKEN` is the job's own
+  `GITHUB_TOKEN` scoped to `actions: read` on this repo — so `gh run list`,
+  `gh run view <id> --log`, `gh run watch` work. **Read the logs instead of
+  guessing at a CI failure**, and never ask for a PAT to do it.
 - Rich local test corpus: ~2183 jars in `~/.gradle/caches`, including `-sources.jar`
   artifacts (gson, msal4j, lwjgl, mojang-logging) and a large obfuscated/remapped
   `minecraft-client.jar` under `~/.gradle/caches/fabric-loom/` — the scale/perf

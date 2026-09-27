@@ -25,10 +25,17 @@ jobs:
        contains(github.event.comment.body, '/opencode')) &&
       github.event.comment.user.type != 'Bot'
     runs-on: ubuntu-latest
-    # Only the OIDC token exchange needs a GITHUB_TOKEN scope; the agent acts
-    # through the opencode-agent App token, not this one.
+    # A `permissions:` block is a whitelist, not additive: anything not listed
+    # here is `none`.
+    #   id-token: write — the OIDC exchange only; the agent acts through the
+    #     opencode-agent App token, not this GITHUB_TOKEN.
+    #   actions: read   — the minimum that lets the agent pull CI logs
+    #     (`gh run view <id> --log`) instead of guessing at a red build.
+    # Read-only, this repo only, minted per job and dead when the job ends:
+    # no personal token ever enters the runner.
     permissions:
       id-token: write
+      actions: read
     steps:
       - name: Checkout repository
         uses: actions/checkout@v4
@@ -49,6 +56,11 @@ jobs:
         uses: anomalyco/opencode/github@latest
         env:
           OPENCODE_API_KEY: ${{ secrets.OPENCODE_API_KEY }}
+          # Job-scoped, read-only Actions token (see `permissions:` above) so
+          # the agent can read CI logs with `gh`. `gh` reads GH_TOKEN; this is
+          # deliberately not named GITHUB_TOKEN, which the action itself
+          # consumes when `use_github_token: true` — we stay on the OIDC path.
+          GH_TOKEN: ${{ github.token }}
           # OpenCode's own permission system (NOT GitHub's). A headless run has
           # no client to answer an "ask", so every ask deadlocks the job.
           # "*": allow covers the built-in asks (external_directory, doom_loop,
