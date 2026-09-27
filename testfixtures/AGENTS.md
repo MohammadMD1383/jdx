@@ -13,12 +13,51 @@ elements) · `VarargsAndModifiers` (`synchronized`/`native`/`strictfp`) ·
 misleads (`KotlinShapes`: suspend, properties, default args, `@JvmName`, objects,
 companions, facades, data/value classes).
 
+**The diff pair** (`src/diffV1/`, `src/diffV2/`, `src/diffAbsent/`) is a *second*,
+separate corpus for `jdx diff` (issue #23, `docs/TESTING.md` §11.2): two versions of
+the **same** package `dev.jdx.diffapi`, built into `build/diff-fixtures/`. Read those
+rules below before touching either.
+
+## The diff pair — its own rules
+
+- **Same package on both sides.** The two versions must share binary names, or every
+  type reads as `TYPE_REMOVED` + `TYPE_ADDED` and the intra-type rules never fire. The
+  version difference is the *package* being the same, not a version suffix.
+- **Its own directory, its own base name.** `build/diff-fixtures/` and
+  `diff-fixtures-v1`/`-v2`, never `build/libs` and never a `testfixtures-` name —
+  `FixtureJars.singleJar`, core's `Fixtures.singleJar` and `ArtifactTestJars.binaryJar`
+  all `require(size == 1)` over that directory. Resolved by `DiffFixtureJars`.
+- **Source dirs are `setSrcDirs`, spelled exactly as the source sets** (`src/diffV1`,
+  not `src/diffv1`). A `srcDir` *adds* to the plugin's default, and the default for
+  source set `diffV1` is already `src/diffV1/kotlin` — so an added lower-case path is a
+  second entry on Linux and **the same directory** on macOS and Windows, where the
+  compiler then reads every fixture twice (`CLASSIFIER_REDECLARATION`, issue #66). Linux
+  cannot see this class of bug; only the other two runners can. Note also that a
+  Java source set's *Kotlin* source set inherits the Java `srcDirs`, which is why
+  `diffAbsent` sets its Kotlin dirs to empty.
+- **No `@ExpectedMembers`, and that is deliberate.** An annotation describes one type;
+  the property these fixtures exist to prove is a property of the *pair* — that every
+  rule in `core/diff/CompatRule.kt` fires against real `javac` output. The
+  self-describing mechanism is `DiffFixtureRuleCoverageTest` in `:index`: add a rule
+  there with the fixture that triggers it, and a rule with no fixture fails the build.
+- **`src/diffAbsent/` is compiled but never packaged.** `javac` will not compile a class
+  whose supertype is missing, so the "supertype in neither artifact" fixture has to
+  exist to compile and then be kept out of both jars — which is exactly the situation
+  the differ's `inheritance not checked` path exists for.
+- **One type must stay identical** (`Stable.java`, byte-for-byte in both trees): a
+  finding naming it is a false alarm, and a false alarm in an upgrade report is how an
+  agent decides not to take an upgrade for nothing.
+- **Rules javac cannot produce** are listed in `unreachableFromJavac` in that test with
+  the reason — e.g. `VARARGS_CHANGED`, because `f(String)` and `f(String...)` have
+  different descriptors. Do not add one to the required list "to make it pass"; that
+  would be claiming coverage the corpus does not have.
+
 ## Rules
 
-- Every fixture type carries `@ExpectedMembers` with its **`javap -p` truth** —
-  adding a fixture adds coverage automatically. Copy member lines from `javap -p`
-  output, never from memory; rebuild twice and check the jars are byte-identical.
-  Full rules: `docs/TESTING.md` §11.1.
+- Every fixture type in `src/main` carries `@ExpectedMembers` with its **`javap -p`
+  truth** — adding a fixture adds coverage automatically. Copy member lines from
+  `javap -p` output, never from memory; rebuild twice and check the jars are
+  byte-identical. Full rules: `docs/TESTING.md` §11.1.
 - `java-test-fixtures` output must **not** land in `build/libs`: point
   `testFixturesJar.destinationDirectory` at `build/test-fixtures-libs`, or every
   "exactly one binary fixture jar" assertion sees two jars and fails.

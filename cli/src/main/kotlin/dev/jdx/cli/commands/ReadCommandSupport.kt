@@ -505,6 +505,24 @@ internal fun defaultSignatureQuery(
     options: JdxService.SignatureOptions,
 ): JdxService.ServiceOutcome = JdxService.signature(ref, roots, options)
 
+/**
+ * Query behind `diff`, injectable so command tests run without IO (issue #23).
+ *
+ * Deliberately shaped like no other query here: there is no [JdxService.RootsSpec],
+ * because a diff names its own two artifacts and resolves no classpath at all.
+ */
+internal typealias DiffQuery = (
+    old: JdxService.ArtifactSpec,
+    new: JdxService.ArtifactSpec,
+    options: JdxService.DiffOptions,
+) -> JdxService.ServiceOutcome
+
+internal fun defaultDiffQuery(
+    old: JdxService.ArtifactSpec,
+    new: JdxService.ArtifactSpec,
+    options: JdxService.DiffOptions,
+): JdxService.ServiceOutcome = JdxService.diff(old, new, options)
+
 /** Query behind `doc`, injectable so command tests run without IO (T-025). */
 internal typealias DocQuery = (
     ref: String,

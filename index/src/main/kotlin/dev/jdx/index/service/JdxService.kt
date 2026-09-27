@@ -1,11 +1,16 @@
 package dev.jdx.index.service
 
+import dev.jdx.core.diff.ApiDiffer
+import dev.jdx.core.diff.ApiSurface
+import dev.jdx.core.diff.FailOn
+import dev.jdx.core.diff.SeverityFilter
 import dev.jdx.core.model.AccessFlag
 import dev.jdx.core.paths.JdxOs
 import dev.jdx.core.model.ClassInfo
 import dev.jdx.core.model.FieldInfo
 import dev.jdx.core.model.JvmDescriptor
 import dev.jdx.core.model.KotlinMethodView
+import dev.jdx.core.model.MavenCoordinate
 import dev.jdx.core.model.MemberSymbolRef
 import dev.jdx.core.model.MethodInfo
 import dev.jdx.core.model.ModuleSymbolRef
@@ -35,18 +40,21 @@ import dev.jdx.core.render.ClassCard
 import dev.jdx.core.render.DEFAULT_BODY_MAX_LINES
 import dev.jdx.core.render.DEFAULT_CALLS_DEPTH
 import dev.jdx.core.render.DEFAULT_CALLS_LIMIT
+import dev.jdx.core.render.DEFAULT_DIFF_LIMIT
 import dev.jdx.core.render.DEFAULT_DOC_MAX_LINES
 import dev.jdx.core.render.DEFAULT_HIERARCHY_LIMIT
 import dev.jdx.core.render.DEFAULT_SIGNATURE_LIMIT
 import dev.jdx.core.render.DEFAULT_SOURCE_MAX_LINES
 import dev.jdx.core.render.DocBlock
 import dev.jdx.core.render.DocSubject
+import dev.jdx.core.render.DiffReport
 import dev.jdx.core.render.MemberKind
 import dev.jdx.core.render.SignatureBlock
 import dev.jdx.core.render.SignatureEntry
 import dev.jdx.core.render.SourceBlock
 import dev.jdx.core.render.buildBodyBlock
 import dev.jdx.core.render.buildCallListing
+import dev.jdx.core.render.buildDiffReport
 import dev.jdx.core.render.buildDocBlock
 import dev.jdx.core.render.buildSignatureBlock
 import dev.jdx.core.render.buildSourceBlock
@@ -106,6 +114,10 @@ import dev.jdx.index.artifact.ArtifactReadException
 import dev.jdx.index.artifact.ArtifactRoot
 import dev.jdx.index.asm.AsmClassReader
 import dev.jdx.index.asm.ClassReadResult
+import dev.jdx.index.diff.ApiSnapshotResult
+import dev.jdx.index.diff.ArtifactSnapshots
+import dev.jdx.index.diff.sortedDiffWarnings
+import dev.jdx.index.maven.MavenCoords
 import dev.jdx.index.maven.MavenResolveFn
 import dev.jdx.index.maven.MavenResolver
 import dev.jdx.index.maven.productionMavenResolve
@@ -333,6 +345,21 @@ public object JdxService {
             override val exitCode: Int = 0
             override fun renderText(color: Boolean): String = block.renderText(color)
             override fun toJson(command: String): String = block.toJson(command)
+        }
+
+        /**
+         * An API diff report (`diff`) — exit 0, or the gate's 1.
+         *
+         * The only outcome whose exit code is a *verdict* rather than a lookup
+         * result: `--fail-on` is what turns "a difference was found" into a
+         * process status (D-015). The verdict is in the envelope as
+         * `result.gate` too, so a consumer that cannot see exit codes still
+         * sees it.
+         */
+        public data class Diff(val report: DiffReport) : ServiceOutcome {
+            override val exitCode: Int get() = report.exitCode
+            override fun renderText(color: Boolean): String = report.renderText(color)
+            override fun toJson(command: String): String = report.toJson(command)
         }
 
         /** A machine-legible failure — exit 1..6, never a guess, never a trace. */
@@ -2157,6 +2184,254 @@ public object JdxService {
             search.close()
         }
     }
+
+    // -- diff (issue #23) -------------------------------------------------------
+
+    /**
+     * One side of a diff: what to read, and how hard to try when it names a
+     * Maven coordinate. [allowFetch] is the per-invocation `--fetch` opt-in
+     * (D-006) and [repos] the `--repo` mirrors tried before Central; both apply
+     * to a coordinate side only — a path is either there or it is not.
+     */
+    public data class ArtifactSpec(
+        public val spec: String,
+        public val allowFetch: Boolean = false,
+        public val repos: List<String> = emptyList(),
+    )
+
+    /**
+     * Presentation and gate options for `diff`. [visibility] picks the surface
+     * that enters a snapshot (`--visibility public|all`); [includeSynthetic]
+     * keeps bridges and compiler-generated members in it.
+     * [severityFilter] and [maxFindings] shape what is *printed*; [failOn] is
+     * the only one that can change the exit code.
+     */
+    public data class DiffOptions(
+        public val visibility: ApiSurface = ApiSurface.PUBLIC,
+        public val includeSynthetic: Boolean = false,
+        public val severityFilter: SeverityFilter = SeverityFilter.ALL,
+        public val failOn: FailOn = FailOn.NONE,
+        public val maxFindings: Int = DEFAULT_DIFF_LIMIT,
+    )
+
+    /**
+     * Answers `diff <old> <new>`: the API difference between two artifacts
+     * (issue #23), most severe change first, with an optional CI gate.
+     *
+     * **No classpath, no workspace, no JDK — deliberately.** Every other command
+     * here answers "what does this symbol mean on *this* classpath", which is
+     * why they need roots and exit 4 without them. A diff names the two
+     * artifacts it compares and resolves them itself, so it is answerable with
+     * nothing selected, and the JDK is not part of the question — adding
+     * `java.base` to both sides would only drown the report in its own noise.
+     * That is why this entry point takes no [RootsSpec].
+     *
+     * **Bytecode only.** Both sides are read with [AsmClassReader] and nothing
+     * else — no sources pairing, no decompilation, no class loading (D-017). A
+     * diff compares *structure*, and the truth model (structure-from-bytecode,
+     * D-009) has no flesh to reconcile here: bodies, parameter docs and javadoc
+     * are not part of the question a caller asked.
+     *
+     * A comparison that ran exits 0, or 1 when `--fail-on` trips — that gate is
+     * the only non-zero exit a successful diff can produce. A side that names
+     * nothing is exit 3, a side that cannot be read is exit 5, and both fail
+     * before any comparison happens.
+     */
+    public fun diff(
+        old: ArtifactSpec,
+        new: ArtifactSpec,
+        options: DiffOptions = DiffOptions(),
+    ): ServiceOutcome {
+        val query = "${old.spec} -> ${new.spec}"
+        if (options.maxFindings < 0) {
+            return failure(3, query, "usage error: --limit must be >= 0, got ${options.maxFindings}")
+        }
+        // No "no workspace" gate here, though every other entry point has one:
+        // the two specs are the whole classpath this command needs, by design.
+        return try {
+            executeDiff(old, new, options, query)
+        } catch (e: ArtifactReadException) {
+            failure(5, query, e.message ?: "artifact read error")
+        } catch (e: Exception) {
+            failure(6, query, "internal error: ${e.javaClass.simpleName}: ${e.message ?: "no detail"}")
+        }
+    }
+
+    private fun executeDiff(
+        old: ArtifactSpec,
+        new: ArtifactSpec,
+        options: DiffOptions,
+        query: String,
+    ): ServiceOutcome {
+        val oldSide = when (val side = resolveDiffSide(old, "old", query)) {
+            is DiffSide.Failed -> return side.outcome
+            is DiffSide.Ready -> side
+        }
+        val newSide = when (val side = resolveDiffSide(new, "new", query)) {
+            is DiffSide.Failed -> return side.outcome
+            is DiffSide.Ready -> side
+        }
+        val before = snapshotOf(oldSide, options)
+        val after = snapshotOf(newSide, options)
+        return ServiceOutcome.Diff(
+            buildDiffReport(
+                diff = ApiDiffer.diff(before.snapshot, after.snapshot),
+                surface = options.visibility,
+                includeSynthetic = options.includeSynthetic,
+                severityFilter = options.severityFilter,
+                failOn = options.failOn,
+                maxFindings = options.maxFindings,
+                // Two entries, old first: a diff can always supply the provenance
+                // of its own inputs, and it is the one fact the report needs to
+                // be readable.
+                provenance = listOf(
+                    Provenance(artifact = oldSide.label, origin = Origin.BYTECODE),
+                    Provenance(artifact = newSide.label, origin = Origin.BYTECODE),
+                ),
+                warnings = sortedDiffWarnings(before.warnings + after.warnings),
+            ),
+        )
+    }
+
+    /** Reads one resolved side and closes its root. Bytecode only — see [diff]. */
+    private fun snapshotOf(side: DiffSide.Ready, options: DiffOptions): ApiSnapshotResult =
+        ArtifactLoader.open(side.jar).use { root ->
+            ArtifactSnapshots.of(root, side.label, options.visibility, options.includeSynthetic)
+        }
+
+    /**
+     * How one side of a diff resolved: a single jar to read, or an exit-coded
+     * outcome to serialise instead. A diff compares *two artifacts*, so "several"
+     * is a failure state here rather than a set of roots.
+     */
+    private sealed interface DiffSide {
+        data class Ready(val jar: Path, val label: String) : DiffSide
+        data class Failed(val outcome: ServiceOutcome.Failure) : DiffSide
+    }
+
+    private fun resolveDiffSide(side: ArtifactSpec, which: String, query: String): DiffSide {
+        val text = side.spec.trim()
+        if (text.isEmpty()) {
+            return DiffSide.Failed(failure(3, query, noArtifactMessage(which, "the argument is empty")))
+        }
+        if (isCoordinateShaped(text)) {
+            val coordinate = MavenCoords.parse(text)
+                ?: return DiffSide.Failed(failure(3, query, "usage error: ${MavenCoords.invalidReason(text)}"))
+            return resolveCoordinateSide(coordinate, side, query)
+        }
+        return resolvePathSide(text, which, query)
+    }
+
+    /**
+     * Whether a side is *trying* to be a coordinate: two or more colons, never
+     * one, because a single colon is a Windows drive letter (`C:\libs\api.jar`)
+     * and must stay a path. A shape that claims a coordinate but is malformed is
+     * a usage error, not a missing file — `--coord` reports the same input the
+     * same way, and "no such artifact" for `g:a` would send an agent looking at
+     * its filesystem instead of at its coordinates.
+     */
+    private fun isCoordinateShaped(text: String): Boolean = text.count { it == ':' } >= 2
+
+    /**
+     * A coordinate side, resolved exactly as `--coord` resolves one: the fetch
+     * cache, then the Gradle files cache, then `~/.m2`, and only with
+     * `allowFetch` the `--repo` mirrors followed by Central (D-006, T-069).
+     * Local caches first is what keeps a diff off the network unless the caller
+     * opted in.
+     *
+     * Unresolvable is exit 5 carrying the resolver's own message, which is what
+     * `--coord` reports for the same failure — an artifact that is not there is
+     * a read problem, not a syntax one, and the message already names `--fetch`.
+     */
+    private fun resolveCoordinateSide(
+        coordinate: MavenCoordinate,
+        side: ArtifactSpec,
+        query: String,
+    ): DiffSide {
+        val outcome = MavenResolver.resolve(
+            coordinateText = MavenCoords.format(coordinate),
+            allowFetch = side.allowFetch,
+            repositories = MavenResolver.Repositories(repoBaseUrls = diffRepoBaseUrls(side.repos)),
+        )
+        val label = MavenCoords.format(coordinate)
+        return when (outcome) {
+            is MavenResolver.Outcome.Resolved -> DiffSide.Ready(outcome.artifact.binaryJar, label)
+            is MavenResolver.Outcome.Unresolved -> DiffSide.Failed(
+                failure(5, query, "artifact read error: ${outcome.message}"),
+            )
+        }
+    }
+
+    /**
+     * A path side, expanded by [expandJarSpec] so `~`, globs, class directories,
+     * case-insensitive `.jar`/`.zip` and the dedupe rules are the `--jars` rules
+     * an agent already knows. Exactly one artifact may come back: a glob that
+     * matches two jars is a set of roots, and a diff has no root to hold them.
+     */
+    private fun resolvePathSide(text: String, which: String, query: String): DiffSide {
+        val paths = try {
+            expandJarSpec(text)
+        } catch (e: ArtifactReadException) {
+            // A glob that matched nothing names a set of artifacts that does not
+            // exist — a typo, so exit 3 naming the fix. A plain path that is
+            // absent or unreadable is an artifact read error, exactly what
+            // `--jars` reports for the same input everywhere else; rethrowing
+            // keeps that one message and that one exit code.
+            if (hasGlobChars(text)) {
+                return DiffSide.Failed(
+                    failure(3, query, noArtifactMessage(which, "'$text' matches no artifact")),
+                )
+            }
+            throw e
+        }
+        if (paths.size != 1) {
+            return DiffSide.Failed(
+                failure(
+                    3,
+                    query,
+                    "usage error: diff compares two artifacts; '$text' resolved to ${paths.size} jars " +
+                        "(pass exactly one jar, class directory or Maven coordinate per side)",
+                ),
+            )
+        }
+        val jar = paths.single()
+        return DiffSide.Ready(jar, labelOf(jar))
+    }
+
+    /**
+     * The display label for a path side: the file (or class-directory) name,
+     * which is what [dev.jdx.index.artifact.ArtifactRoot.displayName] reports for
+     * both shapes. Never the absolute path — default output must not leak the
+     * machine's layout (AGENTS.md §2.5) — and the caller already knows which of
+     * its own two arguments each side came from.
+     */
+    private fun labelOf(path: Path): String = path.fileName?.toString() ?: path.toString()
+
+    /**
+     * The `--repo` fetch order: the caller's mirrors in the order given, then
+     * Maven Central last (T-069). Mirrors `ReadCommandSupport.buildRepoBaseUrls`
+     * in `cli` one-for-one; the two cannot be one function because `cli` is an
+     * adapter over `index` and this module cannot call up into it. If that
+     * helper ever moves down, this is the copy to delete.
+     */
+    private fun diffRepoBaseUrls(customRepos: List<String>): List<String> {
+        val seen = LinkedHashSet<String>()
+        val ordered = ArrayList<String>(customRepos.size + 1)
+        for (url in customRepos) {
+            if (seen.add(url.trimEnd('/'))) ordered.add(url)
+        }
+        if (seen.add(MavenCoords.CENTRAL_BASE_URL.trimEnd('/'))) ordered.add(MavenCoords.CENTRAL_BASE_URL)
+        return ordered
+    }
+
+    /**
+     * The one message for "this side names no artifact": which side, what was
+     * wrong with it, and the four spellings a side accepts — an agent must be
+     * able to fix the call from this line alone (AGENTS.md §2.1).
+     */
+    private fun noArtifactMessage(which: String, why: String): String =
+        "usage error: diff $which: $why; pass one jar path, one class directory, " +
+            "one glob (e.g. 'libs/*.jar') or one Maven coordinate (group:artifact:version)"
 
     // -- usages (T-030) ------------------------------------------------------------
 

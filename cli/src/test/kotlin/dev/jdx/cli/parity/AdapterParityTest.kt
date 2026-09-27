@@ -45,7 +45,7 @@ import org.junit.jupiter.api.Test
  * MCP returns byte-identical `result` payloads. The proof is structural —
  * every adapter serialises the same `JdxService.dispatch` outcome with
  * `ServiceOutcome.toJson(wire)` (D-056 §1) — so this suite pins the structure
- * instead of goldening 17 commands × 3 adapters: one table row per read
+ * instead of goldening 18 commands × 3 adapters: one table row per read
  * command over the fixture jar, one JDK sample, two failure branches, two
  * real CLI `--json` spot checks anchoring the `dispatch`-as-CLI reference,
  * and a hostile-input property keeping the proof honest beyond hand-picked
@@ -113,6 +113,17 @@ class AdapterParityTest {
             ParityCase(DaemonClient.callersRequest("dev.jdx.fixtures.Generics#identity"), roots),
             ParityCase(DaemonClient.callsRequest("dev.jdx.fixtures.Generics#identity(java.lang.Object)"), roots),
             ParityCase(DaemonClient.samplesRequest("dev.jdx.fixtures.Generics#identity"), roots),
+            // `diff` is shaped like no other read command: it names its own two
+            // artifacts (`query` is the OLD side, `new` the candidate, which is
+            // exactly what DiffCommand builds) and resolves no classpath, so
+            // `roots` here only exists because ParityCase carries one. The pair
+            // is the fixture binary jar against the fixture sources jar: real
+            // bytes on both sides, and a non-trivial findings payload, which is
+            // where a serialisation drift between adapters would actually show.
+            ParityCase(
+                RpcRequest(RpcCommand.DIFF, FixtureJars.binaryJar().absolutePath, mapOf("new" to FixtureJars.sourcesJar().absolutePath)),
+                roots,
+            ),
         )
     }
 
@@ -153,9 +164,9 @@ class AdapterParityTest {
     }
 
     @Test
-    fun `all seventeen read commands answer byte-identical envelopes on every adapter`() {
+    fun `all eighteen read commands answer byte-identical envelopes on every adapter`() {
         val cases = readCases()
-        cases.size shouldBe 17
+        cases.size shouldBe 18
         val session = mcpSession()
         val server = httpServer()
         server.start()
@@ -289,7 +300,7 @@ class AdapterParityTest {
 
     @Test
     fun `parity holds over generated hostile requests`(): Unit = runBlocking {
-        readCommands.size shouldBe 17
+        readCommands.size shouldBe 18
         val session = mcpSession()
         val server = httpServer()
         server.start()

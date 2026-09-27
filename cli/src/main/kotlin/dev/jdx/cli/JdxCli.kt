@@ -14,6 +14,7 @@ import dev.jdx.cli.commands.BodyCommand
 import dev.jdx.cli.commands.CallersCommand
 import dev.jdx.cli.commands.CallsCommand
 import dev.jdx.cli.commands.SamplesCommand
+import dev.jdx.cli.commands.DiffCommand
 import dev.jdx.cli.commands.BatchCommand
 import dev.jdx.cli.commands.BenchCommand
 import dev.jdx.cli.commands.ServeCommand
@@ -127,6 +128,7 @@ fun main(args: Array<String>): Unit =
         CallersCommand(),
         CallsCommand(),
         SamplesCommand(),
+        DiffCommand(),
         BatchCommand(),
         BenchCommand(),
         ServeCommand(),

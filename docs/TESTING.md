@@ -389,6 +389,45 @@ Requirements:
   fixture adds test coverage automatically.
 - **A `Fixtures` helper** resolves jar paths with no hard-coded absolute paths.
 
+### 11.2 The v1/v2 diff pair (issue #23)
+
+`jdx diff` needs a corpus that is two *artifacts* rather than one, so `testfixtures`
+carries a second, independent pair: `src/diffV1/` and `src/diffV2/`, **the same package**
+`dev.jdx.diffapi` compiled into `build/diff-fixtures/diff-fixtures-v1.jar` and `-v2.jar`
+and resolved by `dev.jdx.testsupport.fixtures.DiffFixtureJars` (property
+`jdx.diffFixturesDir`). Same package on both sides is the whole point: version the
+package and every type reads as a removal plus an addition, and the intra-type rules
+never fire.
+
+Three rules make it work without disturbing the main corpus:
+
+- **A different directory, and a base name that does not start with `testfixtures-`.**
+  `FixtureJars`, core's `Fixtures` and `ArtifactTestJars` all `require(size == 1)` over
+  `build/libs`, so a second jar there turns three unrelated assertions into exceptions.
+- **A third source set, `src/diffAbsent/`, that compiles but is never packaged.**
+  `javac` refuses a class whose supertype is missing, so the fixture for "the supertype
+  is in neither artifact" has to exist in order to compile and then be kept out of both
+  jars — which is exactly the real-world case (a superclass in *another dependency*) the
+  differ's `inheritance not checked` detail exists for.
+- **A deliberately unchanged type** (`Stable.java`, byte-for-byte in both trees), so the
+  pair can prove the differ is *not noisy* as well as not blind.
+
+**Rule coverage, not `@ExpectedMembers`.** The pair is self-describing through
+`DiffFixtureRuleCoverageTest` in `:index` rather than through per-type annotations: the
+property worth pinning is a property of the *pair* — that every rule in
+`core/diff/CompatRule.kt` fires against **real `javac` output**. A rule can pass every
+hand-built example in `core` and still be unreachable, because the reader never produces
+the shape it expects; that is the one class of bug this corpus exists to catch. The test
+lists every rule with the fixture that triggers it, so a new rule with no fixture fails
+the build — and a rule that fires with no fixture fails it too, so a fixture cannot grow
+silently.
+
+It also carries an explicit `unreachableFromJavac` list, with reasons, for rules that are
+correct but that no compiler will produce input for — `VARARGS_CHANGED` is the example,
+because `f(String)` and `f(String...)` have *different* descriptors, so that change is a
+`PARAMETER_TYPE_CHANGED`. Those are pinned by hand-built snapshots instead. Adding one
+to the required list "to make it pass" would claim coverage the corpus does not have.
+
 ### 11.1 Adding a fixture
 
 1. Add the source under `testfixtures/src/main/java` (or `src/main/kotlin`). The odd one out

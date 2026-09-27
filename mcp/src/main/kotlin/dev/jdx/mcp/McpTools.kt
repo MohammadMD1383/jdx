@@ -325,6 +325,45 @@ public val ALL_MCP_TOOLS: List<McpToolDefinition> = listOf(
         ),
     ),
     McpToolDefinition(
+        command = RpcCommand.DIFF,
+        description = "What changed between two artifacts? Public-API diff with named " +
+            "binary-compatibility rules (MEMBER_REMOVED, RETURN_TYPE_CHANGED, ...), most " +
+            "breaking first. `query` is the OLD artifact and `new` the candidate; each is a " +
+            "jar, class dir, glob, or Maven coordinate. Exits 0 whenever the comparison ran.",
+        params = listOf(
+            McpParam(
+                name = "query", kind = McpParamKind.STRING, required = true,
+                description = "The OLD (baseline) artifact: jar file, class directory, glob, " +
+                    "or group:artifact:version.",
+            ),
+            McpParam(
+                name = "new", kind = McpParamKind.STRING, required = true,
+                description = "The NEW (candidate) artifact, compared against `query`.",
+            ),
+            workspaceParam(),
+            McpParam(
+                name = "visibility", kind = McpParamKind.STRING,
+                description = "public (default: public and protected declarations) or all " +
+                    "(every declared type and member).",
+            ),
+            McpParam(
+                name = "includeSynthetic", kind = McpParamKind.BOOLEAN,
+                description = "Compare bridge/synthetic members too, hidden by default.",
+            ),
+            McpParam(
+                name = "severity", kind = McpParamKind.STRING,
+                description = "How much to print: all (default), suspicious (breaking and " +
+                    "suspicious), or breaking only. The tally always describes everything.",
+            ),
+            McpParam(
+                name = "failOn", kind = McpParamKind.STRING,
+                description = "none (default, always 0), breaking (exit 1 on a breaking " +
+                    "change) or any (exit 1 on any difference).",
+            ),
+            limitParam(200),
+        ),
+    ),
+    McpToolDefinition(
         command = RpcCommand.VERSION,
         description = "The jdx version this server was built as.",
         params = listOf(labelParam(), workspaceParam()),

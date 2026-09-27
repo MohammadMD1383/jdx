@@ -87,7 +87,14 @@ public class McpSession(
             )
             else -> {
                 val request = tool.requestFor(split.query, split.params)
-                when (val resolved = service.daemonRoots(effectiveWorkspace(split), request.query, store)) {
+                // The command rides along so a query that resolves its own artifacts
+                // (`diff`) is not refused for want of a workspace (issue #23).
+                when (val resolved = service.daemonRoots(
+                    effectiveWorkspace(split),
+                    request.query,
+                    store,
+                    request.command,
+                )) {
                     is DaemonRoots.Ready ->
                         of(tool, service.dispatch(request, resolved.roots).toJson(request.command.wire))
                     is DaemonRoots.Failed ->

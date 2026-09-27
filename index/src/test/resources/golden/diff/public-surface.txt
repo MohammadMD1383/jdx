@@ -1,0 +1,54 @@
+api diff diff-fixtures-v1.jar -> diff-fixtures-v2.jar (public surface)
+breaking  TYPE_REMOVED  dev.jdx.diffapi.Departed
+breaking  TYPE_KIND_CHANGED  dev.jdx.diffapi.Convertible: class -> interface
+breaking  TYPE_MADE_FINAL  dev.jdx.diffapi.Tuned
+breaking  SUPERTYPE_REMOVED  dev.jdx.diffapi.Api: java.io.Serializable
+breaking  MEMBER_REMOVED  dev.jdx.diffapi.Api#legacy()
+breaking  MEMBER_REMOVED  dev.jdx.diffapi.Convertible#<init>()
+breaking  MEMBER_REMOVED  dev.jdx.diffapi.Orphaned#gone(): supertype dev.jdx.absent.Supertype is not in diff-fixtures-v2.jar; inheritance not checked
+breaking  MEMBER_REMOVED  dev.jdx.diffapi.Tuned#opened()
+breaking  MEMBER_VISIBILITY_NARROWED  dev.jdx.diffapi.Api#narrowed(): public -> protected
+breaking  MEMBER_MADE_FINAL  dev.jdx.diffapi.Api#sealable()
+breaking  STATIC_TO_INSTANCE  dev.jdx.diffapi.Api#shared()
+breaking  ABSTRACT_ADDED  dev.jdx.diffapi.Convertible
+breaking  ABSTRACT_ADDED  dev.jdx.diffapi.Convertible#value()
+breaking  INTERFACE_METHOD_ADDED  dev.jdx.diffapi.Contract#alsoRequired()
+breaking  ENUM_CONSTANT_REMOVED  dev.jdx.diffapi.Signal#RED
+breaking  PARAMETER_TYPE_CHANGED  dev.jdx.diffapi.Api#retyped(java.lang.String): now: dev.jdx.diffapi.Api#retyped(int)
+breaking  PARAMETER_TYPE_CHANGED  dev.jdx.diffapi.Api#spread(java.lang.String): now: dev.jdx.diffapi.Api#spread(java.lang.String[])
+breaking  RETURN_TYPE_CHANGED  dev.jdx.diffapi.Api#width(): int -> long
+breaking  FIELD_TYPE_CHANGED  dev.jdx.diffapi.Api#counter: int -> long
+suspicious  MEMBER_MOVED_TO_SUPERTYPE  dev.jdx.diffapi.Relocated#shared(): declared by dev.jdx.diffapi.Base
+suspicious  GENERIC_SIGNATURE_CHANGED  dev.jdx.diffapi.Api#echoed(java.util.List)
+suspicious  CHECKED_EXCEPTION_ADDED  dev.jdx.diffapi.Api#checked(): java.io.IOException
+suspicious  KOTLIN_NAME_CHANGED  dev.jdx.diffapi.Kotlinish#greet(java.lang.String): JVM name renamedForJvm -> greet
+suspicious  KOTLIN_SUSPEND_CHANGED  dev.jdx.diffapi.Kotlinish#fetch(java.lang.String): suspend added
+suspicious  KOTLIN_NULLABILITY_CHANGED  dev.jdx.diffapi.Kotlinish#nullable(): java.lang.String -> java.lang.String?
+suspicious  KOTLIN_DEFAULT_ARG_REMOVED  dev.jdx.diffapi.Kotlinish#repeat(int): parameter 1
+suspicious  KOTLIN_PARAMETER_NAME_CHANGED  dev.jdx.diffapi.Kotlinish#measure(int): count -> total
+info  TYPE_ADDED  dev.jdx.diffapi.Extra
+info  SUPERTYPE_ADDED  dev.jdx.diffapi.Api: dev.jdx.diffapi.Extra
+info  SUPERTYPE_ADDED  dev.jdx.diffapi.Relocated: dev.jdx.diffapi.Base
+info  MEMBER_ADDED  dev.jdx.diffapi.Api#alsoRequired()
+info  MEMBER_ADDED  dev.jdx.diffapi.Api#born()
+info  MEMBER_ADDED  dev.jdx.diffapi.Api#extra()
+info  MEMBER_ADDED  dev.jdx.diffapi.Base#shared()
+info  MEMBER_ADDED  dev.jdx.diffapi.Kotlinish#setCurrent(java.lang.String)
+info  MEMBER_ADDED  dev.jdx.diffapi.Orphaned#kept()
+info  THROWS_REMOVED  dev.jdx.diffapi.Api#stale(): java.io.IOException
+info  KOTLIN_DEFAULT_ARG_ADDED  dev.jdx.diffapi.Kotlinish#describe(java.lang.String): parameter 1
+info  ANNOTATION_ADDED  dev.jdx.diffapi.Api#fresh(): java.lang.Deprecated
+info  ANNOTATION_ADDED  dev.jdx.diffapi.Api#marked(): java.lang.Deprecated
+info  ANNOTATION_ADDED  dev.jdx.diffapi.Kotlinish#label(): org.jetbrains.annotations.Nullable
+info  ANNOTATION_REMOVED  dev.jdx.diffapi.Api#stale(): java.lang.Deprecated
+info  ANNOTATION_REMOVED  dev.jdx.diffapi.Kotlinish#label(): org.jetbrains.annotations.NotNull
+info  DEPRECATED_ADDED  dev.jdx.diffapi.Api#fresh()
+info  DEPRECATED_ADDED  dev.jdx.diffapi.Api#marked()
+info  DEPRECATED_REMOVED  dev.jdx.diffapi.Api#stale()
+info  SYNCHRONIZED_ADDED  dev.jdx.diffapi.Tuned#guarded()
+info  TRANSIENT_CHANGED  dev.jdx.diffapi.Tuned#scratch: transient removed
+info  FIELD_CONSTANT_VALUE_CHANGED  dev.jdx.diffapi.Api#LIMIT: 10 -> 20
+19 breaking · 8 suspicious · 22 informational · 1 type added · 1 type removed
+source: diff-fixtures-v1.jar (bytecode)
+source: diff-fixtures-v2.jar (bytecode)
+next: jdx members dev.jdx.diffapi.Departed

@@ -77,10 +77,90 @@ tasks.named<JavaCompile>("compileNoDebugJava") {
     classpath = files(main.output) + (classpath ?: files())
 }
 
+// Two more source sets, compiled into a **pair** of jars for `jdx diff`
+// (issue #23, TESTING.md §11.2). Unlike the main corpus these are two genuinely
+// different versions of the same package, so a diff has something to compare.
+//
+// Both jars go to `build/diff-fixtures/`, NOT `build/libs`, and their base name does
+// not start with `testfixtures-`: `FixtureJars.singleJar`, core's `Fixtures.singleJar`
+// and `ArtifactTestJars.binaryJar` all `require(size == 1)` over `build/libs` filtering
+// names that do, so a second jar there turns three unrelated assertions into exceptions.
+// The separate directory is the same trick `testFixturesJar` uses above.
+//
+// No `-sources.jar` for the pair: a diff reads bytecode only, so a sources jar for it
+// would be an artifact no test can use.
+// `setSrcDirs`, never `srcDir`, and the directory names spelled **exactly** as the
+// source sets. Both matter, and a case-insensitive filesystem is what proves it: the
+// Kotlin plugin already contributes a default `src/diffV1/kotlin`, so an *added*
+// `src/diffv1/kotlin` is a second entry on Linux (harmless — the paths differ) and the
+// *same* directory on macOS and Windows, where the compiler then sees every fixture file
+// twice and fails with `CLASSIFIER_REDECLARATION` (issue #66). `setSrcDirs` replaces the
+// default instead of stacking on it, and matching the source-set name means the two
+// agree even if a future edit gets the spelling wrong. Cost of getting this wrong: a
+// green Linux build and a red macOS and Windows build that only mentions one fixture
+// class, with no Linux test able to see it coming.
+val diffV1 = sourceSets.create("diffV1") {
+    java.setSrcDirs(listOf("src/diffV1/java"))
+    kotlin.setSrcDirs(listOf("src/diffV1/kotlin"))
+}
+val diffV2 = sourceSets.create("diffV2") {
+    java.setSrcDirs(listOf("src/diffV2/java"))
+    kotlin.setSrcDirs(listOf("src/diffV2/kotlin"))
+}
+
+// A supertype that both `Orphaned` classes extend and that is in **neither** diff jar.
+// `javac` will not compile a class whose supertype is missing, so the type has to exist
+// to compile and then be kept out of the artifacts — which is exactly the situation the
+// differ's "inheritance not checked" path exists for: a real superclass living in
+// *another dependency*. Its output is a compile classpath entry and nothing else; no
+// `Jar` task here reads it.
+val diffAbsent = sourceSets.create("diffAbsent") {
+    java.setSrcDirs(listOf("src/diffAbsent/java"))
+    // The Kotlin source set of a Java source set *inherits* the Java srcDirs, so without
+    // this the Kotlin compiler would read `src/diffAbsent/java` too. Harmless while it
+    // holds no `.kt` file, and a `CLASSIFIER_REDECLARATION` waiting for the day one
+    // lands. The set is deliberately Java-only, so say so.
+    kotlin.setSrcDirs(emptyList<String>())
+}
+
+listOf(
+    Triple("diffV1", "compileDiffV1Java", diffV1),
+    Triple("diffV2", "compileDiffV2Java", diffV2),
+).forEach { (sourceSetName, javaTaskName, _) ->
+    configurations.named("${sourceSetName}CompileClasspath") {
+        extendsFrom(configurations.getByName("implementation"))
+    }
+    // The main output carries `ExpectedMembers`; the diff fixtures live in their own
+    // packages and do not annotate (the rule-coverage test in `:index` is what
+    // self-describes them), so the classpath is only the JDK plus this module's deps.
+    tasks.named<JavaCompile>(javaTaskName) {
+        val main = sourceSets.getByName("main")
+        classpath = files(main.output) + (classpath ?: files())
+    }
+    // The absent supertype compiles but is never packaged. Putting its output on the
+    // compile classpath is also what orders `compileDiffAbsentJava` before this compile.
+    tasks.named<JavaCompile>(javaTaskName) {
+        val absent = sourceSets.getByName("diffAbsent")
+        classpath = files(absent.output) + (classpath ?: files())
+    }
+}
+
 // Every archive this module produces is reproducible: fixed timestamps, sorted entries.
 tasks.withType<AbstractArchiveTask>().configureEach {
     isPreserveFileTimestamps = false
     isReproducibleFileOrder = true
+}
+
+val diffV1Jar = tasks.register<Jar>("diffV1Jar") {
+    archiveBaseName.set("diff-fixtures-v1")
+    destinationDirectory.set(layout.buildDirectory.dir("diff-fixtures"))
+    from(diffV1.output)
+}
+
+val diffV2Jar = tasks.register<Jar>("diffV2Jar") {
+    archiveBaseName.set("diff-fixtures-v2")
+    destinationDirectory.set(layout.buildDirectory.dir("diff-fixtures"))
+    from(diffV2.output)
 }
 
 tasks.named<Jar>("jar") {
@@ -97,7 +177,7 @@ val sourcesJar = tasks.register<Jar>("sourcesJar") {
 // `build` (and therefore `check`) always produces both jars; nobody should discover a stale
 // or missing `-sources.jar` halfway through a differential test run.
 tasks.named("build") {
-    dependsOn(sourcesJar)
+    dependsOn(sourcesJar, diffV1Jar, diffV2Jar)
 }
 
 dependencies {

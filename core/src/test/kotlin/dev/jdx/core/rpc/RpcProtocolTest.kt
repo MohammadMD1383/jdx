@@ -272,7 +272,7 @@ class RpcProtocolTest {
         RpcCommand.entries.map { it.wire } shouldBe listOf(
             "show", "members", "outline", "body", "source", "signature", "doc",
             "search", "resolve", "ls", "tree", "usages", "hierarchy", "implementors",
-            "callers", "calls", "samples", "version", "doctor", "health",
+            "callers", "calls", "samples", "diff", "version", "doctor", "health",
         )
         RpcCommand.entries.map { it.wire }.toSet().size shouldBe RpcCommand.entries.size
         RpcCommand.entries.all { it.wire == it.wire.lowercase() } shouldBe true

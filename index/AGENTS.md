@@ -7,6 +7,13 @@ behaviour lives here** (adapters call in, never the reverse). `explicitApi()` is
 
 - `service/JdxService` — every command's implementation; `service/RpcDispatch` —
   wire-command dispatch (same package, keeps the service file untouched).
+  `JdxService.diff(old, new, options)` is the one query that takes **no `RootsSpec`**: a
+  diff names its own two artifacts, so `daemonRoots` short-circuits to `Ready` for
+  `RpcCommand.DIFF` and the dispatch ignores the roots it is handed.
+- `diff/ArtifactSnapshots` — artifact → `ApiSnapshot`: sorted `classEntryPaths()`,
+  `AsmClassReader` per class, and every `UnsupportedVersion`/`Corrupt` skipped with its
+  warning rather than failing the artifact. Structure only — a diff never pairs sources
+  and never decompiles.
 - `asm/AsmClassReader` — `ClassReader` with `SKIP_FRAMES` (never `SKIP_DEBUG`:
   parameter names live there). Rejects class files newer than the *running* JDK.
 - `artifact/` — `ArtifactLoader` (jars, dirs, `jrt:/`), `ZipSafety` (traversal +
@@ -26,6 +33,10 @@ behaviour lives here** (adapters call in, never the reverse). `explicitApi()` is
   dedupe, symlink-loop-safe walk; the `active-workspace` file is LF-pinned.
 - `maven/` — `MavenResolver` (local caches first) + `MavenFetch` (opt-in `--fetch`,
   checksum-verified into `<cache-dir>/m2/`); `--repo` mirrors tried before Central.
+- `diff/ArtifactSnapshots` — one opened root → `ApiSnapshot` + that root's warnings,
+  for `jdx diff` (issue #23). Bytecode only (no `SourcesPairing`, no decompiler) and
+  degrade-don't-fail: an unparseable or too-new class is skipped with its warning and
+  the rest of the jar still diffs. Warnings come back code-then-subject sorted.
 - `kotlin/` — `KotlinMetadata` (never-throws `@Metadata` decode), `KotlinMembers`
   (suspend/`@JvmName`/`internal` repair, property folding, default-arg `= ...`),
   `KotlinSidecarFetch` (7-artifact table, SHA-1, skip-present/resume).
@@ -43,6 +54,13 @@ behaviour lives here** (adapters call in, never the reverse). `explicitApi()` is
   stay JVM-projected; `core` carriers must not leak mutable `KmClass` equality into
   pinned shapes (compare contents, never carriers).
 - `doctor` is refused over the daemon wire (exit 6); the daemon never fetches.
+- `diff` is the one command with **no classpath**: it names its own two artifacts, so
+  it takes no `RootsSpec`, never consults the JDK, and `JdxService.daemonRoots(…,
+  command = RpcCommand.DIFF)` short-circuits to an empty `RootsSpec` (otherwise the
+  three daemon adapters would exit 4 for a diff that needs no workspace). Its hosts
+  are `<cache>/m2`, the Gradle files cache, `~/.m2`, and — only with `--fetch` — the
+  `--repo` mirrors. One side resolves to exactly one artifact; two is exit 3, because a
+  diff has no root to hold a set.
 
 ## Gotchas (distilled)
 
@@ -59,6 +77,12 @@ behaviour lives here** (adapters call in, never the reverse). `explicitApi()` is
   corrupt framing (zeroed zlib header), not entry bytes, to pin read-failure branches.
 - Indexer benchmarks must run under the *runtime* JDK, not the toolchain JDK, or every
   newer class warns `UNSUPPORTED_CLASS_VERSION` and measures zero.
+- `diff`'s `--repo` ordering is spelled twice: `JdxService.diffRepoBaseUrls` here and
+  `ReadCommandSupport.buildRepoBaseUrls` in `cli`, because `cli` sits *above* `index` and
+  cannot be called from it. If that helper ever moves down, delete this copy — do not add
+  a third. `ArtifactSpec` also has no repository-injection seam (unlike `RootsSpec`'s
+  `mavenResolve`), so a *resolvable* coordinate side cannot be tested hermetically yet:
+  only the malformed (exit 3) and unresolvable (exit 5) branches are.
 - Text⊆JSON checks must compare `JsonEscape.quote(entity)` minus quotes — result
   payloads legitimately contain envelope field names. Calibrate pairing rules against
   a scratch dump of the real fixture (dump first, rule second).

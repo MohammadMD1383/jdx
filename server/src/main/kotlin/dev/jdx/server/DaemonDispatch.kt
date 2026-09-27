@@ -45,7 +45,7 @@ public fun jdxServiceHandler(
                 message = "daemon cannot answer 'doctor': it reports this machine's environment — " +
                     "run the same query without the daemon",
             )
-            else -> when (val resolved = JdxService.daemonRoots(workspace, request.query, store)) {
+            else -> when (val resolved = JdxService.daemonRoots(workspace, request.query, store, request.command)) {
                 is DaemonRoots.Ready ->
                     JdxService.dispatchJson(request, resolved.roots)
                 is DaemonRoots.Failed ->

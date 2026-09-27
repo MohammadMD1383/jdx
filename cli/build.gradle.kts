@@ -64,6 +64,12 @@ listOf("test", "tier2Test", "benchTest").forEach { taskName ->
             "jdx.fixturesDir",
             project(":testfixtures").layout.buildDirectory.dir("libs").get().asFile.absolutePath,
         )
+        // The `jdx diff` fixture pair (issue #23, TESTING.md §11.2).
+        dependsOn(":testfixtures:diffV1Jar", ":testfixtures:diffV2Jar")
+        systemProperty(
+            "jdx.diffFixturesDir",
+            project(":testfixtures").layout.buildDirectory.dir("diff-fixtures").get().asFile.absolutePath,
+        )
     }
 }
 

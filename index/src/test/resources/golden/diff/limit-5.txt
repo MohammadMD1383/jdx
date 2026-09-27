@@ -1,0 +1,11 @@
+api diff diff-fixtures-v1.jar -> diff-fixtures-v2.jar (all surface)
+breaking  TYPE_REMOVED  dev.jdx.diffapi.Departed
+breaking  TYPE_KIND_CHANGED  dev.jdx.diffapi.Convertible: class -> interface
+breaking  TYPE_MADE_FINAL  dev.jdx.diffapi.Tuned
+breaking  SUPERTYPE_REMOVED  dev.jdx.diffapi.Api: java.io.Serializable
+breaking  MEMBER_REMOVED  dev.jdx.diffapi.Api#legacy()
+5 of 51 findings shown (--limit 51 to see more)
+19 breaking · 8 suspicious · 24 informational · 1 type added · 1 type removed
+source: diff-fixtures-v1.jar (bytecode)
+source: diff-fixtures-v2.jar (bytecode)
+next: jdx members dev.jdx.diffapi.Departed

@@ -30,7 +30,14 @@ is the CLI surface, pinned by help/parity goldens.)
   or `2.x`, never a guess); `doctor` reuses the probe for the setup row.
   Tests pin userHome/projectDir to temp dirs, never the real home.
 - `parity/AdapterParityTest` — the §9 contract: CLI `--json` == MCP == HTTP bytes
-  over all 17 read commands + failure branches + a hostile-property case.
+  over all 18 read commands + failure branches + a hostile-property case.
+- `commands/DiffCommand` is the one query with no `RootsSpec`, no `--jars`/`-w`/`--no-jdk`
+  and **no `--no-daemon`**: a diff names its own two artifacts, and a warm daemon holds
+  nothing a two-artifact comparison can reuse (nor a way to carry a `--fail-on` verdict
+  back over the v1 wire, which only carries an exit code as an error). A flag that does
+  nothing is a lie, so the flag is *absent*, not inert: `jdx --no-daemon diff a b`
+  parses, `jdx diff --no-daemon a b` does not. The daemon still *serves* `diff` (MCP
+  `jdx_diff`, `GET /v1/diff`) — the CLI just does not forward to it.
 
 ## Rules
 

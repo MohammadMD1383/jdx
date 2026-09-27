@@ -19,7 +19,7 @@ are `toJson` bytes verbatim, no second shape. `explicitApi()` is on.
   `parseIdleDuration` never throws. `stop` validates the pid file owns a
   `daemon run` child before signalling (never kills a reused pid) and escalates
   `destroy()` to `destroyForcibly()`.
-- `DaemonDispatch` — resolves roots, serialises outcomes; all 17 read commands to
+- `DaemonDispatch` — resolves roots, serialises outcomes; all 18 read commands to
   `JdxService` (`indexedArtifacts` stays 0 — live roots, no persistent acceleration).
 - `HttpServer` — JDK builtin only: `GET /v1/<command>`, `POST /v1/batch` (NDJSON),
   `GET /v1/health`; `?workspace=` per-call override; localhost by default; blocks
