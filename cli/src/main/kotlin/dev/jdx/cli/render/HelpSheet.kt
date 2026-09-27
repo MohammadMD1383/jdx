@@ -36,7 +36,7 @@ public val HELP_ROWS: List<HelpRow> = listOf(
     HelpRow("diff <old> <new>", "Public-API diff + binary-compat warnings (upgrades)", "jdx diff gson-2.11.0.jar gson-2.14.0.jar --fail-on breaking"),
     HelpRow("version", "Print the jdx version", "jdx version"),
     HelpRow("upgrade [--check]", "Self-update from GitHub Releases", "jdx upgrade --check"),
-    HelpRow("doctor", "Self-diagnosis (JDK, index, daemon, workspace)", "jdx doctor"),
+    HelpRow("doctor", "Self-diagnosis (JDK, index, AppCDS, daemon, workspace)", "jdx doctor"),
     HelpRow("ws create|list|info|remove|add|use", "Project and library configuration", "jdx ws list"),
     HelpRow("cache info|gc|clear", "Index and cache maintenance", "jdx cache info"),
     HelpRow("kotlin install", "Fetch the Kotlin PSI sidecar (Kotlin sources)", "jdx kotlin install"),

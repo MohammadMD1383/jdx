@@ -108,6 +108,13 @@ data class DoctorEnvironment(
     /** Explicit cache/config overrides (tests pin resolved roots without env). */
     val cacheRootOverride: Path? = null,
     val configRootOverride: Path? = null,
+    /**
+     * AppCDS archive next to the fat jar (`libs/jdx.jsa`) and the fat jar itself.
+     * Null means unresolvable (dev layout — running from classes, not a jar).
+     * Tests inject fixture paths; production resolves from the code source.
+     */
+    val cdsArchive: Path? = null,
+    val cdsFatJar: Path? = null,
 ) {
     /** The OS family for per-OS dirs — the single `os.name` branch lives in [JdxPaths]. */
     val os: JdxOs get() = JdxPaths.detectOs(osName)
@@ -136,6 +143,7 @@ data class DoctorEnvironment(
                 ?: emptyList()
             val runtimeDir = DaemonPaths.systemSocketDir()
             val workingDir = Paths.get("").toAbsolutePath()
+            val (cdsArchive, cdsFatJar) = locateCdsPaths()
             return DoctorEnvironment(
                 userHome = userHome,
                 javaHome = javaHome,
@@ -147,6 +155,8 @@ data class DoctorEnvironment(
                 processRunner = RealProcessRunner,
                 workspaceEnv = System.getenv("JDX_WORKSPACE"),
                 envVars = System.getenv(),
+                cdsArchive = cdsArchive,
+                cdsFatJar = cdsFatJar,
             )
         }
     }
@@ -176,6 +186,7 @@ class DoctorService(
             "config" to ::configCheck,
             "index" to ::indexCheck,
             "kotlin" to ::kotlinCheck,
+            "appcds" to ::appcdsCheck,
             "daemon" to ::daemonCheck,
             "workspace" to ::workspaceCheck,
             "setup" to ::setupCheck,
@@ -319,6 +330,58 @@ class DoctorService(
                 DoctorStatus.WARN,
                 "side-loaded compiler not installed (${status.jar}) — " +
                     "run `jdx kotlin install` to fetch it; Kotlin sources unavailable (D-008)",
+            )
+        }
+    }
+
+    private fun appcdsCheck(): DoctorCheck {
+        // AppCDS archive (T-048): shipped by `:app:installDist` next to the fat jar,
+        // engaged presence-only via `-Xshare:auto` (missing/stale degrades, never fails).
+        // Cheap stat-only checks — present/absent/stale via size + mtime vs the fat jar —
+        // so `doctor` stays fast and offline. Absent/stale is a WARN (degraded cold start),
+        // never a FAIL; only the generic probe wrapper turns a thrown exception into FAIL.
+        val archive = environment.cdsArchive
+        val fatJar = environment.cdsFatJar
+        if (archive == null || fatJar == null) {
+            return check(
+                "appcds",
+                DoctorStatus.WARN,
+                "unavailable (dev layout — no AppCDS archive next to classes; ship with :app:installDist)",
+            )
+        }
+        try {
+            if (!Files.isRegularFile(archive)) {
+                return check(
+                    "appcds",
+                    DoctorStatus.WARN,
+                    "absent ($archive) — cold start without AppCDS; rebuild with ./gradlew :app:installDist",
+                )
+            }
+            val size = Files.size(archive)
+            if (size == 0L) {
+                return check(
+                    "appcds",
+                    DoctorStatus.WARN,
+                    "empty ($archive) — archive corrupt or truncated; rebuild with ./gradlew :app:installDist",
+                )
+            }
+            if (Files.isRegularFile(fatJar)) {
+                val jarTime = Files.getLastModifiedTime(fatJar)
+                val archiveTime = Files.getLastModifiedTime(archive)
+                if (archiveTime < jarTime) {
+                    return check(
+                        "appcds",
+                        DoctorStatus.WARN,
+                        "stale ($archive older than $fatJar — rebuild with ./gradlew :app:installDist)",
+                    )
+                }
+            }
+            return check("appcds", DoctorStatus.OK, "present ($archive, ${formatBytes(size)})")
+        } catch (e: Exception) {
+            return check(
+                "appcds",
+                DoctorStatus.WARN,
+                "unreadable ($archive — ${e.message ?: e.javaClass.simpleName})",
             )
         }
     }
@@ -519,6 +582,25 @@ class DoctorService(
     companion object {
         /** `javap` must read our fixture classes (bytecode 65): older is a WARN, absent is a FAIL. */
         const val MINIMUM_JAVAP_MAJOR: Int = 21
+    }
+}
+
+/**
+ * Locates the AppCDS archive (`libs/jdx.jsa`) and its fat jar from the running
+ * code source. Returns `(null, null)` in dev layout (classes directory, not a
+ * jar) or when the location is unresolvable — the `appcds` row reports that as
+ * unavailable (WARN), never a crash. Pure-IO helper, tested via injected paths.
+ */
+internal fun locateCdsPaths(): Pair<Path?, Path?> {
+    return try {
+        val location = DoctorService::class.java.protectionDomain?.codeSource?.location
+            ?: return null to null
+        val file = Paths.get(location.toURI())
+        if (!file.toString().endsWith(".jar")) return null to null
+        val libs = file.parent ?: return null to null
+        libs.resolve("jdx.jsa") to file
+    } catch (_: Exception) {
+        null to null
     }
 }
 

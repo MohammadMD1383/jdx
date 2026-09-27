@@ -2,6 +2,7 @@ package dev.jdx.app
 
 import io.kotest.matchers.shouldBe
 import io.kotest.matchers.string.shouldContain
+import io.kotest.matchers.string.shouldNotContain
 import io.kotest.matchers.string.shouldStartWith
 import org.junit.jupiter.api.Test
 import org.junit.jupiter.api.condition.DisabledOnOs
@@ -199,5 +200,54 @@ class InstallScriptTest {
 
         result.exitCode shouldBe 1
         result.stderr shouldContain ":app:installDist"
+    }
+
+    @Test
+    fun `a missing AppCDS archive warns but still installs`() {
+        val home = tempDir("jdx-home-")
+        val fakeRepo = tempDir("jdx-fakerepo-")
+        val fakeBuild = File(fakeRepo, "app/build").apply { mkdirs() }
+        val fakeLibs = File(fakeBuild, "libs").apply { mkdirs() }
+        File(fakeBuild, "jdx").apply {
+            writeText("#!/bin/sh\nexit 0\n")
+            setExecutable(true, false)
+        }
+        File(fakeLibs, "jdx-test-all.jar").apply { writeText("fake jar") }
+        // No jdx.jsa: the install must succeed with a note, never a failure
+        // (the launcher degrades via -Xshare:auto; `jdx doctor` owns the truth).
+        val scriptCopy = File(fakeRepo, "install.sh").apply {
+            writeText(installScript.readText())
+            setExecutable(true, false)
+        }
+
+        val result = runInstallScript(home, script = scriptCopy)
+
+        result.exitCode shouldBe 0
+        result.stderr shouldContain "AppCDS"
+        result.stderr shouldContain "jdx doctor"
+        Files.isSymbolicLink(File(home, ".local/bin/jdx").toPath()) shouldBe true
+    }
+
+    @Test
+    fun `a present AppCDS archive installs without the missing-archive note`() {
+        val home = tempDir("jdx-home-")
+        val fakeRepo = tempDir("jdx-fakerepo-")
+        val fakeBuild = File(fakeRepo, "app/build").apply { mkdirs() }
+        val fakeLibs = File(fakeBuild, "libs").apply { mkdirs() }
+        File(fakeBuild, "jdx").apply {
+            writeText("#!/bin/sh\nexit 0\n")
+            setExecutable(true, false)
+        }
+        File(fakeLibs, "jdx-test-all.jar").apply { writeText("fake jar") }
+        File(fakeLibs, "jdx.jsa").apply { writeText("fake archive") }
+        val scriptCopy = File(fakeRepo, "install.sh").apply {
+            writeText(installScript.readText())
+            setExecutable(true, false)
+        }
+
+        val result = runInstallScript(home, script = scriptCopy)
+
+        result.exitCode shouldBe 0
+        result.stderr shouldNotContain "no AppCDS archive"
     }
 }

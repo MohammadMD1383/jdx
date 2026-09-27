@@ -24,7 +24,7 @@ class DoctorCommand(
 ) : CoreCliktCommand(name = "doctor") {
     override fun help(context: Context): String =
         "Check the jdx environment and report one ok/warn/fail row per check " +
-            "(JDK, javap, cache, config, index, Kotlin module, daemon, workspace, agent setup). " +
+            "(JDK, javap, cache, config, index, Kotlin module, AppCDS archive, daemon, workspace, agent setup). " +
             "Exits 6 if any check fails. With --json, print the same report in the JSON envelope."
 
     private val json by option(

@@ -31,7 +31,7 @@ class DoctorEnvironmentTest {
 
     private val expectedNames = listOf(
         "jdk", "jrt", "javap", "jdk-sources", "cache",
-        "config", "index", "kotlin", "daemon", "workspace", "setup",
+        "config", "index", "kotlin", "appcds", "daemon", "workspace", "setup",
     )
 
     // `root` cannot make a directory unreadable to itself; drop that state there.
@@ -118,7 +118,7 @@ class DoctorEnvironmentTest {
         val service = DoctorService(environment)
         val report = service.probe()
 
-        // 2. Same eleven rows, in order, always.
+        // 2. Same twelve rows, in order, always.
         report.checks.map { it.name } shouldBe expectedNames
 
         // 3. The exit-code law: 6 iff some check failed.
@@ -161,6 +161,9 @@ class DoctorEnvironmentTest {
         if (workspace == WorkspaceState.NESTED) {
             byName.getValue("workspace").detail shouldContain outer.toString()
         }
+        // The matrix fixture always ships a fresh archive, so the row stays OK here;
+        // the absent/stale/empty/unresolvable shapes are pinned in DoctorServiceTest.
+        byName.getValue("appcds").status shouldBe DoctorStatus.OK
     }
 
     private data class TextRow(val name: String, val status: String, val detail: String)
