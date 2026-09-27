@@ -1,0 +1,4 @@
+api diff diff-old.jar -> diff-old.jar (public surface)
+no differences (2 types compared)
+source: diff-old.jar (bytecode)
+source: diff-old.jar (bytecode)

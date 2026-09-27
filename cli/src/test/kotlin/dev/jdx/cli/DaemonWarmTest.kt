@@ -420,7 +420,7 @@ class DaemonWarmTest {
 
     @Test
     fun `warm answers stay byte-identical to in-process over generated requests`(): Unit = runBlocking {
-        readCommands.size shouldBe 17
+        readCommands.size shouldBe 18
         val server = warmServer()
         server.start()
         try {

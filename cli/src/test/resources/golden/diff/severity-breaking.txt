@@ -1,0 +1,13 @@
+api diff diff-old.jar -> diff-new.jar (public surface)
+breaking  TYPE_REMOVED  difffix.Extra
+breaking  MEMBER_REMOVED  difffix.Api#legacy(): supertype java.lang.Object is not in diff-new.jar; inheritance not checked
+breaking  MEMBER_REMOVED  difffix.Api#narrowed(): supertype java.lang.Object is not in diff-new.jar; inheritance not checked
+breaking  MEMBER_MADE_FINAL  difffix.Api#sealedFinal()
+breaking  STATIC_TO_INSTANCE  difffix.Api#shared()
+breaking  PARAMETER_TYPE_CHANGED  difffix.Api#variadic(int): now: difffix.Api#variadic(int[])
+breaking  RETURN_TYPE_CHANGED  difffix.Api#width(): int -> long
+5 findings below --severity breaking
+7 breaking · 2 suspicious · 3 informational · 1 type added · 1 type removed
+source: diff-old.jar (bytecode)
+source: diff-new.jar (bytecode)
+next: jdx members difffix.Extra
