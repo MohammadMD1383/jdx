@@ -21,6 +21,11 @@ is the CLI surface, pinned by help/parity goldens.)
   probing covers `$JAVA_HOME/bin` and Windows `.exe`/`.cmd`/`.bat` (`osName`
   seam). `service/UpgradeService` — pure-Java `tar.gz` extraction first
   (external `tar` is the fallback), `.exe`-aware launcher check.
+  `service/SetupService` — agent wiring (`jdx setup --agent opencode
+  --scope project|system`): JSONC-tolerant `mcp.jdx` merge into
+  `opencode.json[c]` (project walk-up, else `~/.config/opencode`), idempotent
+  no-op re-runs, `--check`/`--remove`; `doctor` reuses its probe for the setup
+  row. Tests pin userHome/projectDir to temp dirs, never the real home.
 - `parity/AdapterParityTest` — the §9 contract: CLI `--json` == MCP == HTTP bytes
   over all 17 read commands + failure branches + a hostile-property case.
 

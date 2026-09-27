@@ -1,0 +1,13 @@
+{
+  "model": "anthropic/x",
+  "mcp": {
+    "other": {
+      "type": "local",
+      "command": [
+        "other"
+      ],
+      "enabled": true
+    }
+  }
+}
+

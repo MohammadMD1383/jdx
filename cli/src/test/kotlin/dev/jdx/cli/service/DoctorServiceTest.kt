@@ -33,14 +33,14 @@ class DoctorServiceTest {
 
     private val expectedNames = listOf(
         "jdk", "jrt", "javap", "jdk-sources", "cache",
-        "config", "index", "kotlin", "daemon", "workspace",
+        "config", "index", "kotlin", "daemon", "workspace", "setup",
     )
 
     private fun isPosixFs(): Boolean =
         java.nio.file.FileSystems.getDefault().supportedFileAttributeViews().contains("posix")
 
     @Test
-    fun `a healthy environment reports ten rows and exits zero`() {
+    fun `a healthy environment reports eleven rows and exits zero`() {
         val service = DoctorService(fakeEnvironment(tempDir("jdx-doctor-test-")))
 
         val report = service.probe()
@@ -322,8 +322,38 @@ class DoctorServiceTest {
     }
 
     @Test
-    fun `stale sockets are WARN naming the files, never claiming the daemon runs`() {
-        // Dummy `.sock` files answer nothing, so the real default probe reads them as stale.
+    fun `the setup row warns when opencode is unwired`() {
+        val service = DoctorService(fakeEnvironment(tempDir("jdx-doctor-test-")))
+
+        val report = service.probe()
+
+        val setup = report.checks.first { it.name == "setup" }
+        setup.status shouldBe DoctorStatus.WARN
+        setup.detail shouldContain "opencode"
+        setup.detail shouldContain "jdx setup --agent opencode --scope project"
+        exitCodeFor(report) shouldBe 0
+    }
+
+    @Test
+    fun `the setup row is OK once the project entry exists`() {
+        val root = tempDir("jdx-doctor-test-")
+        val environment = fakeEnvironment(root)
+        SetupService(environment.userHome, environment.workingDir).run(
+            SetupService.SetupRequest(
+                agent = SetupService.Agent.OPENCODE,
+                scope = SetupService.Scope.PROJECT,
+            ),
+        )
+
+        val report = DoctorService(environment).probe()
+
+        val setup = report.checks.first { it.name == "setup" }
+        setup.status shouldBe DoctorStatus.OK
+        setup.detail shouldContain "installed"
+    }
+
+    @Test
+    fun `stale sockets are WARN naming the files, never claiming the daemon runs`() {        // Dummy `.sock` files answer nothing, so the real default probe reads them as stale.
         val service = DoctorService(fakeEnvironment(tempDir("jdx-doctor-test-"), socketCount = 2))
 
         val report = service.probe()

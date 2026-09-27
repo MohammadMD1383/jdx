@@ -31,7 +31,7 @@ class DoctorEnvironmentTest {
 
     private val expectedNames = listOf(
         "jdk", "jrt", "javap", "jdk-sources", "cache",
-        "config", "index", "kotlin", "daemon", "workspace",
+        "config", "index", "kotlin", "daemon", "workspace", "setup",
     )
 
     // `root` cannot make a directory unreadable to itself; drop that state there.
@@ -118,7 +118,7 @@ class DoctorEnvironmentTest {
         val service = DoctorService(environment)
         val report = service.probe()
 
-        // 2. Same ten rows, in order, always.
+        // 2. Same eleven rows, in order, always.
         report.checks.map { it.name } shouldBe expectedNames
 
         // 3. The exit-code law: 6 iff some check failed.

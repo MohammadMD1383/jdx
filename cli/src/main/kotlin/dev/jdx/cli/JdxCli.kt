@@ -17,6 +17,7 @@ import dev.jdx.cli.commands.SamplesCommand
 import dev.jdx.cli.commands.BatchCommand
 import dev.jdx.cli.commands.BenchCommand
 import dev.jdx.cli.commands.ServeCommand
+import dev.jdx.cli.commands.SetupCommand
 import dev.jdx.cli.commands.DocCommand
 import dev.jdx.cli.commands.HelpCommand
 import dev.jdx.cli.commands.HierarchyCommand
@@ -129,6 +130,7 @@ fun main(args: Array<String>): Unit =
         BatchCommand(),
         BenchCommand(),
         ServeCommand(),
+        SetupCommand(),
         McpCommand(),
         HelpCommand(),
         daemonGroup(),
