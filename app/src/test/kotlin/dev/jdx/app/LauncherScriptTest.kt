@@ -628,7 +628,7 @@ class LauncherScriptTest {
         // Machine-dependent by design (doctor reports this machine): only the shape is pinned.
         (result.exitCode == 0 || result.exitCode == 6) shouldBe true
         result.stdout.shouldStartWith("jdx doctor")
-        result.stdout.trim().lines().size shouldBe 11
+        result.stdout.trim().lines().size shouldBe 12
         result.stdout shouldNotContain "\u001B"
     }
 

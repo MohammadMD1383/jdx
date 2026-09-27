@@ -1,0 +1,37 @@
+{
+  "model": "anthropic/x",
+  "mcp": {
+    "other": {
+      "type": "local",
+      "command": [
+        "other"
+      ],
+      "enabled": true
+    },
+    "servers": {
+      "v2other": {
+        "type": "local",
+        "command": [
+          "v2other"
+        ]
+      },
+      "jdx": {
+        "type": "local",
+        "command": [
+          "jdx",
+          "mcp"
+        ],
+        "disabled": false
+      }
+    },
+    "jdx": {
+      "type": "local",
+      "command": [
+        "jdx",
+        "mcp"
+      ],
+      "enabled": true
+    }
+  }
+}
+

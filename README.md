@@ -11,6 +11,7 @@
 curl -fsSL https://raw.githubusercontent.com/MohammadMD1383/jdx/main/install-release.sh | bash
 jdx members java.util.HashMap --limit 5
 # MCP (Claude Code / Cursor): {"mcpServers":{"jdx":{"command":"jdx","args":["mcp"]}}}
+# MCP (OpenCode v1+v2): jdx setup --agent opencode --scope project   (then restart opencode)
 ```
 
 ---
