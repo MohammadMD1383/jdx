@@ -7,6 +7,14 @@
         "other"
       ],
       "enabled": true
+    },
+    "servers": {
+      "v2other": {
+        "type": "local",
+        "command": [
+          "v2other"
+        ]
+      }
     }
   }
 }

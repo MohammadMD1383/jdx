@@ -39,7 +39,7 @@ class SetupGoldenTest {
         val mergeDir = root.resolve("merge").also { Files.createDirectories(it) }
         Files.writeString(
             mergeDir.resolve("opencode.json"),
-            """{"model":"anthropic/x","mcp":{"other":{"type":"local","command":["other"],"enabled":true}}}""",
+            """{"model":"anthropic/x","mcp":{"other":{"type":"local","command":["other"],"enabled":true},"servers":{"v2other":{"type":"local","command":["v2other"]}}}}""",
         )
         val merge = SetupService(home, mergeDir)
         val mergeOutcome = merge.run(

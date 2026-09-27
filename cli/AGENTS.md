@@ -22,10 +22,13 @@ is the CLI surface, pinned by help/parity goldens.)
   seam). `service/UpgradeService` — pure-Java `tar.gz` extraction first
   (external `tar` is the fallback), `.exe`-aware launcher check.
   `service/SetupService` — agent wiring (`jdx setup --agent opencode
-  --scope project|system`): JSONC-tolerant `mcp.jdx` merge into
-  `opencode.json[c]` (project walk-up, else `~/.config/opencode`), idempotent
-  no-op re-runs, `--check`/`--remove`; `doctor` reuses its probe for the setup
-  row. Tests pin userHome/projectDir to temp dirs, never the real home.
+  --scope project|system`): JSONC-tolerant `mcp.jdx` (v1) + `mcp.servers.jdx`
+  (v2, `enabled` → `disabled`) merge into `opencode.json[c]` (project walk-up,
+  else `~/.config/opencode`), idempotent no-op re-runs, `--check`/`--remove`;
+  `parseOpencodeVersion`/`probeOpencodeVersion` classify the installed line
+  (`opencode` then legacy `opencode2`; v1 = `1.x`, v2 = `0.0.0-next/beta/dev-*`
+  or `2.x`, never a guess); `doctor` reuses the probe for the setup row.
+  Tests pin userHome/projectDir to temp dirs, never the real home.
 - `parity/AdapterParityTest` — the §9 contract: CLI `--json` == MCP == HTTP bytes
   over all 17 read commands + failure branches + a hostile-property case.
 

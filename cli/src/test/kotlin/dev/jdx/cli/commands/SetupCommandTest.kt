@@ -32,9 +32,16 @@ class SetupCommandTest {
     /** Thrown by the test terminator instead of killing the test JVM. */
     class SetupExit(val code: Int) : RuntimeException()
 
-    private fun commandFor(home: Path, project: Path): SetupCommand = SetupCommand(
+    private fun commandFor(
+        home: Path,
+        project: Path,
+        version: SetupService.OpencodeVersionInfo = SetupService.OpencodeVersionInfo(
+            SetupService.OpencodeVersion.ABSENT,
+        ),
+    ): SetupCommand = SetupCommand(
         serviceFactory = { _, _ -> SetupService(home, project) },
         terminate = { throw SetupExit(it) },
+        versionProbe = { version },
     )
 
     private fun fakeDirs(root: Path): Pair<Path, Path> {
@@ -52,8 +59,27 @@ class SetupCommandTest {
         }
 
         output.trim() shouldContain "opencode project setup installed"
+        output.trim() shouldContain "v1+v2 entries"
         output.trim() shouldContain "restart opencode"
+        output.trim() shouldContain "opencode not found on PATH"
         SetupService.isInstalledAt(project.resolve("opencode.json")) shouldBe true
+    }
+
+    @Test
+    fun `install names the detected opencode line`(@TempDir root: Path) {
+        val (home, project) = fakeDirs(root)
+        val v2 = SetupService.OpencodeVersionInfo(
+            SetupService.OpencodeVersion.V2,
+            "opencode v0.0.0-next-17403",
+            "opencode",
+        )
+        val output = captureStdout {
+            JdxCli().subcommands(commandFor(home, project, v2))
+                .parse(listOf("setup", "--agent", "opencode", "--scope", "project"))
+        }
+
+        output.trim() shouldContain "opencode project setup installed"
+        output.trim() shouldContain "detected: opencode v2 (opencode v0.0.0-next-17403)"
     }
 
     @Test
@@ -172,8 +198,13 @@ class SetupCommandTest {
     @Test
     fun `json carries the setup payload in the envelope`(@TempDir root: Path) {
         val (home, project) = fakeDirs(root)
+        val v1 = SetupService.OpencodeVersionInfo(
+            SetupService.OpencodeVersion.V1,
+            "opencode 1.18.3",
+            "opencode",
+        )
         val output = captureStdout {
-            JdxCli().subcommands(commandFor(home, project))
+            JdxCli().subcommands(commandFor(home, project, v1))
                 .parse(listOf("setup", "--scope", "project", "--json"))
         }
 
@@ -184,6 +215,8 @@ class SetupCommandTest {
         result["agent"]?.jsonPrimitive?.content shouldBe "opencode"
         result["scope"]?.jsonPrimitive?.content shouldBe "project"
         result["installed"]?.jsonPrimitive?.content shouldBe "true"
+        result["opencodeVersion"]?.jsonPrimitive?.content shouldBe "v1"
+        result["opencodeRaw"]?.jsonPrimitive?.content shouldBe "opencode 1.18.3"
     }
 
     @Test

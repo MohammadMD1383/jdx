@@ -330,8 +330,97 @@ class DoctorServiceTest {
         val setup = report.checks.first { it.name == "setup" }
         setup.status shouldBe DoctorStatus.WARN
         setup.detail shouldContain "opencode"
+        setup.detail shouldContain "opencode not found on PATH"
         setup.detail shouldContain "jdx setup --agent opencode --scope project"
         exitCodeFor(report) shouldBe 0
+    }
+
+    /** Answers `opencode --version` with [versionOutput], every other tool with the modern javap stub. */
+    private fun opencodeDispatchRunner(versionOutput: String): ProcessRunner = ProcessRunner { executable, _ ->
+        if (executable.fileName.toString().startsWith("opencode")) {
+            ProcessOutcome(0, versionOutput, "")
+        } else {
+            ProcessOutcome(0, "26.0.2.1", "")
+        }
+    }
+
+    @Test
+    fun `the setup row names the detected opencode v1 line`() {
+        val service = DoctorService(
+            fakeEnvironment(
+                tempDir("jdx-doctor-test-"),
+                runner = opencodeDispatchRunner("opencode 1.18.3"),
+                opencodeBinaries = listOf("opencode"),
+            ),
+        )
+
+        val report = service.probe()
+
+        val setup = report.checks.first { it.name == "setup" }
+        setup.status shouldBe DoctorStatus.WARN
+        setup.detail shouldContain "opencode v1 (opencode 1.18.3)"
+    }
+
+    @Test
+    fun `the setup row names the detected opencode v2 line`() {
+        val root = tempDir("jdx-doctor-test-")
+        val environment = fakeEnvironment(
+            root,
+            runner = opencodeDispatchRunner("opencode v0.0.0-next-17403"),
+            opencodeBinaries = listOf("opencode"),
+        )
+        SetupService(environment.userHome, environment.workingDir).run(
+            SetupService.SetupRequest(
+                agent = SetupService.Agent.OPENCODE,
+                scope = SetupService.Scope.PROJECT,
+            ),
+        )
+
+        val report = DoctorService(environment).probe()
+
+        val setup = report.checks.first { it.name == "setup" }
+        setup.status shouldBe DoctorStatus.OK
+        setup.detail shouldContain "opencode v2 (opencode v0.0.0-next-17403)"
+        setup.detail shouldContain "installed"
+    }
+
+    @Test
+    fun `the setup row falls back to the opencode2 shim`() {
+        val service = DoctorService(
+            fakeEnvironment(
+                tempDir("jdx-doctor-test-"),
+                runner = opencodeDispatchRunner("opencode2 v0.0.0-next-15806"),
+                opencodeBinaries = listOf("opencode2"),
+            ),
+        )
+
+        val report = service.probe()
+
+        report.checks.first { it.name == "setup" }.detail shouldContain "opencode v2 (opencode2 v0.0.0-next-15806)"
+    }
+
+    @Test
+    fun `a failing opencode probe reads as version unknown, never a crash`() {
+        val runner = ProcessRunner { executable, _ ->
+            if (executable.fileName.toString().startsWith("opencode")) {
+                throw IOException("fake opencode explosion")
+            } else {
+                ProcessOutcome(0, "26.0.2.1", "")
+            }
+        }
+        val service = DoctorService(
+            fakeEnvironment(
+                tempDir("jdx-doctor-test-"),
+                runner = runner,
+                opencodeBinaries = listOf("opencode"),
+            ),
+        )
+
+        val report = service.probe()
+
+        val setup = report.checks.first { it.name == "setup" }
+        setup.status shouldBe DoctorStatus.WARN
+        setup.detail shouldContain "opencode version unknown"
     }
 
     @Test

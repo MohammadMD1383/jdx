@@ -24,16 +24,26 @@ import java.nio.file.Path
  * OpenCode layout (verified against a real install: global
  * `~/.config/opencode/opencode.jsonc` with `"$schema":
  * "https://opencode.ai/config.json"`; project `opencode.json`/`opencode.jsonc`
- * in the checkout): MCP servers live under the top-level `mcp` object keyed by
- * server name, each a `{ "type": "local", "command": [...], "enabled": ... }`
- * object (see https://opencode.ai/config.json `McpLocalConfig`). The entry
- * this service owns is `mcp.jdx`.
+ * in the checkout). OpenCode is beta-testing v2 alongside v1 (issue: both
+ * lines must keep working until v1 is deprecated and removed), and the two
+ * lines shape the MCP entry differently:
+ *
+ * - v1: servers live directly under the top-level `mcp` object keyed by
+ *   server name, each a `{ "type": "local", "command": [...], "enabled": ... }`
+ *   object (see https://opencode.ai/config.json `McpLocalConfig`). The entry
+ *   this service owns is `mcp.jdx`.
+ * - v2: servers live under `mcp.servers`, and `enabled` is replaced by the
+ *   inverse `disabled` (see https://opencode.ai/v2/docs/mcp-servers and the
+ *   v1→v2 migration guide). The entry this service owns is
+ *   `mcp.servers.jdx`. V2 keeps reading the v1 shape, but the native shape
+ *   takes precedence on conflict — so this service writes **both** entries
+ *   and treats either as "wired" when probing.
  *
  * Merge discipline: the target file is parsed leniently (JSONC comments and
  * trailing commas are accepted), every unrelated key is preserved byte-free —
- * only `mcp.jdx` is added, replaced, or removed. A second run is a byte-exact
- * no-op: when the desired entry is already present nothing is rewritten, so
- * comments and formatting survive idempotent re-runs.
+ * only `mcp.jdx` / `mcp.servers.jdx` are added, replaced, or removed. A second
+ * run is a byte-exact no-op: when both desired entries are already present
+ * nothing is rewritten, so comments and formatting survive idempotent re-runs.
  */
 class SetupService(
     private val userHome: Path,
@@ -49,6 +59,32 @@ class SetupService(
         PROJECT("project"),
         SYSTEM("system"),
     }
+
+    /**
+     * Which OpenCode major line is installed for use. V1 stable reports `1.x`;
+     * the v2 beta reports `0.0.0-next-*`/`0.0.0-beta-*`/`0.0.0-dev-*` (a future
+     * stable would report `2.x`). `ABSENT` means no `opencode` binary on PATH;
+     * `UNKNOWN` means a binary answered but its version is unparseable — the
+     * detail names the raw output so a human can judge instead of jdx guessing.
+     */
+    enum class OpencodeVersion(val cliName: String) {
+        V1("v1"),
+        V2("v2"),
+        ABSENT("absent"),
+        UNKNOWN("unknown"),
+    }
+
+    /**
+     * Best-effort answer to "which opencode will run this config". [raw] is the
+     * trimmed `--version` output (null when the binary never answered);
+     * [binary] names the probed executable (`opencode`, or the legacy `opencode2`
+     * shim when no `opencode` is on PATH).
+     */
+    data class OpencodeVersionInfo(
+        val version: OpencodeVersion,
+        val raw: String? = null,
+        val binary: String? = null,
+    )
 
     /** What the caller asked for: install, report-only, or uninstall. */
     data class SetupRequest(
@@ -99,7 +135,7 @@ class SetupService(
         val current = readRootOrNull(path) ?: return doInstall(path, null)
         val root = current.getOrNull()
             ?: return SetupOutcome.Corrupt(path, current.error ?: "not a JSON object")
-        if (isInstalledRoot(root)) return SetupOutcome.Installed(path, changed = false)
+        if (isV1Installed(root) && isV2Installed(root)) return SetupOutcome.Installed(path, changed = false)
         return doInstall(path, root)
     }
 
@@ -128,12 +164,22 @@ class SetupService(
         /** The MCP server name owned by this service in every backend config. */
         const val SERVER_NAME: String = "jdx"
 
-        /** The exact entry written: `jdx mcp` on PATH as a local MCP server. */
-        fun desiredEntry(): JsonObject = buildJsonObject {
+        /** The v1 entry: `jdx mcp` on PATH as a local MCP server under `mcp`. */
+        fun desiredEntryV1(): JsonObject = buildJsonObject {
             put("type", "local")
             put("command", JsonArray(listOf(JsonPrimitive("jdx"), JsonPrimitive("mcp"))))
             put("enabled", true)
         }
+
+        /** The v2 entry: same server under `mcp.servers`, `enabled` → `disabled`. */
+        fun desiredEntryV2(): JsonObject = buildJsonObject {
+            put("type", "local")
+            put("command", JsonArray(listOf(JsonPrimitive("jdx"), JsonPrimitive("mcp"))))
+            put("disabled", false)
+        }
+
+        /** Backwards-compatible alias for the v1 entry (v1 support is deprecated, slated for removal). */
+        fun desiredEntry(): JsonObject = desiredEntryV1()
 
         private val prettyJson: Json = Json { prettyPrint = true; prettyPrintIndent = "  " }
 
@@ -152,6 +198,77 @@ class SetupService(
         fun parseScope(raw: String?): Scope? {
             if (raw == null) return Scope.PROJECT
             return Scope.entries.firstOrNull { it.cliName == raw.lowercase() }
+        }
+
+        private val OPENCODE_VERSION_PATTERN =
+            Regex("""v?(\d+)\.(\d+)\.(\d+)(?:[-.]([0-9A-Za-z.-]+))?""")
+
+        /**
+         * Classifies an `opencode --version` output line. V1 stable prints `1.x`
+         * (`opencode 1.18.3`); the v2 beta prints `0.0.0-next-*` / `0.0.0-beta-*`
+         * / `0.0.0-dev-*` (a future stable would print `2.x`). Anything else —
+         * blank, garbage, a version from an unknown future — is UNKNOWN, never a
+         * guess. Pure — example- and property-tested.
+         */
+        fun parseOpencodeVersion(output: String?): OpencodeVersion {
+            if (output.isNullOrBlank()) return OpencodeVersion.UNKNOWN
+            val match = OPENCODE_VERSION_PATTERN.find(output) ?: return OpencodeVersion.UNKNOWN
+            val major = match.groupValues[1].toIntOrNull() ?: return OpencodeVersion.UNKNOWN
+            val qualifier = match.groupValues[4].lowercase()
+            return when {
+                major == 1 -> OpencodeVersion.V1
+                major == 2 -> OpencodeVersion.V2
+                major == 0 && (
+                    qualifier.contains("next") || qualifier.contains("beta") ||
+                        qualifier.contains("dev") || qualifier.contains("alpha") ||
+                        qualifier.contains("rc")
+                    ) -> OpencodeVersion.V2
+                else -> OpencodeVersion.UNKNOWN
+            }
+        }
+
+        /**
+         * Answers "which opencode is installed for use" from PATH. Probes the
+         * `opencode` binary first — since v2 replaced the v1 binary in place,
+         * that name is what the user runs — and falls back to the legacy
+         * `opencode2` shim only when no `opencode` is on PATH. The first binary
+         * found wins even when its output is unparseable (UNKNOWN names the raw
+         * output; a legacy shim must never shadow the real binary). Never throws:
+         * missing binaries read as ABSENT, failing runs as UNKNOWN. Pure IO
+         * seam ([ProcessRunner]) so tests inject fakes.
+         */
+        fun probeOpencodeVersion(
+            pathDirs: List<Path>,
+            runner: ProcessRunner,
+            osName: String = System.getProperty("os.name", ""),
+        ): OpencodeVersionInfo {
+            for (binary in listOf("opencode", "opencode2")) {
+                val executable = pathDirs.firstNotNullOfOrNull { dir ->
+                    toolFileNames(binary, osName)
+                        .map { dir.resolve(it) }
+                        .firstOrNull { Files.isRegularFile(it) && Files.isExecutable(it) }
+                } ?: continue
+                val raw = try {
+                    val outcome = runner.run(executable, listOf("--version"))
+                    (outcome.stdout + "\n" + outcome.stderr).trim().ifEmpty { null }
+                } catch (_: Exception) {
+                    null
+                }
+                return OpencodeVersionInfo(parseOpencodeVersion(raw), raw, binary)
+            }
+            return OpencodeVersionInfo(OpencodeVersion.ABSENT)
+        }
+
+        /**
+         * One human line naming the detected OpenCode line for `setup` and
+         * `doctor` output (`opencode v2 (0.0.0-next-17403)`,
+         * `opencode not found on PATH`). Pure — example-tested.
+         */
+        fun describeVersion(info: OpencodeVersionInfo): String = when (info.version) {
+            OpencodeVersion.V1 -> "opencode v1" + (info.raw?.let { " ($it)" } ?: "")
+            OpencodeVersion.V2 -> "opencode v2" + (info.raw?.let { " ($it)" } ?: "")
+            OpencodeVersion.ABSENT -> "opencode not found on PATH"
+            OpencodeVersion.UNKNOWN -> "opencode version unknown" + (info.raw?.let { " ($it)" } ?: "")
         }
 
         /**
@@ -196,42 +313,98 @@ class SetupService(
             }
         }
 
-        /** True when `mcp.jdx` is a local server whose command runs `jdx mcp`. */
-        fun isInstalledRoot(root: JsonObject): Boolean {
+        /** True when either the v1 (`mcp.jdx`) or the v2 (`mcp.servers.jdx`) entry wires `jdx mcp`. */
+        fun isInstalledRoot(root: JsonObject): Boolean = isV1Installed(root) || isV2Installed(root)
+
+        /** True when the v1 `mcp.jdx` entry is a local server whose command runs `jdx mcp`. */
+        fun isV1Installed(root: JsonObject): Boolean {
             val entry = root["mcp"]?.jsonObjectOrNull()?.get(SERVER_NAME)?.jsonObjectOrNull()
                 ?: return false
+            return isJdxEntry(entry)
+        }
+
+        /** True when the v2 `mcp.servers.jdx` entry is a local server whose command runs `jdx mcp`. */
+        fun isV2Installed(root: JsonObject): Boolean {
+            val servers = root["mcp"]?.jsonObjectOrNull()?.get("servers")?.jsonObjectOrNull()
+                ?: return false
+            if (isServerEntry(servers)) return false
+            val entry = servers[SERVER_NAME]?.jsonObjectOrNull() ?: return false
+            return isJdxEntry(entry)
+        }
+
+        /** True when [entry] is a local server whose command runs `jdx mcp`. Never throws (hostile configs). */
+        fun isJdxEntry(entry: JsonObject): Boolean {
             if (entry["type"]?.jsonPrimitiveOrNull() != "local") return false
             val command = entry["command"] as? JsonArray ?: return false
             val words = command.mapNotNull { (it as? JsonPrimitive)?.contentOrNull() }
+            if (words.size < 2 || words.last() != "mcp") return false
             // Accept absolute install paths (`~/.local/bin/jdx mcp`): the last two
             // words name the binary and the subcommand.
-            return words.size >= 2 &&
-                words.last() == "mcp" &&
+            return try {
                 Path.of(words[words.size - 2]).fileName.toString() == "jdx"
+            } catch (_: Exception) {
+                false
+            }
         }
 
-        /** Merges the desired entry into [root] (null = fresh file with `$schema`). */
+        /**
+         * Merges both desired entries into [root] (null = fresh file with `$schema`).
+         * Every other server — in `mcp` and in `mcp.servers` — is preserved.
+         */
         fun mergeInstall(root: JsonObject?): JsonObject {
             val base: MutableMap<String, JsonElement> = root?.toMutableMap() ?: mutableMapOf(
                 "\$schema" to JsonPrimitive("https://opencode.ai/config.json"),
             )
             val mcp = root?.get("mcp")?.jsonObjectOrNull()?.toMutableMap() ?: mutableMapOf()
-            mcp[SERVER_NAME] = desiredEntry()
+            mcp[SERVER_NAME] = desiredEntryV1()
+            val serversRaw = mcp["servers"]
+            if (serversRaw is JsonObject && isServerEntry(serversRaw)) {
+                // A v1 server literally named "servers": the v2 namespace cannot
+                // share the key, so the foreign entry wins untouched and only the
+                // v1 entry is written (merge discipline — never clobber).
+            } else {
+                val servers = (serversRaw as? JsonObject)?.toMutableMap() ?: mutableMapOf()
+                servers[SERVER_NAME] = desiredEntryV2()
+                mcp["servers"] = JsonObject(servers)
+            }
             base["mcp"] = JsonObject(mcp)
             return JsonObject(base)
         }
 
-        /** Removes only `mcp.jdx`; drops an emptied `mcp` object to stay tidy. */
+        /**
+         * Removes both `mcp.jdx` and `mcp.servers.jdx`; drops an emptied
+         * `mcp.servers` and then an emptied `mcp` object to stay tidy. A v1
+         * server literally named `servers` is left untouched (see [mergeInstall]).
+         */
         fun mergeRemove(root: JsonObject): JsonObject {
             val base = root.toMutableMap()
             val mcp = root["mcp"]?.jsonObjectOrNull()?.toMutableMap() ?: return root
             mcp.remove(SERVER_NAME)
+            val serversRaw = mcp["servers"]
+            if (serversRaw is JsonObject && !isServerEntry(serversRaw)) {
+                val servers = serversRaw.toMutableMap()
+                servers.remove(SERVER_NAME)
+                if (servers.isEmpty()) mcp.remove("servers") else mcp["servers"] = JsonObject(servers)
+            }
             if (mcp.isEmpty()) base.remove("mcp") else base["mcp"] = JsonObject(mcp)
             return JsonObject(base)
         }
 
-        private fun hasEntry(root: JsonObject): Boolean =
-            root["mcp"]?.jsonObjectOrNull()?.containsKey(SERVER_NAME) == true
+        /**
+         * True when [obj] looks like an MCP server definition rather than the v2
+         * `servers` namespace: `type` is a string (`local`/`remote`), where a
+         * namespace would hold a server object under that key instead.
+         */
+        fun isServerEntry(obj: JsonObject): Boolean =
+            (obj["type"] as? JsonPrimitive)?.isString == true
+
+        private fun hasEntry(root: JsonObject): Boolean {
+            val mcp = root["mcp"]?.jsonObjectOrNull() ?: return false
+            if (mcp.containsKey(SERVER_NAME)) return true
+            val servers = mcp["servers"]?.jsonObjectOrNull() ?: return false
+            if (isServerEntry(servers)) return false
+            return servers.containsKey(SERVER_NAME)
+        }
 
         private fun readRootOrNull(path: Path): RootRead? {
             if (!Files.isRegularFile(path)) return null

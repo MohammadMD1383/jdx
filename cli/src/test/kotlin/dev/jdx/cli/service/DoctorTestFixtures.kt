@@ -50,6 +50,8 @@ internal fun fakeEnvironment(
     activeWorkspace: String? = null,
     /** A stub sidecar jar standing in for the D-008 compiler (T-038); false means absent. */
     kotlinSidecarPresent: Boolean = false,
+    /** OpenCode binaries to place on the fake PATH (`opencode`, `opencode2`); empty means absent. */
+    opencodeBinaries: List<String> = emptyList(),
     /** OS name for `.exe` tool probing; tests inject `"Windows 11"`. */
     osName: String = System.getProperty("os.name", ""),
 ): DoctorEnvironment {
@@ -65,6 +67,11 @@ internal fun fakeEnvironment(
     val pathBin = root.resolve("pathbin").also { Files.createDirectories(it) }
     if (pathBinJavap) {
         emptyExecutable(pathBin, "javap")
+    }
+    for (binary in opencodeBinaries) {
+        for (name in toolFileNames(binary, osName)) {
+            emptyExecutable(pathBin, name)
+        }
     }
     val cacheRoot = home.resolve(".cache/jdx").also { Files.createDirectories(it) }
     cacheSetup(cacheRoot)

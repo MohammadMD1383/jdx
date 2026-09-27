@@ -8,6 +8,16 @@
         "mcp"
       ],
       "enabled": true
+    },
+    "servers": {
+      "jdx": {
+        "type": "local",
+        "command": [
+          "jdx",
+          "mcp"
+        ],
+        "disabled": false
+      }
     }
   }
 }
