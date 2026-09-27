@@ -12,6 +12,7 @@ curl -fsSL https://raw.githubusercontent.com/MohammadMD1383/jdx/main/install-rel
 jdx members java.util.HashMap --limit 5
 # MCP (Claude Code / Cursor): {"mcpServers":{"jdx":{"command":"jdx","args":["mcp"]}}}
 # MCP (OpenCode v1+v2): jdx setup --agent opencode --scope project   (then restart opencode)
+# MCP (Claude Code): jdx setup --agent claude-code --scope project   (then restart claude)
 # MCP (Kilo Code): jdx setup --agent kilo --scope project   (then restart Kilo Code)
 ```
 

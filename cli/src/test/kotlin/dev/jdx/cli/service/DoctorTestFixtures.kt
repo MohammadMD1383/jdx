@@ -55,6 +55,8 @@ internal fun fakeEnvironment(
     kotlinSidecarPresent: Boolean = false,
     /** OpenCode binaries to place on the fake PATH (`opencode`, `opencode2`); empty means absent. */
     opencodeBinaries: List<String> = emptyList(),
+    /** Claude Code binaries to place on the fake PATH (`claude`); empty means absent. */
+    claudeBinaries: List<String> = emptyList(),
     /** OS name for `.exe` tool probing; tests inject `"Windows 11"`. */
     osName: String = System.getProperty("os.name", ""),
     /**
@@ -79,6 +81,11 @@ internal fun fakeEnvironment(
         emptyExecutable(pathBin, "javap")
     }
     for (binary in opencodeBinaries) {
+        for (name in toolFileNames(binary, osName)) {
+            emptyExecutable(pathBin, name)
+        }
+    }
+    for (binary in claudeBinaries) {
         for (name in toolFileNames(binary, osName)) {
             emptyExecutable(pathBin, name)
         }

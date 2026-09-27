@@ -480,19 +480,22 @@ class DoctorService(
     }
 
     private fun setupCheck(): DoctorCheck {
-        // Agent wiring (issue #33 family): reports whether the `jdx mcp` entries
-        // are present in the OpenCode and Kilo Code project and system configs,
-        // and which OpenCode line is installed for use (v1 vs v2 beta — the
-        // OpenCode install covers both, but the operator must know which binary
-        // reads it). Read-only — the same lenient probe as `jdx setup --check`,
-        // plus a best-effort `opencode --version` classification that never
-        // throws. Missing on every scope is a WARN (setup is optional), never a
-        // FAIL; an unreadable file names itself.
-        val projectPath = SetupService.projectConfigPath(environment.workingDir)
-        val systemPath = SetupService.systemConfigPath(environment.userHome)
+        // Agent wiring (issue #33 family): reports whether the `jdx mcp`
+        // entries are present in the OpenCode (v1/v2 entries), Claude Code
+        // (`.mcp.json` / `~/.claude.json`) and Kilo Code project and system
+        // configs, plus which lines are installed for use (OpenCode v1 vs v2
+        // beta — the install covers both, but the operator must know which
+        // binary reads it). Read-only — the same lenient probe as
+        // `jdx setup --check`, plus best-effort `--version` classifications
+        // that never throw. Missing on every scope is a WARN (setup is
+        // optional), never a FAIL; an unreadable file names itself.
+        val opencodeProject = SetupService.projectConfigPath(environment.workingDir)
+        val opencodeSystem = SetupService.systemConfigPath(environment.userHome)
+        val claudeProject = SetupService.claudeProjectConfigPath(environment.workingDir)
+        val claudeSystem = SetupService.claudeSystemConfigPath(environment.userHome)
         val kiloProjectPath = SetupService.kiloProjectConfigPath(environment.workingDir)
         val kiloSystemPath = SetupService.kiloSystemConfigPath(environment.userHome)
-        val detected = try {
+        val opencodeDetected = try {
             SetupService.describeVersion(
                 SetupService.probeOpencodeVersion(
                     environment.pathDirs,
@@ -503,6 +506,17 @@ class DoctorService(
         } catch (e: Exception) {
             "opencode version unknown (${e.message ?: e.javaClass.simpleName})"
         }
+        val claudeDetected = try {
+            SetupService.describeClaudeVersion(
+                SetupService.probeClaudeVersion(
+                    environment.pathDirs,
+                    environment.processRunner,
+                    environment.osName,
+                ),
+            )
+        } catch (e: Exception) {
+            "claude-code version unknown (${e.message ?: e.javaClass.simpleName})"
+        }
         fun stateOf(path: Path, agent: SetupService.Agent): String? = try {
             when {
                 !Files.exists(path) -> null
@@ -512,16 +526,21 @@ class DoctorService(
         } catch (e: Exception) {
             "unreadable ($path)"
         }
-        val projectState = stateOf(projectPath, SetupService.Agent.OPENCODE)
-            ?: "no project config (${projectPath.fileName})"
-        val systemState = stateOf(systemPath, SetupService.Agent.OPENCODE)
-            ?: "no system config ($systemPath)"
+        val opencodeProjectState =
+            stateOf(opencodeProject, SetupService.Agent.OPENCODE) ?: "no project config (${opencodeProject.fileName})"
+        val opencodeSystemState =
+            stateOf(opencodeSystem, SetupService.Agent.OPENCODE) ?: "no system config ($opencodeSystem)"
+        val claudeProjectState =
+            stateOf(claudeProject, SetupService.Agent.CLAUDE_CODE) ?: "no project config (${claudeProject.fileName})"
+        val claudeSystemState =
+            stateOf(claudeSystem, SetupService.Agent.CLAUDE_CODE) ?: "no system config ($claudeSystem)"
         val kiloProjectState = stateOf(kiloProjectPath, SetupService.Agent.KILO)
             ?: "no project config (${kiloProjectPath.fileName})"
         val kiloSystemState = stateOf(kiloSystemPath, SetupService.Agent.KILO)
             ?: "no system config ($kiloSystemPath)"
         val status = if (
-            projectState.startsWith("installed") || systemState.startsWith("installed") ||
+            opencodeProjectState.startsWith("installed") || opencodeSystemState.startsWith("installed") ||
+            claudeProjectState.startsWith("installed") || claudeSystemState.startsWith("installed") ||
             kiloProjectState.startsWith("installed") || kiloSystemState.startsWith("installed")
         ) {
             DoctorStatus.OK
@@ -529,11 +548,16 @@ class DoctorService(
             DoctorStatus.WARN
         }
         val hint = if (status == DoctorStatus.OK) "" else
-            " — run `jdx setup --agent opencode --scope project` or `jdx setup --agent kilo --scope project`"
+            " — run `jdx setup --agent opencode --scope project`, " +
+                "`jdx setup --agent claude-code --scope project` or " +
+                "`jdx setup --agent kilo --scope project`"
         return check(
             "setup",
             status,
-            "$detected: opencode project $projectState; opencode system $systemState; " +
+            "opencode project $opencodeProjectState ($opencodeDetected); " +
+                "opencode system $opencodeSystemState; " +
+                "claude-code project $claudeProjectState ($claudeDetected); " +
+                "claude-code system $claudeSystemState; " +
                 "kilo project $kiloProjectState; kilo system $kiloSystemState$hint",
         )
     }

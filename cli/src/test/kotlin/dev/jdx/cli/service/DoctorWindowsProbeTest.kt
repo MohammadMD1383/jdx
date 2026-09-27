@@ -110,4 +110,29 @@ class DoctorWindowsProbeTest {
             toolFileNames(base, "Linux") shouldBe listOf(base)
         }
     }
+
+    @Test
+    fun `windows claude exe shim is detected in the setup row`() {
+        // Reproduces the windows-leg failure: the probe resolves claude.exe
+        // (first PATHEXT candidate), so dispatch must match on the stem.
+        val runner = ProcessRunner { executable, _ ->
+            if (executable.fileName.toString().substringBefore(".") == "claude") {
+                ProcessOutcome(0, "1.0.33 (Claude Code)", "")
+            } else {
+                ProcessOutcome(0, "26.0.2.1", "")
+            }
+        }
+        val service = DoctorService(
+            fakeEnvironment(
+                tempDir("jdx-doctor-win-"),
+                runner = runner,
+                claudeBinaries = listOf("claude"),
+                osName = "Windows 11",
+            ),
+        )
+
+        val setup = service.probe().checks.first { it.name == "setup" }
+
+        setup.detail shouldContain "claude-code (1.0.33 (Claude Code))"
+    }
 }

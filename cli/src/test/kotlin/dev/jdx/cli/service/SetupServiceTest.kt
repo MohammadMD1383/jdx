@@ -8,9 +8,13 @@ import io.kotest.property.arbitrary.string
 import io.kotest.property.checkAll
 import kotlinx.coroutines.runBlocking
 import kotlinx.serialization.json.Json
+import kotlinx.serialization.json.JsonArray
 import kotlinx.serialization.json.JsonObject
+import kotlinx.serialization.json.JsonPrimitive
+import kotlinx.serialization.json.buildJsonObject
 import kotlinx.serialization.json.jsonObject
 import kotlinx.serialization.json.jsonPrimitive
+import kotlinx.serialization.json.put
 import org.junit.jupiter.api.Test
 import org.junit.jupiter.api.io.TempDir
 import java.nio.file.Files
@@ -405,12 +409,17 @@ class SetupServiceTest {
         SetupService.parseAgent("OpenCode") shouldBe SetupService.Agent.OPENCODE
         SetupService.parseAgent("OPENCODE") shouldBe SetupService.Agent.OPENCODE
         SetupService.parseAgent("open-code") shouldBe SetupService.Agent.OPENCODE
+        SetupService.parseAgent("claude-code") shouldBe SetupService.Agent.CLAUDE_CODE
+        SetupService.parseAgent("Claude Code") shouldBe SetupService.Agent.CLAUDE_CODE
+        SetupService.parseAgent("claudecode") shouldBe SetupService.Agent.CLAUDE_CODE
+        SetupService.parseAgent("claude") shouldBe SetupService.Agent.CLAUDE_CODE
+        SetupService.parseAgent("CLAUDE_CODE") shouldBe SetupService.Agent.CLAUDE_CODE
         SetupService.parseAgent("kilo") shouldBe SetupService.Agent.KILO
         SetupService.parseAgent("Kilo") shouldBe SetupService.Agent.KILO
         SetupService.parseAgent("kilo-code") shouldBe SetupService.Agent.KILO
         SetupService.parseAgent("kilocode") shouldBe SetupService.Agent.KILO
         SetupService.parseAgent("KILO_CODE") shouldBe SetupService.Agent.KILO
-        SetupService.parseAgent("claude") shouldBe null
+        SetupService.parseAgent("clippy") shouldBe null
         SetupService.parseScope(null) shouldBe SetupService.Scope.PROJECT
         SetupService.parseScope("system") shouldBe SetupService.Scope.SYSTEM
         SetupService.parseScope("PROJECT") shouldBe SetupService.Scope.PROJECT
@@ -713,7 +722,10 @@ class SetupServiceTest {
                 val bin = executableBin(root, "opencode", "opencode2")
                 // Whatever opencode answers wins — even garbage (UNKNOWN, never the shim's line).
                 val runner = ProcessRunner { executable, _ ->
-                    if (executable.fileName.toString() == "opencode") {
+                    // Extension-aware: on Windows the probe resolves
+                    // opencode.exe (see toolFileNames); the stem still
+                    // distinguishes opencode from the opencode2 shim.
+                    if (executable.fileName.toString().substringBefore(".") == "opencode") {
                         ProcessOutcome(0, "opencode 1.9.0 $clean", "")
                     } else {
                         ProcessOutcome(0, "opencode2 v0.0.0-next-15806", "")
@@ -772,5 +784,339 @@ class SetupServiceTest {
             parsed["b"].toString() shouldBe "[1,2]"
             SetupService.stripJsonc(text) shouldBe SetupService.stripJsonc(text)
         }
+    }
+
+    // -- Claude Code backend (.mcp.json / ~/.claude.json, mcpServers.jdx) --
+
+    private fun claudeProjectRequest(
+        check: Boolean = false,
+        remove: Boolean = false,
+    ): SetupService.SetupRequest = SetupService.SetupRequest(
+        agent = SetupService.Agent.CLAUDE_CODE,
+        scope = SetupService.Scope.PROJECT,
+        check = check,
+        remove = remove,
+    )
+
+    private fun claudeSystemRequest(
+        check: Boolean = false,
+        remove: Boolean = false,
+    ): SetupService.SetupRequest = SetupService.SetupRequest(
+        agent = SetupService.Agent.CLAUDE_CODE,
+        scope = SetupService.Scope.SYSTEM,
+        check = check,
+        remove = remove,
+    )
+
+    @Test
+    fun `a fresh claude project install creates dot mcp json with the jdx entry`(@TempDir root: Path) {
+        val dirs = fakeDirs(root)
+        val service = SetupService(dirs.home, dirs.project)
+
+        val outcome = service.run(claudeProjectRequest())
+
+        val installed = outcome as SetupService.SetupOutcome.Installed
+        installed.changed shouldBe true
+        installed.path shouldBe dirs.project.resolve(".mcp.json")
+        setupExitCode(outcome) shouldBe 0
+        val stored = Json.parseToJsonElement(Files.readString(installed.path)).jsonObject
+        val entry = stored["mcpServers"]?.jsonObject?.get("jdx")?.jsonObject
+        entry?.get("command")?.jsonPrimitive?.content shouldBe "jdx"
+        entry?.get("args").toString() shouldBe """["mcp"]"""
+        SetupService.isInstalledRoot(stored, SetupService.Agent.CLAUDE_CODE) shouldBe true
+        SetupService.isInstalledAt(installed.path, SetupService.Agent.CLAUDE_CODE) shouldBe true
+        // OpenCode probe does not mistake a Claude file for wired.
+        SetupService.isInstalledAt(installed.path) shouldBe false
+    }
+
+    @Test
+    fun `claude install preserves other servers and never clobbers`(@TempDir root: Path) {
+        val dirs = fakeDirs(root)
+        Files.writeString(
+            dirs.project.resolve(".mcp.json"),
+            """{"mcpServers":{"other":{"command":"other","args":["x"]}}}""",
+        )
+        val service = SetupService(dirs.home, dirs.project)
+
+        val outcome = service.run(claudeProjectRequest()) as SetupService.SetupOutcome.Installed
+
+        outcome.changed shouldBe true
+        val stored = Json.parseToJsonElement(Files.readString(outcome.path)).jsonObject
+        stored["mcpServers"]?.jsonObject?.get("other")?.jsonObject
+            ?.get("command")?.jsonPrimitive?.content shouldBe "other"
+        SetupService.isInstalledRoot(stored, SetupService.Agent.CLAUDE_CODE) shouldBe true
+    }
+
+    @Test
+    fun `a second claude install is a byte-identical no-op`(@TempDir root: Path) {
+        val dirs = fakeDirs(root)
+        val service = SetupService(dirs.home, dirs.project)
+
+        val first = service.run(claudeProjectRequest()) as SetupService.SetupOutcome.Installed
+        val before = Files.readAllBytes(first.path)
+        val second = service.run(claudeProjectRequest())
+
+        (second as SetupService.SetupOutcome.Installed).changed shouldBe false
+        Files.readAllBytes(first.path) shouldBe before
+    }
+
+    @Test
+    fun `claude check reports without writing`(@TempDir root: Path) {
+        val dirs = fakeDirs(root)
+        val service = SetupService(dirs.home, dirs.project)
+
+        val absent = service.run(claudeProjectRequest(check = true))
+        absent as SetupService.SetupOutcome.Checked
+        absent.installed shouldBe false
+        setupExitCode(absent) shouldBe 1
+        Files.exists(dirs.project.resolve(".mcp.json")) shouldBe false
+
+        service.run(claudeProjectRequest())
+        val present = service.run(claudeProjectRequest(check = true))
+        present as SetupService.SetupOutcome.Checked
+        present.installed shouldBe true
+        setupExitCode(present) shouldBe 0
+    }
+
+    @Test
+    fun `claude remove deletes only the jdx entry and drops the emptied namespace`(@TempDir root: Path) {
+        val dirs = fakeDirs(root)
+        val service = SetupService(dirs.home, dirs.project)
+        service.run(claudeProjectRequest())
+
+        val outcome = service.run(claudeProjectRequest(remove = true)) as SetupService.SetupOutcome.Removed
+
+        outcome.changed shouldBe true
+        val stored = Json.parseToJsonElement(Files.readString(dirs.project.resolve(".mcp.json"))).jsonObject
+        stored.containsKey("mcpServers") shouldBe false
+        SetupService.isInstalledAt(dirs.project.resolve(".mcp.json"), SetupService.Agent.CLAUDE_CODE) shouldBe false
+
+        val again = service.run(claudeProjectRequest(remove = true))
+        (again as SetupService.SetupOutcome.Removed).changed shouldBe false
+        setupExitCode(again) shouldBe 0
+    }
+
+    @Test
+    fun `claude remove keeps other servers`(@TempDir root: Path) {
+        val dirs = fakeDirs(root)
+        Files.writeString(
+            dirs.project.resolve(".mcp.json"),
+            """{"mcpServers":{"other":{"command":"other","args":["x"]}}}""",
+        )
+        val service = SetupService(dirs.home, dirs.project)
+        service.run(claudeProjectRequest())
+
+        val outcome = service.run(claudeProjectRequest(remove = true)) as SetupService.SetupOutcome.Removed
+
+        outcome.changed shouldBe true
+        val stored = Json.parseToJsonElement(Files.readString(dirs.project.resolve(".mcp.json"))).jsonObject
+        stored["mcpServers"]?.jsonObject?.containsKey("jdx") shouldBe false
+        stored["mcpServers"]?.jsonObject?.containsKey("other") shouldBe true
+    }
+
+    @Test
+    fun `claude system scope targets dot claude json under the fake home`(@TempDir root: Path) {
+        val dirs = fakeDirs(root)
+        val service = SetupService(dirs.home, dirs.project)
+
+        val created = service.run(claudeSystemRequest()) as SetupService.SetupOutcome.Installed
+
+        created.path shouldBe dirs.home.resolve(".claude.json")
+        SetupService.isInstalledAt(created.path, SetupService.Agent.CLAUDE_CODE) shouldBe true
+    }
+
+    @Test
+    fun `claude project scope walks up to the nearest mcp json`(@TempDir root: Path) {
+        val dirs = fakeDirs(root)
+        Files.writeString(dirs.project.resolve(".mcp.json"), "{}")
+        val nested = dirs.project.resolve("a/b").also { Files.createDirectories(it) }
+        val service = SetupService(dirs.home, nested)
+
+        val outcome = service.run(claudeProjectRequest())
+
+        val installed = outcome as SetupService.SetupOutcome.Installed
+        installed.path shouldBe dirs.project.resolve(".mcp.json")
+        Files.exists(nested.resolve(".mcp.json")) shouldBe false
+    }
+
+    @Test
+    fun `a claude corrupt config exits 5 and names the file`(@TempDir root: Path) {
+        val dirs = fakeDirs(root)
+        Files.writeString(dirs.project.resolve(".mcp.json"), "{ not json,")
+        val service = SetupService(dirs.home, dirs.project)
+
+        val outcome = service.run(claudeProjectRequest())
+
+        outcome as SetupService.SetupOutcome.Corrupt
+        setupExitCode(outcome) shouldBe 5
+    }
+
+    @Test
+    fun `claude entry probe accepts absolute install paths and rejects foreign commands`(@TempDir root: Path) {
+        val dirs = fakeDirs(root)
+        Files.writeString(
+            dirs.project.resolve(".mcp.json"),
+            """{"mcpServers":{"jdx":{"command":"/home/u/.local/bin/jdx","args":["mcp"]}}}""",
+        )
+
+        SetupService.isInstalledAt(
+            dirs.project.resolve(".mcp.json"),
+            SetupService.Agent.CLAUDE_CODE,
+        ) shouldBe true
+
+        Files.writeString(
+            dirs.project.resolve(".mcp.json"),
+            """{"mcpServers":{"jdx":{"command":"other","args":["mcp"]}}}""",
+        )
+        SetupService.isInstalledAt(
+            dirs.project.resolve(".mcp.json"),
+            SetupService.Agent.CLAUDE_CODE,
+        ) shouldBe false
+
+        Files.writeString(
+            dirs.project.resolve(".mcp.json"),
+            """{"mcpServers":{"jdx":{"command":"jdx","args":["other"]}}}""",
+        )
+        SetupService.isInstalledAt(
+            dirs.project.resolve(".mcp.json"),
+            SetupService.Agent.CLAUDE_CODE,
+        ) shouldBe false
+    }
+
+    @Test
+    fun `claude entry probe accepts windows shims and backslash paths`(@TempDir root: Path) {
+        val dirs = fakeDirs(root)
+        val path = dirs.project.resolve(".mcp.json")
+        for (command in listOf("jdx.exe", "jdx.cmd", "jdx.bat", "JDX.EXE", "C:\\tools\\jdx.exe", "C:/tools/jdx.cmd")) {
+            Files.writeString(path, claudeRootWithCommand(command).toString())
+            SetupService.isInstalledAt(path, SetupService.Agent.CLAUDE_CODE) shouldBe true
+        }
+        Files.writeString(path, claudeRootWithCommand("jdx.exe", arg = "other").toString())
+        SetupService.isInstalledAt(path, SetupService.Agent.CLAUDE_CODE) shouldBe false
+    }
+
+    private fun claudeRootWithCommand(command: String, arg: String = "mcp"): JsonObject = buildJsonObject {
+        put(
+            "mcpServers",
+            buildJsonObject {
+                put(
+                    "jdx",
+                    buildJsonObject {
+                        put("command", command)
+                        put("args", JsonArray(listOf(JsonPrimitive(arg))))
+                    },
+                )
+            },
+        )
+    }
+
+    @Test
+    fun `opencode entry probe accepts windows shims and backslash paths`() {
+        for (command in listOf("jdx", "jdx.exe", "jdx.bat", "C:\\tools\\jdx.exe", "/home/u/.local/bin/jdx")) {
+            val entry = buildJsonObject {
+                put("type", "local")
+                put("command", JsonArray(listOf(JsonPrimitive(command), JsonPrimitive("mcp"))))
+                put("enabled", true)
+            }
+            SetupService.isJdxEntry(entry) shouldBe true
+        }
+        val foreign = buildJsonObject {
+            put("type", "local")
+            put("command", JsonArray(listOf(JsonPrimitive("other.exe"), JsonPrimitive("mcp"))))
+            put("enabled", true)
+        }
+        SetupService.isJdxEntry(foreign) shouldBe false
+    }
+
+    @Test
+    fun `a hostile claude command word never throws the installed probe`(@TempDir root: Path) {
+        val dirs = fakeDirs(root)
+        Files.writeString(
+            dirs.project.resolve(".mcp.json"),
+            "{\"mcpServers\":{\"jdx\":{\"command\":\"\u0000\",\"args\":[\"mcp\"]}}}",
+        )
+
+        SetupService.isInstalledAt(
+            dirs.project.resolve(".mcp.json"),
+            SetupService.Agent.CLAUDE_CODE,
+        ) shouldBe false
+    }
+
+    @Test
+    fun `targetPath resolves per agent and scope`(@TempDir root: Path) {
+        val dirs = fakeDirs(root)
+        val service = SetupService(dirs.home, dirs.project)
+
+        service.targetPath(SetupService.Agent.OPENCODE, SetupService.Scope.PROJECT) shouldBe
+            dirs.project.resolve("opencode.json")
+        service.targetPath(SetupService.Agent.OPENCODE, SetupService.Scope.SYSTEM) shouldBe
+            dirs.home.resolve(".config/opencode/opencode.json")
+        service.targetPath(SetupService.Agent.CLAUDE_CODE, SetupService.Scope.PROJECT) shouldBe
+            dirs.project.resolve(".mcp.json")
+        service.targetPath(SetupService.Agent.CLAUDE_CODE, SetupService.Scope.SYSTEM) shouldBe
+            dirs.home.resolve(".claude.json")
+    }
+
+    @Test
+    fun `claude version probing names presence without guessing`() {
+        SetupService.probeClaudeVersion(
+            emptyList(),
+            ProcessRunner { _, _ -> ProcessOutcome(0, "x", "") },
+        ).version shouldBe SetupService.ClaudeVersion.ABSENT
+    }
+
+    @Test
+    fun `claude version probe classifies answers`(@TempDir root: Path) {
+        val bin = root.resolve("bin").also { Files.createDirectories(it) }
+        Files.createFile(bin.resolve("claude")).toFile().setExecutable(true)
+
+        val present = SetupService.probeClaudeVersion(
+            listOf(bin),
+            ProcessRunner { _, _ -> ProcessOutcome(0, "1.0.33 (Claude Code)", "") },
+        )
+        present.version shouldBe SetupService.ClaudeVersion.PRESENT
+        present.raw shouldBe "1.0.33 (Claude Code)"
+        present.binary shouldBe "claude"
+
+        val blank = SetupService.probeClaudeVersion(
+            listOf(bin),
+            ProcessRunner { _, _ -> ProcessOutcome(0, "  ", "") },
+        )
+        blank.version shouldBe SetupService.ClaudeVersion.UNKNOWN
+
+        val failing = SetupService.probeClaudeVersion(
+            listOf(bin),
+            throwingRunner("boom"),
+        )
+        failing.version shouldBe SetupService.ClaudeVersion.UNKNOWN
+    }
+
+    @Test
+    fun `claude probe resolves the exe shim on windows`(@TempDir root: Path) {
+        val bin = root.resolve("bin").also { Files.createDirectories(it) }
+        Files.createFile(bin.resolve("claude.exe")).toFile().setExecutable(true)
+        val runner = ProcessRunner { _, _ -> ProcessOutcome(0, "1.0.33 (Claude Code)", "") }
+
+        val info = SetupService.probeClaudeVersion(listOf(bin), runner, osName = "Windows 11")
+
+        info.version shouldBe SetupService.ClaudeVersion.PRESENT
+        info.raw shouldBe "1.0.33 (Claude Code)"
+        info.binary shouldBe "claude"
+    }
+
+    @Test
+    fun `describeClaudeVersion covers every variant`() {
+        SetupService.describeClaudeVersion(
+            SetupService.ClaudeVersionInfo(SetupService.ClaudeVersion.PRESENT, "1.0.33 (Claude Code)", "claude"),
+        ) shouldBe "claude-code (1.0.33 (Claude Code))"
+        SetupService.describeClaudeVersion(
+            SetupService.ClaudeVersionInfo(SetupService.ClaudeVersion.ABSENT),
+        ) shouldBe "claude-code not found on PATH"
+        SetupService.describeClaudeVersion(
+            SetupService.ClaudeVersionInfo(SetupService.ClaudeVersion.UNKNOWN, "banana", "claude"),
+        ) shouldBe "claude-code version unknown (banana)"
+        SetupService.describeClaudeVersion(
+            SetupService.ClaudeVersionInfo(SetupService.ClaudeVersion.UNKNOWN),
+        ) shouldBe "claude-code version unknown"
     }
 }
