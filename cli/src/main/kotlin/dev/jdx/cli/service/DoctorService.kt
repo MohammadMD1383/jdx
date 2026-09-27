@@ -418,15 +418,17 @@ class DoctorService(
 
     private fun setupCheck(): DoctorCheck {
         // Agent wiring (issue #33 family): reports whether the `jdx mcp` entries
-        // are present in the OpenCode project and system configs, and which
-        // OpenCode line is installed for use (v1 vs v2 beta — the install
-        // covers both, but the operator must know which binary reads it).
-        // Read-only — the same lenient probe as `jdx setup --check`, plus a
-        // best-effort `opencode --version` classification that never throws.
-        // Missing on both scopes is a WARN (setup is optional), never a FAIL;
-        // an unreadable file names itself.
+        // are present in the OpenCode and Kilo Code project and system configs,
+        // and which OpenCode line is installed for use (v1 vs v2 beta — the
+        // OpenCode install covers both, but the operator must know which binary
+        // reads it). Read-only — the same lenient probe as `jdx setup --check`,
+        // plus a best-effort `opencode --version` classification that never
+        // throws. Missing on every scope is a WARN (setup is optional), never a
+        // FAIL; an unreadable file names itself.
         val projectPath = SetupService.projectConfigPath(environment.workingDir)
         val systemPath = SetupService.systemConfigPath(environment.userHome)
+        val kiloProjectPath = SetupService.kiloProjectConfigPath(environment.workingDir)
+        val kiloSystemPath = SetupService.kiloSystemConfigPath(environment.userHome)
         val detected = try {
             SetupService.describeVersion(
                 SetupService.probeOpencodeVersion(
@@ -438,24 +440,39 @@ class DoctorService(
         } catch (e: Exception) {
             "opencode version unknown (${e.message ?: e.javaClass.simpleName})"
         }
-        fun stateOf(path: Path): String? = try {
+        fun stateOf(path: Path, agent: SetupService.Agent): String? = try {
             when {
                 !Files.exists(path) -> null
-                SetupService.isInstalledAt(path) -> "installed ($path)"
+                SetupService.isInstalledAt(path, agent) -> "installed ($path)"
                 else -> "not installed ($path)"
             }
         } catch (e: Exception) {
             "unreadable ($path)"
         }
-        val projectState = stateOf(projectPath) ?: "no project config (${projectPath.fileName})"
-        val systemState = stateOf(systemPath) ?: "no system config ($systemPath)"
-        val status = if (projectState.startsWith("installed") || systemState.startsWith("installed")) {
+        val projectState = stateOf(projectPath, SetupService.Agent.OPENCODE)
+            ?: "no project config (${projectPath.fileName})"
+        val systemState = stateOf(systemPath, SetupService.Agent.OPENCODE)
+            ?: "no system config ($systemPath)"
+        val kiloProjectState = stateOf(kiloProjectPath, SetupService.Agent.KILO)
+            ?: "no project config (${kiloProjectPath.fileName})"
+        val kiloSystemState = stateOf(kiloSystemPath, SetupService.Agent.KILO)
+            ?: "no system config ($kiloSystemPath)"
+        val status = if (
+            projectState.startsWith("installed") || systemState.startsWith("installed") ||
+            kiloProjectState.startsWith("installed") || kiloSystemState.startsWith("installed")
+        ) {
             DoctorStatus.OK
         } else {
             DoctorStatus.WARN
         }
-        val hint = if (status == DoctorStatus.OK) "" else " — run `jdx setup --agent opencode --scope project`"
-        return check("setup", status, "$detected: $projectState; $systemState$hint")
+        val hint = if (status == DoctorStatus.OK) "" else
+            " — run `jdx setup --agent opencode --scope project` or `jdx setup --agent kilo --scope project`"
+        return check(
+            "setup",
+            status,
+            "$detected: opencode project $projectState; opencode system $systemState; " +
+                "kilo project $kiloProjectState; kilo system $kiloSystemState$hint",
+        )
     }
 
     private fun check(name: String, status: DoctorStatus, detail: String): DoctorCheck =

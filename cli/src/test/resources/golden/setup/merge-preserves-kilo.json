@@ -1,0 +1,21 @@
+{
+  "model": "kilo",
+  "mcp": {
+    "other": {
+      "type": "local",
+      "command": [
+        "other"
+      ],
+      "enabled": true
+    },
+    "jdx": {
+      "type": "local",
+      "command": [
+        "jdx",
+        "mcp"
+      ],
+      "enabled": true
+    }
+  }
+}
+
