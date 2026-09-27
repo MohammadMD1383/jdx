@@ -352,12 +352,15 @@ class DiffServiceTest {
         report.counts.typesAdded shouldBe 0
         report.counts.typesRemoved shouldBe 0
         val corrupt = report.warnings.filter { it.code.name == "CORRUPT_CLASS" }
-        // Both sides hold the broken class and both trip over it, but a warning
-        // is a fact and not a per-side event: the report says it once, naming
-        // the class, instead of once per artifact.
-        corrupt.size shouldBe 1
-        corrupt.single().subject shouldBe "d.Broken"
-        outcome.renderText(false) shouldContain "warning CORRUPT_CLASS"
+        // Both sides hold the broken class and both trip over it: each side's
+        // warning is attributed (`in <label>:`), so the same unreadable class
+        // in two jars is two facts and reports once per side.
+        corrupt.size shouldBe 2
+        corrupt.forEach { it.subject shouldBe "d.Broken" }
+        corrupt[0].message shouldContain "in v1.jar:"
+        corrupt[1].message shouldContain "in v2.jar:"
+        outcome.renderText(false) shouldContain "warning CORRUPT_CLASS: in v1.jar:"
+        outcome.renderText(false) shouldContain "warning CORRUPT_CLASS: in v2.jar:"
         outcome.toJson("diff") shouldContain "\"code\":\"CORRUPT_CLASS\""
         outcome.toJson("diff") shouldContain "\"subject\":\"d.Broken\""
     }
@@ -379,6 +382,46 @@ class DiffServiceTest {
         report.findings shouldBe emptyList()
         report.identical shouldBe true
         report.warnings.map { it.code.name } shouldBe listOf("CORRUPT_CLASS")
+        // The warning names the side that produced it, so an agent can tell
+        // the class was dropped from the new jar and not the old one.
+        report.warnings.single().message shouldContain "in v2.jar:"
+        report.warnings.single().subject shouldBe "d.Broken"
+    }
+
+    @Test
+    fun `a corrupt class in the old jar only is attributed to the old side`(@TempDir temp: Path) {
+        val old = diffJar(
+            temp.resolve("v1.jar"),
+            greeter("greet"),
+            corruptEntries = listOf("d/Broken.class"),
+        )
+        val new = diffJar(temp.resolve("v2.jar"), greeter("greet"))
+
+        val outcome = JdxService.diff(side(old), side(new))
+        val report = reportOf(outcome).report
+
+        report.findings shouldBe emptyList()
+        report.identical shouldBe true
+        report.warnings.map { it.code.name } shouldBe listOf("CORRUPT_CLASS")
+        report.warnings.single().message shouldContain "in v1.jar:"
+        report.warnings.single().subject shouldBe "d.Broken"
+        outcome.renderText(false) shouldContain "warning CORRUPT_CLASS: in v1.jar:"
+    }
+
+    @Test
+    fun `a self-diff with a corrupt class still reports the warning once`(@TempDir temp: Path) {
+        // Same label on both sides: attribution produces identical messages,
+        // so distinct() still collapses the union to one entry.
+        val jar = diffJar(
+            temp.resolve("v1.jar"),
+            greeter("greet"),
+            corruptEntries = listOf("d/Broken.class"),
+        )
+
+        val report = reportOf(JdxService.diff(side(jar), side(jar))).report
+
+        report.warnings.map { it.code.name } shouldBe listOf("CORRUPT_CLASS")
+        report.warnings.single().message shouldContain "in v1.jar:"
     }
 
     @Test
