@@ -445,6 +445,44 @@ class ApiDifferTest {
     }
 
     @Test
+    fun `a compiler's own bookkeeping annotation is never reported as an API change`() {
+        // `kotlin.Metadata` changes value on *every* edit to a Kotlin declaration, so
+        // reporting it would put a line that is always true on every Kotlin diff and bury
+        // the real finding. Unlike a JetBrains `@Nullable`, nobody compiles against it.
+        val withMetadata = AnnotationInfo(TYPE_NAME("kotlin.Metadata"), mapOf("k" to "1", "d1" to "[]"))
+        val withOtherMetadata = AnnotationInfo(TYPE_NAME("kotlin.Metadata"), mapOf("k" to "2", "d1" to "[]"))
+        val real = AnnotationInfo(TYPE_NAME("com.example.Marker"), mapOf("level" to "1"))
+        val realChanged = AnnotationInfo(TYPE_NAME("com.example.Marker"), mapOf("level" to "2"))
+
+        // Type level: metadata churn alone produces nothing at all.
+        rulesBetween(
+            snapshotOf("a.jar", type("com.example.Foo", isKotlin = true, annotations = listOf(withMetadata))),
+            snapshotOf("b.jar", type("com.example.Foo", isKotlin = true, annotations = listOf(withOtherMetadata))),
+        ) shouldBe emptyList()
+
+        // And it does not mask a real annotation change on the same declaration.
+        rulesBetween(
+            snapshotOf("a.jar", type("com.example.Foo", annotations = listOf(withMetadata, real))),
+            snapshotOf("b.jar", type("com.example.Foo", annotations = listOf(withOtherMetadata, realChanged))),
+        ) shouldBe listOf(CompatRule.ANNOTATION_VALUES_CHANGED)
+
+        // Member level too: a real annotation still reports.
+        val old = snapshotOf(
+            "a.jar",
+            type(
+                "com.example.Foo",
+                isKotlin = true,
+                members = listOf(method("f", annotations = listOf(withMetadata))),
+            ),
+        )
+        val new = snapshotOf(
+            "b.jar",
+            type("com.example.Foo", isKotlin = true, members = listOf(method("f"))),
+        )
+        rulesBetween(old, new) shouldBe emptyList()
+    }
+
+    @Test
     fun `a removed enum constant is ENUM_CONSTANT_REMOVED, a removed plain field is not`() {
         val old = snapshotOf(
             "a.jar",

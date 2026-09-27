@@ -18,8 +18,8 @@ breaking  PARAMETER_TYPE_CHANGED  dev.jdx.diffapi.Api#retyped(java.lang.String):
 breaking  PARAMETER_TYPE_CHANGED  dev.jdx.diffapi.Api#spread(java.lang.String): now: dev.jdx.diffapi.Api#spread(java.lang.String[])
 breaking  RETURN_TYPE_CHANGED  dev.jdx.diffapi.Api#width(): int -> long
 breaking  FIELD_TYPE_CHANGED  dev.jdx.diffapi.Api#counter: int -> long
-21 findings below --severity breaking
-19 breaking · 3 suspicious · 18 informational · 1 type added · 1 type removed
+32 findings below --severity breaking
+19 breaking · 8 suspicious · 24 informational · 1 type added · 1 type removed
 source: diff-fixtures-v1.jar (bytecode)
 source: diff-fixtures-v2.jar (bytecode)
 next: jdx members dev.jdx.diffapi.Departed

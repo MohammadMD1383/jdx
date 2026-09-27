@@ -68,14 +68,24 @@ class DiffFixtureRuleCoverageTest {
         CompatRule.PARAMETER_TYPE_CHANGED to "Api#retyped, Api#spread",
         CompatRule.RETURN_TYPE_CHANGED to "Api#width()",
         CompatRule.FIELD_TYPE_CHANGED to "Api#counter",
+        // -- Kotlin-visible: the only place these are proven against real `@Metadata`
+        //    rather than a hand-built `KotlinMethodView`
+        CompatRule.KOTLIN_NAME_CHANGED to "Kotlinish#greet loses @JvmName",
+        CompatRule.KOTLIN_SUSPEND_CHANGED to "Kotlinish#fetch becomes suspend",
+        CompatRule.KOTLIN_NULLABILITY_CHANGED to "Kotlinish#nullable(): String -> String?",
+        CompatRule.KOTLIN_DEFAULT_ARG_REMOVED to "Kotlinish#repeat loses its default",
+        CompatRule.KOTLIN_DEFAULT_ARG_ADDED to "Kotlinish#describe gains a default",
+        CompatRule.KOTLIN_PARAMETER_NAME_CHANGED to "Kotlinish#measure: count -> total",
+        CompatRule.KOTLIN_PROPERTY_BECAME_MUTABLE to "Kotlinish#current: val -> var",
         // -- source-visible
+        CompatRule.FINAL_REMOVED to "Kotlinish#current: a val's field loses final",
         CompatRule.GENERIC_SIGNATURE_CHANGED to "Api#echoed()",
         CompatRule.CHECKED_EXCEPTION_ADDED to "Api#checked()",
         CompatRule.THROWS_REMOVED to "Api#stale()",
         CompatRule.DEPRECATED_ADDED to "Api#fresh(), Api#marked()",
         CompatRule.DEPRECATED_REMOVED to "Api#stale()",
-        CompatRule.ANNOTATION_ADDED to "Api#fresh(), Api#marked()",
-        CompatRule.ANNOTATION_REMOVED to "Api#stale()",
+        CompatRule.ANNOTATION_ADDED to "Api#fresh(), Kotlinish#label()",
+        CompatRule.ANNOTATION_REMOVED to "Api#stale(), Kotlinish#label()",
         CompatRule.SYNCHRONIZED_ADDED to "Tuned#guarded()",
         CompatRule.TRANSIENT_CHANGED to "Tuned#scratch",
         CompatRule.FIELD_CONSTANT_VALUE_CHANGED to "Api#LIMIT",
@@ -93,15 +103,15 @@ class DiffFixtureRuleCoverageTest {
      *   what `Api#spread()` produces). Flipping `ACC_VARARGS` on a method that already
      *   takes an array is not expressible in Java source, so the rule only fires on
      *   hand-modified bytecode.
-     * - `KOTLIN_*`, `KOTLIN_PROPERTY_BECAME_MUTABLE` — this pair is Java; the Kotlin
-     *   rules need `@Metadata`, which `testfixtures/src/main/kotlin` covers for the
-     *   reader and `core`'s hand-built snapshots cover for the differ.
-     * - `MEMBER_VISIBILITY_NARROWED` on a *type*, `ABSTRACT_REMOVED`, `FINAL_REMOVED`,
-     *   `INSTANCE_TO_STATIC`, `STATIC_TO_INSTANCE`'s inverse, `NATIVE_*`,
-     *   `THROWS_*`'s unchecked side, `PARAMETER_NAME_*`, `ANNOTATION_VALUES_CHANGED`,
-     *   `ANNOTATION_DEFAULT_CHANGED` — all reachable, all covered by the per-rule
-     *   examples; the pair is chosen for the *link-breaking* rules, not for one instance
-     *   of every modifier flag.
+     * - The remaining modifier and annotation rules — `MEMBER_VISIBILITY_NARROWED` on a
+     *   *type*, `TYPE_VISIBILITY_NARROWED`, `ABSTRACT_REMOVED`, `FINAL_REMOVED`,
+     *   `INSTANCE_TO_STATIC`, `NATIVE_ADDED`/`NATIVE_REMOVED`, `ANNOTATION_VALUES_CHANGED`,
+     *   `ANNOTATION_DEFAULT_CHANGED`, `PARAMETER_NAME_CHANGED`, `PARAMETER_NAMES_LOST` —
+     *   are all reachable and all covered by the per-rule examples. The pair is chosen for
+     *   the *link-breaking* and *Kotlin-visible* rules, not for one instance of every
+     *   modifier flag; `ANNOTATION_VALUES_CHANGED` in particular is deliberately
+     *   unreachable here, because the pair's only annotation-value changes are on
+     *   `kotlin.Metadata`, which the differ deliberately ignores.
      */
     private val unreachableFromJavac: Set<CompatRule> = setOf(CompatRule.VARARGS_CHANGED)
 

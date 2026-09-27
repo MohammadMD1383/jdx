@@ -153,6 +153,13 @@ public data class ApiDiff(
  * Type-level findings shared by types and members: the `throws` clause, the
  * annotation set and `@Deprecated`. Kept in one place so a type and a member
  * cannot drift on what counts as the same annotation.
+ *
+ * [INTERNAL_ANNOTATIONS] are skipped: they are the compiler's own bookkeeping, and
+ * they change on *every* edit to a Kotlin declaration. Reporting
+ * `ANNOTATION_VALUES_CHANGED kotlin.Metadata` on a diff of two Kotlin artifacts would
+ * bury a real finding under a line that is always true, so it is noise by construction
+ * — and unlike a JetBrains `@Nullable` (which is a real, declared API), nobody compiles
+ * against it.
  */
 internal fun annotationFindings(
     before: List<AnnotationInfo>,
@@ -161,8 +168,10 @@ internal fun annotationFindings(
     ref: String,
 ): List<DiffFinding> {
     val out = mutableListOf<DiffFinding>()
-    val oldByType = before.associateBy { it.type.binaryName }
-    val newByType = after.associateBy { it.type.binaryName }
+    val oldByType = before.filterNot { it.type.binaryName in INTERNAL_ANNOTATIONS }
+        .associateBy { it.type.binaryName }
+    val newByType = after.filterNot { it.type.binaryName in INTERNAL_ANNOTATIONS }
+        .associateBy { it.type.binaryName }
     for ((annotationType, annotation) in newByType) {
         val previous = oldByType[annotationType]
         val rule = when {
@@ -179,6 +188,13 @@ internal fun annotationFindings(
     }
     return out
 }
+
+/** Annotations the compiler writes, that no consumer compiles against. */
+internal val INTERNAL_ANNOTATIONS: Set<String> = setOf(
+    "kotlin.Metadata",
+    "kotlin.jvm.internal.TypeTable",
+    "kotlin.jvm.internal.JavaTypeParameters",
+)
 
 /**
  * Whether a `throws` entry is *possibly* checked. The two unchecked roots are

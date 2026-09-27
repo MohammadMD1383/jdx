@@ -21,8 +21,13 @@ breaking  FIELD_TYPE_CHANGED  dev.jdx.diffapi.Api#counter: int -> long
 suspicious  MEMBER_MOVED_TO_SUPERTYPE  dev.jdx.diffapi.Relocated#shared(): declared by dev.jdx.diffapi.Base
 suspicious  GENERIC_SIGNATURE_CHANGED  dev.jdx.diffapi.Api#echoed(java.util.List)
 suspicious  CHECKED_EXCEPTION_ADDED  dev.jdx.diffapi.Api#checked(): java.io.IOException
-18 findings below --severity suspicious
-19 breaking · 3 suspicious · 18 informational · 1 type added · 1 type removed
+suspicious  KOTLIN_NAME_CHANGED  dev.jdx.diffapi.Kotlinish#greet(java.lang.String): JVM name renamedForJvm -> greet
+suspicious  KOTLIN_SUSPEND_CHANGED  dev.jdx.diffapi.Kotlinish#fetch(java.lang.String): suspend added
+suspicious  KOTLIN_NULLABILITY_CHANGED  dev.jdx.diffapi.Kotlinish#nullable(): java.lang.String -> java.lang.String?
+suspicious  KOTLIN_DEFAULT_ARG_REMOVED  dev.jdx.diffapi.Kotlinish#repeat(int): parameter 1
+suspicious  KOTLIN_PARAMETER_NAME_CHANGED  dev.jdx.diffapi.Kotlinish#measure(int): count -> total
+24 findings below --severity suspicious
+19 breaking · 8 suspicious · 24 informational · 1 type added · 1 type removed
 source: diff-fixtures-v1.jar (bytecode)
 source: diff-fixtures-v2.jar (bytecode)
 next: jdx members dev.jdx.diffapi.Departed
