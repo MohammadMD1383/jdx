@@ -1,6 +1,7 @@
 package dev.jdx.cli
 
 import com.github.ajalt.clikt.core.CoreCliktCommand
+import com.github.ajalt.clikt.core.context
 import com.github.ajalt.clikt.core.main
 import com.github.ajalt.clikt.core.subcommands
 import com.github.ajalt.clikt.parameters.options.flag
@@ -106,7 +107,23 @@ internal fun CoreCliktCommand.effectiveJson(ownJson: Boolean): Boolean =
     ownJson || rootCommand()?.json == true
 
 /** One-shot CLI entry point; the fat jar's `Main-Class` (see `app/build.gradle.kts`). */
-fun main(args: Array<String>): Unit =
+fun main(args: Array<String>): Unit = buildRoot().main(args)
+
+/**
+ * Builds the rooted command tree with clikt's `exitProcess` seam owned by us.
+ *
+ * Clikt reports usage errors (missing argument, unknown command/option, `--help`,
+ * `--version`) by handing the status code to the `Context.exitProcess` seam and
+ * then returning normally. clikt-core's default seam is a no-op (the real one lives
+ * in the mordant flavor we excluded), so without this every usage error exits 0.
+ * Child contexts inherit the parent's seam, so setting it on the root covers every
+ * subcommand. Clikt's own error code is 1; the D-015 contract reserves 3 for usage
+ * errors, so 1 maps to 3 while 0 (`--help`/`--version`) passes through.
+ *
+ * [terminate] is injectable so tests can capture the code instead of killing the
+ * host JVM (mirroring the per-command `terminate` seam).
+ */
+internal fun buildRoot(terminate: (Int) -> Unit = { kotlin.system.exitProcess(it) }): JdxCli =
     JdxCli().subcommands(
         VersionCommand(),
         UpgradeCommand(),
@@ -139,4 +156,6 @@ fun main(args: Array<String>): Unit =
         wsGroup(),
         cacheGroup(),
         kotlinGroup(),
-    ).main(args)
+    ).context {
+        exitProcess = { status -> terminate(if (status == 1) 3 else status) }
+    }

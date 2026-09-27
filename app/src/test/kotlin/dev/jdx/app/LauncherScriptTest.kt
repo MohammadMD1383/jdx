@@ -618,6 +618,55 @@ class LauncherScriptTest {
         result.stdout.shouldContain("Usage: jdx")
     }
 
+    // ------------------------------------------------------------------ usage errors (issue: Clikt-level exits were 0)
+
+    @Test
+    fun `missing argument exits 3 through the real launcher and fat jar`() {
+        assumeTrue(javaIsAvailable(), "no java on PATH or /usr/lib/jvm/default")
+        assumeTrue(builtLauncher.isFile, "app/build/jdx missing — run :app:installDist")
+
+        val result = runLauncher(builtLauncher, projectDir, args = listOf("members"))
+
+        result.exitCode shouldBe 3
+        // Clikt prints usage errors to stdout in the mordant-less core flavor.
+        result.stdout.shouldContain("Usage:")
+    }
+
+    @Test
+    fun `unknown command exits 3 through the real launcher and fat jar`() {
+        assumeTrue(javaIsAvailable(), "no java on PATH or /usr/lib/jvm/default")
+        assumeTrue(builtLauncher.isFile, "app/build/jdx missing — run :app:installDist")
+
+        val result = runLauncher(builtLauncher, projectDir, args = listOf("nosuchcommand"))
+
+        result.exitCode shouldBe 3
+    }
+
+    @Test
+    fun `unknown option exits 3 through the real launcher and fat jar`() {
+        assumeTrue(javaIsAvailable(), "no java on PATH or /usr/lib/jvm/default")
+        assumeTrue(builtLauncher.isFile, "app/build/jdx missing — run :app:installDist")
+
+        val result = runLauncher(builtLauncher, projectDir, args = listOf("members", "java.lang.String", "--nope"))
+
+        result.exitCode shouldBe 3
+    }
+
+    @Test
+    fun `diff with an invalid limit still exits 3 through the real launcher and fat jar`() {
+        // Service-level usage error, validated before any artifact IO, so missing
+        // jars never matter here: proves the fix did not disturb the service path.
+        assumeTrue(javaIsAvailable(), "no java on PATH or /usr/lib/jvm/default")
+        assumeTrue(builtLauncher.isFile, "app/build/jdx missing — run :app:installDist")
+
+        val result = runLauncher(
+            builtLauncher, projectDir,
+            args = listOf("diff", "/nope/a.jar", "/nope/b.jar", "--limit", "-1"),
+        )
+
+        result.exitCode shouldBe 3
+    }
+
     @Test
     fun `doctor round-trips through the real launcher and fat jar`() {
         assumeTrue(javaIsAvailable(), "no java on PATH or /usr/lib/jvm/default")
