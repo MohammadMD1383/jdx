@@ -15,11 +15,14 @@ rem   2. fail with one human-readable line on stderr -- never a stack trace --
 rem      if it cannot (missing JDK, JDK too old, missing build). Exit code 6
 rem      (D-015/D-026), the same contract as the POSIX launcher.
 rem   3. run the fat jar with the one-shot CLI JVM flags (PROPOSAL.md §15):
-rem      -XX:TieredStopAtLevel=1 -XX:+UseSerialGC -Xshare:auto
+rem      -XX:TieredStopAtLevel=1 -XX:+UseSerialGC -Xshare:auto -Xlog:cds=off
 rem      plus -XX:SharedArchiveFile when the AppCDS archive (jdx.jsa, shipped
 rem      by :app:installDist) sits next to the fat jar. A missing or stale
 rem      archive degrades to the plain run via -Xshare:auto, never a hard
 rem      failure -- so this is a presence check only, no version probing.
+rem      -Xlog:cds=off keeps that degradation silent: a stale archive's
+rem      mismatch notice would otherwise print at [error] and read like a
+rem      crash for a command that then works fine.
 rem
 rem The fat jar is located relative to this script's own directory (%~dp0
 rem keeps a trailing backslash), so the install directory can live anywhere
@@ -27,18 +30,29 @@ rem (per-user default %LOCALAPPDATA%\Programs\jdx, Phase 0 decision).
 rem
 rem NOTE: keep the one-shot flag set and their order identical to the POSIX
 rem launcher and jdx.ps1 -- flag order (-Xshare:auto before
-rem -XX:SharedArchiveFile) is what makes stale archives degrade instead of
-rem fail, and it is pinned by WindowsLauncherScriptTest.
+rem -XX:SharedArchiveFile) is what makes stale archives degrade quietly
+rem instead of fail, and it is pinned by WindowsLauncherScriptTest.
 
 setlocal EnableExtensions
 
 set JDX_MIN_JAVA=21
 
 rem --- locate the fat jar next to this script ---
+rem More than one fat jar is an ambiguous install, never a guess: the build
+rem evicts superseded jars, so reaching here means a stale jar survived (or
+rem jars were copied by hand) -- the old last-match-wins pick once reported
+rem the wrong version silently. Each match calls :jdx_note_jar (a subroutine,
+rem so values expand per match without delayed expansion); a second match
+rem records JDX_JAR_DUP and the install is refused naming every jar.
 set JDX_JAR=
-for %%J in ("%~dp0libs\jdx-*-all.jar") do if exist "%%J" set "JDX_JAR=%%J"
+set JDX_JAR_DUP=
+for %%J in ("%~dp0libs\jdx-*-all.jar") do if exist "%%J" call :jdx_note_jar "%%J"
 if not defined JDX_JAR (
   1>&2 echo jdx: no jdx fat jar in '%~dp0libs' -- build it first: gradlew.bat :app:installDist
+  exit /b 6
+)
+if defined JDX_JAR_DUP (
+  1>&2 echo jdx: multiple jdx fat jars in '%~dp0libs': '%JDX_JAR%', '%JDX_JAR_DUP%' -- rebuild to leave exactly one: gradlew.bat :app:clean :app:installDist
   exit /b 6
 )
 
@@ -125,8 +139,21 @@ set JDX_CDS=
 if exist "%~dp0libs\jdx.jsa" set "JDX_CDS=-XX:SharedArchiveFile=%~dp0libs\jdx.jsa"
 
 if defined JDX_CDS (
-  "%JAVA_EXE%" -XX:TieredStopAtLevel=1 -XX:+UseSerialGC -Xshare:auto "%JDX_CDS%" -jar "%JDX_JAR%" %*
+  "%JAVA_EXE%" -XX:TieredStopAtLevel=1 -XX:+UseSerialGC -Xshare:auto -Xlog:cds=off "%JDX_CDS%" -jar "%JDX_JAR%" %*
 ) else (
-  "%JAVA_EXE%" -XX:TieredStopAtLevel=1 -XX:+UseSerialGC -Xshare:auto -jar "%JDX_JAR%" %*
+  "%JAVA_EXE%" -XX:TieredStopAtLevel=1 -XX:+UseSerialGC -Xshare:auto -Xlog:cds=off -jar "%JDX_JAR%" %*
 )
 exit /b %ERRORLEVEL%
+
+rem --- fat-jar disambiguation: one call per glob match (see above) ---
+:jdx_note_jar
+if not defined JDX_JAR (
+  set "JDX_JAR=%~1"
+  exit /b 0
+)
+if not defined JDX_JAR_DUP (
+  set "JDX_JAR_DUP=%~1"
+) else (
+  set "JDX_JAR_DUP=%JDX_JAR_DUP%, %~1"
+)
+exit /b 0

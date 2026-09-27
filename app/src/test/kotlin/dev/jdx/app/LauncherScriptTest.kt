@@ -217,6 +217,7 @@ class LauncherScriptTest {
             "-XX:TieredStopAtLevel=1",
             "-XX:+UseSerialGC",
             "-Xshare:auto",
+            "-Xlog:cds=off",
             "-jar",
             File(install, "libs/jdx-0.0.0-all.jar").absolutePath,
             "--version",
@@ -461,6 +462,29 @@ class LauncherScriptTest {
         assertCleanFailure(result, ":app:installDist")
     }
 
+    @Test
+    fun `multiple fat jars are an ambiguous install naming every jar, never a silent first-glob pick`() {
+        // A versioned `-PjdxVersion` build on top of a default one used to leave
+        // both jars behind, and the old first-match-wins glob picked the older
+        // (`0.1.0-SNAPSHOT` sorts before `1.3.0`) — silently reporting the wrong
+        // version. The launcher must refuse instead of guessing.
+        val install = newFakeInstall()
+        val stubJdk = newStubJdk()
+        val argsFile = File(install, "stub-args.txt")
+        File(install, "libs/jdx-0.0.0-all.jar").delete()
+        val stale = File(install, "libs/jdx-0.1.0-SNAPSHOT-all.jar").apply { writeBytes(byteArrayOf(0x50, 0x4b)) }
+        val current = File(install, "libs/jdx-1.3.0-all.jar").apply { writeBytes(byteArrayOf(0x50, 0x4b)) }
+
+        val result = runLauncher(
+            File(install, "jdx"), install, args = listOf("--version"),
+            environment = mapOf("JAVA_HOME" to stubJdk.absolutePath) + stubEnvironment(argsFile),
+        )
+
+        assertCleanFailure(result, "multiple", stale.name, current.name, ":app:clean", ":app:installDist")
+        // Refused before any JVM launch: the stub recorded nothing.
+        argsFile.exists() shouldBe false
+    }
+
     // ------------------------------------------------------------------ AppCDS archive (T-048)
 
     @Test
@@ -480,6 +504,7 @@ class LauncherScriptTest {
             "-XX:TieredStopAtLevel=1",
             "-XX:+UseSerialGC",
             "-Xshare:auto",
+            "-Xlog:cds=off",
             "-XX:SharedArchiveFile=${File(install, "libs/jdx.jsa").absolutePath}",
             "-jar",
             File(install, "libs/jdx-0.0.0-all.jar").absolutePath,
@@ -502,6 +527,9 @@ class LauncherScriptTest {
         result.exitCode shouldBe 0
         recordedArgs(argsFile) shouldNotContain "-XX:SharedArchiveFile=${File(install, "libs/jdx.jsa").absolutePath}"
         recordedArgs(argsFile) shouldContain "-Xshare:auto"
+        // CDS diagnostics stay off even with no archive: the flag is
+        // unconditional, so a stale archive can never surface as [error] noise.
+        recordedArgs(argsFile) shouldContain "-Xlog:cds=off"
     }
 
     @Test
@@ -704,6 +732,22 @@ class LauncherScriptTest {
 
         result.exitCode shouldBe 0
         result.stdout.trim() shouldBe "jdx version ${dev.jdx.cli.BuildInfo.version}"
+    }
+
+    @Test
+    fun `installDist leaves exactly one fat jar in build-libs`() {
+        // A versioned `-PjdxVersion` build on top of a default one used to leave
+        // both jars behind, and the launcher globbed the older first — silently
+        // reporting the wrong version. The fatJar task now evicts superseded
+        // siblings, so the install must hold exactly one `jdx-*-all.jar`.
+        assumeTrue(builtLauncher.isFile, "app/build/jdx missing — run :app:installDist")
+
+        val libs = File(projectDir, "build/libs")
+        val fatJars = libs.listFiles { file -> file.name.startsWith("jdx-") && file.name.endsWith("-all.jar") }
+            .orEmpty().toList()
+        assumeTrue(fatJars.isNotEmpty(), "fat jar missing in app/build/libs — run :app:installDist")
+
+        fatJars.size shouldBe 1
     }
 
     @Test

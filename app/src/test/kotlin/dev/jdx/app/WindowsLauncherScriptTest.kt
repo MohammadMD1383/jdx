@@ -134,12 +134,14 @@ class WindowsLauncherScriptTest {
     @Test
     fun `the bat passes the one-shot flags in stale-safe order before -jar`() {
         // -Xshare:auto before -XX:SharedArchiveFile is what makes a stale
-        // jdx.jsa degrade instead of fail (same pin as the POSIX launcher).
+        // jdx.jsa degrade instead of fail (same pin as the POSIX launcher);
+        // -Xlog:cds=off keeps that degradation silent instead of [error] noise.
         assertOrdered(
             bat(),
             "-XX:TieredStopAtLevel=1",
             "-XX:+UseSerialGC",
             "-Xshare:auto",
+            "-Xlog:cds=off",
             "-XX:SharedArchiveFile=",
             "-jar",
         )
@@ -154,6 +156,7 @@ class WindowsLauncherScriptTest {
             "-XX:TieredStopAtLevel=1",
             "-XX:+UseSerialGC",
             "-Xshare:auto",
+            "-Xlog:cds=off",
             "-XX:SharedArchiveFile=",
             "-jar",
         )
@@ -176,6 +179,19 @@ class WindowsLauncherScriptTest {
         text shouldContain "libs\\jdx.jsa"
         text shouldContain ":app:installDist"
         text shouldContain "exit 6"
+    }
+
+    @Test
+    fun `multiple fat jars are an ambiguous install in both launchers, never a silent pick`() {
+        // The old launchers each picked one jar silently (first glob match /
+        // last loop assignment) — a stale jar then reported the wrong version.
+        // Both must refuse, naming the jars and the rebuild that leaves one.
+        bat() shouldContain "multiple jdx fat jars"
+        bat() shouldContain "JDX_JAR_DUP"
+        bat() shouldContain ":app:clean"
+        ps1() shouldContain "multiple jdx fat jars"
+        ps1() shouldContain "\$JdxJars.Count -gt 1"
+        ps1() shouldContain ":app:clean"
     }
 
     // ------------------------------------------------------------------ version gate
@@ -355,6 +371,7 @@ class WindowsLauncherScriptTest {
             "-XX:TieredStopAtLevel=1",
             "-XX:+UseSerialGC",
             "-Xshare:auto",
+            "-Xlog:cds=off",
             "-jar",
             File(install, "libs/jdx-0.0.0-all.jar").absolutePath,
             "--version",
@@ -381,6 +398,7 @@ class WindowsLauncherScriptTest {
             "-XX:TieredStopAtLevel=1",
             "-XX:+UseSerialGC",
             "-Xshare:auto",
+            "-Xlog:cds=off",
             "-XX:SharedArchiveFile=${File(install, "libs/jdx.jsa").absolutePath}",
             "-jar",
             File(install, "libs/jdx-0.0.0-all.jar").absolutePath,
@@ -467,5 +485,33 @@ class WindowsLauncherScriptTest {
         result.exitCode shouldBe 6
         result.stderr shouldContain "jdx: "
         result.stderr shouldContain ":app:installDist"
+    }
+
+    @Test
+    @Tag("tier2")
+    fun `ps1 with multiple fat jars refuses naming every jar`() {
+        // Same ambiguous-install contract as the POSIX launcher: a stale jar
+        // must never be picked silently (it once reported the wrong version).
+        assumePosixPwsh()
+        val install = newPs1FakeInstall()
+        val stubJdk = newStubJavaExe()
+        val argsFile = File(install, "stub-args.txt")
+        File(install, "libs/jdx-0.0.0-all.jar").delete()
+        File(install, "libs/jdx-0.1.0-SNAPSHOT-all.jar").writeBytes(byteArrayOf(0x50, 0x4b))
+        File(install, "libs/jdx-1.3.0-all.jar").writeBytes(byteArrayOf(0x50, 0x4b))
+
+        val result = runPs1(
+            File(install, "jdx.ps1"),
+            listOf("version"),
+            mapOf("JAVA_HOME" to stubJdk.absolutePath) + stubExeEnvironment(argsFile),
+        )
+
+        result.exitCode shouldBe 6
+        result.stderr shouldContain "jdx: "
+        result.stderr shouldContain "multiple jdx fat jars"
+        result.stderr shouldContain "jdx-0.1.0-SNAPSHOT-all.jar"
+        result.stderr shouldContain "jdx-1.3.0-all.jar"
+        result.stderr shouldContain ":app:clean"
+        recordedArgs(argsFile) shouldBe emptyList()
     }
 }

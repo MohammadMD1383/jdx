@@ -973,8 +973,10 @@ a per-adapter pile of goldens.
 Additional measures:
 - **Lazy source indexing** — never parse sources until a source-level query arrives.
 - **Lazy classloaders** for Vineflower and Kotlin PSI.
-- **`-XX:TieredStopAtLevel=1 -XX:+UseSerialGC -Xshare:auto`** in the launcher for the
+- **`-XX:TieredStopAtLevel=1 -XX:+UseSerialGC -Xshare:auto -Xlog:cds=off`** in the launcher for the
   one-shot path (classic CLI JVM tuning; irrelevant and disabled for the daemon).
+  `-Xlog:cds=off` keeps a stale AppCDS archive's mismatch notice off stderr, where it
+  reads like a crash for a command that then works fine.
 - A `jdx bench` command, tagged out of normal test runs, measuring against the local
   `minecraft-client.jar` so regressions are caught.
 
