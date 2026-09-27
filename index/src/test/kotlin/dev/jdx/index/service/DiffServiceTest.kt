@@ -11,6 +11,7 @@ import dev.jdx.index.service.JdxService.ServiceOutcome
 import io.kotest.matchers.shouldBe
 import io.kotest.matchers.string.shouldContain
 import io.kotest.matchers.string.shouldNotContain
+import java.io.File
 import java.nio.file.Path
 import org.junit.jupiter.api.Tag
 import org.junit.jupiter.api.Test
@@ -42,6 +43,23 @@ class DiffServiceTest {
     )
 
     private fun side(jar: Path): ArtifactSpec = ArtifactSpec(spec = jar.toString())
+
+    /**
+     * A glob spec inside [dir], built by **string concatenation**, never
+     * `dir.resolve(pattern)`.
+     *
+     * A spec is a plain string to the service — it is matched, not opened — but
+     * `Path.resolve("*.jar")` *parses* the pattern, and on Windows `*` is an illegal
+     * character in a path: the test would die with `InvalidPathException` before reaching
+     * any assertion, on a runner that shares nothing with the developer. The `File`
+     * separator keeps the joined spec valid on both.
+     */
+    private fun globIn(dir: Path, pattern: String): String =
+        dir.toString() + File.separator + pattern
+
+    /** [globIn], wrapped as the spec for the `new` side. */
+    private fun globSpec(dir: Path, pattern: String): ArtifactSpec =
+        ArtifactSpec(spec = globIn(dir, pattern))
 
     private fun reportOf(outcome: ServiceOutcome): ServiceOutcome.Diff {
         (outcome is ServiceOutcome.Diff) shouldBe true
@@ -400,7 +418,7 @@ class DiffServiceTest {
     ) {
         val old = diffJar(temp.resolve("v1.jar"), greeter("greet"))
 
-        val outcome = JdxService.diff(side(old), side(temp.resolve("*.absent")))
+        val outcome = JdxService.diff(side(old), globSpec(temp, "*.absent"))
 
         outcome.exitCode shouldBe 3
         val text = outcome.renderText(false)
@@ -427,7 +445,7 @@ class DiffServiceTest {
         diffJar(libs.resolve("two.jar"), greeter("greet", "fresh"))
         val other = diffJar(temp.resolve("v1.jar"), greeter("greet"))
 
-        val outcome = JdxService.diff(side(other), side(libs.resolve("*.jar")))
+        val outcome = JdxService.diff(side(other), globSpec(libs, "*.jar"))
 
         outcome.exitCode shouldBe 3
         val text = outcome.renderText(false)

@@ -5,6 +5,7 @@ import io.kotest.matchers.shouldBe
 import io.kotest.matchers.string.shouldContain
 import io.kotest.matchers.string.shouldNotContain
 import java.io.ByteArrayOutputStream
+import java.io.File
 import java.io.PrintStream
 import java.nio.file.Files
 import java.nio.file.Path
@@ -59,6 +60,19 @@ class DiffCommandsServiceTest {
         assumeTrue(built != null, "no Java compiler on the test runtime JDK; crafted diff jars skipped")
         return built!!
     }
+
+    /**
+     * A glob spec inside [dir], built by **string concatenation**, never
+     * `dir.resolve(pattern)`.
+     *
+     * A spec is matched, not opened, so a glob is a perfectly good command-line
+     * argument — but `Path.resolve("*.jar")` *parses* the pattern, and on Windows `*` is
+     * an illegal character in a path: the test would die with `InvalidPathException`
+     * before reaching any assertion. The `File` separator keeps the joined spec valid on
+     * both platforms.
+     */
+    private fun globIn(dir: Path, pattern: String): String =
+        dir.toString() + File.separator + pattern
 
     /**
      * `severity␠␠RULE␠␠ref` or `severity␠␠RULE␠␠ref: detail`. The lowest
@@ -296,7 +310,7 @@ class DiffCommandsServiceTest {
     fun `a spec matching no artifact exits 3 naming the side`(@TempDir dir: Path) {
         val (old, _) = corpus(dir)
 
-        val run = run(listOf(old.toString(), dir.resolve("*.absent").toString()))
+        val run = run(listOf(old.toString(), globIn(dir, "*.absent")))
 
         run.exit shouldBe 3
         run.output shouldContain "usage error: diff new:"
@@ -307,7 +321,7 @@ class DiffCommandsServiceTest {
     fun `a spec matching several jars exits 3`(@TempDir dir: Path) {
         val (old, new) = corpus(dir)
 
-        val run = run(listOf(old.toString(), dir.resolve("*.jar").toString()))
+        val run = run(listOf(old.toString(), globIn(dir, "*.jar")))
 
         run.exit shouldBe 3
         run.output shouldContain "usage error: diff compares two artifacts;"
