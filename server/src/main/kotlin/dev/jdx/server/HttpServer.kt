@@ -189,7 +189,9 @@ public class JdxHttpServer(
             )
             else -> {
                 val query = params["query"].orEmpty()
-                val outcome = when (val resolved = service.daemonRoots(effectiveWorkspace(params), query, store)) {
+                // The command rides along so `diff`, which resolves its own two artifacts,
+                // answers over HTTP without a workspace (issue #23).
+                val outcome = when (val resolved = service.daemonRoots(effectiveWorkspace(params), query, store, command)) {
                     is DaemonRoots.Ready ->
                         service.dispatch(RpcRequest(command, query, params - "query" - "workspace"), resolved.roots)
                     is DaemonRoots.Failed -> resolved.outcome
@@ -245,7 +247,7 @@ public class JdxHttpServer(
                     message = "http cannot answer 'doctor': it reports this machine's environment — " +
                         "run `jdx doctor` in a shell",
                 )
-                else -> when (val resolved = service.daemonRoots(workspace, request.query, store)) {
+                else -> when (val resolved = service.daemonRoots(workspace, request.query, store, request.command)) {
                     is DaemonRoots.Ready -> service.dispatch(request, resolved.roots).toJson(request.command.wire)
                     is DaemonRoots.Failed -> resolved.outcome.toJson(request.command.wire)
                 }

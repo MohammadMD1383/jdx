@@ -416,7 +416,13 @@ class RpcDispatchTest {
         // Empty roots fail fast (exit 3/4/5) before any jar is opened, so 200 hostile
         // dispatches per command stay milliseconds: this pins totality, not behaviour.
         val noRoots = RootsSpec(jarSpecs = emptyList(), includeJdk = false)
-        val commands = RpcCommand.entries.filter { it != RpcCommand.VERSION && it != RpcCommand.DOCTOR && it != RpcCommand.HEALTH }
+        // `diff` is excluded because that premise is false for it: it names its
+        // own two artifacts, so it resolves (and can succeed on) whatever the
+        // query says, and a hostile string that happened to be a real directory
+        // would read a real classpath. Its totality is pinned in
+        // `DiffServicePropertyTest`, anchored under a directory that cannot exist.
+        val transportCommands = listOf(RpcCommand.VERSION, RpcCommand.DOCTOR, RpcCommand.HEALTH, RpcCommand.DIFF)
+        val commands = RpcCommand.entries.filterNot { it in transportCommands }
         checkAll(50, Arb.bind(Arb.of(commands), arbHostileString(0..24), arbParams()) { command, query, params ->
             RpcRequest(command, query, params)
         }) { request ->

@@ -1,7 +1,7 @@
 api diff diff-old.jar -> diff-new.jar (public surface)
 breaking  TYPE_REMOVED  difffix.Extra
-breaking  MEMBER_REMOVED  difffix.Api#legacy(): supertype java.lang.Object is not in diff-new.jar; inheritance not checked
-breaking  MEMBER_REMOVED  difffix.Api#narrowed(): supertype java.lang.Object is not in diff-new.jar; inheritance not checked
+breaking  MEMBER_REMOVED  difffix.Api#legacy()
+breaking  MEMBER_REMOVED  difffix.Api#narrowed()
 breaking  MEMBER_MADE_FINAL  difffix.Api#sealedFinal()
 breaking  STATIC_TO_INSTANCE  difffix.Api#shared()
 breaking  PARAMETER_TYPE_CHANGED  difffix.Api#variadic(int): now: difffix.Api#variadic(int[])

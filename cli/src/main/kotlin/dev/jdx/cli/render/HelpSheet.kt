@@ -33,6 +33,7 @@ public val HELP_ROWS: List<HelpRow> = listOf(
     HelpRow("callers <member>", "Call hierarchy (in)", "jdx callers 'Gson#toJson(Object)'"),
     HelpRow("calls <member>", "Call hierarchy (out)", "jdx calls 'Gson#toJson(Object)'"),
     HelpRow("samples <symbol>", "Real call sites as usage examples", "jdx samples 'Gson#toJson(Object)'"),
+    HelpRow("diff <old> <new>", "Public-API diff + binary-compat warnings (upgrades)", "jdx diff gson-2.11.0.jar gson-2.14.0.jar --fail-on breaking"),
     HelpRow("version", "Print the jdx version", "jdx version"),
     HelpRow("upgrade [--check]", "Self-update from GitHub Releases", "jdx upgrade --check"),
     HelpRow("doctor", "Self-diagnosis (JDK, index, daemon, workspace)", "jdx doctor"),

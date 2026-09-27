@@ -463,6 +463,98 @@ jdx batch [--json]                     read queries from stdin, one result per l
 `-w/--workspace`, `--jars`, `--src`, `--coord`, `--jdk/--no-jdk`, `--json`, `--no-color`,
 `--max-lines`, `--brief`, `--verbose`, `--quiet`, `--no-daemon`, `--timeout`, `--cache-dir`.
 
+### 7.7 Public-API diff
+
+#### `jdx diff <old> <new>`
+Answers the question a dependency upgrade poses: *what changed, and can I still compile
+and link against it?* It compares the API surface of two artifacts — jars, class
+directories, globs, or Maven coordinates (`--fetch` to download) — and reports every
+difference, **most severe first**, each naming one rule.
+
+```
+jdx diff gson-2.11.0.jar gson-2.14.0.jar
+api diff gson-2.11.0.jar -> gson-2.14.0.jar (public surface)
+breaking  MEMBER_REMOVED  com.google.gson.stream.JsonReader#getLenient()
+suspicious  CHECKED_EXCEPTION_ADDED  com.google.gson.Gson#toJson(java.lang.Object): java.io.IOException
+info  MEMBER_ADDED  com.google.gson.stream.JsonReader#getNestingLimit()
+1 breaking · 1 suspicious · 15 informational · 2 types added · 0 types removed
+source: gson-2.11.0.jar (bytecode)
+source: gson-2.14.0.jar (bytecode)
+next: jdx members com.google.gson.stream.JsonReader
+```
+
+Flags: `--visibility public|all` (default `public`; `all` compares every declared
+member, for refactors and mod/mixin work), `--include-synthetic`, `--severity
+all|suspicious|breaking`, `--fail-on none|breaking|any`, `--limit N` *(default 200)*,
+`--fetch`, `--repo`, `--json`, `--no-color`.
+
+**Structure only.** A diff reads bytecode and nothing else: no sources jar, no
+decompilation, no classpath. An API has no "flesh" to recover — the whole surface is
+in the class files, and the truth model of §11.1 already says structure comes from
+bytecode.
+
+**What is compared.** Types and their `kind`, visibility, supertypes and annotations;
+members by **name plus erased parameter list**, so a covariant return is one
+`RETURN_TYPE_CHANGED` rather than a removal plus an addition. Field identity includes
+the field type. `<clinit>` is never part of an API.
+
+**Three severities, one rule each.** Every finding carries exactly one rule id — the
+`CompatRule` name, so an agent filters on a code, never on prose:
+
+- **BREAKING** — an already-compiled caller can fail to link or to run: `TYPE_REMOVED`,
+  `TYPE_KIND_CHANGED`, `TYPE_VISIBILITY_NARROWED`, `TYPE_MADE_FINAL`, `SUPERTYPE_REMOVED`,
+  `MEMBER_REMOVED`, `MEMBER_VISIBILITY_NARROWED`, `MEMBER_MADE_FINAL`,
+  `STATIC_TO_INSTANCE`, `INSTANCE_TO_STATIC`, `ABSTRACT_ADDED`, `INTERFACE_METHOD_ADDED`,
+  `ENUM_CONSTANT_REMOVED`, `PARAMETER_TYPE_CHANGED`, `RETURN_TYPE_CHANGED`,
+  `FIELD_TYPE_CHANGED`.
+- **SUSPICIOUS** — binary-compatible by the letter of JLS §13.5, but recompiling, the
+  Kotlin view or the behaviour can still break: `MEMBER_MOVED_TO_SUPERTYPE`,
+  `GENERIC_SIGNATURE_CHANGED`, `CHECKED_EXCEPTION_ADDED`, `VARARGS_CHANGED`,
+  `NATIVE_ADDED`/`NATIVE_REMOVED`, `KOTLIN_NAME_CHANGED`, `KOTLIN_SUSPEND_CHANGED`,
+  `KOTLIN_NULLABILITY_CHANGED`, `KOTLIN_DEFAULT_ARG_REMOVED`,
+  `KOTLIN_PARAMETER_NAME_CHANGED`.
+- **INFO** — additive or cosmetic: `TYPE_ADDED`, `SUPERTYPE_ADDED`, `MEMBER_ADDED`,
+  `FINAL_REMOVED`, `ABSTRACT_REMOVED`, `ANNOTATION_ADDED`/`ANNOTATION_REMOVED`/
+  `ANNOTATION_VALUES_CHANGED`, `DEPRECATED_ADDED`/`DEPRECATED_REMOVED`,
+  `THROWS_REMOVED`, `PARAMETER_NAME_CHANGED`, `PARAMETER_NAMES_LOST`,
+  `SYNCHRONIZED_ADDED`/`SYNCHRONIZED_REMOVED`, `TRANSIENT_CHANGED`,
+  `FIELD_CONSTANT_VALUE_CHANGED`, `ANNOTATION_DEFAULT_CHANGED`,
+  `KOTLIN_DEFAULT_ARG_ADDED`, `KOTLIN_PROPERTY_BECAME_MUTABLE`.
+
+**Three pairing passes, so the output is not a remove/add avalanche.** A member that
+disappeared *and* one that appeared, agreeing on name and arity, is one retyped
+signature (`PARAMETER_TYPE_CHANGED`, `FIELD_TYPE_CHANGED`), not two findings. What is
+left over, agreeing on the *Kotlin* name and the arity a Kotlin caller writes, is a JVM
+rename (`KOTLIN_NAME_CHANGED` — an `@JvmName` appearing or disappearing, an `internal`
+member's module-name mangling) or a `suspend` flip (`KOTLIN_SUSPEND_CHANGED`, whose
+descriptor carries the hidden `Continuation`). The rest are plain removals and
+additions. **An ambiguous bucket is never paired** — with two removals of one shape
+there is no way to know which addition replaced which, and guessing is worse than
+asking (§3.3).
+
+**The inheritance check, and where it refuses to guess.** A member gone from its type
+but declared by one of that type's *new supertypes* is `MEMBER_MOVED_TO_SUPERTYPE`, not
+a removal: the caller's `invokevirtual` still resolves through the chain. When the walk
+hits a supertype the artifact does not hold, absence proves nothing — so the removal
+stays `MEMBER_REMOVED` and the detail says which supertype was missing. **A diff never
+downgrades a breaking change on a maybe.**
+
+**Exit codes.** A successful comparison **exits 0 whatever it found** — "found something"
+is the answer, not a failure, and an agent must not have to parse prose to learn it. The
+per-severity tally always describes the whole comparison, even when `--severity` or
+`--limit` hid part of it. `--fail-on breaking` (or `any`) turns the report into a process
+status for a pipeline and exits **1**; the verdict is also in the envelope as
+`result.gate`, so a consumer that cannot see exit codes still sees the answer. Usage
+errors are 3 and an unreadable artifact is 5, exactly as everywhere else.
+
+**No workspace, no `--jars`, no `--no-jdk`, no `--no-daemon`.** A diff names its own
+two artifacts, so there is no classpath to resolve — it works in an empty directory with
+no workspace ever created. And it is not forwarded to the daemon: a daemon warm on one
+workspace's classpath holds nothing a two-artifact comparison can reuse, and a
+`--fail-on` verdict has no way back over the v1 wire, which carries an exit code only as
+an error. The daemon still *serves* `diff` — `jdx_diff` over MCP and `GET /v1/diff?query=…&new=…`
+dispatch the same `JdxService.diff` call and answer byte-identically (§14).
+
 ---
 
 ## 8. Output design
@@ -894,6 +986,13 @@ Additional measures:
 `0` ok · `1` not found · `2` ambiguous · `3` usage error · `4` no index/workspace ·
 `5` artifact read error · `6` internal error.
 
+**One documented exception: the `diff` gate.** `jdx diff` (§7.7) exits `0` whenever the
+comparison ran, whatever it found, and `--fail-on breaking|any` exits **`1`** when the
+gate trips — a deliberate, owner-approved reuse of `1`, since a diff has no "not found"
+outcome and the gate is a *result* rather than an error. The verdict is in the envelope
+too (`result.gate`), so nothing depends on reading the process status. No other command
+may bend the table.
+
 ### Degradation ladder
 Never fail where a lesser answer exists — but **always label the fallback**:
 
@@ -1093,8 +1192,8 @@ Each milestone ends with a working, committed, demoable binary.
 
 Explicitly out of v1 scope, recorded so they are not lost:
 
-- **`jdx diff a.jar b.jar`** — public-API diff with binary-compatibility warnings, for
-  dependency upgrades. *(User deferred this in the v1-extras decision.)*
+- ~~**`jdx diff a.jar b.jar`** — public-API diff with binary-compatibility warnings, for
+  dependency upgrades.~~ **Shipped** (issue #23): spec in §7.7, flags in Appendix B.
 - **Mappings / remapping** — Minecraft-style obfuscated jars: read Tiny/SRG/ProGuard mapping
   files so `jdx` can answer in either namespace. High value on this particular machine.
 - **Resources & metadata inspection** — `META-INF/services`, `module-info`, manifest
@@ -1253,6 +1352,10 @@ calls     --depth N --in --exclude --external-only --limit
           [-w …] [--jars …] [--no-jdk] [--json] [--no-color]
 samples   --limit N --prefer-sources
           [-w …] [--jars …] [--no-jdk] [--json] [--no-color]
+diff      <old> <new> [--visibility public|all] [--include-synthetic]
+          [--severity all|suspicious|breaking] [--fail-on none|breaking|any]
+          [--limit N] [--fetch] [--repo] [--json] [--no-color]
+          (no --jars/-w/--no-jdk/--no-daemon: a diff names its own two artifacts)
 ws        create|list|info|remove|add|use   --auto --jars --src --coord --repo --jdk
 index     --force -w
 cache     info|gc|clear [--cache-dir --json]  (gc: --dry-run)

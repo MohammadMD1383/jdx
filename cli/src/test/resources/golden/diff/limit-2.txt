@@ -1,6 +1,6 @@
 api diff diff-old.jar -> diff-new.jar (public surface)
 breaking  TYPE_REMOVED  difffix.Extra
-breaking  MEMBER_REMOVED  difffix.Api#legacy(): supertype java.lang.Object is not in diff-new.jar; inheritance not checked
+breaking  MEMBER_REMOVED  difffix.Api#legacy()
 2 of 12 findings shown (--limit 12 to see more)
 7 breaking · 2 suspicious · 3 informational · 1 type added · 1 type removed
 source: diff-old.jar (bytecode)

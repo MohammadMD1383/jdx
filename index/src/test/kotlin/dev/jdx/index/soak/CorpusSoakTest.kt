@@ -419,6 +419,7 @@ private fun warningCodesOf(outcome: ServiceOutcome): List<WarningCode> = when (o
     is ServiceOutcome.Hierarchy -> outcome.listing.warnings.map { it.code }
     is ServiceOutcome.CallGraph -> outcome.listing.warnings.map { it.code }
     is ServiceOutcome.SampleList -> outcome.listing.warnings.map { it.code }
+    is ServiceOutcome.Diff -> outcome.report.warnings.map { it.code }
     is ServiceOutcome.Failure -> emptyList()
 }
 
@@ -538,6 +539,14 @@ private fun entitiesOf(outcome: ServiceOutcome): List<String> = when (outcome) {
             }
         }
         for (warning in outcome.listing.warnings) add(warning.code.name)
+    }
+    is ServiceOutcome.Diff -> buildList {
+        for (finding in outcome.report.findings) {
+            add(finding.ref)
+            add(finding.rule.name)
+        }
+        for (warning in outcome.report.warnings) add(warning.code.name)
+        for (provenance in outcome.report.provenance) add(provenance.artifact)
     }
     is ServiceOutcome.Failure -> outcome.error.candidates
 }

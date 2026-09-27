@@ -45,6 +45,29 @@ paired; `--engine javap` shows raw bytecode. Decompiled output is always labelle
 | `jdx calls <member>` | Call hierarchy out | Same as `callers`, plus `--external-only` (hide callees in the method's own artifact — dependency view) |
 | `jdx samples <symbol>` | *(no IDE equivalent)* | `--limit` (default 3), `--in` / `--exclude`, `--prefer-sources` (rank snippet-capable callers first). Ranked by exemplariness: non-test before test, non-generated before generated, fuller overloads first. Snippets capped at 15 lines. Type refs match calls to any member; field refs exit 3. |
 
+## Upgrades: API diff
+
+| Command | IDE equivalent | Key flags |
+|---|---|---|
+| `jdx diff <old> <new>` | "What did this upgrade break?" | `--visibility public\|all` (default `public`: public + protected declarations; `all` = every declared member, for refactors and mod/mixin work), `--include-synthetic`, `--severity all\|suspicious\|breaking` (cumulative), `--fail-on none\|breaking\|any`, `--limit` (200), `--fetch`, `--repo`, `--json`. Each of the two specs is a jar, class directory, glob, or `group:artifact:version`. Reads bytecode only — no sources, no decompilation, no classpath. Every finding names one rule (`MEMBER_REMOVED`, `RETURN_TYPE_CHANGED`, `KOTLIN_SUSPEND_CHANGED`, …) at `breaking` / `suspicious` / `info`, and every line is a canonical ref. The full rule set is `docs/PROPOSAL.md` §7.7. |
+
+```console
+$ jdx diff gson-2.11.0.jar gson-2.14.0.jar --fail-on breaking
+api diff gson-2.11.0.jar -> gson-2.14.0.jar (public surface)
+info  FIELD_CONSTANT_VALUE_CHANGED  com.google.gson.internal.GsonBuildConfig#VERSION: "2.11.0" -> "2.14.0"
+0 breaking · 0 suspicious · 17 informational · 2 types added · 0 types removed
+fail-on breaking: no breaking changes (exit 0)
+source: gson-2.11.0.jar (bytecode)
+source: gson-2.14.0.jar (bytecode)
+next: jdx members com.google.gson.internal.GsonBuildConfig
+```
+
+`diff` exits **0 whenever the comparison ran**, whatever it found — the answer is in
+the report, not in the process status. `--fail-on breaking` (or `any`) is the CI gate
+and is the only way a successful diff exits non-zero (see the exit-code table). It needs
+no workspace, no `--jars` and no `--no-daemon`, and is answered by the MCP tool
+`jdx_diff` and `GET /v1/diff?query=<old>&new=<new>` with identical bytes.
+
 ## Environment and maintenance
 
 | Command | Purpose | Key flags / notes |
@@ -63,7 +86,7 @@ paired; `--engine javap` shows raw bytecode. Decompiled output is always labelle
 | Command | Purpose | Notes |
 |---|---|---|
 | `jdx daemon start\|stop\|status\|restart` | Warm background JVM | Per-workspace unix socket under the OS runtime dir (`$XDG_RUNTIME_DIR/jdx/<hash>-v1.sock` on Linux; macOS `$TMPDIR/jdx-$UID`, Windows `%LOCALAPPDATA%/jdx/run` — full table in `docs/PROPOSAL.md` §17.1; a missing `XDG_RUNTIME_DIR` falls back, never `exit 3`); over-long socket paths exit 3 with the `JDX_RUNTIME_DIR` hint (104 B macOS / 108 B elsewhere); concurrent `start` fails fast on the socket lock; `stop` never kills a reused pid; `--idle 5m` default (0 disables); `start` is idempotent. `status`: uptime, memory, query count. `run` (foreground) is the internal spawn target. |
-| `jdx mcp [-w name]` | MCP stdio server | One typed `jdx_*` tool per query (20 tools) with generated schemas; per-call workspace override; answers byte-identical to `--json`. |
+| `jdx mcp [-w name]` | MCP stdio server | One typed `jdx_*` tool per query (21 tools) with generated schemas; per-call workspace override; answers byte-identical to `--json`. |
 | `jdx serve [-w name] [--port 7070] [--bind 127.0.0.1]` | Local HTTP/JSON API | `GET /v1/<command>?query=…&<param>=…`, `POST /v1/batch` (NDJSON), `GET /v1/health`. Localhost by default; blocks until interrupted. Bodies byte-identical to `--json`. |
 | `jdx batch` | Many queries, one process | NDJSON `RpcRequest` lines on stdin (`{"command":"members","query":"…","params":{…}}`), one envelope per line on stdout; exit code is the max query exit code. Roots resolved once. `--json` accepted and ignored (output is always envelopes). |
 
@@ -94,6 +117,10 @@ identical cold and warm.
 | `4` | No index or workspace resolved for this query |
 | `5` | Artifact read error (corrupt jar, unreadable file) |
 | `6` | Internal error |
+
+The one exception is `jdx diff`'s `--fail-on breaking\|any` gate, which exits `1` when it
+trips: a successful comparison otherwise always exits `0`, and the verdict is in the
+envelope as `result.gate` too.
 
 References are Javadoc style — `com.example.Outer`, `com.example.Outer#method(Type)`,
 short `Outer#method` (resolved, or exit 2 with candidates). Always quote the ref:

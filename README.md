@@ -127,6 +127,9 @@ jdx -w fx members 'com.example.Service'   # served warm automatically
 
 # One process, many queries
 echo '{"command":"show","query":"java.util.Map"}' | jdx batch --jars gson.jar
+
+# Upgrading a dependency? Ask what actually breaks
+jdx diff gson-2.11.0.jar gson-2.14.0.jar --fail-on breaking
 ```
 
 ## What makes it an *IDE*, not a better `javap`
@@ -141,6 +144,9 @@ echo '{"command":"show","query":"java.util.Map"}' | jdx batch --jars gson.jar
 - **Javadoc/KDoc**, including documentation inherited from a supertype.
 - **`jdx samples`** — real call sites from the classpath as usage examples. Evidence instead
   of recollection.
+- **`jdx diff a.jar b.jar`** — the public-API diff for a dependency upgrade, with every
+  difference named as a rule (`MEMBER_REMOVED`, `RETURN_TYPE_CHANGED`, …) at
+  `breaking`/`suspicious`/`info`, and a `--fail-on` gate for CI.
 
 ## What makes it *for agents*, not for humans
 
@@ -166,8 +172,7 @@ command; `jdx help --agent` prints the compact agent block.
 Graph queries re-scan live bytecode roots per query (no persistent-index acceleration
 yet); call hierarchy is exact name+descriptor matching, not override-aware. Full list in
 [GitHub Issues](https://github.com/MohammadMD1383/jdx/issues). Out-of-scope for v1
-(API diff, mappings/remap, resources inspection, …) is the phase-2 backlog, also tracked
-there.
+(mappings/remap, resources inspection, …) is the phase-2 backlog, also tracked there.
 
 ## Documentation
 

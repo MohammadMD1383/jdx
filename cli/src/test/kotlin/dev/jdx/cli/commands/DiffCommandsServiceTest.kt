@@ -94,9 +94,13 @@ class DiffCommandsServiceTest {
         run.output shouldContain "info  SUPERTYPE_ADDED  difffix.Api: difffix.Marker"
         run.output shouldContain "info  MEMBER_ADDED  difffix.Api#fresh()"
         run.output shouldContain "7 breaking · 2 suspicious · 3 informational · 1 type added · 1 type removed"
-        // A removal the differ could not clear against a supertype says so rather
-        // than presenting an unchecked guess as fact (AGENTS.md §2.2).
-        run.output shouldContain "supertype java.lang.Object is not in ${DiffCaseJars.NEW_NAME}; inheritance not checked"
+        // A removal is reported plainly: every class extends `java.lang.Object`, which is
+        // never inside a third-party jar, so treating it as an unchecked supertype would
+        // put a caveat on every removal in every report. The "could not check" wording is
+        // reserved for a supertype outside the artifact that is genuinely unknown, and
+        // `ApiDifferTest` pins both halves of that rule.
+        run.output shouldContain "breaking  MEMBER_REMOVED  difffix.Api#legacy()\n"
+        run.output shouldNotContain "inheritance not checked"
         // Provenance names both inputs; a diff never claims to have read sources.
         run.output shouldContain "source: ${DiffCaseJars.OLD_NAME} (bytecode)"
         run.output shouldContain "source: ${DiffCaseJars.NEW_NAME} (bytecode)"

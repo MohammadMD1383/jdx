@@ -64,6 +64,7 @@ public enum class RpcCommand(public val wire: String, public val requiresQuery: 
     CALLERS("callers", true),
     CALLS("calls", true),
     SAMPLES("samples", true),
+    DIFF("diff", true),
 
     /** Build identity — answered without touching an index. */
     VERSION("version", false),

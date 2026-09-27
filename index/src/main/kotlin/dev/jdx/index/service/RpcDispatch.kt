@@ -1,9 +1,13 @@
 package dev.jdx.index.service
 
+import dev.jdx.core.diff.ApiSurface
+import dev.jdx.core.diff.FailOn
+import dev.jdx.core.diff.SeverityFilter
 import dev.jdx.core.model.Visibility
 import dev.jdx.core.render.DEFAULT_BODY_MAX_LINES
 import dev.jdx.core.render.DEFAULT_CALLS_DEPTH
 import dev.jdx.core.render.DEFAULT_CALLS_LIMIT
+import dev.jdx.core.render.DEFAULT_DIFF_LIMIT
 import dev.jdx.core.render.DEFAULT_DOC_MAX_LINES
 import dev.jdx.core.render.DEFAULT_HIERARCHY_LIMIT
 import dev.jdx.core.render.DEFAULT_MEMBER_LIMIT
@@ -21,8 +25,10 @@ import dev.jdx.core.rpc.RpcCommand
 import dev.jdx.core.rpc.RpcRequest
 import dev.jdx.decompile.DecompilerId
 import dev.jdx.index.maven.MavenResolver
+import dev.jdx.index.service.JdxService.ArtifactSpec
 import dev.jdx.index.service.JdxService.BodyOptions
 import dev.jdx.index.service.JdxService.CallOptions
+import dev.jdx.index.service.JdxService.DiffOptions
 import dev.jdx.index.service.JdxService.DocOptions
 import dev.jdx.index.service.JdxService.HierarchyOptions
 import dev.jdx.index.service.JdxService.KindFilter
@@ -83,6 +89,12 @@ import dev.jdx.index.workspace.WorkspaceStore
  * - `callers`: `depth`, `in`, `exclude`, `limit`.
  * - `calls`: `depth`, `in`, `exclude`, `externalOnly`, `limit`.
  * - `samples`: `limit`, `in`, `exclude`, `preferSources`.
+ * - `diff`: the query is the *old* artifact and the required `new` param the new
+ *   one (a diff has two subjects; the wire has one `query` field, T-040), plus
+ *   `fetch`, `repo` (comma-separated `--repo` mirrors), `visibility`
+ *   (public|all), `includeSynthetic`, `severity` (all|suspicious|breaking),
+ *   `failOn` (none|breaking|any) and `limit`. `diff` ignores the classpath
+ *   `roots` it is handed — it names its own two artifacts.
  *
  * `version`/`doctor`/`health` are transport-level (T-041): they never reach this
  * function through the daemon, and calling it directly answers exit 3 saying so.
@@ -237,6 +249,28 @@ public fun JdxService.dispatch(request: RpcRequest, roots: RootsSpec): ServiceOu
                 preferSources = scope.bool("preferSources"),
             ),
         )
+        RpcCommand.DIFF -> diff(
+            old = ArtifactSpec(
+                spec = scope.query,
+                allowFetch = scope.bool("fetch"),
+                repos = scope.repos(),
+            ),
+            new = ArtifactSpec(
+                spec = scope.requiredParam("new") ?: return scope.failure(),
+                allowFetch = scope.bool("fetch"),
+                repos = scope.repos(),
+            ),
+            options = DiffOptions(
+                visibility = scope.diffVisibility() ?: return scope.failure(),
+                includeSynthetic = scope.bool("includeSynthetic"),
+                severityFilter = scope.severityFilter() ?: return scope.failure(),
+                failOn = scope.failOn() ?: return scope.failure(),
+                maxFindings = scope.int("limit", DEFAULT_DIFF_LIMIT) ?: return scope.failure(),
+            ),
+            // `roots` is intentionally not passed on: a diff names its own two
+            // artifacts and reads nothing else, so a classpath (and the JDK in
+            // it) could only add the same noise to both sides of the report.
+        )
         RpcCommand.VERSION, RpcCommand.DOCTOR, RpcCommand.HEALTH ->
             ServiceOutcome.Failure(
                 ErrorResult.generic(
@@ -307,12 +341,22 @@ public sealed interface DaemonRoots {
  * reads as exit 4 naming the fix, like the one-shot CLI — never a silent fallback
  * to other roots. Call per request (not per start), so `ws create` while the daemon
  * runs is picked up. Never throws.
+ *
+ * [command] is the request being served, and exists for one reason: a `diff`
+ * names the two artifacts it compares and resolves them itself, so classpath
+ * resolution is a no-op for it. Without this short-circuit `diff` over MCP or
+ * HTTP would exit 4 whenever no workspace is selected — the *most common* way to
+ * ask for it ("compare these two jars"). An empty [RootsSpec] is exactly what
+ * `diff` ignores, so nothing is lost by answering it with one. `null` (the
+ * default) keeps every other command's behaviour byte-identical to before.
  */
 public fun JdxService.daemonRoots(
     workspace: String,
     query: String,
     store: WorkspaceStore = FileWorkspaceStore.system(),
+    command: RpcCommand? = null,
 ): DaemonRoots {
+    if (command == RpcCommand.DIFF) return DaemonRoots.Ready(RootsSpec())
     val resolved = WorkspaceResolver.resolve(
         flagWorkspace = workspace,
         loadWorkspace = store::load,
@@ -459,6 +503,61 @@ private class ParamScope(
 
     /** Whether the request carried this param at all (absent means the CLI default). */
     fun has(name: String): Boolean = name in params
+
+    /**
+     * A required text param. Absent or blank records the usage error naming the
+     * CLI flag: a diff has two subjects and inventing a default for the missing
+     * one would silently compare an artifact against nothing.
+     */
+    fun requiredParam(name: String): String? {
+        val raw = params[name]?.trim()
+        if (raw.isNullOrEmpty()) {
+            fail("usage error: --$name is required for $commandWire")
+            return null
+        }
+        return raw
+    }
+
+    /**
+     * The `--repo` mirrors, in flag order. The wire carries one text value per
+     * param name (T-040), so a repeatable flag arrives comma-separated; entries
+     * are trimmed and blanks dropped. That split is wire grammar, not a product
+     * rule — nothing else in `jdx` treats a comma inside a URL specially.
+     */
+    fun repos(): List<String> = (params["repo"] ?: "")
+        .split(",")
+        .map { it.trim() }
+        .filter { it.isNotEmpty() }
+
+    /** `--visibility` for `diff`; an unknown value is a usage error, never a guess. */
+    fun diffVisibility(): ApiSurface? =
+        enumParam("visibility", "visibility", ApiSurface.PUBLIC, ApiSurface::fromFlag)
+
+    /** `--severity` for `diff`; an unknown value is a usage error, never a guess. */
+    fun severityFilter(): SeverityFilter? =
+        enumParam("severity", "severity", SeverityFilter.ALL, SeverityFilter::fromFlag)
+
+    /** `--fail-on` for `diff`; an unknown value is a usage error, never a guess. */
+    fun failOn(): FailOn? = enumParam("failOn", "fail-on", FailOn.NONE, FailOn::fromFlag)
+
+    /**
+     * One enum-valued param, resolved through its own `fromFlag` so the accepted
+     * spellings live with the enum (CONTRIBUTING: no logic in adapters). [wire]
+     * is the param name; [flag] is the CLI spelling used in the message, because
+     * that is what the caller typed and what it must retype.
+     */
+    private inline fun <E> enumParam(
+        wire: String,
+        flag: String,
+        default: E,
+        fromFlag: (String) -> E?,
+    ): E? {
+        val raw = params[wire] ?: return default
+        return fromFlag(raw) ?: run {
+            fail("usage error: --$flag '$raw' is not valid for $commandWire")
+            null
+        }
+    }
 
     /** `null` means the ladder default (paired sources first); unknown engines fail. */
     fun engineOrNull(): DecompilerId? {

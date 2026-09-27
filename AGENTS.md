@@ -92,7 +92,7 @@ get an explicit reversal, record it here and in the commit message)
 | Classpath input | explicit paths/globs/dirs + **named workspaces** + **project auto-discovery** (never run Gradle/Maven) + **Maven coords (auto-download opt-in)** + **JDK stdlib via jrt-fs** |
 | Interfaces | one-shot **CLI**, **MCP** stdio server, **daemon** (5-min idle auto-shutdown), **HTTP/JSON** — all thin adapters over one `JdxService`, no logic in adapters |
 | Testing | **TDD mandatory in `core`** + generative families; Pitest mutation gate ≥ 80 % on `core` |
-| Deferred | jar API diff, mappings/remap, resources & services inspection |
+| Deferred | mappings/remap, resources & services inspection, `--since`/API-level reporting |
 | Repo | local git; public GitHub repo ([github.com/MohammadMD1383/jdx](https://github.com/MohammadMD1383/jdx)), Apache-2.0 |
 
 ## 4. Repository layout
@@ -154,6 +154,12 @@ round-tripping.
 | `4` | No index or workspace resolved for this query |
 | `5` | Artifact read error (corrupt jar, unreadable file) |
 | `6` | Internal error |
+
+**The one documented exception** (owner-approved, issue #23): `jdx diff` exits `0`
+whenever the comparison ran, whatever it found, and `--fail-on breaking|any` exits `1`
+when the gate trips. A diff has no "not found" outcome, and the verdict is also in the
+envelope as `result.gate`, so a consumer that cannot read exit codes still gets the
+answer. Nothing else may bend this table.
 
 ## 7. Build, test, lint
 

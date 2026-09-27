@@ -389,6 +389,30 @@ Requirements:
   fixture adds test coverage automatically.
 - **A `Fixtures` helper** resolves jar paths with no hard-coded absolute paths.
 
+### 11.2 The v1/v2 diff pair (issue #23)
+
+`jdx diff` needs a corpus that is two *artifacts* rather than one, so `testfixtures`
+carries a second, independent pair: `src/diffv1/` and `src/diffv2/` compiled into
+`build/diff-fixtures/diff-fixtures-v1.jar` and `-v2.jar`, resolved by
+`dev.jdx.testsupport.fixtures.DiffFixtureJars` (property `jdx.diffFixturesDir`).
+
+Two rules make it work without disturbing the main corpus:
+
+- **A different directory, and a base name that does not start with `testfixtures-`.**
+  `FixtureJars`, core's `Fixtures` and `ArtifactTestJars` all `require(size == 1)` over
+  `build/libs`, so a second jar there turns three unrelated assertions into exceptions.
+- **A separate `@ExpectedMembers` validator** (`DiffFixtureCorpusTest`) over the two new
+  jars, because the main `FixtureCorpusTest` enumerates `build/libs` and must not learn
+  about them.
+
+The pair's job is *rule coverage*: between them the two versions must produce at least one
+instance of every rule in `core/diff/CompatRule.kt`, including the awkward ones —
+`MEMBER_MOVED_TO_SUPERTYPE` (a member that moved to a supertype present in the same jar)
+and the case where a supertype is named but **absent**, which must stay
+`MEMBER_REMOVED` with an "inheritance not checked" detail rather than silently
+downgrading. The fixture KDoc on each class names the rules it targets, so a new rule
+without a fixture is visible in review.
+
 ### 11.1 Adding a fixture
 
 1. Add the source under `testfixtures/src/main/java` (or `src/main/kotlin`). The odd one out
