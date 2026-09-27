@@ -392,7 +392,7 @@ Requirements:
 ### 11.2 The v1/v2 diff pair (issue #23)
 
 `jdx diff` needs a corpus that is two *artifacts* rather than one, so `testfixtures`
-carries a second, independent pair: `src/diffv1/` and `src/diffv2/`, **the same package**
+carries a second, independent pair: `src/diffV1/` and `src/diffV2/`, **the same package**
 `dev.jdx.diffapi` compiled into `build/diff-fixtures/diff-fixtures-v1.jar` and `-v2.jar`
 and resolved by `dev.jdx.testsupport.fixtures.DiffFixtureJars` (property
 `jdx.diffFixturesDir`). Same package on both sides is the whole point: version the
@@ -404,7 +404,7 @@ Three rules make it work without disturbing the main corpus:
 - **A different directory, and a base name that does not start with `testfixtures-`.**
   `FixtureJars`, core's `Fixtures` and `ArtifactTestJars` all `require(size == 1)` over
   `build/libs`, so a second jar there turns three unrelated assertions into exceptions.
-- **A third source set, `src/diffabsent/`, that compiles but is never packaged.**
+- **A third source set, `src/diffAbsent/`, that compiles but is never packaged.**
   `javac` refuses a class whose supertype is missing, so the fixture for "the supertype
   is in neither artifact" has to exist in order to compile and then be kept out of both
   jars — which is exactly the real-world case (a superclass in *another dependency*) the

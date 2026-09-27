@@ -89,13 +89,23 @@ tasks.named<JavaCompile>("compileNoDebugJava") {
 //
 // No `-sources.jar` for the pair: a diff reads bytecode only, so a sources jar for it
 // would be an artifact no test can use.
+// `setSrcDirs`, never `srcDir`, and the directory names spelled **exactly** as the
+// source sets. Both matter, and a case-insensitive filesystem is what proves it: the
+// Kotlin plugin already contributes a default `src/diffV1/kotlin`, so an *added*
+// `src/diffv1/kotlin` is a second entry on Linux (harmless — the paths differ) and the
+// *same* directory on macOS and Windows, where the compiler then sees every fixture file
+// twice and fails with `CLASSIFIER_REDECLARATION` (issue #66). `setSrcDirs` replaces the
+// default instead of stacking on it, and matching the source-set name means the two
+// agree even if a future edit gets the spelling wrong. Cost of getting this wrong: a
+// green Linux build and a red macOS and Windows build that only mentions one fixture
+// class, with no Linux test able to see it coming.
 val diffV1 = sourceSets.create("diffV1") {
-    java.srcDir("src/diffv1/java")
-    kotlin.srcDir("src/diffv1/kotlin")
+    java.setSrcDirs(listOf("src/diffV1/java"))
+    kotlin.setSrcDirs(listOf("src/diffV1/kotlin"))
 }
 val diffV2 = sourceSets.create("diffV2") {
-    java.srcDir("src/diffv2/java")
-    kotlin.srcDir("src/diffv2/kotlin")
+    java.setSrcDirs(listOf("src/diffV2/java"))
+    kotlin.setSrcDirs(listOf("src/diffV2/kotlin"))
 }
 
 // A supertype that both `Orphaned` classes extend and that is in **neither** diff jar.
@@ -105,7 +115,12 @@ val diffV2 = sourceSets.create("diffV2") {
 // *another dependency*. Its output is a compile classpath entry and nothing else; no
 // `Jar` task here reads it.
 val diffAbsent = sourceSets.create("diffAbsent") {
-    java.srcDir("src/diffabsent/java")
+    java.setSrcDirs(listOf("src/diffAbsent/java"))
+    // The Kotlin source set of a Java source set *inherits* the Java srcDirs, so without
+    // this the Kotlin compiler would read `src/diffAbsent/java` too. Harmless while it
+    // holds no `.kt` file, and a `CLASSIFIER_REDECLARATION` waiting for the day one
+    // lands. The set is deliberately Java-only, so say so.
+    kotlin.setSrcDirs(emptyList<String>())
 }
 
 listOf(

@@ -3,7 +3,7 @@ package dev.jdx.diffapi
 /**
  * The Kotlin half of the diff fixture pair (issue #23) — the candidate version.
  *
- * <p>Every difference from `src/diffv1`'s twin is a *Kotlin-visible* change that the JVM
+ * <p>Every difference from `src/diffV1`'s twin is a *Kotlin-visible* change that the JVM
  * projection alone would either hide or report as an unrelated remove/add pair. That is
  * the whole argument for reading `@Metadata` before diffing.
  *

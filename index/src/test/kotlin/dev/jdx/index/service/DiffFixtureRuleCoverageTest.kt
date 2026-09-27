@@ -49,8 +49,8 @@ class DiffFixtureRuleCoverageTest {
      */
     private val required: Map<CompatRule, String> = mapOf(
         // -- types
-        CompatRule.TYPE_REMOVED to "diffv1/…/Departed.java (gone in v2)",
-        CompatRule.TYPE_ADDED to "diffv2/…/Extra.java (new in v2)",
+        CompatRule.TYPE_REMOVED to "diffV1/…/Departed.java (gone in v2)",
+        CompatRule.TYPE_ADDED to "diffV2/…/Extra.java (new in v2)",
         CompatRule.TYPE_KIND_CHANGED to "Convertible: class -> interface",
         CompatRule.TYPE_MADE_FINAL to "Tuned gains final",
         CompatRule.SUPERTYPE_REMOVED to "Api drops java.io.Serializable",
@@ -152,7 +152,7 @@ class DiffFixtureRuleCoverageTest {
                     "rule is unreachable from real bytecode or the pair has no fixture " +
                     "for it:\n" + missing.joinToString("\n") { rule ->
                         "  $rule — expected from: ${required.getValue(rule)}"
-                    } + "\nThe pair lives in testfixtures/src/diffv1 and src/diffv2; " +
+                    } + "\nThe pair lives in testfixtures/src/diffV1 and src/diffV2; " +
                     "add the fixture and this test goes green."
             }
         }
