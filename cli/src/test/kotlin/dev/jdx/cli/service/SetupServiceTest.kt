@@ -1119,4 +1119,306 @@ class SetupServiceTest {
             SetupService.ClaudeVersionInfo(SetupService.ClaudeVersion.UNKNOWN),
         ) shouldBe "claude-code version unknown"
     }
+
+    // -- Cline backend (single global cline_mcp_settings.json, nested transport entry) --
+
+    private fun clineProjectRequest(
+        check: Boolean = false,
+        remove: Boolean = false,
+    ): SetupService.SetupRequest = SetupService.SetupRequest(
+        agent = SetupService.Agent.CLINE,
+        scope = SetupService.Scope.PROJECT,
+        check = check,
+        remove = remove,
+    )
+
+    private fun clineSystemRequest(
+        check: Boolean = false,
+        remove: Boolean = false,
+    ): SetupService.SetupRequest = SetupService.SetupRequest(
+        agent = SetupService.Agent.CLINE,
+        scope = SetupService.Scope.SYSTEM,
+        check = check,
+        remove = remove,
+    )
+
+    private fun clinePath(home: Path): Path = home.resolve(".cline/data/settings/cline_mcp_settings.json")
+
+    @Test
+    fun `a fresh cline system install writes the transport entry the real CLI writes`(@TempDir root: Path) {
+        val dirs = fakeDirs(root)
+        val service = SetupService(dirs.home, dirs.project)
+
+        val outcome = service.run(clineSystemRequest())
+
+        val installed = outcome as SetupService.SetupOutcome.Installed
+        installed.changed shouldBe true
+        installed.path shouldBe clinePath(dirs.home)
+        setupExitCode(outcome) shouldBe 0
+        val stored = Json.parseToJsonElement(Files.readString(installed.path)).jsonObject
+        // No `$schema`, no flat command: exactly the `cline mcp add` shape.
+        stored.containsKey("\$schema") shouldBe false
+        val transport = stored["mcpServers"]?.jsonObject?.get("jdx")?.jsonObject?.get("transport")?.jsonObject
+        transport?.get("type")?.jsonPrimitive?.content shouldBe "stdio"
+        transport?.get("command")?.jsonPrimitive?.content shouldBe "jdx"
+        transport?.get("args").toString() shouldBe """["mcp"]"""
+        SetupService.isInstalledRoot(stored, SetupService.Agent.CLINE) shouldBe true
+        SetupService.isInstalledAt(installed.path, SetupService.Agent.CLINE) shouldBe true
+    }
+
+    @Test
+    fun `cline project scope targets the same single global file`(@TempDir root: Path) {
+        val dirs = fakeDirs(root)
+        val service = SetupService(dirs.home, dirs.project)
+
+        // Cline keeps no project-level MCP file (verified against cline
+        // 3.0.65 + extension 4.1.21): both scopes resolve to the global file.
+        service.targetPath(SetupService.Agent.CLINE, SetupService.Scope.PROJECT) shouldBe
+            clinePath(dirs.home)
+        service.targetPath(SetupService.Agent.CLINE, SetupService.Scope.SYSTEM) shouldBe
+            clinePath(dirs.home)
+
+        val outcome = service.run(clineProjectRequest()) as SetupService.SetupOutcome.Installed
+
+        outcome.path shouldBe clinePath(dirs.home)
+        Files.exists(dirs.project.resolve(".cline/mcp.json")) shouldBe false
+        SetupService.isInstalledAt(outcome.path, SetupService.Agent.CLINE) shouldBe true
+    }
+
+    @Test
+    fun `cline install merges and never clobbers unrelated entries`(@TempDir root: Path) {
+        val dirs = fakeDirs(root)
+        Files.createDirectories(clinePath(dirs.home).parent)
+        Files.writeString(
+            clinePath(dirs.home),
+            """{"mcpServers":{"other":{"transport":{"type":"stdio","command":"other","args":["x"]}},"disabled-other":{"command":"other","args":["x"],"disabled":true}}}""",
+        )
+        val service = SetupService(dirs.home, dirs.project)
+
+        val outcome = service.run(clineSystemRequest()) as SetupService.SetupOutcome.Installed
+
+        outcome.changed shouldBe true
+        val stored = Json.parseToJsonElement(Files.readString(outcome.path)).jsonObject
+        stored["mcpServers"]?.jsonObject?.get("other")?.jsonObject
+            ?.get("transport")?.jsonObject?.get("command")?.jsonPrimitive?.content shouldBe "other"
+        stored["mcpServers"]?.jsonObject?.get("disabled-other")?.jsonObject
+            ?.get("disabled").toString() shouldBe "true"
+        SetupService.isInstalledRoot(stored, SetupService.Agent.CLINE) shouldBe true
+    }
+
+    @Test
+    fun `a second cline install is a byte-identical no-op`(@TempDir root: Path) {
+        val dirs = fakeDirs(root)
+        val service = SetupService(dirs.home, dirs.project)
+
+        val first = service.run(clineSystemRequest()) as SetupService.SetupOutcome.Installed
+        val before = Files.readAllBytes(first.path)
+        val second = service.run(clineSystemRequest())
+
+        (second as SetupService.SetupOutcome.Installed).changed shouldBe false
+        Files.readAllBytes(first.path) shouldBe before
+    }
+
+    @Test
+    fun `cline check reports without writing`(@TempDir root: Path) {
+        val dirs = fakeDirs(root)
+        val service = SetupService(dirs.home, dirs.project)
+
+        val absent = service.run(clineSystemRequest(check = true))
+        absent as SetupService.SetupOutcome.Checked
+        absent.installed shouldBe false
+        setupExitCode(absent) shouldBe 1
+        Files.exists(clinePath(dirs.home)) shouldBe false
+
+        service.run(clineSystemRequest())
+        val present = service.run(clineSystemRequest(check = true))
+        present as SetupService.SetupOutcome.Checked
+        present.installed shouldBe true
+        setupExitCode(present) shouldBe 0
+    }
+
+    @Test
+    fun `cline remove deletes only the jdx entry and drops the emptied namespace`(@TempDir root: Path) {
+        val dirs = fakeDirs(root)
+        val service = SetupService(dirs.home, dirs.project)
+        service.run(clineSystemRequest())
+
+        val outcome = service.run(clineSystemRequest(remove = true)) as SetupService.SetupOutcome.Removed
+
+        outcome.changed shouldBe true
+        val stored = Json.parseToJsonElement(Files.readString(clinePath(dirs.home))).jsonObject
+        stored.containsKey("mcpServers") shouldBe false
+        SetupService.isInstalledAt(clinePath(dirs.home), SetupService.Agent.CLINE) shouldBe false
+
+        val again = service.run(clineSystemRequest(remove = true))
+        (again as SetupService.SetupOutcome.Removed).changed shouldBe false
+        setupExitCode(again) shouldBe 0
+    }
+
+    @Test
+    fun `cline remove keeps other servers`(@TempDir root: Path) {
+        val dirs = fakeDirs(root)
+        Files.createDirectories(clinePath(dirs.home).parent)
+        Files.writeString(
+            clinePath(dirs.home),
+            """{"mcpServers":{"other":{"transport":{"type":"stdio","command":"other","args":["x"]}}}}""",
+        )
+        val service = SetupService(dirs.home, dirs.project)
+        service.run(clineSystemRequest())
+
+        val outcome = service.run(clineSystemRequest(remove = true)) as SetupService.SetupOutcome.Removed
+
+        outcome.changed shouldBe true
+        val stored = Json.parseToJsonElement(Files.readString(clinePath(dirs.home))).jsonObject
+        stored["mcpServers"]?.jsonObject?.containsKey("jdx") shouldBe false
+        stored["mcpServers"]?.jsonObject?.containsKey("other") shouldBe true
+    }
+
+    @Test
+    fun `a cline corrupt config exits 5 and names the file`(@TempDir root: Path) {
+        val dirs = fakeDirs(root)
+        Files.createDirectories(clinePath(dirs.home).parent)
+        Files.writeString(clinePath(dirs.home), "{ not json,")
+        val service = SetupService(dirs.home, dirs.project)
+
+        val outcome = service.run(clineSystemRequest())
+
+        outcome as SetupService.SetupOutcome.Corrupt
+        setupExitCode(outcome) shouldBe 5
+    }
+
+    @Test
+    fun `cline entry probe accepts the legacy flat shape the binary still reads`(@TempDir root: Path) {
+        val dirs = fakeDirs(root)
+        val path = clinePath(dirs.home)
+        Files.createDirectories(path.parent)
+        // Flat legacy shape from the Cline docs (no `transport` wrapper).
+        Files.writeString(path, """{"mcpServers":{"jdx":{"command":"jdx","args":["mcp"]}}}""")
+
+        SetupService.isInstalledAt(path, SetupService.Agent.CLINE) shouldBe true
+    }
+
+    @Test
+    fun `cline entry probe accepts absolute install paths and windows shims`(@TempDir root: Path) {
+        val dirs = fakeDirs(root)
+        val path = clinePath(dirs.home)
+        Files.createDirectories(path.parent)
+        for (command in listOf("/home/u/.local/bin/jdx", "jdx.exe", "jdx.cmd", "JDX.BAT", "C:\\tools\\jdx.exe")) {
+            Files.writeString(path, clineRootWithCommand(command).toString())
+            SetupService.isInstalledAt(path, SetupService.Agent.CLINE) shouldBe true
+        }
+        // A disabled entry is still wired (presence is what `--check` reports).
+        Files.writeString(
+            path,
+            """{"mcpServers":{"jdx":{"transport":{"type":"stdio","command":"jdx","args":["mcp"]},"disabled":true}}}""",
+        )
+        SetupService.isInstalledAt(path, SetupService.Agent.CLINE) shouldBe true
+    }
+
+    @Test
+    fun `cline entry probe rejects remote shapes and foreign commands`(@TempDir root: Path) {
+        val dirs = fakeDirs(root)
+        val path = clinePath(dirs.home)
+        Files.createDirectories(path.parent)
+        // Remote transports cannot launch a local `jdx` process.
+        for (entry in listOf(
+            """{"transport":{"type":"streamableHttp","url":"https://example.com/mcp"}}""",
+            """{"transport":{"type":"sse","url":"https://example.com/mcp"}}""",
+            """{"type":"streamableHttp","url":"https://example.com/mcp"}""",
+            """{"transport":{"type":"stdio","command":"other","args":["mcp"]}}""",
+            """{"command":"other","args":["mcp"]}""",
+            """{"transport":{"type":"stdio","command":"jdx","args":["other"]}}""",
+            """{"transport":{"type":"stdio","command":"jdx"}}""",
+        )) {
+            Files.writeString(path, """{"mcpServers":{"jdx":$entry}}""")
+            SetupService.isInstalledAt(path, SetupService.Agent.CLINE) shouldBe false
+        }
+    }
+
+    private fun clineRootWithCommand(command: String): JsonObject = buildJsonObject {
+        put(
+            "mcpServers",
+            buildJsonObject {
+                put(
+                    "jdx",
+                    buildJsonObject {
+                        put(
+                            "transport",
+                            buildJsonObject {
+                                put("type", "stdio")
+                                put("command", command)
+                                put("args", JsonArray(listOf(JsonPrimitive("mcp"))))
+                            },
+                        )
+                    },
+                )
+            },
+        )
+    }
+
+    @Test
+    fun `a hostile cline command word never throws the installed probe`(@TempDir root: Path) {
+        val dirs = fakeDirs(root)
+        val path = clinePath(dirs.home)
+        Files.createDirectories(path.parent)
+        Files.writeString(
+            path,
+            "{\"mcpServers\":{\"jdx\":{\"transport\":{\"type\":\"stdio\",\"command\":\"\u0000\",\"args\":[\"mcp\"]}}}}",
+        )
+
+        SetupService.isInstalledAt(path, SetupService.Agent.CLINE) shouldBe false
+    }
+
+    @Test
+    fun `cline agent parsing accepts documented spellings`() {
+        SetupService.parseAgent("cline") shouldBe SetupService.Agent.CLINE
+        SetupService.parseAgent("Cline") shouldBe SetupService.Agent.CLINE
+        SetupService.parseAgent("CLINE") shouldBe SetupService.Agent.CLINE
+        SetupService.parseAgent("cline-code") shouldBe SetupService.Agent.CLINE
+        SetupService.parseAgent("clinecode") shouldBe SetupService.Agent.CLINE
+        SetupService.parseAgent("CLINE_CODE") shouldBe SetupService.Agent.CLINE
+    }
+
+    @Test
+    fun `cline merge preserves generated servers and stays idempotent`() {
+        runBlocking {
+            checkAll(Arb.string(1..24)) { raw ->
+                // Server names must survive a JSON round-trip; control
+                // characters and the owned name would skew the assertion.
+                val name = raw.replace(Regex("[\\p{Cntrl}\"]"), " ").trim()
+                    .ifEmpty { "other" }.takeUnless { it == "jdx" } ?: "other"
+                val root = buildJsonObject {
+                    put(
+                        "mcpServers",
+                        buildJsonObject {
+                            put(
+                                name,
+                                buildJsonObject {
+                                    put(
+                                        "transport",
+                                        buildJsonObject {
+                                            put("type", "stdio")
+                                            put("command", "other")
+                                            put("args", JsonArray(listOf(JsonPrimitive("x"))))
+                                        },
+                                    )
+                                },
+                            )
+                        },
+                    )
+                }
+                val merged = SetupService.mergeInstallCline(root)
+                // The foreign server survives the merge byte-free in shape.
+                merged["mcpServers"]?.jsonObject?.get(name)?.jsonObject
+                    ?.get("transport")?.jsonObject?.get("command")?.jsonPrimitive?.content shouldBe "other"
+                SetupService.isInstalledRootFor(SetupService.Agent.CLINE, merged) shouldBe true
+                // A second merge is a no-op: idempotence is structural.
+                SetupService.mergeInstallCline(merged) shouldBe merged
+                // Removing drops only the owned entry.
+                val removed = SetupService.mergeRemoveCline(merged)
+                removed["mcpServers"]?.jsonObject?.containsKey("jdx") shouldBe false
+                removed["mcpServers"]?.jsonObject?.containsKey(name) shouldBe true
+            }
+        }
+    }
 }

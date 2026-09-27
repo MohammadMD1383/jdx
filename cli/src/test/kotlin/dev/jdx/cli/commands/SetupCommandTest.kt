@@ -55,6 +55,16 @@ class SetupCommandTest {
         versionProbe = { throw AssertionError("kilo setup must not probe the opencode binary") },
     )
 
+    private fun clineCommandFor(home: Path, project: Path): SetupCommand = SetupCommand(
+        serviceFactory = { _, _ -> SetupService(home, project) },
+        terminate = { throw SetupExit(it) },
+        // Cline wiring must never consult either version probe: throwing probes pin that.
+        versionProbe = { throw AssertionError("cline setup must not probe the opencode binary") },
+        claudeVersionProbe = { throw AssertionError("cline setup must not probe the claude binary") },
+    )
+
+    private fun clinePath(home: Path): Path = home.resolve(".cline/data/settings/cline_mcp_settings.json")
+
     private fun fakeDirs(root: Path): Pair<Path, Path> {
         val home = root.resolve("home").also { Files.createDirectories(it) }
         val project = root.resolve("project").also { Files.createDirectories(it) }
@@ -178,7 +188,7 @@ class SetupCommandTest {
         }
 
         code shouldBe 3
-        output.trim() shouldContain "opencode|claude-code|kilo"
+        output.trim() shouldContain "opencode|claude-code|kilo|cline"
     }
 
     @Test
@@ -525,6 +535,157 @@ class SetupCommandTest {
         // (`explicitNulls = false`), never null-marked.
         result.containsKey("opencodeVersion") shouldBe false
         result.containsKey("opencodeRaw") shouldBe false
+    }
+
+    // -- Cline wiring (`--agent cline`, single global file) --
+
+    @Test
+    fun `cline install writes the global entry and names the restart`(@TempDir root: Path) {
+        val (home, project) = fakeDirs(root)
+        val output = captureStdout {
+            JdxCli().subcommands(clineCommandFor(home, project))
+                .parse(listOf("setup", "--agent", "cline", "--scope", "system"))
+        }
+
+        output.trim() shouldContain "cline system setup installed"
+        output.trim() shouldContain "cline_mcp_settings.json"
+        output.trim() shouldContain "restart Cline"
+        SetupService.isInstalledAt(
+            clinePath(home),
+            SetupService.Agent.CLINE,
+        ) shouldBe true
+    }
+
+    @Test
+    fun `cline project scope writes the same global file and says so`(@TempDir root: Path) {
+        val (home, project) = fakeDirs(root)
+        val output = captureStdout {
+            JdxCli().subcommands(clineCommandFor(home, project))
+                .parse(listOf("setup", "--agent", "cline", "--scope", "project"))
+        }
+
+        // Cline keeps no project-level MCP file: the run wires the global
+        // file and the output names it instead of a checkout-local path.
+        output.trim() shouldContain "cline project setup installed"
+        output.trim() shouldContain "global file"
+        output.trim() shouldContain clinePath(home).toString()
+        Files.exists(project.resolve(".cline/mcp.json")) shouldBe false
+        SetupService.isInstalledAt(
+            clinePath(home),
+            SetupService.Agent.CLINE,
+        ) shouldBe true
+    }
+
+    @Test
+    fun `cline accepts every documented spelling`(@TempDir root: Path) {
+        listOf("cline", "Cline", "cline-code", "clinecode").forEachIndexed { index, spelling ->
+            val case = root.resolve("case-$index").also { Files.createDirectories(it) }
+            val (home, project) = fakeDirs(case)
+            captureStdout {
+                JdxCli().subcommands(clineCommandFor(home, project))
+                    .parse(listOf("setup", "--agent", spelling, "--scope", "system"))
+            }
+
+            SetupService.isInstalledAt(
+                clinePath(home),
+                SetupService.Agent.CLINE,
+            ) shouldBe true
+        }
+    }
+
+    @Test
+    fun `a second cline install is a no-op reporting already installed`(@TempDir root: Path) {
+        val (home, project) = fakeDirs(root)
+        val args = listOf("setup", "--agent", "cline", "--scope", "system")
+        captureStdout { JdxCli().subcommands(clineCommandFor(home, project)).parse(args) }
+
+        val output = captureStdout {
+            JdxCli().subcommands(clineCommandFor(home, project)).parse(args)
+        }
+
+        output.trim() shouldContain "already installed"
+    }
+
+    @Test
+    fun `cline check exits 1 when absent and 0 once installed without writing`(@TempDir root: Path) {
+        val (home, project) = fakeDirs(root)
+        val check = listOf("setup", "--agent", "cline", "--scope", "system", "--check")
+
+        val absent = shouldThrow<SetupExit> {
+            captureStdout { JdxCli().subcommands(clineCommandFor(home, project)).parse(check) }
+        }
+        absent.code shouldBe 1
+        Files.exists(clinePath(home)) shouldBe false
+
+        captureStdout {
+            JdxCli().subcommands(clineCommandFor(home, project))
+                .parse(listOf("setup", "--agent", "cline", "--scope", "system"))
+        }
+        val installed = captureStdout {
+            JdxCli().subcommands(clineCommandFor(home, project)).parse(check)
+        }
+        installed.trim() shouldContain "cline system setup installed"
+    }
+
+    @Test
+    fun `cline check hint names the cline install command`(@TempDir root: Path) {
+        val (home, project) = fakeDirs(root)
+
+        var code = -1
+        val output = captureStdout {
+            try {
+                JdxCli().subcommands(clineCommandFor(home, project))
+                    .parse(listOf("setup", "--agent", "cline", "--scope", "system", "--check"))
+            } catch (e: SetupExit) {
+                code = e.code
+            }
+        }
+
+        code shouldBe 1
+        output.trim() shouldContain "jdx setup --agent cline --scope system"
+    }
+
+    @Test
+    fun `cline remove uninstalls cleanly`(@TempDir root: Path) {
+        val (home, project) = fakeDirs(root)
+        captureStdout {
+            JdxCli().subcommands(clineCommandFor(home, project))
+                .parse(listOf("setup", "--agent", "cline", "--scope", "system"))
+        }
+
+        val output = captureStdout {
+            JdxCli().subcommands(clineCommandFor(home, project))
+                .parse(listOf("setup", "--agent", "cline", "--scope", "system", "--remove"))
+        }
+
+        output.trim() shouldContain "cline system setup removed"
+        SetupService.isInstalledAt(
+            clinePath(home),
+            SetupService.Agent.CLINE,
+        ) shouldBe false
+    }
+
+    @Test
+    fun `cline json carries the setup payload without version probes`(@TempDir root: Path) {
+        val (home, project) = fakeDirs(root)
+        val output = captureStdout {
+            JdxCli().subcommands(clineCommandFor(home, project))
+                .parse(listOf("setup", "--agent", "cline", "--scope", "system", "--json"))
+        }
+
+        val parsed = Json.parseToJsonElement(output.trim()).jsonObject
+        parsed["command"]?.jsonPrimitive?.content shouldBe "setup"
+        parsed["ok"]?.jsonPrimitive?.content shouldBe "true"
+        val result = parsed["result"]!!.jsonObject
+        result["agent"]?.jsonPrimitive?.content shouldBe "cline"
+        result["scope"]?.jsonPrimitive?.content shouldBe "system"
+        result["installed"]?.jsonPrimitive?.content shouldBe "true"
+        // No version probes for Cline: the nullable fields are absent
+        // (`explicitNulls = false`), never null-marked.
+        result.containsKey("opencodeVersion") shouldBe false
+        result.containsKey("opencodeRaw") shouldBe false
+        result.containsKey("claudeVersion") shouldBe false
+        result.containsKey("claudeRaw") shouldBe false
     }
 
     private fun captureStdout(block: () -> Unit): String {
