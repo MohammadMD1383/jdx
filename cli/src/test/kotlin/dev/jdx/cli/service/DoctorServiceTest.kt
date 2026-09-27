@@ -502,6 +502,46 @@ class DoctorServiceTest {
     }
 
     @Test
+    fun `the setup row covers kilo when nothing is wired`() {
+        val service = DoctorService(fakeEnvironment(tempDir("jdx-doctor-test-")))
+
+        val report = service.probe()
+
+        val setup = report.checks.first { it.name == "setup" }
+        setup.status shouldBe DoctorStatus.WARN
+        setup.detail shouldContain "kilo project"
+        setup.detail shouldContain "kilo system"
+        setup.detail shouldContain "jdx setup --agent kilo --scope project"
+        setup.detail shouldContain "jdx setup --agent opencode --scope project"
+    }
+
+    @Test
+    fun `the setup row is OK when only kilo is wired`() {
+        val root = tempDir("jdx-doctor-test-")
+        val environment = fakeEnvironment(root)
+        SetupService(environment.userHome, environment.workingDir).run(
+            SetupService.SetupRequest(
+                agent = SetupService.Agent.KILO,
+                scope = SetupService.Scope.PROJECT,
+            ),
+        )
+        SetupService(environment.userHome, environment.workingDir).run(
+            SetupService.SetupRequest(
+                agent = SetupService.Agent.KILO,
+                scope = SetupService.Scope.SYSTEM,
+            ),
+        )
+
+        val report = DoctorService(environment).probe()
+
+        val setup = report.checks.first { it.name == "setup" }
+        setup.status shouldBe DoctorStatus.OK
+        setup.detail shouldContain "kilo project installed"
+        setup.detail shouldContain "kilo system installed"
+        setup.detail shouldContain "opencode project"
+    }
+
+    @Test
     fun `stale sockets are WARN naming the files, never claiming the daemon runs`() {        // Dummy `.sock` files answer nothing, so the real default probe reads them as stale.
         val service = DoctorService(fakeEnvironment(tempDir("jdx-doctor-test-"), socketCount = 2))
 

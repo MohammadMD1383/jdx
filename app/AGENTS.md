@@ -7,14 +7,18 @@ Fat-jar assembly + the `jdx` launchers (POSIX + Windows) + AppCDS archive.
 - `src/main/scripts/jdx` — POSIX launcher: resolves the JDK (`JAVA_HOME` → `java` on `PATH` →
   `/usr/libexec/java_home` on macOS → `/usr/lib/jvm/default` or `$JDX_JVM_DEFAULT_DIR`; one human-readable line + exit 6 when unusable, never
   assumes `JAVA_HOME`), applies one-shot flags
-  (`-TieredStopAtLevel=1`, serial GC, `-Xshare:auto`), passes
+  (`-TieredStopAtLevel=1`, serial GC, `-Xshare:auto`, `-Xlog:cds=off`), passes
   `-XX:SharedArchiveFile=<fixed jdx.jsa path>` only when the archive exists next
-  to the fat jar (missing/stale degrades to a plain run, never fatal).
+  to the fat jar (missing/stale degrades silently to a plain run, never fatal —
+  CDS diagnostics stay off so the mismatch never prints as `[error]` noise).
+  More than one `jdx-*-all.jar` is an ambiguous install: exit 6 naming every
+  jar (never a first-glob-wins guess, which once reported the wrong version).
   `$JDX_JAVA_HOME_HELPER` overrides the macOS helper path (test seam).
   Installer scripts use no `--` anywhere: BSD mkdir/cp/chmod reject it.
 - `src/main/scripts/jdx.bat` (+ `jdx.ps1`) — Windows launchers (#46): same
   contract as the POSIX script (same flags in the same stale-safe order, same
-  exit-6 failures, fat jar + `jdx.jsa` resolved relative to the script dir).
+  exit-6 failures, fat jar + `jdx.jsa` resolved relative to the script dir,
+  same ambiguous-install refusal on multiple `jdx-*-all.jar`).
   JDK discovery is `%JAVA_HOME%\bin\java.exe` (loud error when set-but-broken,
   never a silent fall-through) → `where java.exe` → registry
   (`JavaSoft` / `Adoptium` `JavaHome` values) → `%ProgramFiles%\Java` (+
@@ -25,6 +29,9 @@ Fat-jar assembly + the `jdx` launchers (POSIX + Windows) + AppCDS archive.
   config-cache safe: plain-`File` captures only), wired into `installDist`.
   `buildJavaExe` probes `bin/java.exe` first so CDS training runs on a Windows
   host; `installDist` ships all three launchers (`build/jdx[.bat|.ps1]`).
+  `fatJar` evicts superseded `jdx-*-all.jar` siblings after writing its own, so
+  a versioned `-PjdxVersion` build can never leave a stale jar behind for the
+  launcher glob to pick.
 
 ## Rules
 

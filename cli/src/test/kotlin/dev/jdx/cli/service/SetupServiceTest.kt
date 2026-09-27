@@ -58,6 +58,26 @@ class SetupServiceTest {
         remove = remove,
     )
 
+    private fun kiloProjectRequest(
+        check: Boolean = false,
+        remove: Boolean = false,
+    ): SetupService.SetupRequest = SetupService.SetupRequest(
+        agent = SetupService.Agent.KILO,
+        scope = SetupService.Scope.PROJECT,
+        check = check,
+        remove = remove,
+    )
+
+    private fun kiloSystemRequest(
+        check: Boolean = false,
+        remove: Boolean = false,
+    ): SetupService.SetupRequest = SetupService.SetupRequest(
+        agent = SetupService.Agent.KILO,
+        scope = SetupService.Scope.SYSTEM,
+        check = check,
+        remove = remove,
+    )
+
     @Test
     fun `a fresh project install creates opencode dot json with the jdx entry`(@TempDir root: Path) {
         val dirs = fakeDirs(root)
@@ -394,6 +414,11 @@ class SetupServiceTest {
         SetupService.parseAgent("claudecode") shouldBe SetupService.Agent.CLAUDE_CODE
         SetupService.parseAgent("claude") shouldBe SetupService.Agent.CLAUDE_CODE
         SetupService.parseAgent("CLAUDE_CODE") shouldBe SetupService.Agent.CLAUDE_CODE
+        SetupService.parseAgent("kilo") shouldBe SetupService.Agent.KILO
+        SetupService.parseAgent("Kilo") shouldBe SetupService.Agent.KILO
+        SetupService.parseAgent("kilo-code") shouldBe SetupService.Agent.KILO
+        SetupService.parseAgent("kilocode") shouldBe SetupService.Agent.KILO
+        SetupService.parseAgent("KILO_CODE") shouldBe SetupService.Agent.KILO
         SetupService.parseAgent("clippy") shouldBe null
         SetupService.parseScope(null) shouldBe SetupService.Scope.PROJECT
         SetupService.parseScope("system") shouldBe SetupService.Scope.SYSTEM
@@ -415,6 +440,187 @@ class SetupServiceTest {
 
         SetupService(dirs.home, dirs.project).run(systemRequest())
         SetupService.isInstalledAt(systemPath) shouldBe true
+    }
+
+    // -- Kilo Code backend: single `mcp.jdx` entry in `kilo.json[c]` --
+
+    @Test
+    fun `a fresh kilo project install creates dot-kilo kilo dot json with only the single entry`(@TempDir root: Path) {
+        val dirs = fakeDirs(root)
+        val service = SetupService(dirs.home, dirs.project)
+
+        val outcome = service.run(kiloProjectRequest())
+
+        val installed = outcome as SetupService.SetupOutcome.Installed
+        installed.changed shouldBe true
+        installed.path shouldBe dirs.project.resolve(".kilo/kilo.json")
+        setupExitCode(outcome) shouldBe 0
+        val stored = Json.parseToJsonElement(Files.readString(installed.path)).jsonObject
+        // No OpenCode `$schema` on a fresh Kilo file, and no v2 namespace.
+        stored.containsKey("\$schema") shouldBe false
+        stored["mcp"]?.jsonObject?.containsKey("servers") shouldBe false
+        SetupService.isInstalledRootFor(SetupService.Agent.KILO, stored) shouldBe true
+        SetupService.isV1Installed(stored) shouldBe true
+        val entry = stored["mcp"]?.jsonObject?.get("jdx")?.jsonObject
+        entry?.get("type")?.jsonPrimitive?.content shouldBe "local"
+        entry?.get("command").toString() shouldBe """["jdx","mcp"]"""
+        entry?.get("enabled")?.jsonPrimitive?.content shouldBe "true"
+    }
+
+    @Test
+    fun `kilo install merges and never writes the v2 namespace`(@TempDir root: Path) {
+        val dirs = fakeDirs(root)
+        Files.writeString(
+            dirs.project.resolve("kilo.json"),
+            """{"model":"kilo","mcp":{"other":{"type":"local","command":["other"],"enabled":true},"servers":{"type":"local","command":["mine"]}}}""",
+        )
+        val service = SetupService(dirs.home, dirs.project)
+
+        val outcome = service.run(kiloProjectRequest())
+
+        (outcome as SetupService.SetupOutcome.Installed).changed shouldBe true
+        val stored = Json.parseToJsonElement(Files.readString(outcome.path)).jsonObject
+        stored["model"]?.jsonPrimitive?.content shouldBe "kilo"
+        stored["mcp"]?.jsonObject?.get("other")?.jsonObject
+            ?.get("command")?.toString() shouldBe """["other"]"""
+        // A foreign `servers` key has no OpenCode v2 meaning in a Kilo config: untouched.
+        stored["mcp"]?.jsonObject?.get("servers")?.jsonObject
+            ?.get("command")?.toString() shouldBe """["mine"]"""
+        SetupService.isInstalledRootFor(SetupService.Agent.KILO, stored) shouldBe true
+    }
+
+    @Test
+    fun `kilo install over a root-level file targets that file`(@TempDir root: Path) {
+        val dirs = fakeDirs(root)
+        Files.writeString(dirs.project.resolve("kilo.jsonc"), "{}")
+        val service = SetupService(dirs.home, dirs.project)
+
+        val outcome = service.run(kiloProjectRequest())
+
+        (outcome as SetupService.SetupOutcome.Installed).path shouldBe dirs.project.resolve("kilo.jsonc")
+        Files.exists(dirs.project.resolve(".kilo/kilo.json")) shouldBe false
+    }
+
+    @Test
+    fun `kilo project scope prefers the dot-kilo variant and walks up`(@TempDir root: Path) {
+        val dirs = fakeDirs(root)
+        Files.createDirectories(dirs.project.resolve(".kilo"))
+        Files.writeString(dirs.project.resolve(".kilo/kilo.json"), "{}")
+        Files.writeString(dirs.project.resolve("kilo.json"), "{}")
+        val nested = dirs.project.resolve("a/b").also { Files.createDirectories(it) }
+        val service = SetupService(dirs.home, nested)
+
+        val outcome = service.run(kiloProjectRequest())
+
+        val installed = outcome as SetupService.SetupOutcome.Installed
+        installed.path shouldBe dirs.project.resolve(".kilo/kilo.json")
+        Files.exists(nested.resolve(".kilo/kilo.json")) shouldBe false
+        SetupService.isInstalledAt(installed.path, SetupService.Agent.KILO) shouldBe true
+    }
+
+    @Test
+    fun `kilo system scope prefers the existing jsonc and creates json otherwise`(@TempDir root: Path) {
+        val dirs = fakeDirs(root)
+        val service = SetupService(dirs.home, dirs.project)
+
+        val created = service.run(kiloSystemRequest()) as SetupService.SetupOutcome.Installed
+        created.path shouldBe dirs.home.resolve(".config/kilo/kilo.json")
+
+        Files.writeString(
+            dirs.home.resolve(".config/kilo/kilo.jsonc"),
+            """{}""",
+        )
+        val merged = service.run(kiloSystemRequest()) as SetupService.SetupOutcome.Installed
+        merged.path shouldBe dirs.home.resolve(".config/kilo/kilo.jsonc")
+        SetupService.isInstalledAt(merged.path, SetupService.Agent.KILO) shouldBe true
+    }
+
+    @Test
+    fun `kilo remove deletes only mcp dot jdx and drops the emptied mcp object`(@TempDir root: Path) {
+        val dirs = fakeDirs(root)
+        val service = SetupService(dirs.home, dirs.project)
+        service.run(kiloProjectRequest())
+
+        val outcome = service.run(kiloProjectRequest(remove = true))
+
+        (outcome as SetupService.SetupOutcome.Removed).changed shouldBe true
+        val stored = Json.parseToJsonElement(
+            Files.readString(dirs.project.resolve(".kilo/kilo.json")),
+        ).jsonObject
+        stored.containsKey("mcp") shouldBe false
+        SetupService.isInstalledAt(dirs.project.resolve(".kilo/kilo.json"), SetupService.Agent.KILO) shouldBe false
+
+        val again = service.run(kiloProjectRequest(remove = true))
+        (again as SetupService.SetupOutcome.Removed).changed shouldBe false
+        setupExitCode(again) shouldBe 0
+    }
+
+    @Test
+    fun `kilo remove leaves other servers and any servers key untouched`(@TempDir root: Path) {
+        val dirs = fakeDirs(root)
+        Files.writeString(
+            dirs.project.resolve("kilo.json"),
+            """{"mcp":{"other":{"type":"local","command":["other"]},"servers":{"type":"local","command":["mine"]}}}""",
+        )
+        val service = SetupService(dirs.home, dirs.project)
+        service.run(kiloProjectRequest())
+
+        val outcome = service.run(kiloProjectRequest(remove = true))
+
+        (outcome as SetupService.SetupOutcome.Removed).changed shouldBe true
+        val stored = Json.parseToJsonElement(Files.readString(dirs.project.resolve("kilo.json"))).jsonObject
+        stored["mcp"]?.jsonObject?.containsKey("jdx") shouldBe false
+        stored["mcp"]?.jsonObject?.containsKey("other") shouldBe true
+        stored["mcp"]?.jsonObject?.get("servers")?.jsonObject
+            ?.get("command")?.toString() shouldBe """["mine"]"""
+    }
+
+    @Test
+    fun `a second kilo install is a byte-identical no-op`(@TempDir root: Path) {
+        val dirs = fakeDirs(root)
+        val service = SetupService(dirs.home, dirs.project)
+
+        val first = service.run(kiloProjectRequest()) as SetupService.SetupOutcome.Installed
+        val before = Files.readAllBytes(first.path)
+        val second = service.run(kiloProjectRequest())
+
+        (second as SetupService.SetupOutcome.Installed).changed shouldBe false
+        Files.readAllBytes(first.path) shouldBe before
+    }
+
+    @Test
+    fun `kilo check reports without writing`(@TempDir root: Path) {
+        val dirs = fakeDirs(root)
+        val service = SetupService(dirs.home, dirs.project)
+
+        val absent = service.run(kiloProjectRequest(check = true))
+        absent as SetupService.SetupOutcome.Checked
+        absent.installed shouldBe false
+        setupExitCode(absent) shouldBe 1
+        Files.exists(dirs.project.resolve(".kilo/kilo.json")) shouldBe false
+
+        service.run(kiloProjectRequest())
+        val present = service.run(kiloProjectRequest(check = true))
+        present as SetupService.SetupOutcome.Checked
+        present.installed shouldBe true
+        setupExitCode(present) shouldBe 0
+    }
+
+    @Test
+    fun `kilo backends do not cross-wire with opencode configs`(@TempDir root: Path) {
+        val dirs = fakeDirs(root)
+        val service = SetupService(dirs.home, dirs.project)
+        service.run(kiloProjectRequest())
+        val kiloPath = dirs.project.resolve(".kilo/kilo.json")
+
+        // The Kilo file wires Kilo and also satisfies the lenient OpenCode probe (shared v1 shape).
+        SetupService.isInstalledAt(kiloPath, SetupService.Agent.KILO) shouldBe true
+        // A v2-only fragment wires OpenCode but never Kilo.
+        val v2Only = Json.parseToJsonElement(
+            """{"mcp":{"servers":{"jdx":{"type":"local","command":["jdx","mcp"],"disabled":false}}}}""",
+        ).jsonObject
+        SetupService.isInstalledRootFor(SetupService.Agent.OPENCODE, v2Only) shouldBe true
+        SetupService.isInstalledRootFor(SetupService.Agent.KILO, v2Only) shouldBe false
     }
 
     // -- OpenCode v1 vs v2 detection: which line is installed for use --

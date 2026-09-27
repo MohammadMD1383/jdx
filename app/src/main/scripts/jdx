@@ -15,12 +15,14 @@
 #   2. fail with one human-readable line on stderr — never a stack trace — if it cannot
 #      (missing JDK, JDK too old, missing build). Exit code 6 (D-015/D-026).
 #   3. exec the fat jar with the one-shot CLI JVM flags (PROPOSAL.md §15):
-#      -XX:TieredStopAtLevel=1 -XX:+UseSerialGC -Xshare:auto
+#      -XX:TieredStopAtLevel=1 -XX:+UseSerialGC -Xshare:auto -Xlog:cds=off
 #      plus -XX:SharedArchiveFile when the AppCDS archive (T-048,
 #      app/build/libs/jdx.jsa, shipped by :app:installDist) sits next to the
 #      fat jar. A missing or stale archive degrades to the plain run via
 #      -Xshare:auto, never a hard failure — so this is a presence check only,
-#      no version probing.
+#      no version probing. -Xlog:cds=off keeps that degradation silent: a stale
+#      archive's mismatch notice would otherwise print at [error] and read like
+#      a crash for a command that then works fine.
 #
 # install.sh symlinks this file into ~/.local/bin, so the fat jar is located relative to
 # the *resolved* script path, not $0: GNU `readlink -f` when it works, otherwise a
@@ -69,12 +71,30 @@ case $self in
 esac
 
 jar=
+jar_count=0
+jar_list=
 for candidate in "$jdx_home"/libs/jdx-*-all.jar; do
     [ -f "$candidate" ] || continue
-    jar=$candidate
-    break
+    jar_count=$((jar_count + 1))
+    if [ -z "$jar" ]; then
+        jar=$candidate
+    fi
+    if [ -z "$jar_list" ]; then
+        jar_list="'$candidate'"
+    else
+        jar_list="$jar_list '$candidate'"
+    fi
 done
-[ -n "$jar" ] || die "no jdx fat jar in '$jdx_home/libs' — build it first: ./gradlew :app:installDist"
+if [ "$jar_count" -eq 0 ]; then
+    die "no jdx fat jar in '$jdx_home/libs' — build it first: ./gradlew :app:installDist"
+fi
+# More than one fat jar is an ambiguous install, never a guess: the build
+# evicts superseded jars, so reaching here means a stale jar survived (or jars
+# were copied by hand) — picking first-glob-wins once reported the wrong
+# version silently. Name every jar and say how to get back to exactly one.
+if [ "$jar_count" -gt 1 ]; then
+    die "multiple jdx fat jars in '$jdx_home/libs': $jar_list — rebuild to leave exactly one: ./gradlew :app:clean :app:installDist"
+fi
 
 # An explicitly set JAVA_HOME that is broken is a loud error, not a silent fall-through to
 # PATH: a user who sets JAVA_HOME wants *that* JDK, and quietly picking another one hides
@@ -125,15 +145,16 @@ esac
 [ "$major" -ge "$minimum_java_major" ] || die "jdx requires Java $minimum_java_major+, but '$java_exe' is version '$version' — set JAVA_HOME to a newer JDK"
 
 # AppCDS archive (T-048): shipped by :app:installDist next to the fat jar.
-# Presence check only — -Xshare:auto below makes a stale archive a warning,
-# never a failure, so no version probing here.
+# Presence check only — -Xshare:auto below makes a stale archive degrade
+# silently (CDS diagnostics off via -Xlog:cds=off), never a failure, so no
+# version probing here.
 cds_archive=
 if [ -f "$jdx_home/libs/jdx.jsa" ]; then
     cds_archive="-XX:SharedArchiveFile=$jdx_home/libs/jdx.jsa"
 fi
 
 if [ -n "$cds_archive" ]; then
-    exec "$java_exe" -XX:TieredStopAtLevel=1 -XX:+UseSerialGC -Xshare:auto "$cds_archive" -jar "$jar" "$@"
+    exec "$java_exe" -XX:TieredStopAtLevel=1 -XX:+UseSerialGC -Xshare:auto -Xlog:cds=off "$cds_archive" -jar "$jar" "$@"
 else
-    exec "$java_exe" -XX:TieredStopAtLevel=1 -XX:+UseSerialGC -Xshare:auto -jar "$jar" "$@"
+    exec "$java_exe" -XX:TieredStopAtLevel=1 -XX:+UseSerialGC -Xshare:auto -Xlog:cds=off -jar "$jar" "$@"
 fi

@@ -48,6 +48,13 @@ class SetupCommandTest {
         claudeVersionProbe = { claudeVersion },
     )
 
+    private fun kiloCommandFor(home: Path, project: Path): SetupCommand = SetupCommand(
+        serviceFactory = { _, _ -> SetupService(home, project) },
+        terminate = { throw SetupExit(it) },
+        // Kilo wiring must never consult `opencode --version`: a throwing probe pins that.
+        versionProbe = { throw AssertionError("kilo setup must not probe the opencode binary") },
+    )
+
     private fun fakeDirs(root: Path): Pair<Path, Path> {
         val home = root.resolve("home").also { Files.createDirectories(it) }
         val project = root.resolve("project").also { Files.createDirectories(it) }
@@ -158,17 +165,20 @@ class SetupCommandTest {
     }
 
     @Test
-    fun `an unknown agent exits 3 naming the supported one`(@TempDir root: Path) {
+    fun `an unknown agent exits 3 naming the supported ones`(@TempDir root: Path) {
         val (home, project) = fakeDirs(root)
-
-        val exit = shouldThrow<SetupExit> {
-            captureStdout {
+        var code = -1
+        val output = captureStdout {
+            try {
                 JdxCli().subcommands(commandFor(home, project))
                     .parse(listOf("setup", "--agent", "clippy"))
+            } catch (e: SetupExit) {
+                code = e.code
             }
         }
 
-        exit.code shouldBe 3
+        code shouldBe 3
+        output.trim() shouldContain "opencode|claude-code|kilo"
     }
 
     @Test
@@ -371,6 +381,150 @@ class SetupCommandTest {
                 ) shouldBe if (scope == SetupService.Scope.PROJECT) 0 else 1
             }
         }
+    }
+
+    // -- Kilo Code wiring (`--agent kilo`) --
+
+    @Test
+    fun `kilo install writes the single entry and names the restart`(@TempDir root: Path) {
+        val (home, project) = fakeDirs(root)
+        val output = captureStdout {
+            JdxCli().subcommands(kiloCommandFor(home, project))
+                .parse(listOf("setup", "--agent", "kilo", "--scope", "project"))
+        }
+
+        output.trim() shouldContain "kilo project setup installed"
+        // Separator-aware: the rendered path uses `\` on Windows (#52).
+        output.trim() shouldContain project.resolve(".kilo").resolve("kilo.json").toString()
+        output.trim() shouldContain "restart Kilo Code"
+        SetupService.isInstalledAt(
+            project.resolve(".kilo/kilo.json"),
+            SetupService.Agent.KILO,
+        ) shouldBe true
+    }
+
+    @Test
+    fun `kilo accepts every documented spelling`(@TempDir root: Path) {
+        listOf("kilo", "Kilo", "kilo-code", "kilocode").forEachIndexed { index, spelling ->
+            val case = root.resolve("case-$index").also { Files.createDirectories(it) }
+            val (home, project) = fakeDirs(case)
+            captureStdout {
+                JdxCli().subcommands(kiloCommandFor(home, project))
+                    .parse(listOf("setup", "--agent", spelling, "--scope", "project"))
+            }
+
+            SetupService.isInstalledAt(
+                project.resolve(".kilo/kilo.json"),
+                SetupService.Agent.KILO,
+            ) shouldBe true
+        }
+    }
+
+    @Test
+    fun `a second kilo install is a no-op reporting already installed`(@TempDir root: Path) {
+        val (home, project) = fakeDirs(root)
+        val args = listOf("setup", "--agent", "kilo", "--scope", "project")
+        captureStdout { JdxCli().subcommands(kiloCommandFor(home, project)).parse(args) }
+
+        val output = captureStdout {
+            JdxCli().subcommands(kiloCommandFor(home, project)).parse(args)
+        }
+
+        output.trim() shouldContain "already installed"
+    }
+
+    @Test
+    fun `kilo system scope writes under the fake home`(@TempDir root: Path) {
+        val (home, project) = fakeDirs(root)
+        captureStdout {
+            JdxCli().subcommands(kiloCommandFor(home, project))
+                .parse(listOf("setup", "--agent", "kilo", "--scope", "system"))
+        }
+
+        SetupService.isInstalledAt(
+            home.resolve(".config/kilo/kilo.json"),
+            SetupService.Agent.KILO,
+        ) shouldBe true
+    }
+
+    @Test
+    fun `kilo check exits 1 when absent and 0 once installed without writing`(@TempDir root: Path) {
+        val (home, project) = fakeDirs(root)
+        val check = listOf("setup", "--agent", "kilo", "--scope", "project", "--check")
+
+        val absent = shouldThrow<SetupExit> {
+            captureStdout { JdxCli().subcommands(kiloCommandFor(home, project)).parse(check) }
+        }
+        absent.code shouldBe 1
+        Files.exists(project.resolve(".kilo/kilo.json")) shouldBe false
+
+        captureStdout {
+            JdxCli().subcommands(kiloCommandFor(home, project))
+                .parse(listOf("setup", "--agent", "kilo", "--scope", "project"))
+        }
+        val installed = captureStdout {
+            JdxCli().subcommands(kiloCommandFor(home, project)).parse(check)
+        }
+        installed.trim() shouldContain "kilo project setup installed"
+    }
+
+    @Test
+    fun `kilo check hint names the kilo install command`(@TempDir root: Path) {
+        val (home, project) = fakeDirs(root)
+
+        var code = -1
+        val output = captureStdout {
+            try {
+                JdxCli().subcommands(kiloCommandFor(home, project))
+                    .parse(listOf("setup", "--agent", "kilo", "--scope", "system", "--check"))
+            } catch (e: SetupExit) {
+                code = e.code
+            }
+        }
+
+        code shouldBe 1
+        output.trim() shouldContain "jdx setup --agent kilo --scope system"
+    }
+
+    @Test
+    fun `kilo remove uninstalls cleanly`(@TempDir root: Path) {
+        val (home, project) = fakeDirs(root)
+        captureStdout {
+            JdxCli().subcommands(kiloCommandFor(home, project))
+                .parse(listOf("setup", "--agent", "kilo", "--scope", "project"))
+        }
+
+        val output = captureStdout {
+            JdxCli().subcommands(kiloCommandFor(home, project))
+                .parse(listOf("setup", "--agent", "kilo", "--scope", "project", "--remove"))
+        }
+
+        output.trim() shouldContain "kilo project setup removed"
+        SetupService.isInstalledAt(
+            project.resolve(".kilo/kilo.json"),
+            SetupService.Agent.KILO,
+        ) shouldBe false
+    }
+
+    @Test
+    fun `kilo json carries the setup payload without an opencode line`(@TempDir root: Path) {
+        val (home, project) = fakeDirs(root)
+        val output = captureStdout {
+            JdxCli().subcommands(kiloCommandFor(home, project))
+                .parse(listOf("setup", "--agent", "kilo", "--scope", "project", "--json"))
+        }
+
+        val parsed = Json.parseToJsonElement(output.trim()).jsonObject
+        parsed["command"]?.jsonPrimitive?.content shouldBe "setup"
+        parsed["ok"]?.jsonPrimitive?.content shouldBe "true"
+        val result = parsed["result"]!!.jsonObject
+        result["agent"]?.jsonPrimitive?.content shouldBe "kilo"
+        result["scope"]?.jsonPrimitive?.content shouldBe "project"
+        result["installed"]?.jsonPrimitive?.content shouldBe "true"
+        // No OpenCode line probe for Kilo: the nullable fields are absent
+        // (`explicitNulls = false`), never null-marked.
+        result.containsKey("opencodeVersion") shouldBe false
+        result.containsKey("opencodeRaw") shouldBe false
     }
 
     private fun captureStdout(block: () -> Unit): String {

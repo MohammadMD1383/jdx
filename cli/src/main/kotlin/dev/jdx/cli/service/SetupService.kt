@@ -16,11 +16,12 @@ import java.nio.file.Path
  * `jdx setup --agent <name> --scope <project|system>` (issue #33 family).
  *
  * Writes, checks, and removes the MCP server entry that launches `jdx mcp` in
- * third-party agent configs. Two backends share this service behind the
- * [Agent] seam: OpenCode (`opencode.json[c]`, v1+v2 entries) and Claude Code
- * (`.mcp.json` / `~/.claude.json`, `mcpServers.jdx`). All filesystem behaviour
- * lives here; the Clikt command only parses flags, renders, and maps exit
- * codes (D-004).
+ * third-party agent configs. Three backends share this service behind the
+ * [Agent] seam: OpenCode (`opencode.json[c]`, v1+v2 entries), Claude Code
+ * (`.mcp.json` / `~/.claude.json`, `mcpServers.jdx`), and Kilo Code (a fork
+ * of OpenCode — its `mcp` map carries the same v1-style local-server shape).
+ * All filesystem behaviour lives here; the Clikt command only parses flags,
+ * renders, and maps exit codes (D-004).
  *
  * OpenCode layout (verified against a real install: global
  * `~/.config/opencode/opencode.jsonc` with `"$schema":
@@ -40,20 +41,32 @@ import java.nio.file.Path
  *   takes precedence on conflict — so this service writes **both** entries
  *   and treats either as "wired" when probing.
  *
+ * Kilo Code layout (verified against the published docs at
+ * https://kilo.ai/docs/automate/mcp/using-in-kilo-code and
+ * https://kilo.ai/docs/getting-started/settings: global
+ * `~/.config/kilo/kilo.jsonc`, project `kilo.jsonc` in the project root or
+ * `.kilo/kilo.jsonc` for a cleaner setup, the `.kilo/` variant taking priority
+ * when both exist). MCP servers live under the top-level `mcp` key in the
+ * same v1-style shape (`type: local`, `command`, `enabled`) — so the Kilo
+ * backend owns the single entry `mcp.jdx` and never writes the OpenCode v2
+ * `mcp.servers` namespace. Fresh Kilo files carry no `$schema` (that URL
+ * names the OpenCode config schema).
+ *
  * Merge discipline: the target file is parsed leniently (JSONC comments and
  * trailing commas are accepted), every unrelated key is preserved byte-free —
- * only `mcp.jdx` / `mcp.servers.jdx` are added, replaced, or removed. A second
- * run is a byte-exact no-op: when both desired entries are already present
+ * only the owned entries are added, replaced, or removed. A second
+ * run is a byte-exact no-op: when the desired entries are already present
  * nothing is rewritten, so comments and formatting survive idempotent re-runs.
  */
 class SetupService(
     private val userHome: Path,
     private val projectDir: Path,
 ) {
-    /** Agents with setup support: OpenCode and Claude Code. */
+    /** Agents with setup support: OpenCode, Claude Code, and Kilo Code. */
     enum class Agent(val cliName: String) {
         OPENCODE("opencode"),
         CLAUDE_CODE("claude-code"),
+        KILO("kilo"),
     }
 
     /** Where the entry is written: the checkout or the user's global config. */
@@ -142,8 +155,8 @@ class SetupService(
         return try {
             when {
                 request.check -> SetupOutcome.Checked(path, isInstalledAt(path, request.agent))
-                request.remove -> removeAt(path, request.agent)
-                else -> installAt(path, request.agent)
+                request.remove -> removeAt(request.agent, path)
+                else -> installAt(request.agent, path)
             }
         } catch (e: IOException) {
             SetupOutcome.Failed(path, e.message ?: e.javaClass.simpleName)
@@ -153,7 +166,7 @@ class SetupService(
     /** Resolves the file `--check`/install/remove targets (existing file wins). */
     fun targetPath(scope: Scope): Path = targetPath(Agent.OPENCODE, scope)
 
-    /** Agent-aware target: OpenCode uses `opencode.json[c]`; Claude Code uses `.mcp.json` / `~/.claude.json`. */
+    /** Resolves the file `--check`/install/remove targets for [agent] (existing file wins). */
     fun targetPath(agent: Agent, scope: Scope): Path = when (agent) {
         Agent.OPENCODE -> when (scope) {
             Scope.PROJECT -> projectConfigPath(projectDir)
@@ -163,48 +176,38 @@ class SetupService(
             Scope.PROJECT -> claudeProjectConfigPath(projectDir)
             Scope.SYSTEM -> claudeSystemConfigPath(userHome)
         }
+        Agent.KILO -> when (scope) {
+            Scope.PROJECT -> kiloProjectConfigPath(projectDir)
+            Scope.SYSTEM -> kiloSystemConfigPath(userHome)
+        }
     }
 
-    private fun installAt(path: Path, agent: Agent): SetupOutcome {
-        val current = readRootOrNull(path) ?: return doInstall(path, null, agent)
+    private fun installAt(agent: Agent, path: Path): SetupOutcome {
+        val current = readRootOrNull(path) ?: return doInstall(agent, path, null)
         val root = current.getOrNull()
             ?: return SetupOutcome.Corrupt(path, current.error ?: "not a JSON object")
-        if (isInstalledRoot(root, agent)) {
-            // OpenCode needs both the v1 and the v2 entry; either alone still
-            // counts as wired for `--check`, but install completes the pair.
-            if (agent == Agent.OPENCODE && !(isV1Installed(root) && isV2Installed(root))) {
-                return doInstall(path, root, agent)
-            }
-            return SetupOutcome.Installed(path, changed = false)
-        }
-        return doInstall(path, root, agent)
+        if (isCompleteFor(agent, root)) return SetupOutcome.Installed(path, changed = false)
+        return doInstall(agent, path, root)
     }
 
-    private fun removeAt(path: Path, agent: Agent): SetupOutcome {
+    private fun removeAt(agent: Agent, path: Path): SetupOutcome {
         if (!Files.isRegularFile(path)) return SetupOutcome.Removed(path, changed = false)
-        val current = readRootOrNull(path) ?: return doRemove(path, null, agent)
+        val current = readRootOrNull(path) ?: return doRemove(agent, path, null)
         val root = current.getOrNull()
             ?: return SetupOutcome.Corrupt(path, current.error ?: "not a JSON object")
-        if (!hasEntry(root, agent)) return SetupOutcome.Removed(path, changed = false)
-        return doRemove(path, root, agent)
+        if (!hasEntryFor(agent, root)) return SetupOutcome.Removed(path, changed = false)
+        return doRemove(agent, path, root)
     }
 
-    private fun doInstall(path: Path, root: JsonObject?, agent: Agent): SetupOutcome {
-        val merged = when (agent) {
-            Agent.OPENCODE -> mergeInstall(root)
-            Agent.CLAUDE_CODE -> mergeClaudeInstall(root)
-        }
+    private fun doInstall(agent: Agent, path: Path, root: JsonObject?): SetupOutcome {
+        val merged = mergeInstallFor(agent, root)
         writeRoot(path, merged)
         return SetupOutcome.Installed(path, changed = true)
     }
 
-    private fun doRemove(path: Path, root: JsonObject?, agent: Agent): SetupOutcome {
+    private fun doRemove(agent: Agent, path: Path, root: JsonObject?): SetupOutcome {
         if (root == null) return SetupOutcome.Removed(path, changed = false)
-        val merged = when (agent) {
-            Agent.OPENCODE -> mergeRemove(root)
-            Agent.CLAUDE_CODE -> mergeClaudeRemove(root)
-        }
-        writeRoot(path, merged)
+        writeRoot(path, mergeRemoveFor(agent, root))
         return SetupOutcome.Removed(path, changed = true)
     }
 
@@ -234,15 +237,17 @@ class SetupService(
         /**
          * Parses `--agent` case-insensitively (`OpenCode`, `opencode`,
          * `open-code` all match; `Claude Code`, `claude-code`, `claudecode`,
-         * `claude` all match). Null when unsupported — the adapter exits 3
+         * `claude` all match Claude Code; `kilo`, `kilo-code`, `kilocode`
+         * match Kilo Code). Null when unsupported — the adapter exits 3
          * naming it.
          */
         fun parseAgent(raw: String?): Agent? {
             if (raw == null) return Agent.OPENCODE
-            val normalized = raw.lowercase().replace("-", "").replace("_", "").replace(" ", "")
-            if (normalized == "claude") return Agent.CLAUDE_CODE
-            return Agent.entries.firstOrNull {
-                it.cliName.lowercase().replace("-", "").replace("_", "") == normalized
+            return when (raw.lowercase().replace("-", "").replace("_", "").replace(" ", "")) {
+                "opencode" -> Agent.OPENCODE
+                "claudecode", "claude" -> Agent.CLAUDE_CODE
+                "kilo", "kilocode" -> Agent.KILO
+                else -> null
             }
         }
 
@@ -416,16 +421,48 @@ class SetupService(
             put("args", JsonArray(listOf(JsonPrimitive("mcp"))))
         }
 
-        /** Report-only probe shared by `--check` and the `doctor` setup row. */
-        fun isInstalledAt(path: Path): Boolean {
-            if (!Files.isRegularFile(path)) return false
-            return try {
-                val root = readRoot(path).getOrNull() ?: return false
-                isInstalledRoot(root)
-            } catch (_: IOException) {
-                false
+        /**
+         * Kilo Code project target: the nearest `kilo.json[c]` walking up from
+         * [projectDir], preferring the `.kilo/` variant at each level (that is
+         * what the Kilo docs name the cleaner setup, and the `.kilo/` file
+         * takes priority when both exist in one directory), else a fresh
+         * `.kilo/kilo.json` in [projectDir].
+         */
+        fun kiloProjectConfigPath(projectDir: Path): Path {
+            var dir: Path? = projectDir.toAbsolutePath().normalize()
+            while (dir != null) {
+                for (candidate in kiloProjectCandidates(dir)) {
+                    if (Files.isRegularFile(candidate)) return candidate
+                }
+                dir = dir.parent
             }
+            return projectDir.toAbsolutePath().normalize().resolve(".kilo/kilo.json")
         }
+
+        /** Kilo Code project candidates in priority order within one directory. */
+        private fun kiloProjectCandidates(dir: Path): List<Path> = listOf(
+            dir.resolve(".kilo/kilo.jsonc"),
+            dir.resolve(".kilo/kilo.json"),
+            dir.resolve("kilo.jsonc"),
+            dir.resolve("kilo.json"),
+        )
+
+        /**
+         * Kilo Code system target: the existing global config when present
+         * (`kilo.jsonc` first — that is what the Kilo docs name), else a
+         * fresh `kilo.json` under `~/.config/kilo`.
+         */
+        fun kiloSystemConfigPath(userHome: Path): Path {
+            val dir = userHome.resolve(".config/kilo")
+            val jsonc = dir.resolve("kilo.jsonc")
+            val json = dir.resolve("kilo.json")
+            if (Files.isRegularFile(jsonc)) return jsonc
+            if (Files.isRegularFile(json)) return json
+            return json
+        }
+
+        /** Report-only probe shared by `--check` and the `doctor` setup row. */
+        fun isInstalledAt(path: Path): Boolean = isInstalledAt(path, Agent.OPENCODE)
 
         /** Agent-aware report-only probe shared by `--check` and the `doctor` setup row. */
         fun isInstalledAt(path: Path, agent: Agent): Boolean {
@@ -439,12 +476,29 @@ class SetupService(
         }
 
         /** True when either the v1 (`mcp.jdx`) or the v2 (`mcp.servers.jdx`) entry wires `jdx mcp`. */
-        fun isInstalledRoot(root: JsonObject): Boolean = isV1Installed(root) || isV2Installed(root)
+        fun isInstalledRoot(root: JsonObject): Boolean = isInstalledRoot(root, Agent.OPENCODE)
 
-        /** Agent-aware probe: OpenCode checks v1/v2 entries, Claude Code checks `mcpServers.jdx`. */
-        fun isInstalledRoot(root: JsonObject, agent: Agent): Boolean = when (agent) {
-            Agent.OPENCODE -> isInstalledRoot(root)
+        /** True when [agent]'s owned entries wire `jdx mcp` (OpenCode: v1 or v2; Kilo: `mcp.jdx`; Claude: `mcpServers.jdx`). */
+        fun isInstalledRootFor(agent: Agent, root: JsonObject): Boolean = isInstalledRoot(root, agent)
+
+        /**
+         * True when an install is a no-op (every owned entry present): OpenCode
+         * needs **both** the v1 and v2 entries — a v1-only file is completed
+         * with the v2 entry — while Kilo and Claude Code need only their
+         * single entry. The report-only probe ([isInstalledRoot]) stays
+         * lenient (either OpenCode entry counts).
+         */
+        private fun isCompleteFor(agent: Agent, root: JsonObject): Boolean = when (agent) {
+            Agent.OPENCODE -> isV1Installed(root) && isV2Installed(root)
+            Agent.KILO -> isV1Installed(root)
             Agent.CLAUDE_CODE -> isClaudeInstalled(root)
+        }
+
+        /** Agent-aware probe: OpenCode checks v1/v2 entries, Claude Code checks `mcpServers.jdx`, Kilo checks `mcp.jdx`. */
+        fun isInstalledRoot(root: JsonObject, agent: Agent): Boolean = when (agent) {
+            Agent.OPENCODE -> isV1Installed(root) || isV2Installed(root)
+            Agent.CLAUDE_CODE -> isClaudeInstalled(root)
+            Agent.KILO -> isV1Installed(root)
         }
 
         /** True when the `mcpServers.jdx` entry is a server whose command runs `jdx mcp`. */
@@ -544,7 +598,16 @@ class SetupService(
          * Merges both desired entries into [root] (null = fresh file with `$schema`).
          * Every other server — in `mcp` and in `mcp.servers` — is preserved.
          */
-        fun mergeInstall(root: JsonObject?): JsonObject {
+        fun mergeInstall(root: JsonObject?): JsonObject = mergeInstallFor(Agent.OPENCODE, root)
+
+        /** Merges [agent]'s owned entries into [root] (null = fresh file). */
+        fun mergeInstallFor(agent: Agent, root: JsonObject?): JsonObject = when (agent) {
+            Agent.OPENCODE -> mergeInstallOpencode(root)
+            Agent.CLAUDE_CODE -> mergeClaudeInstall(root)
+            Agent.KILO -> mergeInstallKilo(root)
+        }
+
+        private fun mergeInstallOpencode(root: JsonObject?): JsonObject {
             val base: MutableMap<String, JsonElement> = root?.toMutableMap() ?: mutableMapOf(
                 "\$schema" to JsonPrimitive("https://opencode.ai/config.json"),
             )
@@ -565,11 +628,34 @@ class SetupService(
         }
 
         /**
+         * Merges the single Kilo Code entry (`mcp.jdx`) into [root] (null = fresh
+         * file with no `$schema` — that URL names the OpenCode config schema).
+         * Every other key — including any `servers` key, which has no OpenCode
+         * v2 meaning in a Kilo config — is preserved untouched.
+         */
+        fun mergeInstallKilo(root: JsonObject?): JsonObject {
+            val base: MutableMap<String, JsonElement> = root?.toMutableMap() ?: mutableMapOf()
+            val mcp = root?.get("mcp")?.jsonObjectOrNull()?.toMutableMap() ?: mutableMapOf()
+            mcp[SERVER_NAME] = desiredEntryV1()
+            base["mcp"] = JsonObject(mcp)
+            return JsonObject(base)
+        }
+
+        /**
          * Removes both `mcp.jdx` and `mcp.servers.jdx`; drops an emptied
          * `mcp.servers` and then an emptied `mcp` object to stay tidy. A v1
          * server literally named `servers` is left untouched (see [mergeInstall]).
          */
-        fun mergeRemove(root: JsonObject): JsonObject {
+        fun mergeRemove(root: JsonObject): JsonObject = mergeRemoveFor(Agent.OPENCODE, root)
+
+        /** Removes [agent]'s owned entries from [root], tidying emptied parents. */
+        fun mergeRemoveFor(agent: Agent, root: JsonObject): JsonObject = when (agent) {
+            Agent.OPENCODE -> mergeRemoveOpencode(root)
+            Agent.CLAUDE_CODE -> mergeClaudeRemove(root)
+            Agent.KILO -> mergeRemoveKilo(root)
+        }
+
+        private fun mergeRemoveOpencode(root: JsonObject): JsonObject {
             val base = root.toMutableMap()
             val mcp = root["mcp"]?.jsonObjectOrNull()?.toMutableMap() ?: return root
             mcp.remove(SERVER_NAME)
@@ -584,6 +670,19 @@ class SetupService(
         }
 
         /**
+         * Removes the Kilo Code entry (`mcp.jdx`); drops an emptied `mcp`
+         * object to stay tidy. Any `servers` key is left untouched — it is
+         * not a Kilo-owned namespace.
+         */
+        fun mergeRemoveKilo(root: JsonObject): JsonObject {
+            val base = root.toMutableMap()
+            val mcp = root["mcp"]?.jsonObjectOrNull()?.toMutableMap() ?: return root
+            mcp.remove(SERVER_NAME)
+            if (mcp.isEmpty()) base.remove("mcp") else base["mcp"] = JsonObject(mcp)
+            return JsonObject(base)
+        }
+
+        /**
          * True when [obj] looks like an MCP server definition rather than the v2
          * `servers` namespace: `type` is a string (`local`/`remote`), where a
          * namespace would hold a server object under that key instead.
@@ -591,18 +690,24 @@ class SetupService(
         fun isServerEntry(obj: JsonObject): Boolean =
             (obj["type"] as? JsonPrimitive)?.isString == true
 
-        private fun hasEntry(root: JsonObject): Boolean = hasEntry(root, Agent.OPENCODE)
+        private fun hasEntry(root: JsonObject): Boolean = hasEntryFor(Agent.OPENCODE, root)
 
-        private fun hasEntry(root: JsonObject, agent: Agent): Boolean = when (agent) {
+        private fun hasEntry(root: JsonObject, agent: Agent): Boolean = hasEntryFor(agent, root)
+
+        private fun hasEntryFor(agent: Agent, root: JsonObject): Boolean = when (agent) {
+            Agent.CLAUDE_CODE -> {
+                val servers = root["mcpServers"]?.jsonObjectOrNull() ?: return false
+                servers.containsKey(SERVER_NAME)
+            }
+            Agent.KILO -> {
+                val mcp = root["mcp"]?.jsonObjectOrNull() ?: return false
+                mcp.containsKey(SERVER_NAME)
+            }
             Agent.OPENCODE -> {
                 val mcp = root["mcp"]?.jsonObjectOrNull() ?: return false
                 if (mcp.containsKey(SERVER_NAME)) return true
                 val servers = mcp["servers"]?.jsonObjectOrNull() ?: return false
                 if (isServerEntry(servers)) return false
-                servers.containsKey(SERVER_NAME)
-            }
-            Agent.CLAUDE_CODE -> {
-                val servers = root["mcpServers"]?.jsonObjectOrNull() ?: return false
                 servers.containsKey(SERVER_NAME)
             }
         }

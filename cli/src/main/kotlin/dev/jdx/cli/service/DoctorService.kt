@@ -417,18 +417,21 @@ class DoctorService(
     }
 
     private fun setupCheck(): DoctorCheck {
-        // Agent wiring (issue #33 family): reports whether the `jdx mcp` entries
-        // are present in the OpenCode project and system configs (v1/v2 entries)
-        // and in the Claude Code project (`.mcp.json`) and system
-        // (`~/.claude.json`) configs, plus which lines are installed for use.
-        // Read-only — the same lenient probe as `jdx setup --check`, plus
-        // best-effort `--version` classifications that never throw. Missing on
-        // every scope is a WARN (setup is optional), never a FAIL; an
-        // unreadable file names itself.
+        // Agent wiring (issue #33 family): reports whether the `jdx mcp`
+        // entries are present in the OpenCode (v1/v2 entries), Claude Code
+        // (`.mcp.json` / `~/.claude.json`) and Kilo Code project and system
+        // configs, plus which lines are installed for use (OpenCode v1 vs v2
+        // beta — the install covers both, but the operator must know which
+        // binary reads it). Read-only — the same lenient probe as
+        // `jdx setup --check`, plus best-effort `--version` classifications
+        // that never throw. Missing on every scope is a WARN (setup is
+        // optional), never a FAIL; an unreadable file names itself.
         val opencodeProject = SetupService.projectConfigPath(environment.workingDir)
         val opencodeSystem = SetupService.systemConfigPath(environment.userHome)
         val claudeProject = SetupService.claudeProjectConfigPath(environment.workingDir)
         val claudeSystem = SetupService.claudeSystemConfigPath(environment.userHome)
+        val kiloProjectPath = SetupService.kiloProjectConfigPath(environment.workingDir)
+        val kiloSystemPath = SetupService.kiloSystemConfigPath(environment.userHome)
         val opencodeDetected = try {
             SetupService.describeVersion(
                 SetupService.probeOpencodeVersion(
@@ -468,21 +471,31 @@ class DoctorService(
             stateOf(claudeProject, SetupService.Agent.CLAUDE_CODE) ?: "no project config (${claudeProject.fileName})"
         val claudeSystemState =
             stateOf(claudeSystem, SetupService.Agent.CLAUDE_CODE) ?: "no system config ($claudeSystem)"
+        val kiloProjectState = stateOf(kiloProjectPath, SetupService.Agent.KILO)
+            ?: "no project config (${kiloProjectPath.fileName})"
+        val kiloSystemState = stateOf(kiloSystemPath, SetupService.Agent.KILO)
+            ?: "no system config ($kiloSystemPath)"
         val status = if (
             opencodeProjectState.startsWith("installed") || opencodeSystemState.startsWith("installed") ||
-            claudeProjectState.startsWith("installed") || claudeSystemState.startsWith("installed")
+            claudeProjectState.startsWith("installed") || claudeSystemState.startsWith("installed") ||
+            kiloProjectState.startsWith("installed") || kiloSystemState.startsWith("installed")
         ) {
             DoctorStatus.OK
         } else {
             DoctorStatus.WARN
         }
         val hint = if (status == DoctorStatus.OK) "" else
-            " — run `jdx setup --agent opencode --scope project` or `jdx setup --agent claude-code --scope project`"
+            " — run `jdx setup --agent opencode --scope project`, " +
+                "`jdx setup --agent claude-code --scope project` or " +
+                "`jdx setup --agent kilo --scope project`"
         return check(
             "setup",
             status,
-            "opencode [$opencodeDetected: $opencodeProjectState; $opencodeSystemState]; " +
-                "claude-code [$claudeDetected: $claudeProjectState; $claudeSystemState]$hint",
+            "opencode project $opencodeProjectState ($opencodeDetected); " +
+                "opencode system $opencodeSystemState; " +
+                "claude-code project $claudeProjectState ($claudeDetected); " +
+                "claude-code system $claudeSystemState; " +
+                "kilo project $kiloProjectState; kilo system $kiloSystemState$hint",
         )
     }
 

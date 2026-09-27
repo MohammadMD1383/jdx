@@ -42,6 +42,25 @@ val fatJar = tasks.register<Jar>("fatJar") {
     // Determinism (AGENTS.md): same inputs -> same bytes.
     isPreserveFileTimestamps = false
     isReproducibleFileOrder = true
+    // Stale-jar eviction: a versioned `-PjdxVersion` build on top of a default
+    // one used to leave both `jdx-0.1.0-SNAPSHOT-all.jar` and `jdx-1.3.0-all.jar`
+    // behind, and the launcher globbed the older first — silently reporting the
+    // wrong version (and misleading `jdx upgrade`). After writing its own jar,
+    // delete any superseded sibling so `libs` holds exactly one `jdx-*-all.jar`.
+    // A stale jar can only appear when this task runs (the name changes with
+    // the version), so evicting here covers `:app:installDist` too.
+    // Config-cache rule (T-067): plain values only cross into the action — the
+    // libs dir and this task's own jar name are captured below as locals.
+    val libsDir = layout.buildDirectory.dir("libs").get().asFile
+    val myJarName = archiveFileName.get()
+    doLast {
+        libsDir.listFiles { file ->
+            file.isFile && file.name.startsWith("jdx-") && file.name.endsWith("-all.jar") &&
+                file.name != myJarName
+        }?.forEach { stale ->
+            if (!stale.delete()) logger.warn("jdx: could not delete superseded fat jar ${stale.name}")
+        }
+    }
 }
 
 // --- AppCDS archive (T-048) ---
