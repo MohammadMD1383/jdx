@@ -254,7 +254,8 @@ class SetupCommandTest {
         }
 
         output.trim() shouldContain "kilo project setup installed"
-        output.trim() shouldContain ".kilo/kilo.json"
+        // Separator-aware: the rendered path uses `\` on Windows (#52).
+        output.trim() shouldContain project.resolve(".kilo").resolve("kilo.json").toString()
         output.trim() shouldContain "restart Kilo Code"
         SetupService.isInstalledAt(
             project.resolve(".kilo/kilo.json"),
