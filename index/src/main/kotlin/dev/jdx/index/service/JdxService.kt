@@ -2288,7 +2288,20 @@ public object JdxService {
                     Provenance(artifact = oldSide.label, origin = Origin.BYTECODE),
                     Provenance(artifact = newSide.label, origin = Origin.BYTECODE),
                 ),
-                warnings = sortedDiffWarnings(before.warnings + after.warnings),
+                // Each side's warnings are attributed before unioning, so a
+                // CORRUPT_CLASS/UNNAMEABLE_CLASS warning names the artifact it
+                // came from (AGENTS.md §2.4, §2.8). Without the side an agent
+                // cannot tell whether the class was dropped from the old jar or
+                // the new one — exactly what a diff exists to answer. The
+                // reader's own text is left untouched (it is shared by every
+                // command and pinned in other goldens); the copy here is the
+                // diff's union only. After attribution the same unreadable class
+                // in both jars is two facts (one per side) and reports twice;
+                // a self-diff (same label twice) still dedupes in distinct().
+                warnings = sortedDiffWarnings(
+                    before.warnings.map { it.copy(message = "in ${oldSide.label}: ${it.message}") } +
+                        after.warnings.map { it.copy(message = "in ${newSide.label}: ${it.message}") },
+                ),
             ),
         )
     }

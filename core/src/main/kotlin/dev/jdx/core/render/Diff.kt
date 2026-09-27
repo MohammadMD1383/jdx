@@ -221,7 +221,10 @@ public fun buildDiffReport(
         // Both sides are read independently, so a class both artifacts share and both
         // trips a warning on reports it twice. It is one fact, not two, and a self-diff
         // (`jdx diff a.jar a.jar`) would otherwise print every warning twice. Distinct
-        // keeps the first-seen order, so the output stays deterministic.
+        // keeps the first-seen order, so the output stays deterministic. The service
+        // attributes each side's warnings (`in <label>:`) before calling, so the same
+        // unreadable class in two differently-named jars stays two facts and reports
+        // once per side; only truly identical entries dedupe here.
         warnings = warnings.distinct(),
         provenance = provenance,
     )
