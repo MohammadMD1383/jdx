@@ -457,7 +457,9 @@ class DoctorServiceTest {
     @Test
     fun `the setup row names the detected claude-code binary`() {
         val runner = ProcessRunner { executable, _ ->
-            if (executable.fileName.toString() == "claude") {
+            // Extension-aware: on Windows the probe resolves claude.exe (see
+            // toolFileNames), so compare the stem, not the raw file name.
+            if (executable.fileName.toString().substringBefore(".") == "claude") {
                 ProcessOutcome(0, "1.0.33 (Claude Code)", "")
             } else if (executable.fileName.toString().startsWith("opencode")) {
                 throw IOException("no opencode here")

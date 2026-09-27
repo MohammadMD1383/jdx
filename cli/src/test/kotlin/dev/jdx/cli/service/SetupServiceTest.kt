@@ -8,9 +8,13 @@ import io.kotest.property.arbitrary.string
 import io.kotest.property.checkAll
 import kotlinx.coroutines.runBlocking
 import kotlinx.serialization.json.Json
+import kotlinx.serialization.json.JsonArray
 import kotlinx.serialization.json.JsonObject
+import kotlinx.serialization.json.JsonPrimitive
+import kotlinx.serialization.json.buildJsonObject
 import kotlinx.serialization.json.jsonObject
 import kotlinx.serialization.json.jsonPrimitive
+import kotlinx.serialization.json.put
 import org.junit.jupiter.api.Test
 import org.junit.jupiter.api.io.TempDir
 import java.nio.file.Files
@@ -512,7 +516,10 @@ class SetupServiceTest {
                 val bin = executableBin(root, "opencode", "opencode2")
                 // Whatever opencode answers wins — even garbage (UNKNOWN, never the shim's line).
                 val runner = ProcessRunner { executable, _ ->
-                    if (executable.fileName.toString() == "opencode") {
+                    // Extension-aware: on Windows the probe resolves
+                    // opencode.exe (see toolFileNames); the stem still
+                    // distinguishes opencode from the opencode2 shim.
+                    if (executable.fileName.toString().substringBefore(".") == "opencode") {
                         ProcessOutcome(0, "opencode 1.9.0 $clean", "")
                     } else {
                         ProcessOutcome(0, "opencode2 v0.0.0-next-15806", "")
@@ -771,6 +778,51 @@ class SetupServiceTest {
     }
 
     @Test
+    fun `claude entry probe accepts windows shims and backslash paths`(@TempDir root: Path) {
+        val dirs = fakeDirs(root)
+        val path = dirs.project.resolve(".mcp.json")
+        for (command in listOf("jdx.exe", "jdx.cmd", "jdx.bat", "JDX.EXE", "C:\\tools\\jdx.exe", "C:/tools/jdx.cmd")) {
+            Files.writeString(path, claudeRootWithCommand(command).toString())
+            SetupService.isInstalledAt(path, SetupService.Agent.CLAUDE_CODE) shouldBe true
+        }
+        Files.writeString(path, claudeRootWithCommand("jdx.exe", arg = "other").toString())
+        SetupService.isInstalledAt(path, SetupService.Agent.CLAUDE_CODE) shouldBe false
+    }
+
+    private fun claudeRootWithCommand(command: String, arg: String = "mcp"): JsonObject = buildJsonObject {
+        put(
+            "mcpServers",
+            buildJsonObject {
+                put(
+                    "jdx",
+                    buildJsonObject {
+                        put("command", command)
+                        put("args", JsonArray(listOf(JsonPrimitive(arg))))
+                    },
+                )
+            },
+        )
+    }
+
+    @Test
+    fun `opencode entry probe accepts windows shims and backslash paths`() {
+        for (command in listOf("jdx", "jdx.exe", "jdx.bat", "C:\\tools\\jdx.exe", "/home/u/.local/bin/jdx")) {
+            val entry = buildJsonObject {
+                put("type", "local")
+                put("command", JsonArray(listOf(JsonPrimitive(command), JsonPrimitive("mcp"))))
+                put("enabled", true)
+            }
+            SetupService.isJdxEntry(entry) shouldBe true
+        }
+        val foreign = buildJsonObject {
+            put("type", "local")
+            put("command", JsonArray(listOf(JsonPrimitive("other.exe"), JsonPrimitive("mcp"))))
+            put("enabled", true)
+        }
+        SetupService.isJdxEntry(foreign) shouldBe false
+    }
+
+    @Test
     fun `a hostile claude command word never throws the installed probe`(@TempDir root: Path) {
         val dirs = fakeDirs(root)
         Files.writeString(
@@ -831,6 +883,19 @@ class SetupServiceTest {
             throwingRunner("boom"),
         )
         failing.version shouldBe SetupService.ClaudeVersion.UNKNOWN
+    }
+
+    @Test
+    fun `claude probe resolves the exe shim on windows`(@TempDir root: Path) {
+        val bin = root.resolve("bin").also { Files.createDirectories(it) }
+        Files.createFile(bin.resolve("claude.exe")).toFile().setExecutable(true)
+        val runner = ProcessRunner { _, _ -> ProcessOutcome(0, "1.0.33 (Claude Code)", "") }
+
+        val info = SetupService.probeClaudeVersion(listOf(bin), runner, osName = "Windows 11")
+
+        info.version shouldBe SetupService.ClaudeVersion.PRESENT
+        info.raw shouldBe "1.0.33 (Claude Code)"
+        info.binary shouldBe "claude"
     }
 
     @Test

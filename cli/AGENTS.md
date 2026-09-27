@@ -32,7 +32,9 @@ is the CLI surface, pinned by help/parity goldens.)
   line (`opencode` then legacy `opencode2`; v1 = `1.x`, v2 =
   `0.0.0-next/beta/dev-*` or `2.x`, never a guess);
   `probeClaudeVersion`/`describeClaudeVersion` report `claude --version`
-  presence; `doctor` reuses both probes for the setup row.
+  presence (`isJdxCommand` accepts Windows shims `jdx.exe`/`.cmd`/`.bat` and
+  backslash paths on every host, so `--check`/`doctor` stay true on Windows);
+  `doctor` reuses both probes for the setup row.
   Tests pin userHome/projectDir to temp dirs, never the real home.
 - `parity/AdapterParityTest` — the §9 contract: CLI `--json` == MCP == HTTP bytes
   over all 18 read commands + failure branches + a hostile-property case.

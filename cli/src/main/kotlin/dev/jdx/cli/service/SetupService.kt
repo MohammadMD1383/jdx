@@ -458,16 +458,13 @@ class SetupService(
          * True when [entry] runs `jdx mcp` in the Claude Code shape
          * (`{"command": "jdx", "args": ["mcp"]}`, the `claude mcp add jdx --
          * jdx mcp` equivalent). Accepts absolute install paths
-         * (`~/.local/bin/jdx`). Never throws (hostile configs).
+         * (`~/.local/bin/jdx`, `C:\tools\jdx.exe`) and Windows `PATHEXT`
+         * shims (`jdx.exe`/`jdx.cmd`/`jdx.bat`) — that is what a real
+         * Windows config carries. Never throws (hostile configs).
          */
         fun isClaudeJdxEntry(entry: JsonObject): Boolean {
             val command = entry["command"]?.jsonPrimitiveOrNull() ?: return false
-            val binary = try {
-                Path.of(command).fileName.toString()
-            } catch (_: Exception) {
-                return false
-            }
-            if (binary != "jdx") return false
+            if (!isJdxCommand(command)) return false
             val args = entry["args"] as? JsonArray ?: return false
             return args.any { (it as? JsonPrimitive)?.contentOrNull() == "mcp" }
         }
@@ -496,6 +493,25 @@ class SetupService(
             return JsonObject(base)
         }
 
+        /**
+         * True when [command] names the `jdx` launcher: the base name after
+         * the last `/` or `\` (so both POSIX and Windows absolute paths work
+         * on every host OS — `Path.of` would treat `\` as a plain character
+         * on Linux), minus a Windows executable extension (`.exe`/`.cmd`/`.bat`,
+         * case-insensitive, mirroring [toolFileNames]). Pure string ops, so it
+         * never throws — not even on NUL bytes that reject `Path.of`.
+         */
+        internal fun isJdxCommand(command: String): Boolean {
+            val base = command.split('/', '\\').last()
+            val lower = base.lowercase()
+            val stem = when {
+                lower.endsWith(".exe") || lower.endsWith(".cmd") || lower.endsWith(".bat") ->
+                    base.dropLast(4)
+                else -> base
+            }
+            return stem.equals("jdx", ignoreCase = true)
+        }
+
         /** True when the v1 `mcp.jdx` entry is a local server whose command runs `jdx mcp`. */
         fun isV1Installed(root: JsonObject): Boolean {
             val entry = root["mcp"]?.jsonObjectOrNull()?.get(SERVER_NAME)?.jsonObjectOrNull()
@@ -518,13 +534,10 @@ class SetupService(
             val command = entry["command"] as? JsonArray ?: return false
             val words = command.mapNotNull { (it as? JsonPrimitive)?.contentOrNull() }
             if (words.size < 2 || words.last() != "mcp") return false
-            // Accept absolute install paths (`~/.local/bin/jdx mcp`): the last two
+            // Accept absolute install paths (`~/.local/bin/jdx mcp`,
+            // `C:\tools\jdx.exe mcp`) and Windows PATHEXT shims: the last two
             // words name the binary and the subcommand.
-            return try {
-                Path.of(words[words.size - 2]).fileName.toString() == "jdx"
-            } catch (_: Exception) {
-                false
-            }
+            return isJdxCommand(words[words.size - 2])
         }
 
         /**
