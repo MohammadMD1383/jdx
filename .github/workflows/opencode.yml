@@ -25,6 +25,8 @@ jobs:
        contains(github.event.comment.body, '/opencode')) &&
       github.event.comment.user.type != 'Bot'
     runs-on: ubuntu-latest
+    # Only the OIDC token exchange needs a GITHUB_TOKEN scope; the agent acts
+    # through the opencode-agent App token, not this one.
     permissions:
       id-token: write
     steps:
@@ -47,5 +49,14 @@ jobs:
         uses: anomalyco/opencode/github@latest
         env:
           OPENCODE_API_KEY: ${{ secrets.OPENCODE_API_KEY }}
+          # OpenCode's own permission system (NOT GitHub's). A headless run has
+          # no client to answer an "ask", so every ask deadlocks the job.
+          # "*": allow covers the built-in asks (external_directory, doom_loop,
+          # *.env reads, ...); the two denies after it win (last match wins) and
+          # turn the remaining unanswerable prompts into hard blocks instead.
+          # v1 config shape — the action installs the latest v1 release, which
+          # reads `permission`, not the v2 `permissions` array. Scoped to this
+          # process tree, so local opencode sessions keep their own rules.
+          OPENCODE_PERMISSION: '{"*":"allow","doom_loop":"deny","question":"deny"}'
         with:
           model: opencode/muse-spark-1.3-contributor-free
