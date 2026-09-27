@@ -1,0 +1,13 @@
+{
+  "model": "kilo",
+  "mcp": {
+    "other": {
+      "type": "local",
+      "command": [
+        "other"
+      ],
+      "enabled": true
+    }
+  }
+}
+

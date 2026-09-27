@@ -20,11 +20,13 @@ import kotlin.system.exitProcess
  * `jdx setup --agent <name> --scope <project|system> [--check] [--remove] [--json]`.
  *
  * First-class agent wiring (issue #33 family): writes, checks, and removes the
- * MCP server entries that launch `jdx mcp`. OpenCode v1 (`mcp.jdx`) and v2
- * (`mcp.servers.jdx`) entries are always written together so the config works
- * whichever line is installed; the detected line is reported, never assumed.
- * A thin adapter (D-004): flag parsing, rendering, and exit codes only —
- * [SetupService] owns the merge and the version classification.
+ * MCP server entries that launch `jdx mcp`. OpenCode gets both the v1
+ * (`mcp.jdx`) and v2 (`mcp.servers.jdx`) entries so the config works whichever
+ * line is installed; the detected line is reported, never assumed. Kilo Code
+ * (an OpenCode fork sharing the `mcp` map shape) gets the single `mcp.jdx`
+ * entry in its `kilo.json[c]` files. A thin adapter (D-004): flag parsing,
+ * rendering, and exit codes only — [SetupService] owns the merge and the
+ * version classification.
  */
 class SetupCommand(
     private val serviceFactory: (userHome: java.nio.file.Path, projectDir: java.nio.file.Path) -> SetupService =
@@ -35,21 +37,24 @@ class SetupCommand(
     override fun help(context: Context): String =
         "Wire jdx into an AI agent: write the MCP server entries that launch `jdx mcp` " +
             "into the agent config (project checkout or user-global). " +
-            "--agent opencode (the only backend so far) --scope project|system. " +
-            "Writes both the v1 (mcp.jdx) and v2 (mcp.servers.jdx) entries so either " +
-            "OpenCode line picks it up (v1 support is deprecated, slated for removal). " +
+            "--agent opencode|kilo --scope project|system. " +
+            "OpenCode gets both the v1 (mcp.jdx) and v2 (mcp.servers.jdx) entries so either " +
+            "OpenCode line picks it up (v1 support is deprecated, slated for removal); " +
+            "Kilo Code gets the single mcp.jdx entry in kilo.jsonc (project prefers .kilo/). " +
             "--check reports without writing; --remove uninstalls cleanly. " +
             "Merges (never clobbers unrelated entries); re-runs are no-ops. " +
             "Exits 0 installed/removed/present, 1 checked-absent, 3 bad usage, 5 unreadable config."
 
     private val agent by option(
         "--agent",
-        help = "Agent to wire (only opencode so far; more backends follow the same seam).",
+        help = "Agent to wire: opencode or kilo (Kilo Code, an OpenCode fork).",
     )
 
     private val scope by option(
         "--scope",
-        help = "Where to write: project (opencode.json in the checkout, default) or system (~/.config/opencode).",
+        help = "Where to write: project (default) or system. " +
+            "OpenCode targets opencode.json[c] (~/.config/opencode); " +
+            "Kilo Code targets kilo.json[c] (~/.config/kilo, project prefers .kilo/).",
     )
 
     private val checkOnly by option(
@@ -71,7 +76,7 @@ class SetupCommand(
         val parsedAgent = SetupService.parseAgent(agent)
         if (parsedAgent == null) {
             finish(
-                "usage error: unsupported --agent '${agent}' (only --agent opencode so far)",
+                "usage error: unsupported --agent '${agent}' (only --agent opencode|kilo)",
                 SetupPayload(agent = agent, message = "unsupported agent '${agent}'"),
                 exitCode = 3,
             )
@@ -111,7 +116,9 @@ class SetupCommand(
             ),
         )
         val path = setupPath(outcome)
-        val version = versionProbe()
+        // The OpenCode line probe is display-only for the OpenCode backend;
+        // Kilo Code skips it (no `opencode --version` classification to report).
+        val version = if (parsedAgent == SetupService.Agent.KILO) null else versionProbe()
         val payload = SetupPayload(
             agent = parsedAgent.cliName,
             scope = parsedScope.cliName,
@@ -128,11 +135,11 @@ class SetupCommand(
                 is SetupService.SetupOutcome.Removed -> outcome.changed
                 else -> null
             },
-            opencodeVersion = version.version.cliName,
-            opencodeRaw = version.raw,
-            message = setupMessage(outcome),
+            opencodeVersion = version?.version?.cliName,
+            opencodeRaw = version?.raw,
+            message = setupMessage(outcome, parsedAgent),
         )
-        finish(setupText(outcome, parsedScope, version), payload, setupExitCode(outcome))
+        finish(setupText(outcome, parsedAgent, parsedScope, version), payload, setupExitCode(outcome))
     }
 
     private fun finish(text: String, payload: SetupPayload, exitCode: Int) {
@@ -180,44 +187,81 @@ private fun setupPath(outcome: SetupService.SetupOutcome): java.nio.file.Path? =
     is SetupService.SetupOutcome.Failed -> outcome.path
 }
 
-private fun setupMessage(outcome: SetupService.SetupOutcome): String = when (outcome) {
-    is SetupService.SetupOutcome.Installed ->
-        if (outcome.changed) "installed (v1+v2 jdx mcp entries written to ${outcome.path.fileName})"
-        else "already installed (${outcome.path.fileName}, v1+v2 entries)"
-    is SetupService.SetupOutcome.Checked ->
-        if (outcome.installed) "installed (${outcome.path.fileName})" else "not installed (${outcome.path.fileName})"
-    is SetupService.SetupOutcome.Removed ->
-        if (outcome.changed) "removed (jdx entries deleted from ${outcome.path.fileName})"
-        else "not installed (nothing to remove)"
-    is SetupService.SetupOutcome.Corrupt -> "unreadable config ${outcome.path}: ${outcome.reason}"
-    is SetupService.SetupOutcome.Failed -> "setup failed: ${outcome.reason}"
+private fun setupMessage(outcome: SetupService.SetupOutcome, agent: SetupService.Agent): String {
+    val entries = if (agent == SetupService.Agent.KILO) "jdx mcp entry" else "v1+v2 jdx mcp entries"
+    return when (outcome) {
+        is SetupService.SetupOutcome.Installed ->
+            if (outcome.changed) "installed ($entries written to ${outcome.path.fileName})"
+            else if (agent == SetupService.Agent.KILO) "already installed (${outcome.path.fileName})"
+            else "already installed (${outcome.path.fileName}, v1+v2 entries)"
+        is SetupService.SetupOutcome.Checked ->
+            if (outcome.installed) "installed (${outcome.path.fileName})" else "not installed (${outcome.path.fileName})"
+        is SetupService.SetupOutcome.Removed ->
+            if (outcome.changed) {
+                if (agent == SetupService.Agent.KILO) "removed (jdx entry deleted from ${outcome.path.fileName})"
+                else "removed (jdx entries deleted from ${outcome.path.fileName})"
+            } else "not installed (nothing to remove)"
+        is SetupService.SetupOutcome.Corrupt -> "unreadable config ${outcome.path}: ${outcome.reason}"
+        is SetupService.SetupOutcome.Failed -> "setup failed: ${outcome.reason}"
+    }
 }
 
 private fun setupText(
     outcome: SetupService.SetupOutcome,
+    agent: SetupService.Agent,
     scope: SetupService.Scope,
-    version: SetupService.OpencodeVersionInfo,
+    version: SetupService.OpencodeVersionInfo?,
 ): String {
+    val name = agent.cliName
+    if (agent == SetupService.Agent.KILO) return setupKiloText(outcome, scope)
     val where = if (scope == SetupService.Scope.PROJECT) "project" else "system"
-    val detected = "detected: ${SetupService.describeVersion(version)}"
+    val detected = "detected: ${SetupService.describeVersion(requireNotNull(version))}"
     return when (outcome) {
         is SetupService.SetupOutcome.Installed ->
             if (outcome.changed) {
-                "opencode $where setup installed (v1+v2 entries)\n  ${outcome.path}\n  $detected\n" +
-                    "next: restart opencode (config loads once at startup)"
+                "$name $where setup installed (v1+v2 entries)\n  ${outcome.path}\n  $detected\n" +
+                    "next: restart $name (config loads once at startup)"
             } else {
-                "opencode $where setup already installed (no changes)\n  ${outcome.path}\n  $detected"
+                "$name $where setup already installed (no changes)\n  ${outcome.path}\n  $detected"
             }
         is SetupService.SetupOutcome.Checked ->
-            if (outcome.installed) "opencode $where setup installed\n  ${outcome.path}\n  $detected"
-            else "opencode $where setup not installed\n  ${outcome.path}\n  $detected\n" +
-                "next: jdx setup --agent opencode --scope ${where.lowercase()}"
+            if (outcome.installed) "$name $where setup installed\n  ${outcome.path}\n  $detected"
+            else "$name $where setup not installed\n  ${outcome.path}\n  $detected\n" +
+                "next: jdx setup --agent $name --scope ${where.lowercase()}"
         is SetupService.SetupOutcome.Removed ->
-            if (outcome.changed) "opencode $where setup removed\n  ${outcome.path}\n  $detected"
-            else "opencode $where setup not installed (nothing to remove)\n  ${outcome.path}\n  $detected"
+            if (outcome.changed) "$name $where setup removed\n  ${outcome.path}\n  $detected"
+            else "$name $where setup not installed (nothing to remove)\n  ${outcome.path}\n  $detected"
         is SetupService.SetupOutcome.Corrupt ->
-            "opencode $where setup unreadable: ${outcome.path}: ${outcome.reason}"
+            "$name $where setup unreadable: ${outcome.path}: ${outcome.reason}"
         is SetupService.SetupOutcome.Failed ->
-            "opencode $where setup failed: ${outcome.reason}"
+            "$name $where setup failed: ${outcome.reason}"
+    }
+}
+
+/** Kilo Code rendering: the single `mcp.jdx` entry, no OpenCode line probe. */
+private fun setupKiloText(
+    outcome: SetupService.SetupOutcome,
+    scope: SetupService.Scope,
+): String {
+    val where = if (scope == SetupService.Scope.PROJECT) "project" else "system"
+    return when (outcome) {
+        is SetupService.SetupOutcome.Installed ->
+            if (outcome.changed) {
+                "kilo $where setup installed\n  ${outcome.path}\n" +
+                    "next: restart Kilo Code (config loads once at startup)"
+            } else {
+                "kilo $where setup already installed (no changes)\n  ${outcome.path}"
+            }
+        is SetupService.SetupOutcome.Checked ->
+            if (outcome.installed) "kilo $where setup installed\n  ${outcome.path}"
+            else "kilo $where setup not installed\n  ${outcome.path}\n" +
+                "next: jdx setup --agent kilo --scope ${where.lowercase()}"
+        is SetupService.SetupOutcome.Removed ->
+            if (outcome.changed) "kilo $where setup removed\n  ${outcome.path}"
+            else "kilo $where setup not installed (nothing to remove)\n  ${outcome.path}"
+        is SetupService.SetupOutcome.Corrupt ->
+            "kilo $where setup unreadable: ${outcome.path}: ${outcome.reason}"
+        is SetupService.SetupOutcome.Failed ->
+            "kilo $where setup failed: ${outcome.reason}"
     }
 }

@@ -1,0 +1,13 @@
+{
+  "mcp": {
+    "jdx": {
+      "type": "local",
+      "command": [
+        "jdx",
+        "mcp"
+      ],
+      "enabled": true
+    }
+  }
+}
+
