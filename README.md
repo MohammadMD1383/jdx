@@ -96,7 +96,7 @@ Prefer the `.zip` on Windows (Explorer/Defender are zip-first) — download the
 `-windows.zip` asset and install it with
 `sh install-release.sh --tarball jdx-<version>-windows.zip`.
 Verify with `jdx version` (`jdx doctor` reports JDK, cache, index, Kotlin
-sidecar, daemon, and workspace status). Release installs self-update with
+sidecar, AppCDS archive, daemon, and workspace status). Release installs self-update with
 `jdx upgrade`. Building from source: `./gradlew :app:installDist && ./install.sh`
 (see [`CONTRIBUTING.md`](CONTRIBUTING.md)).
 

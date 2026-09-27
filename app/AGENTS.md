@@ -39,7 +39,10 @@ Fat-jar assembly + the `jdx` launchers (POSIX + Windows) + AppCDS archive.
   `DumpLoadedClassList` outputs (lambda-proxy `id:` suffixes are run-specific;
   merged lists break `-Xshare:dump` with `Duplicated ID`).
 - `install.sh` (repo root) stays per-user: refuses root, refuses to clobber an
-  unrelated `jdx` without `--force`.
+  unrelated `jdx` without `--force`. No `.jsa` linking needed (the launcher
+  resolves jar + archive from its own resolved path, so the archive travels
+  automatically); a missing archive prints a note only, with `jdx doctor`
+  (appcds row) as the source of truth.
 - Releases: pushing tag `vX.Y.Z` on `main` runs `.github/workflows/release.yml`
   as a three-OS matrix (Windows builds via `gradlew.bat`, each leg smokes its
   own launcher), publishing per-OS `jdx-<version>-<os>.{tar.gz,zip}` + `.sha256`

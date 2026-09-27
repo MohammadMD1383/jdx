@@ -33,14 +33,14 @@ class DoctorServiceTest {
 
     private val expectedNames = listOf(
         "jdk", "jrt", "javap", "jdk-sources", "cache",
-        "config", "index", "kotlin", "daemon", "workspace", "setup",
+        "config", "index", "kotlin", "appcds", "daemon", "workspace", "setup",
     )
 
     private fun isPosixFs(): Boolean =
         java.nio.file.FileSystems.getDefault().supportedFileAttributeViews().contains("posix")
 
     @Test
-    fun `a healthy environment reports eleven rows and exits zero`() {
+    fun `a healthy environment reports twelve rows and exits zero`() {
         val service = DoctorService(fakeEnvironment(tempDir("jdx-doctor-test-")))
 
         val report = service.probe()
@@ -619,6 +619,79 @@ class DoctorServiceTest {
         val kotlin = report.checks.first { it.name == "kotlin" }
         kotlin.status shouldBe DoctorStatus.OK
         kotlin.detail shouldContain dev.jdx.sources.KOTLIN_COMPILER_VERSION
+        exitCodeFor(report) shouldBe 0
+    }
+
+    @Test
+    fun `a present AppCDS archive is an OK naming its size`() {
+        val service = DoctorService(
+            fakeEnvironment(tempDir("jdx-doctor-test-"), cdsState = CdsState.PRESENT),
+        )
+
+        val report = service.probe()
+
+        val appcds = report.checks.first { it.name == "appcds" }
+        appcds.status shouldBe DoctorStatus.OK
+        appcds.detail shouldContain "present"
+        appcds.detail shouldContain "2 KB"
+        exitCodeFor(report) shouldBe 0
+    }
+
+    @Test
+    fun `a missing AppCDS archive is a WARN with the rebuild hint`() {
+        val service = DoctorService(
+            fakeEnvironment(tempDir("jdx-doctor-test-"), cdsState = CdsState.ABSENT),
+        )
+
+        val report = service.probe()
+
+        val appcds = report.checks.first { it.name == "appcds" }
+        appcds.status shouldBe DoctorStatus.WARN
+        appcds.detail shouldContain "absent"
+        appcds.detail shouldContain ":app:installDist"
+        exitCodeFor(report) shouldBe 0
+    }
+
+    @Test
+    fun `a stale AppCDS archive is a WARN naming the fat jar`() {
+        val service = DoctorService(
+            fakeEnvironment(tempDir("jdx-doctor-test-"), cdsState = CdsState.STALE),
+        )
+
+        val report = service.probe()
+
+        val appcds = report.checks.first { it.name == "appcds" }
+        appcds.status shouldBe DoctorStatus.WARN
+        appcds.detail shouldContain "stale"
+        appcds.detail shouldContain "jdx-test-all.jar"
+        exitCodeFor(report) shouldBe 0
+    }
+
+    @Test
+    fun `an empty AppCDS archive is a WARN`() {
+        val service = DoctorService(
+            fakeEnvironment(tempDir("jdx-doctor-test-"), cdsState = CdsState.EMPTY),
+        )
+
+        val report = service.probe()
+
+        val appcds = report.checks.first { it.name == "appcds" }
+        appcds.status shouldBe DoctorStatus.WARN
+        appcds.detail shouldContain "empty"
+        exitCodeFor(report) shouldBe 0
+    }
+
+    @Test
+    fun `an unresolvable AppCDS layout is a WARN, never a crash`() {
+        val service = DoctorService(
+            fakeEnvironment(tempDir("jdx-doctor-test-"), cdsState = CdsState.UNRESOLVABLE),
+        )
+
+        val report = service.probe()
+
+        val appcds = report.checks.first { it.name == "appcds" }
+        appcds.status shouldBe DoctorStatus.WARN
+        appcds.detail shouldContain "dev layout"
         exitCodeFor(report) shouldBe 0
     }
 

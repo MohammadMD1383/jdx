@@ -37,6 +37,15 @@ for jar in "$repo_root"/app/build/libs/jdx-*-all.jar; do
 done
 [ "$jar_found" -eq 1 ] || die "no jdx fat jar in '$repo_root/app/build/libs' — rebuild with ./gradlew :app:installDist"
 
+# AppCDS archive (T-048): no linking needed — install.sh symlinks the launcher
+# itself, and the launcher resolves the fat jar + `libs/jdx.jsa` relative to its
+# *resolved* path, so the archive travels automatically when present. A missing
+# archive is not fatal (`-Xshare:auto` degrades to a plain run); warn only, so
+# `jdx doctor` (appcds row) stays the source of truth for present/absent/stale.
+if [ ! -f "$repo_root/app/build/libs/jdx.jsa" ]; then
+    printf 'note: no AppCDS archive at app/build/libs/jdx.jsa — cold start without AppCDS (rebuild with ./gradlew :app:installDist; see `jdx doctor` appcds row)\n' >&2
+fi
+
 bin_dir=$HOME/.local/bin
 mkdir -p "$bin_dir" || die "cannot create '$bin_dir'"
 

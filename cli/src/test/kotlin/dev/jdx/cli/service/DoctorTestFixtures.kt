@@ -12,6 +12,9 @@ import java.nio.file.Path
  */
 internal fun tempDir(prefix: String): Path = Files.createTempDirectory(prefix)
 
+/** AppCDS fixture shapes for the `appcds` doctor row (see [fakeEnvironment]). */
+internal enum class CdsState { PRESENT, ABSENT, STALE, EMPTY, UNRESOLVABLE }
+
 /** An executable file that is never run — the stub [ProcessRunner] answers instead. */
 internal fun emptyExecutable(dir: Path, name: String): Path {
     Files.createDirectories(dir)
@@ -54,6 +57,13 @@ internal fun fakeEnvironment(
     opencodeBinaries: List<String> = emptyList(),
     /** OS name for `.exe` tool probing; tests inject `"Windows 11"`. */
     osName: String = System.getProperty("os.name", ""),
+    /**
+     * AppCDS fixture shape: PRESENT creates a fresh archive newer than the fat jar (OK);
+     * ABSENT passes paths but creates no archive file (WARN); STALE backdates the archive
+     * below the fat jar (WARN); EMPTY creates a zero-byte archive (WARN); UNRESOLVABLE
+     * passes null paths, i.e. dev layout (WARN).
+     */
+    cdsState: CdsState = CdsState.PRESENT,
 ): DoctorEnvironment {
     val home = root.resolve("home").also { Files.createDirectories(it) }
     val javaHome = root.resolve("jdk").also { Files.createDirectories(it) }
@@ -111,6 +121,43 @@ internal fun fakeEnvironment(
             Files.writeString(configDir.resolve("active-workspace"), "$activeWorkspace\n")
         }
     }
+    val installLibs = root.resolve("install/libs").also { Files.createDirectories(it) }
+    val fatJar = installLibs.resolve("jdx-test-all.jar")
+    val archive = installLibs.resolve("jdx.jsa")
+    val (cdsArchive, cdsFatJar) = when (cdsState) {
+        CdsState.UNRESOLVABLE -> null to null
+        CdsState.ABSENT -> {
+            Files.write(fatJar, ByteArray(128) { 0x4a })
+            archive to fatJar
+        }
+        CdsState.EMPTY -> {
+            Files.write(fatJar, ByteArray(128) { 0x4a })
+            Files.createFile(archive)
+            archive to fatJar
+        }
+        CdsState.STALE -> {
+            Files.write(fatJar, ByteArray(128) { 0x4a })
+            Files.write(archive, ByteArray(2048) { 0x43 })
+            // Backdate the archive below the fat jar so the mtime comparison reads stale.
+            val jarTime = Files.getLastModifiedTime(fatJar)
+            Files.setLastModifiedTime(
+                archive,
+                java.nio.file.attribute.FileTime.fromMillis(jarTime.toMillis() - 60_000),
+            )
+            archive to fatJar
+        }
+        CdsState.PRESENT -> {
+            Files.write(fatJar, ByteArray(128) { 0x4a })
+            Files.write(archive, ByteArray(2048) { 0x43 })
+            // Fresh archive: at-or-after the fat jar so the row reads OK deterministically.
+            val jarTime = Files.getLastModifiedTime(fatJar)
+            Files.setLastModifiedTime(
+                archive,
+                java.nio.file.attribute.FileTime.fromMillis(jarTime.toMillis() + 1_000),
+            )
+            archive to fatJar
+        }
+    }
     return DoctorEnvironment(
         userHome = home,
         javaHome = javaHome,
@@ -120,6 +167,8 @@ internal fun fakeEnvironment(
         workingDir = cwd,
         workspaceEnv = workspaceEnv,
         osName = osName,
+        cdsArchive = cdsArchive,
+        cdsFatJar = cdsFatJar,
         // Pin cache/config to the fixture on every OS: macOS resolves
         // ~/Library/... unconditionally (XDG_* is a Linux convention the
         // macOS branch ignores by design), and Windows falls back past

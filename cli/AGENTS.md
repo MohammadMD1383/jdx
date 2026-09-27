@@ -17,9 +17,10 @@ is the CLI surface, pinned by help/parity goldens.)
   plain — the daemon has no TTY); `--json` bytes are untouched by budgets.
 - `bench/BenchRunner` + `render/BenchSheet` — fixed workload, median of iterations,
   advisory targets (never gate). `service/DoctorService` — injectable probes
-  (workspace store, socket health) so tests never touch the real home; `javap`
-  probing covers `$JAVA_HOME/bin` and Windows `.exe`/`.cmd`/`.bat` (`osName`
-  seam). `service/UpgradeService` — pure-Java `tar.gz` extraction first
+  (workspace store, socket health, AppCDS archive + fat jar paths) so tests never
+  touch the real home; `javap` probing covers `$JAVA_HOME/bin` and Windows
+  `.exe`/`.cmd`/`.bat` (`osName` seam); the `appcds` row is stat-only
+  (size + mtime vs the fat jar, WARN-only, never FAIL). `service/UpgradeService` — pure-Java `tar.gz` extraction first
   (external `tar` is the fallback), `.exe`-aware launcher check.
   `service/SetupService` — agent wiring (`jdx setup --agent opencode|kilo
   --scope project|system`): OpenCode JSONC-tolerant `mcp.jdx` (v1) +
