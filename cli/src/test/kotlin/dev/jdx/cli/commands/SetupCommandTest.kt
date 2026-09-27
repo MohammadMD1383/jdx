@@ -38,10 +38,14 @@ class SetupCommandTest {
         version: SetupService.OpencodeVersionInfo = SetupService.OpencodeVersionInfo(
             SetupService.OpencodeVersion.ABSENT,
         ),
+        claudeVersion: SetupService.ClaudeVersionInfo = SetupService.ClaudeVersionInfo(
+            SetupService.ClaudeVersion.ABSENT,
+        ),
     ): SetupCommand = SetupCommand(
         serviceFactory = { _, _ -> SetupService(home, project) },
         terminate = { throw SetupExit(it) },
         versionProbe = { version },
+        claudeVersionProbe = { claudeVersion },
     )
 
     private fun kiloCommandFor(home: Path, project: Path): SetupCommand = SetupCommand(
@@ -174,7 +178,143 @@ class SetupCommandTest {
         }
 
         code shouldBe 3
-        output.trim() shouldContain "opencode|kilo"
+        output.trim() shouldContain "opencode|claude-code|kilo"
+    }
+
+    @Test
+    fun `claude install writes dot mcp json and says what to do next`(@TempDir root: Path) {
+        val (home, project) = fakeDirs(root)
+        val output = captureStdout {
+            JdxCli().subcommands(commandFor(home, project))
+                .parse(listOf("setup", "--agent", "claude-code", "--scope", "project"))
+        }
+
+        output.trim() shouldContain "claude-code project setup installed"
+        output.trim() shouldContain "mcpServers entry"
+        output.trim() shouldContain "restart claude-code"
+        output.trim() shouldContain "claude-code not found on PATH"
+        SetupService.isInstalledAt(
+            project.resolve(".mcp.json"),
+            SetupService.Agent.CLAUDE_CODE,
+        ) shouldBe true
+    }
+
+    @Test
+    fun `claude accepts the bare claude alias`(@TempDir root: Path) {
+        val (home, project) = fakeDirs(root)
+        captureStdout {
+            JdxCli().subcommands(commandFor(home, project))
+                .parse(listOf("setup", "--agent", "claude", "--scope", "project"))
+        }
+
+        SetupService.isInstalledAt(
+            project.resolve(".mcp.json"),
+            SetupService.Agent.CLAUDE_CODE,
+        ) shouldBe true
+    }
+
+    @Test
+    fun `claude install names the detected binary`(@TempDir root: Path) {
+        val (home, project) = fakeDirs(root)
+        val present = SetupService.ClaudeVersionInfo(
+            SetupService.ClaudeVersion.PRESENT,
+            "1.0.33 (Claude Code)",
+            "claude",
+        )
+        val output = captureStdout {
+            JdxCli().subcommands(commandFor(home, project, claudeVersion = present))
+                .parse(listOf("setup", "--agent", "claude-code", "--scope", "project"))
+        }
+
+        output.trim() shouldContain "detected: claude-code (1.0.33 (Claude Code))"
+    }
+
+    @Test
+    fun `a second claude install is a no-op reporting already installed`(@TempDir root: Path) {
+        val (home, project) = fakeDirs(root)
+        val args = listOf("setup", "--agent", "claude-code", "--scope", "project")
+        captureStdout { JdxCli().subcommands(commandFor(home, project)).parse(args) }
+
+        val output = captureStdout {
+            JdxCli().subcommands(commandFor(home, project)).parse(args)
+        }
+
+        output.trim() shouldContain "already installed"
+    }
+
+    @Test
+    fun `claude system scope writes dot claude json under the fake home`(@TempDir root: Path) {
+        val (home, project) = fakeDirs(root)
+        captureStdout {
+            JdxCli().subcommands(commandFor(home, project))
+                .parse(listOf("setup", "--agent", "claude-code", "--scope", "system"))
+        }
+
+        SetupService.isInstalledAt(
+            home.resolve(".claude.json"),
+            SetupService.Agent.CLAUDE_CODE,
+        ) shouldBe true
+    }
+
+    @Test
+    fun `claude check exits 1 when absent and 0 once installed`(@TempDir root: Path) {
+        val (home, project) = fakeDirs(root)
+        val check = listOf("setup", "--agent", "claude-code", "--scope", "project", "--check")
+
+        val absent = shouldThrow<SetupExit> {
+            captureStdout { JdxCli().subcommands(commandFor(home, project)).parse(check) }
+        }
+        absent.code shouldBe 1
+
+        captureStdout {
+            JdxCli().subcommands(commandFor(home, project))
+                .parse(listOf("setup", "--agent", "claude-code", "--scope", "project"))
+        }
+        captureStdout { JdxCli().subcommands(commandFor(home, project)).parse(check) }
+    }
+
+    @Test
+    fun `claude remove uninstalls cleanly`(@TempDir root: Path) {
+        val (home, project) = fakeDirs(root)
+        captureStdout {
+            JdxCli().subcommands(commandFor(home, project))
+                .parse(listOf("setup", "--agent", "claude-code", "--scope", "project"))
+        }
+
+        val output = captureStdout {
+            JdxCli().subcommands(commandFor(home, project))
+                .parse(listOf("setup", "--agent", "claude-code", "--scope", "project", "--remove"))
+        }
+
+        output.trim() shouldContain "removed"
+        SetupService.isInstalledAt(
+            project.resolve(".mcp.json"),
+            SetupService.Agent.CLAUDE_CODE,
+        ) shouldBe false
+    }
+
+    @Test
+    fun `claude json carries the claude payload in the envelope`(@TempDir root: Path) {
+        val (home, project) = fakeDirs(root)
+        val present = SetupService.ClaudeVersionInfo(
+            SetupService.ClaudeVersion.PRESENT,
+            "1.0.33 (Claude Code)",
+            "claude",
+        )
+        val output = captureStdout {
+            JdxCli().subcommands(commandFor(home, project, claudeVersion = present))
+                .parse(listOf("setup", "--agent", "claude-code", "--scope", "project", "--json"))
+        }
+
+        val parsed = Json.parseToJsonElement(output.trim()).jsonObject
+        parsed["command"]?.jsonPrimitive?.content shouldBe "setup"
+        parsed["ok"]?.jsonPrimitive?.content shouldBe "true"
+        val result = parsed["result"]!!.jsonObject
+        result["agent"]?.jsonPrimitive?.content shouldBe "claude-code"
+        result["scope"]?.jsonPrimitive?.content shouldBe "project"
+        result["installed"]?.jsonPrimitive?.content shouldBe "true"
+        result["claudeVersion"]?.jsonPrimitive?.content shouldBe "present"
+        result["claudeRaw"]?.jsonPrimitive?.content shouldBe "1.0.33 (Claude Code)"
     }
 
     @Test

@@ -21,16 +21,22 @@ is the CLI surface, pinned by help/parity goldens.)
   probing covers `$JAVA_HOME/bin` and Windows `.exe`/`.cmd`/`.bat` (`osName`
   seam). `service/UpgradeService` — pure-Java `tar.gz` extraction first
   (external `tar` is the fallback), `.exe`-aware launcher check.
-  `service/SetupService` — agent wiring (`jdx setup --agent opencode|kilo
-  --scope project|system`): OpenCode JSONC-tolerant `mcp.jdx` (v1) +
-  `mcp.servers.jdx` (v2, `enabled` → `disabled`) merge into `opencode.json[c]`
-  (project walk-up, else `~/.config/opencode`); Kilo Code (OpenCode fork, same
-  `mcp` map shape) single `mcp.jdx` merge into `kilo.json[c]` (project walk-up
-  preferring `.kilo/`, else `~/.config/kilo`; fresh files carry no `$schema`),
-  idempotent no-op re-runs, `--check`/`--remove`;
-  `parseOpencodeVersion`/`probeOpencodeVersion` classify the installed line
-  (`opencode` then legacy `opencode2`; v1 = `1.x`, v2 = `0.0.0-next/beta/dev-*`
-  or `2.x`, never a guess); `doctor` reuses the probe for the setup row.
+  `service/SetupService` — agent wiring (`jdx setup --agent opencode|claude-code|kilo
+  --scope project|system`): JSONC-tolerant `mcp.jdx` (v1) + `mcp.servers.jdx`
+  (v2, `enabled` → `disabled`) merge into `opencode.json[c]` (project walk-up,
+  else `~/.config/opencode`); `mcpServers.jdx` (`{"command": "jdx", "args":
+  ["mcp"]}`, the `claude mcp add jdx -- jdx mcp` equivalent) merges into
+  `.mcp.json` (project walk-up) or `~/.claude.json` (system); Kilo Code
+  (OpenCode fork, same `mcp` map shape) single `mcp.jdx` merge into
+  `kilo.json[c]` (project walk-up preferring `.kilo/`, else `~/.config/kilo`;
+  fresh files carry no `$schema`), idempotent no-op re-runs, `--check`/`--remove`;
+  `parseOpencodeVersion`/`probeOpencodeVersion` classify the installed OpenCode
+  line (`opencode` then legacy `opencode2`; v1 = `1.x`, v2 =
+  `0.0.0-next/beta/dev-*` or `2.x`, never a guess);
+  `probeClaudeVersion`/`describeClaudeVersion` report `claude --version`
+  presence (`isJdxCommand` accepts Windows shims `jdx.exe`/`.cmd`/`.bat` and
+  backslash paths on every host, so `--check`/`doctor` stay true on Windows);
+  `doctor` reuses all probes for the setup row.
   Tests pin userHome/projectDir to temp dirs, never the real home.
 - `parity/AdapterParityTest` — the §9 contract: CLI `--json` == MCP == HTTP bytes
   over all 18 read commands + failure branches + a hostile-property case.

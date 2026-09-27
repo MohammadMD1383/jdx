@@ -10,9 +10,9 @@ import java.nio.file.Files
 import java.nio.file.Path
 
 /**
- * Golden tests for `jdx setup` (issue #33 family): merged `opencode.json`
- * and `kilo.json` bytes pinned to committed files under
- * `src/test/resources/golden/setup/`.
+ * Golden tests for `jdx setup` (issue #33 family): merged `opencode.json`,
+ * Claude Code `.mcp.json` and `kilo.json` bytes pinned to committed files
+ * under `src/test/resources/golden/setup/`.
  *
  * One test pins all six files: [GoldenFiles.verifyAll] fails on orphans, so
  * splitting agents into separate tests would fail each with the other's
@@ -61,6 +61,39 @@ class SetupGoldenTest {
             ),
         ) as SetupService.SetupOutcome.Removed
         contents["remove-keeps-others.json"] = Files.readString(removeOutcome.path)
+
+        val claudeProject = root.resolve("claude-project").also { Files.createDirectories(it) }
+        val claudeFresh = SetupService(home, claudeProject)
+        val claudeFreshOutcome = claudeFresh.run(
+            SetupService.SetupRequest(
+                agent = SetupService.Agent.CLAUDE_CODE,
+                scope = SetupService.Scope.PROJECT,
+            ),
+        ) as SetupService.SetupOutcome.Installed
+        contents["claude-fresh-install.json"] = Files.readString(claudeFreshOutcome.path)
+
+        val claudeMergeDir = root.resolve("claude-merge").also { Files.createDirectories(it) }
+        Files.writeString(
+            claudeMergeDir.resolve(".mcp.json"),
+            """{"mcpServers":{"other":{"command":"other","args":["x"]}}}""",
+        )
+        val claudeMerge = SetupService(home, claudeMergeDir)
+        val claudeMergeOutcome = claudeMerge.run(
+            SetupService.SetupRequest(
+                agent = SetupService.Agent.CLAUDE_CODE,
+                scope = SetupService.Scope.PROJECT,
+            ),
+        ) as SetupService.SetupOutcome.Installed
+        contents["claude-merge-preserves.json"] = Files.readString(claudeMergeOutcome.path)
+
+        val claudeRemoveOutcome = claudeMerge.run(
+            SetupService.SetupRequest(
+                agent = SetupService.Agent.CLAUDE_CODE,
+                scope = SetupService.Scope.PROJECT,
+                remove = true,
+            ),
+        ) as SetupService.SetupOutcome.Removed
+        contents["claude-remove-keeps-others.json"] = Files.readString(claudeRemoveOutcome.path)
 
         val kiloProject = root.resolve("kilo-project").also { Files.createDirectories(it) }
         val kiloFresh = SetupService(home, kiloProject)

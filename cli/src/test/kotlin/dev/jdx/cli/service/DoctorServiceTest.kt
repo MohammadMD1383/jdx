@@ -442,6 +442,66 @@ class DoctorServiceTest {
     }
 
     @Test
+    fun `the setup row covers claude-code wiring and presence`() {
+        val service = DoctorService(fakeEnvironment(tempDir("jdx-doctor-test-")))
+
+        val report = service.probe()
+
+        val setup = report.checks.first { it.name == "setup" }
+        setup.status shouldBe DoctorStatus.WARN
+        setup.detail shouldContain "claude-code"
+        setup.detail shouldContain "claude-code not found on PATH"
+        setup.detail shouldContain "jdx setup --agent claude-code --scope project"
+    }
+
+    @Test
+    fun `the setup row names the detected claude-code binary`() {
+        val runner = ProcessRunner { executable, _ ->
+            // Extension-aware: on Windows the probe resolves claude.exe (see
+            // toolFileNames), so compare the stem, not the raw file name.
+            if (executable.fileName.toString().substringBefore(".") == "claude") {
+                ProcessOutcome(0, "1.0.33 (Claude Code)", "")
+            } else if (executable.fileName.toString().startsWith("opencode")) {
+                throw IOException("no opencode here")
+            } else {
+                ProcessOutcome(0, "26.0.2.1", "")
+            }
+        }
+        val service = DoctorService(
+            fakeEnvironment(
+                tempDir("jdx-doctor-test-"),
+                runner = runner,
+                claudeBinaries = listOf("claude"),
+            ),
+        )
+
+        val report = service.probe()
+
+        val setup = report.checks.first { it.name == "setup" }
+        setup.status shouldBe DoctorStatus.WARN
+        setup.detail shouldContain "claude-code (1.0.33 (Claude Code))"
+    }
+
+    @Test
+    fun `the setup row is OK once the claude-code entry exists`() {
+        val root = tempDir("jdx-doctor-test-")
+        val environment = fakeEnvironment(root)
+        SetupService(environment.userHome, environment.workingDir).run(
+            SetupService.SetupRequest(
+                agent = SetupService.Agent.CLAUDE_CODE,
+                scope = SetupService.Scope.PROJECT,
+            ),
+        )
+
+        val report = DoctorService(environment).probe()
+
+        val setup = report.checks.first { it.name == "setup" }
+        setup.status shouldBe DoctorStatus.OK
+        setup.detail shouldContain "claude-code"
+        setup.detail shouldContain "installed"
+    }
+
+    @Test
     fun `the setup row covers kilo when nothing is wired`() {
         val service = DoctorService(fakeEnvironment(tempDir("jdx-doctor-test-")))
 
