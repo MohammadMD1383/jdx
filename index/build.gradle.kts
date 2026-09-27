@@ -36,6 +36,14 @@ listOf("test", "tier2Test").forEach { taskName ->
             "jdx.fixturesDir",
             project(":testfixtures").layout.buildDirectory.dir("libs").get().asFile.absolutePath,
         )
+        // The `jdx diff` fixture pair (issue #23, TESTING.md §11.2): its own directory,
+        // its own jars, its own property — see `DiffFixtureJars` for why it cannot live
+        // beside the main corpus.
+        dependsOn(":testfixtures:diffV1Jar", ":testfixtures:diffV2Jar")
+        systemProperty(
+            "jdx.diffFixturesDir",
+            project(":testfixtures").layout.buildDirectory.dir("diff-fixtures").get().asFile.absolutePath,
+        )
     }
 }
 
@@ -72,6 +80,10 @@ pitest {
     jvmArgs.add(
         "-Djdx.fixturesDir=" +
             project(":testfixtures").layout.buildDirectory.dir("libs").get().asFile.absolutePath,
+    )
+    jvmArgs.add(
+        "-Djdx.diffFixturesDir=" +
+            project(":testfixtures").layout.buildDirectory.dir("diff-fixtures").get().asFile.absolutePath,
     )
     // #57: same CI relaxation as :core — slow shared runners must not read as
     // killed mutants. Local runs keep the 10 s gate.

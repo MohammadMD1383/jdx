@@ -1,0 +1,28 @@
+api diff diff-fixtures-v1.jar -> diff-fixtures-v2.jar (all surface)
+breaking  TYPE_REMOVED  dev.jdx.diffapi.Departed
+breaking  TYPE_KIND_CHANGED  dev.jdx.diffapi.Convertible: class -> interface
+breaking  TYPE_MADE_FINAL  dev.jdx.diffapi.Tuned
+breaking  SUPERTYPE_REMOVED  dev.jdx.diffapi.Api: java.io.Serializable
+breaking  MEMBER_REMOVED  dev.jdx.diffapi.Api#legacy()
+breaking  MEMBER_REMOVED  dev.jdx.diffapi.Convertible#<init>()
+breaking  MEMBER_REMOVED  dev.jdx.diffapi.Orphaned#gone(): supertype dev.jdx.absent.Supertype is not in diff-fixtures-v2.jar; inheritance not checked
+breaking  MEMBER_VISIBILITY_NARROWED  dev.jdx.diffapi.Api#narrowed(): public -> protected
+breaking  MEMBER_VISIBILITY_NARROWED  dev.jdx.diffapi.Tuned#opened(): public -> package_private
+breaking  MEMBER_MADE_FINAL  dev.jdx.diffapi.Api#sealable()
+breaking  STATIC_TO_INSTANCE  dev.jdx.diffapi.Api#shared()
+breaking  ABSTRACT_ADDED  dev.jdx.diffapi.Convertible
+breaking  ABSTRACT_ADDED  dev.jdx.diffapi.Convertible#value()
+breaking  INTERFACE_METHOD_ADDED  dev.jdx.diffapi.Contract#alsoRequired()
+breaking  ENUM_CONSTANT_REMOVED  dev.jdx.diffapi.Signal#RED
+breaking  PARAMETER_TYPE_CHANGED  dev.jdx.diffapi.Api#retyped(java.lang.String): now: dev.jdx.diffapi.Api#retyped(int)
+breaking  PARAMETER_TYPE_CHANGED  dev.jdx.diffapi.Api#spread(java.lang.String): now: dev.jdx.diffapi.Api#spread(java.lang.String[])
+breaking  RETURN_TYPE_CHANGED  dev.jdx.diffapi.Api#width(): int -> long
+breaking  FIELD_TYPE_CHANGED  dev.jdx.diffapi.Api#counter: int -> long
+suspicious  MEMBER_MOVED_TO_SUPERTYPE  dev.jdx.diffapi.Relocated#shared(): declared by dev.jdx.diffapi.Base
+suspicious  GENERIC_SIGNATURE_CHANGED  dev.jdx.diffapi.Api#echoed(java.util.List)
+suspicious  CHECKED_EXCEPTION_ADDED  dev.jdx.diffapi.Api#checked(): java.io.IOException
+18 findings below --severity suspicious
+19 breaking · 3 suspicious · 18 informational · 1 type added · 1 type removed
+source: diff-fixtures-v1.jar (bytecode)
+source: diff-fixtures-v2.jar (bytecode)
+next: jdx members dev.jdx.diffapi.Departed

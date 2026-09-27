@@ -127,7 +127,12 @@ public object ApiDiffer {
         val oldSupertypes = supertypeNames(old)
         val newSupertypes = supertypeNames(new)
         for (supertype in oldSupertypes) {
-            if (supertype !in newSupertypes) emit(SUPERTYPE_REMOVED, supertype)
+            // `java.lang.Object` disappearing from a class's header means the class
+            // became an interface (which has no superclass) — not that anything was
+            // lost, since every class has it. Same reasoning as the inheritance walk.
+            if (supertype !in newSupertypes && supertype !in UNIVERSAL_SUPERTYPES) {
+                emit(SUPERTYPE_REMOVED, supertype)
+            }
         }
         for (supertype in newSupertypes) {
             if (supertype !in oldSupertypes) emit(SUPERTYPE_ADDED, supertype)
@@ -151,13 +156,22 @@ public object ApiDiffer {
 
         findings.addAll(
             pairUp(removed, added, { shapePairKey(it) }) { oldKey, newKey ->
-                val rule = if (oldKey is ApiFieldKey) FIELD_TYPE_CHANGED else PARAMETER_TYPE_CHANGED
-                DiffFinding(
-                    rule = rule,
-                    type = oldType.binaryName,
-                    ref = oldMembers.getValue(oldKey).canonicalRef,
-                    detail = "now: " + newMembers.getValue(newKey).canonicalRef,
-                )
+                when (oldKey) {
+                    is ApiFieldKey -> DiffFinding(
+                        rule = FIELD_TYPE_CHANGED,
+                        type = oldType.binaryName,
+                        ref = oldMembers.getValue(oldKey).canonicalRef,
+                        // A field's canonical ref carries no type, so "now: <ref>" would
+                        // print the same string twice. The types are the whole news.
+                        detail = "${oldKey.type.binaryName} -> ${(newKey as ApiFieldKey).type.binaryName}",
+                    )
+                    is ApiMethodKey -> DiffFinding(
+                        rule = PARAMETER_TYPE_CHANGED,
+                        type = oldType.binaryName,
+                        ref = oldMembers.getValue(oldKey).canonicalRef,
+                        detail = "now: " + newMembers.getValue(newKey).canonicalRef,
+                    )
+                }
             },
         )
         findings.addAll(

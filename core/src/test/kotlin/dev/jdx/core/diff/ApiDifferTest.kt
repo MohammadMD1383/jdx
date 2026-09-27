@@ -120,7 +120,21 @@ class ApiDifferTest {
     fun `an added supertype is SUPERTYPE_ADDED, not a removal`() {
         val old = snapshotOf("a.jar", type("com.example.Foo", superclass = OBJECT))
         val new = snapshotOf("b.jar", type("com.example.Foo", superclass = STRING))
-        rulesBetween(old, new) shouldBe listOf(CompatRule.SUPERTYPE_REMOVED, CompatRule.SUPERTYPE_ADDED)
+        // `java.lang.Object` going away is not a loss — see the next test.
+        rulesBetween(old, new) shouldBe listOf(CompatRule.SUPERTYPE_ADDED)
+    }
+
+    @Test
+    fun `a class that stopped naming Object did not lose a supertype`() {
+        // A class → interface change, or a class that now names a real superclass, both
+        // drop `java.lang.Object` from the header. Every class has it, so reporting the
+        // removal would be a false alarm on a change that is already reported as
+        // TYPE_KIND_CHANGED or SUPERTYPE_ADDED.
+        val asClass = snapshotOf("a.jar", type("com.example.Foo", superclass = OBJECT))
+        val asInterface = snapshotOf("b.jar", type("com.example.Foo", kind = TypeKind.INTERFACE))
+        rulesBetween(asClass, asInterface) shouldBe listOf(CompatRule.TYPE_KIND_CHANGED)
+        val onEnum = snapshotOf("b.jar", type("com.example.Foo", kind = TypeKind.ENUM, superclass = STRING))
+        rulesBetween(asClass, onEnum) shouldBe listOf(CompatRule.TYPE_KIND_CHANGED, CompatRule.SUPERTYPE_ADDED)
     }
 
     // -- member removals and the inheritance check --------------------------------
@@ -356,12 +370,15 @@ class ApiDifferTest {
     }
 
     @Test
-    fun `a field whose type changed is one FIELD_TYPE_CHANGED`() {
+    fun `a field whose type changed is one FIELD_TYPE_CHANGED naming both types`() {
         val old = snapshotOf("a.jar", type("com.example.Foo", members = listOf(field("n", INT))))
         val new = snapshotOf("b.jar", type("com.example.Foo", members = listOf(field("n", LONG))))
         val finding = onlyFindingBetween(old, new)
         finding.rule shouldBe CompatRule.FIELD_TYPE_CHANGED
         finding.ref shouldBe "com.example.Foo#n"
+        // A field's ref carries no type, so the detail has to — printing the ref twice
+        // would tell the reader nothing.
+        finding.detail shouldBe "int -> long"
     }
 
     @Test
