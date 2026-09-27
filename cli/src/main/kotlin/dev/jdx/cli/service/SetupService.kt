@@ -16,8 +16,9 @@ import java.nio.file.Path
  * `jdx setup --agent <name> --scope <project|system>` (issue #33 family).
  *
  * Writes, checks, and removes the MCP server entry that launches `jdx mcp` in
- * third-party agent configs. This issue lands the OpenCode backend only —
- * other agents follow the same [AgentBackend] seam. All filesystem behaviour
+ * third-party agent configs. Two backends share this service behind the
+ * [Agent] seam: OpenCode (`opencode.json[c]`, v1+v2 entries) and Claude Code
+ * (`.mcp.json` / `~/.claude.json`, `mcpServers.jdx`). All filesystem behaviour
  * lives here; the Clikt command only parses flags, renders, and maps exit
  * codes (D-004).
  *
@@ -49,9 +50,10 @@ class SetupService(
     private val userHome: Path,
     private val projectDir: Path,
 ) {
-    /** Agents with setup support. Only OpenCode ships in this issue. */
+    /** Agents with setup support: OpenCode and Claude Code. */
     enum class Agent(val cliName: String) {
         OPENCODE("opencode"),
+        CLAUDE_CODE("claude-code"),
     }
 
     /** Where the entry is written: the checkout or the user's global config. */
@@ -75,6 +77,18 @@ class SetupService(
     }
 
     /**
+     * Whether the `claude` binary is installed for use. Claude Code has no
+     * v1/v2 line split to classify — `PRESENT` means the binary answered
+     * `--version`; `ABSENT` means no `claude` on PATH; `UNKNOWN` means it is
+     * present but never answered (or answered blank).
+     */
+    enum class ClaudeVersion(val cliName: String) {
+        PRESENT("present"),
+        ABSENT("absent"),
+        UNKNOWN("unknown"),
+    }
+
+    /**
      * Best-effort answer to "which opencode will run this config". [raw] is the
      * trimmed `--version` output (null when the binary never answered);
      * [binary] names the probed executable (`opencode`, or the legacy `opencode2`
@@ -82,6 +96,17 @@ class SetupService(
      */
     data class OpencodeVersionInfo(
         val version: OpencodeVersion,
+        val raw: String? = null,
+        val binary: String? = null,
+    )
+
+    /**
+     * Best-effort answer to "is claude installed". [raw] is the trimmed
+     * `--version` output (null when the binary never answered); [binary] names
+     * the probed executable (`claude`).
+     */
+    data class ClaudeVersionInfo(
+        val version: ClaudeVersion,
         val raw: String? = null,
         val binary: String? = null,
     )
@@ -113,12 +138,12 @@ class SetupService(
     }
 
     fun run(request: SetupRequest): SetupOutcome {
-        val path = targetPath(request.scope)
+        val path = targetPath(request.agent, request.scope)
         return try {
             when {
-                request.check -> SetupOutcome.Checked(path, isInstalledAt(path))
-                request.remove -> removeAt(path)
-                else -> installAt(path)
+                request.check -> SetupOutcome.Checked(path, isInstalledAt(path, request.agent))
+                request.remove -> removeAt(path, request.agent)
+                else -> installAt(path, request.agent)
             }
         } catch (e: IOException) {
             SetupOutcome.Failed(path, e.message ?: e.javaClass.simpleName)
@@ -126,37 +151,60 @@ class SetupService(
     }
 
     /** Resolves the file `--check`/install/remove targets (existing file wins). */
-    fun targetPath(scope: Scope): Path = when (scope) {
-        Scope.PROJECT -> projectConfigPath(projectDir)
-        Scope.SYSTEM -> systemConfigPath(userHome)
+    fun targetPath(scope: Scope): Path = targetPath(Agent.OPENCODE, scope)
+
+    /** Agent-aware target: OpenCode uses `opencode.json[c]`; Claude Code uses `.mcp.json` / `~/.claude.json`. */
+    fun targetPath(agent: Agent, scope: Scope): Path = when (agent) {
+        Agent.OPENCODE -> when (scope) {
+            Scope.PROJECT -> projectConfigPath(projectDir)
+            Scope.SYSTEM -> systemConfigPath(userHome)
+        }
+        Agent.CLAUDE_CODE -> when (scope) {
+            Scope.PROJECT -> claudeProjectConfigPath(projectDir)
+            Scope.SYSTEM -> claudeSystemConfigPath(userHome)
+        }
     }
 
-    private fun installAt(path: Path): SetupOutcome {
-        val current = readRootOrNull(path) ?: return doInstall(path, null)
+    private fun installAt(path: Path, agent: Agent): SetupOutcome {
+        val current = readRootOrNull(path) ?: return doInstall(path, null, agent)
         val root = current.getOrNull()
             ?: return SetupOutcome.Corrupt(path, current.error ?: "not a JSON object")
-        if (isV1Installed(root) && isV2Installed(root)) return SetupOutcome.Installed(path, changed = false)
-        return doInstall(path, root)
+        if (isInstalledRoot(root, agent)) {
+            // OpenCode needs both the v1 and the v2 entry; either alone still
+            // counts as wired for `--check`, but install completes the pair.
+            if (agent == Agent.OPENCODE && !(isV1Installed(root) && isV2Installed(root))) {
+                return doInstall(path, root, agent)
+            }
+            return SetupOutcome.Installed(path, changed = false)
+        }
+        return doInstall(path, root, agent)
     }
 
-    private fun removeAt(path: Path): SetupOutcome {
+    private fun removeAt(path: Path, agent: Agent): SetupOutcome {
         if (!Files.isRegularFile(path)) return SetupOutcome.Removed(path, changed = false)
-        val current = readRootOrNull(path) ?: return doRemove(path, null)
+        val current = readRootOrNull(path) ?: return doRemove(path, null, agent)
         val root = current.getOrNull()
             ?: return SetupOutcome.Corrupt(path, current.error ?: "not a JSON object")
-        if (!hasEntry(root)) return SetupOutcome.Removed(path, changed = false)
-        return doRemove(path, root)
+        if (!hasEntry(root, agent)) return SetupOutcome.Removed(path, changed = false)
+        return doRemove(path, root, agent)
     }
 
-    private fun doInstall(path: Path, root: JsonObject?): SetupOutcome {
-        val merged = mergeInstall(root)
+    private fun doInstall(path: Path, root: JsonObject?, agent: Agent): SetupOutcome {
+        val merged = when (agent) {
+            Agent.OPENCODE -> mergeInstall(root)
+            Agent.CLAUDE_CODE -> mergeClaudeInstall(root)
+        }
         writeRoot(path, merged)
         return SetupOutcome.Installed(path, changed = true)
     }
 
-    private fun doRemove(path: Path, root: JsonObject?): SetupOutcome {
+    private fun doRemove(path: Path, root: JsonObject?, agent: Agent): SetupOutcome {
         if (root == null) return SetupOutcome.Removed(path, changed = false)
-        writeRoot(path, mergeRemove(root))
+        val merged = when (agent) {
+            Agent.OPENCODE -> mergeRemove(root)
+            Agent.CLAUDE_CODE -> mergeClaudeRemove(root)
+        }
+        writeRoot(path, merged)
         return SetupOutcome.Removed(path, changed = true)
     }
 
@@ -184,13 +232,17 @@ class SetupService(
         private val prettyJson: Json = Json { prettyPrint = true; prettyPrintIndent = "  " }
 
         /**
-         * Parses `--agent` case-insensitively (`OpenCode`, `opencode`, `open-code`
-         * all match). Null when unsupported — the adapter exits 3 naming it.
+         * Parses `--agent` case-insensitively (`OpenCode`, `opencode`,
+         * `open-code` all match; `Claude Code`, `claude-code`, `claudecode`,
+         * `claude` all match). Null when unsupported — the adapter exits 3
+         * naming it.
          */
         fun parseAgent(raw: String?): Agent? {
             if (raw == null) return Agent.OPENCODE
+            val normalized = raw.lowercase().replace("-", "").replace("_", "").replace(" ", "")
+            if (normalized == "claude") return Agent.CLAUDE_CODE
             return Agent.entries.firstOrNull {
-                it.cliName == raw.lowercase().replace("-", "").replace("_", "")
+                it.cliName.lowercase().replace("-", "").replace("_", "") == normalized
             }
         }
 
@@ -272,6 +324,43 @@ class SetupService(
         }
 
         /**
+         * Answers "is claude installed for use" from PATH. Probes the `claude`
+         * binary only. Never throws: a missing binary reads as ABSENT, a
+         * failing or blank run as UNKNOWN. Pure IO seam ([ProcessRunner]) so
+         * tests inject fakes.
+         */
+        fun probeClaudeVersion(
+            pathDirs: List<Path>,
+            runner: ProcessRunner,
+            osName: String = System.getProperty("os.name", ""),
+        ): ClaudeVersionInfo {
+            val executable = pathDirs.firstNotNullOfOrNull { dir ->
+                toolFileNames("claude", osName)
+                    .map { dir.resolve(it) }
+                    .firstOrNull { Files.isRegularFile(it) && Files.isExecutable(it) }
+            } ?: return ClaudeVersionInfo(ClaudeVersion.ABSENT)
+            val raw = try {
+                val outcome = runner.run(executable, listOf("--version"))
+                (outcome.stdout + "\n" + outcome.stderr).trim().ifEmpty { null }
+            } catch (_: Exception) {
+                null
+            }
+            if (raw.isNullOrBlank()) return ClaudeVersionInfo(ClaudeVersion.UNKNOWN, raw, "claude")
+            return ClaudeVersionInfo(ClaudeVersion.PRESENT, raw, "claude")
+        }
+
+        /**
+         * One human line naming the detected Claude Code install for `setup`
+         * and `doctor` output (`claude-code (1.0.33)`,
+         * `claude-code not found on PATH`). Pure — example-tested.
+         */
+        fun describeClaudeVersion(info: ClaudeVersionInfo): String = when (info.version) {
+            ClaudeVersion.PRESENT -> "claude-code" + (info.raw?.let { " ($it)" } ?: " installed")
+            ClaudeVersion.ABSENT -> "claude-code not found on PATH"
+            ClaudeVersion.UNKNOWN -> "claude-code version unknown" + (info.raw?.let { " ($it)" } ?: "")
+        }
+
+        /**
          * Project target: the nearest `opencode.json`/`opencode.jsonc` walking up
          * from [projectDir] (opencode itself walks up to the worktree root), else
          * a fresh `opencode.json` in [projectDir].
@@ -302,6 +391,31 @@ class SetupService(
             return json
         }
 
+        /**
+         * Project target for Claude Code: the nearest `.mcp.json` walking up
+         * from [projectDir] (mirrors the OpenCode walk-up), else a fresh
+         * `.mcp.json` in [projectDir]. Verified against the documented layout:
+         * project `.mcp.json` in the checkout, system `~/.claude.json`.
+         */
+        fun claudeProjectConfigPath(projectDir: Path): Path {
+            var dir: Path? = projectDir.toAbsolutePath().normalize()
+            while (dir != null) {
+                val candidate = dir.resolve(".mcp.json")
+                if (Files.isRegularFile(candidate)) return candidate
+                dir = dir.parent
+            }
+            return projectDir.toAbsolutePath().normalize().resolve(".mcp.json")
+        }
+
+        /** System target for Claude Code: the user-global `~/.claude.json`. */
+        fun claudeSystemConfigPath(userHome: Path): Path = userHome.resolve(".claude.json")
+
+        /** The Claude Code entry: `jdx mcp` on PATH as a stdio MCP server under `mcpServers`. */
+        fun desiredClaudeEntry(): JsonObject = buildJsonObject {
+            put("command", "jdx")
+            put("args", JsonArray(listOf(JsonPrimitive("mcp"))))
+        }
+
         /** Report-only probe shared by `--check` and the `doctor` setup row. */
         fun isInstalledAt(path: Path): Boolean {
             if (!Files.isRegularFile(path)) return false
@@ -313,8 +427,74 @@ class SetupService(
             }
         }
 
+        /** Agent-aware report-only probe shared by `--check` and the `doctor` setup row. */
+        fun isInstalledAt(path: Path, agent: Agent): Boolean {
+            if (!Files.isRegularFile(path)) return false
+            return try {
+                val root = readRoot(path).getOrNull() ?: return false
+                isInstalledRoot(root, agent)
+            } catch (_: IOException) {
+                false
+            }
+        }
+
         /** True when either the v1 (`mcp.jdx`) or the v2 (`mcp.servers.jdx`) entry wires `jdx mcp`. */
         fun isInstalledRoot(root: JsonObject): Boolean = isV1Installed(root) || isV2Installed(root)
+
+        /** Agent-aware probe: OpenCode checks v1/v2 entries, Claude Code checks `mcpServers.jdx`. */
+        fun isInstalledRoot(root: JsonObject, agent: Agent): Boolean = when (agent) {
+            Agent.OPENCODE -> isInstalledRoot(root)
+            Agent.CLAUDE_CODE -> isClaudeInstalled(root)
+        }
+
+        /** True when the `mcpServers.jdx` entry is a server whose command runs `jdx mcp`. */
+        fun isClaudeInstalled(root: JsonObject): Boolean {
+            val entry = root["mcpServers"]?.jsonObjectOrNull()?.get(SERVER_NAME)?.jsonObjectOrNull()
+                ?: return false
+            return isClaudeJdxEntry(entry)
+        }
+
+        /**
+         * True when [entry] runs `jdx mcp` in the Claude Code shape
+         * (`{"command": "jdx", "args": ["mcp"]}`, the `claude mcp add jdx --
+         * jdx mcp` equivalent). Accepts absolute install paths
+         * (`~/.local/bin/jdx`). Never throws (hostile configs).
+         */
+        fun isClaudeJdxEntry(entry: JsonObject): Boolean {
+            val command = entry["command"]?.jsonPrimitiveOrNull() ?: return false
+            val binary = try {
+                Path.of(command).fileName.toString()
+            } catch (_: Exception) {
+                return false
+            }
+            if (binary != "jdx") return false
+            val args = entry["args"] as? JsonArray ?: return false
+            return args.any { (it as? JsonPrimitive)?.contentOrNull() == "mcp" }
+        }
+
+        /**
+         * Merges the desired Claude Code entry into [root] (null = fresh file).
+         * Every other server under `mcpServers` is preserved.
+         */
+        fun mergeClaudeInstall(root: JsonObject?): JsonObject {
+            val base: MutableMap<String, JsonElement> = root?.toMutableMap() ?: mutableMapOf()
+            val servers = root?.get("mcpServers")?.jsonObjectOrNull()?.toMutableMap() ?: mutableMapOf()
+            servers[SERVER_NAME] = desiredClaudeEntry()
+            base["mcpServers"] = JsonObject(servers)
+            return JsonObject(base)
+        }
+
+        /**
+         * Removes `mcpServers.jdx`; drops an emptied `mcpServers` object to
+         * stay tidy.
+         */
+        fun mergeClaudeRemove(root: JsonObject): JsonObject {
+            val base = root.toMutableMap()
+            val servers = root["mcpServers"]?.jsonObjectOrNull()?.toMutableMap() ?: return root
+            servers.remove(SERVER_NAME)
+            if (servers.isEmpty()) base.remove("mcpServers") else base["mcpServers"] = JsonObject(servers)
+            return JsonObject(base)
+        }
 
         /** True when the v1 `mcp.jdx` entry is a local server whose command runs `jdx mcp`. */
         fun isV1Installed(root: JsonObject): Boolean {
@@ -398,12 +578,20 @@ class SetupService(
         fun isServerEntry(obj: JsonObject): Boolean =
             (obj["type"] as? JsonPrimitive)?.isString == true
 
-        private fun hasEntry(root: JsonObject): Boolean {
-            val mcp = root["mcp"]?.jsonObjectOrNull() ?: return false
-            if (mcp.containsKey(SERVER_NAME)) return true
-            val servers = mcp["servers"]?.jsonObjectOrNull() ?: return false
-            if (isServerEntry(servers)) return false
-            return servers.containsKey(SERVER_NAME)
+        private fun hasEntry(root: JsonObject): Boolean = hasEntry(root, Agent.OPENCODE)
+
+        private fun hasEntry(root: JsonObject, agent: Agent): Boolean = when (agent) {
+            Agent.OPENCODE -> {
+                val mcp = root["mcp"]?.jsonObjectOrNull() ?: return false
+                if (mcp.containsKey(SERVER_NAME)) return true
+                val servers = mcp["servers"]?.jsonObjectOrNull() ?: return false
+                if (isServerEntry(servers)) return false
+                servers.containsKey(SERVER_NAME)
+            }
+            Agent.CLAUDE_CODE -> {
+                val servers = root["mcpServers"]?.jsonObjectOrNull() ?: return false
+                servers.containsKey(SERVER_NAME)
+            }
         }
 
         private fun readRootOrNull(path: Path): RootRead? {
