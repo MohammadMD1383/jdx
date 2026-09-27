@@ -279,6 +279,172 @@ class ApiDifferTest {
     }
 
     @Test
+    fun `an enum field of its own type is only a constant when it is public static final`() {
+        // The three flags are what `javac` always emits, so no real enum can distinguish
+        // them — but the snapshot is read from arbitrary bytecode, and a hand-crafted
+        // class file can put a public instance field of the enum's own type in there. The
+        // rule must be decided by the flags, not assumed from the kind alone.
+        val owner = type("com.example.Light", kind = TypeKind.ENUM)
+        val selfTyped = LIGHT
+        fun removedFinding(vararg flags: AccessFlag): CompatRule {
+            val old = snapshotOf(
+                "a.jar",
+                owner.copy(
+                    members = mapOf(
+                        ApiFieldKey("odd", selfTyped) to ApiField(
+                            key = ApiFieldKey("odd", selfTyped),
+                            access = Access.of(*flags),
+                            canonicalRef = "com.example.Light#odd",
+                        ),
+                    ),
+                ),
+            )
+            val new = snapshotOf("b.jar", owner)
+            return onlyFindingBetween(old, new).rule
+        }
+        removedFinding(AccessFlag.PUBLIC, AccessFlag.STATIC, AccessFlag.FINAL) shouldBe
+            CompatRule.ENUM_CONSTANT_REMOVED
+        removedFinding(AccessFlag.STATIC, AccessFlag.FINAL) shouldBe CompatRule.MEMBER_REMOVED
+        removedFinding(AccessFlag.PUBLIC, AccessFlag.FINAL) shouldBe CompatRule.MEMBER_REMOVED
+        removedFinding(AccessFlag.PUBLIC, AccessFlag.STATIC) shouldBe CompatRule.MEMBER_REMOVED
+    }
+
+    @Test
+    fun `an enum field of another type is never a constant, whatever the flags`() {
+        val owner = type("com.example.Light", kind = TypeKind.ENUM)
+        val old = snapshotOf(
+            "a.jar",
+            owner.copy(
+                members = mapOf(
+                    ApiFieldKey("helper", STRING) to ApiField(
+                        key = ApiFieldKey("helper", STRING),
+                        access = Access.of(AccessFlag.PUBLIC, AccessFlag.STATIC, AccessFlag.FINAL),
+                        canonicalRef = "com.example.Light#helper",
+                    ),
+                ),
+            ),
+        )
+        onlyFindingBetween(old, snapshotOf("b.jar", owner)).rule shouldBe CompatRule.MEMBER_REMOVED
+    }
+
+    @Test
+    fun `two additions sharing a shape are not paired with one removal either`() {
+        // The mirror of the ambiguous-bucket test: pairing by name+arity alone would have
+        // to choose, and choosing is a guess.
+        val old = snapshotOf("a.jar", type("com.example.Foo", members = listOf(method("f", listOf(STRING)))))
+        val new = snapshotOf(
+            "b.jar",
+            type("com.example.Foo", members = listOf(method("f", listOf(INT)), method("f", listOf(LONG)))),
+        )
+        rulesBetween(old, new) shouldBe listOf(CompatRule.MEMBER_REMOVED, CompatRule.MEMBER_ADDED, CompatRule.MEMBER_ADDED)
+    }
+
+    @Test
+    fun `a field whose generic signature changed reports it, and a field constant too`() {
+        val old = snapshotOf(
+            "a.jar",
+            type(
+                "com.example.Box",
+                members = listOf(
+                    field("items", typeNameFromBinaryName("java.util.List")),
+                    field("size", INT, constantValue = "1"),
+                ),
+            ),
+        )
+        val new = snapshotOf(
+            "b.jar",
+            type(
+                "com.example.Box",
+                members = listOf(
+                    field("items", typeNameFromBinaryName("java.util.List"), genericSignature = "Ljava/util/List<Ljava/lang/String;>;"),
+                    field("size", INT, constantValue = "2"),
+                ),
+            ),
+        )
+        val findings = findingsBetween(old, new)
+        // Generic signature is SUSPICIOUS, the constant value is INFO, so severity orders
+        // them — not the order the two attributes happen to be read in.
+        findings.map { it.rule } shouldBe listOf(
+            CompatRule.GENERIC_SIGNATURE_CHANGED,
+            CompatRule.FIELD_CONSTANT_VALUE_CHANGED,
+        )
+        // Both name the field, and the field ref carries no type, so the details have to
+        // distinguish them or the report has two identical lines.
+        findings.map { it.ref }.distinct() shouldBe listOf("com.example.Box#items", "com.example.Box#size")
+    }
+
+    @Test
+    fun `a field annotation is compared exactly like a method annotation`() {
+        // The field is present on both sides, so this is the annotation changing rather
+        // than the member being removed.
+        val annotated = field("tagged", annotations = listOf(AnnotationInfo(TYPE_NAME("com.example.Marker"))))
+        val bare = field("tagged")
+        val old = snapshotOf("a.jar", type("com.example.Foo", members = listOf(annotated)))
+        val new = snapshotOf("b.jar", type("com.example.Foo", members = listOf(bare)))
+        val findings = findingsBetween(old, new)
+        findings.map { it.rule } shouldBe listOf(CompatRule.ANNOTATION_REMOVED)
+        findings.single().detail shouldBe "com.example.Marker"
+    }
+
+    @Test
+    fun `a Kotlin view that does not hide a Continuation keeps the full arity`() {
+        // `kotlinArity` must subtract the hidden parameter only when the view says the
+        // tail really is a Continuation; a view without that flag must leave the JVM
+        // parameter list alone, or two unrelated members would pair.
+        val continuation = typeNameFromBinaryName("kotlin.coroutines.Continuation")
+        val old = snapshotOf(
+            "a.jar",
+            type(
+                "com.example.Foo",
+                isKotlin = true,
+                members = listOf(
+                    method(
+                        "f",
+                        listOf(continuation),
+                        kotlin = KotlinMethodView(displayName = "f"),
+                    ),
+                ),
+            ),
+        )
+        // Arity 1 on the old side, so nothing pairs with a zero-argument `f`.
+        val new = snapshotOf(
+            "b.jar",
+            type("com.example.Foo", isKotlin = true, members = listOf(method("f"))),
+        )
+        rulesBetween(old, new) shouldBe listOf(CompatRule.MEMBER_REMOVED, CompatRule.MEMBER_ADDED)
+    }
+
+    @Test
+    fun `the finding order breaks ties on type, ref and detail, not just severity`() {
+        // Each comparator component is load-bearing: without a tiebreak on `type` two
+        // findings of the same rule could swap between runs, and `--json` bytes would stop
+        // being reproducible.
+        val severity = listOf(
+            DiffFinding(CompatRule.MEMBER_ADDED, "com.example.Zeta", "com.example.Zeta#a"),
+            DiffFinding(CompatRule.MEMBER_ADDED, "com.example.Alpha", "com.example.Alpha#z"),
+            DiffFinding(CompatRule.MEMBER_ADDED, "com.example.Alpha", "com.example.Alpha#a"),
+        )
+        val ordered = severity.sortedWith(DIFF_FINDING_ORDER)
+        ordered.map { it.type } shouldBe listOf("com.example.Alpha", "com.example.Alpha", "com.example.Zeta")
+        ordered.map { it.ref } shouldBe listOf("com.example.Alpha#a", "com.example.Alpha#z", "com.example.Zeta#a")
+
+        val sameRef = listOf(
+            DiffFinding(CompatRule.MEMBER_ADDED, "com.example.Foo", "com.example.Foo#a", "second"),
+            DiffFinding(CompatRule.MEMBER_ADDED, "com.example.Foo", "com.example.Foo#a", "first"),
+        )
+        sameRef.sortedWith(DIFF_FINDING_ORDER).map { it.detail } shouldBe listOf("first", "second")
+    }
+
+    @Test
+    fun `the artifact labels and the identical verdict are read straight off the diff`() {
+        val diff = ApiDiffer.diff(snapshotOf("old.jar", type("com.example.A")), snapshotOf("new.jar", type("com.example.A")))
+        diff.oldArtifact shouldBe "old.jar"
+        diff.newArtifact shouldBe "new.jar"
+        diff.identical shouldBe true
+        DiffCounts.of(diff).total shouldBe 0
+    }
+
+    @Test
     fun `a removed enum constant is ENUM_CONSTANT_REMOVED, a removed plain field is not`() {
         val old = snapshotOf(
             "a.jar",
