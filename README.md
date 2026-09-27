@@ -3,6 +3,7 @@
 [![Release](https://img.shields.io/github/v/release/MohammadMD1383/jdx)](https://github.com/MohammadMD1383/jdx/releases)
 [![License](https://img.shields.io/github/license/MohammadMD1383/jdx)](LICENSE)
 [![Build](https://github.com/MohammadMD1383/jdx/actions/workflows/release.yml/badge.svg)](https://github.com/MohammadMD1383/jdx/actions/workflows/release.yml)
+[![M8ven Score](https://m8ven.ai/badge/mcp/mohammadmd1383/jdx)](https://m8ven.ai/mcp/mohammadmd1383/jdx)
 
 ## Try it in 30 seconds
 
