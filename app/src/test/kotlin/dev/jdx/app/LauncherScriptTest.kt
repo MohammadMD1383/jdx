@@ -25,7 +25,7 @@ import java.nio.file.Files
 /**
  * Tests of the POSIX launcher script (src/main/scripts/jdx) against a *stub JDK*: a fake
  * `bin/java` shell script that reports a configurable version and records the exec-line
- * arguments. The stub-JDK suites are fast; the two end-to-end tests at the bottom boot a
+ * arguments. The stub-JDK suites are fast; the end-to-end tests at the bottom boot a
  * real JVM each, which puts the whole class (~6 s) over what the tier-1 loop should carry —
  * so this is tier 2 (`@Tag("tier2")`, T-053): it runs in `./gradlew check`, never in
  * `./gradlew test`. The version-gate properties are this task's generative
@@ -763,6 +763,39 @@ class LauncherScriptTest {
         val archive = File(libs, "jdx.jsa")
         archive.isFile shouldBe true
         (archive.length() > 0) shouldBe true
+    }
+
+    @Test
+    fun `a stale AppCDS archive degrades silently through the real launcher and JVM (issue 54)`() {
+        // The per-OS bundles ship jdx.jsa trained on the CI runner's JDK build; on any
+        // other build HotSpot rejects the archive and degrades via -Xshare:auto. The
+        // launcher's -Xlog:cds=off keeps that rejection silent — without it the
+        // `[warning][cds]` notice lands on *stdout*, corrupting piped/JSON output.
+        // A garbage archive exercises the same reject-and-degrade path as a genuine
+        // build mismatch without needing a second JDK on the test host.
+        assumeTrue(javaIsAvailable(), "no java on PATH or /usr/lib/jvm/default")
+        val libs = File(projectDir, "build/libs")
+        val fatJars = libs.listFiles { file -> file.name.startsWith("jdx-") && file.name.endsWith("-all.jar") }
+            .orEmpty().toList()
+        assumeTrue(fatJars.size == 1, "fat jar missing in app/build/libs — run :app:installDist")
+        val fatJar = fatJars.single()
+
+        // A scratch install pointing at a copy of the real fat jar: the build
+        // outputs themselves are never touched.
+        val install = tempDir("jdx-stale-cds-")
+        File(install, "jdx").apply {
+            writeText(launcherSource.readText())
+            setExecutable(true, false)
+        }
+        val installLibs = File(install, "libs").apply { mkdirs() }
+        fatJar.copyTo(File(installLibs, fatJar.name))
+        File(installLibs, "jdx.jsa").writeBytes(byteArrayOf(0x50, 0x4b, 0x03, 0x04, 0x00))
+
+        val result = runLauncher(File(install, "jdx"), install, args = listOf("version"))
+
+        result.exitCode shouldBe 0
+        result.stdout.trim() shouldBe "jdx version ${dev.jdx.cli.BuildInfo.version}"
+        result.stderr shouldBe ""
     }
 
     private fun javaIsAvailable(): Boolean =

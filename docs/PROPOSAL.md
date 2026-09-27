@@ -1099,12 +1099,16 @@ after unzip, since repacked zips may lose it).
 The `jdx.jsa` AppCDS archive in each bundle is trained by that leg's own JDK:
 the archive format is host-specific and a foreign one is ignored via
 `-Xshare:auto`, so per-OS training is what makes the ≤ 250 ms cold-start budget
-(§15) hold on every OS instead of only Linux. Caveat (v1.2.0 probe): the archive
-is keyed to the exact JDK *build* (CI Temurin 21), so a different vendor, update,
-or newer JDK (e.g. a local 27) logs `[cds]` version-mismatch noise on stderr —
-the query still exits 0 with correct output, just without the archive speedup.
-Killing that noise (local retraining vs dropping the archive) is a follow-up,
-not part of this slice. `jdx upgrade` keeps tracking the
+(§15) hold on every OS instead of only Linux. Build skew (issue #54, closed):
+the archive is keyed to the exact JDK *build* (CI Temurin 21), so a different
+vendor, update, or newer JDK (e.g. a local 27) rejects it — but every launcher
+passes `-Xshare:auto -Xlog:cds=off` with `-XX:SharedArchiveFile` after
+`-Xshare:auto`, so the rejection degrades silently to the plain run: exit 0,
+correct output, empty stderr, just without the archive speedup. Silencing
+matters beyond cosmetics: the `[warning][cds]` notice lands on *stdout*, where
+it would corrupt piped and `--json` output. The silent-degradation path is
+pinned end-to-end by `LauncherScriptTest` (a garbage archive still yields a
+clean `jdx version`). `jdx upgrade` keeps tracking the
 bare `.tar.gz` (portable layout, pure-Java extraction, all launchers inside —
 it upgrades Windows installs without any external `tar`).
 
