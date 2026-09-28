@@ -1,0 +1,14 @@
+{
+  "mcpServers": {
+    "jdx": {
+      "transport": {
+        "type": "stdio",
+        "command": "jdx",
+        "args": [
+          "mcp"
+        ]
+      }
+    }
+  }
+}
+

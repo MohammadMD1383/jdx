@@ -20,8 +20,10 @@ import java.nio.file.Paths
  * third-party agent configs. Four backends share this service behind the
  * [Agent] seam: OpenCode (`opencode.json[c]`, v1+v2 entries), Claude Code
  * (`.mcp.json` / `~/.claude.json`, `mcpServers.jdx`), Kilo Code (a fork
- * of OpenCode — its `mcp` map carries the same v1-style local-server shape),
- * and Codex CLI (`config.toml`, `[mcp_servers.jdx]`).
+ *  of OpenCode — its `mcp` map carries the same v1-style local-server shape),
+ *  Cline (`cline_mcp_settings.json`, `mcpServers.jdx` in the nested
+ *  `transport` shape the real CLI writes),
+ *  and Codex CLI (`config.toml`, `[mcp_servers.jdx]`).
  * All filesystem behaviour lives here; the Clikt command only parses flags,
  * renders, and maps exit codes (D-004).
  *
@@ -72,6 +74,26 @@ import java.nio.file.Paths
  * `mcp.servers` namespace. Fresh Kilo files carry no `$schema` (that URL
  * names the OpenCode config schema).
  *
+ * Cline layout (verified against the real install, not the docs: `cline`
+ * CLI 3.0.65 downloaded from npm, plus the VS Code extension bundle 4.1.21;
+ * see the `clineConfigPath` note). Cline keeps a SINGLE global MCP file —
+ * `~/.cline/data/settings/cline_mcp_settings.json` — shared by the CLI, the
+ * IDE extensions, and the SDK via `resolveMcpSettingsPath()`
+ * (`CLINE_MCP_SETTINGS_PATH` > `CLINE_DATA_DIR` > `CLINE_DIR` > `~/.cline`).
+ * No project-level MCP file exists (open cline/cline#2418; every `mcp.json`
+ * string in both binaries is a plugin manifest or a Claude Code `.mcp.json`
+ * reference), so both scopes target the global file and the reported path
+ * always names it. The entry this service owns is `mcpServers.jdx` in the
+ * nested `transport` shape — byte-identical to what
+ * `cline mcp add jdx --yes -- jdx mcp` writes under an isolated HOME:
+ * `{"mcpServers":{"jdx":{"transport":{"type":"stdio","command":"jdx",
+ * "args":["mcp"]}}}}`. The probe additionally accepts the legacy flat shape
+ * (`command`/`args` at the top level, `transportType`/`type` variants), which
+ * the binary's own reader normalises the same way. Legacy globalStorage
+ * (`.../saoudrizwan.claude-dev/settings/cline_mcp_settings.json`) and
+ * `~/Documents/Cline/MCP/` paths are migration-only sources the extension
+ * reads once — never a write target.
+ *
  * Merge discipline: the target file is parsed leniently (JSONC comments and
  * trailing commas are accepted), every unrelated key is preserved byte-free —
  * only the owned entries are added, replaced, or removed. A second
@@ -89,11 +111,12 @@ class SetupService(
      */
     private val codexHome: Path? = null,
 ) {
-    /** Agents with setup support: OpenCode, Claude Code, Kilo Code, and Codex CLI. */
+    /** Agents with setup support: OpenCode, Claude Code, Kilo Code, Cline, and Codex CLI. */
     enum class Agent(val cliName: String) {
         OPENCODE("opencode"),
         CLAUDE_CODE("claude-code"),
         KILO("kilo"),
+        CLINE("cline"),
         CODEX("codex"),
     }
 
@@ -232,6 +255,11 @@ class SetupService(
             Scope.PROJECT -> kiloProjectConfigPath(projectDir)
             Scope.SYSTEM -> kiloSystemConfigPath(userHome)
         }
+        // Cline keeps a single global MCP file (verified against the real
+        // install — see the class KDoc): both scopes resolve to it, so a
+        // project-scoped run still wires Cline for work in this checkout and
+        // the reported path always names the global file.
+        Agent.CLINE -> clineConfigPath(userHome)
         Agent.CODEX -> when (scope) {
             Scope.PROJECT -> codexProjectConfigPath(projectDir)
             Scope.SYSTEM -> codexSystemConfigPath(userHome, codexHome)
@@ -339,8 +367,9 @@ class SetupService(
         /**
          * Parses `--agent` case-insensitively (`OpenCode`, `opencode`,
          * `open-code` all match; `Claude Code`, `claude-code`, `claudecode`,
-         * `claude` all match Claude Code; `kilo`, `kilo-code`, `kilocode`
-         * match Kilo Code; `codex`, `codex-cli`, `codexcli` match Codex CLI).
+         *   `claude` all match Claude Code; `kilo`, `kilo-code`, `kilocode`
+         *   match Kilo Code; `cline`, `cline-code`, `clinecode` match Cline;
+         *   `codex`, `codex-cli`, `codexcli` match Codex CLI).
          * Null when unsupported — the adapter exits 3 naming it.
          */
         fun parseAgent(raw: String?): Agent? {
@@ -349,6 +378,7 @@ class SetupService(
                 "opencode" -> Agent.OPENCODE
                 "claudecode", "claude" -> Agent.CLAUDE_CODE
                 "kilo", "kilocode" -> Agent.KILO
+                "cline", "clinecode" -> Agent.CLINE
                 "codex", "codexcli" -> Agent.CODEX
                 else -> null
             }
@@ -562,6 +592,97 @@ class SetupService(
         }
 
         /**
+         * Cline target for both scopes: the single global MCP file
+         * `~/.cline/data/settings/cline_mcp_settings.json`. Verified against
+         * the real install: `cline` CLI 3.0.65 (`resolveMcpSettingsPath()` in
+         * the platform binary — `CLINE_MCP_SETTINGS_PATH` else
+         * `$CLINE_DATA_DIR/settings` else `$CLINE_DIR/data/settings` else
+         * `~/.cline/data/settings`) and the VS Code extension bundle 4.1.21
+         * (same resolver; legacy globalStorage and `~/Documents/Cline/MCP/`
+         * paths are migration-only read sources). Empirically confirmed by
+         * running `cline mcp add jdx --yes -- jdx mcp` under an isolated
+         * HOME: the entry below appeared at exactly this path. Like the other
+         * system targets this names the default location — Cline itself
+         * honours the `CLINE_*` overrides when reading.
+         */
+        fun clineConfigPath(userHome: Path): Path =
+            userHome.resolve(".cline/data/settings/cline_mcp_settings.json")
+
+        /**
+         * The Cline entry: `jdx mcp` on PATH as a stdio MCP server in the
+         * nested `transport` shape — byte-identical to what
+         * `cline mcp add jdx --yes -- jdx mcp` writes (verified under an
+         * isolated HOME). Key order (`type`, `command`, `args`) matches the
+         * real CLI output so fresh installs diff cleanly against it.
+         */
+        fun desiredClineEntry(): JsonObject = buildJsonObject {
+            put(
+                "transport",
+                buildJsonObject {
+                    put("type", "stdio")
+                    put("command", "jdx")
+                    put("args", JsonArray(listOf(JsonPrimitive("mcp"))))
+                },
+            )
+        }
+
+        /** True when the `mcpServers.jdx` entry is a server that runs `jdx mcp`. */
+        fun isClineInstalled(root: JsonObject): Boolean {
+            val entry = root["mcpServers"]?.jsonObjectOrNull()?.get(SERVER_NAME)?.jsonObjectOrNull()
+                ?: return false
+            return isClineJdxEntry(entry)
+        }
+
+        /**
+         * True when [entry] runs `jdx mcp` in either Cline shape: the nested
+         * `transport` object the real CLI writes, or the legacy flat shape
+         * (`command`/`args` at the top level) the binary's own reader still
+         * normalises (`transport.type ?? transportType ?? type ?? "stdio"`).
+         * Remote shapes (`sse`/`streamableHttp`, `url`-based) never count —
+         * they cannot launch a local `jdx` process. Command matching reuses
+         * [isJdxCommand] (absolute install paths and Windows shims), args
+         * must contain `mcp`. Never throws (hostile configs). The `disabled`
+         * flag is ignored for presence — consistent with the OpenCode
+         * backends — since the wiring itself is what `--check` reports.
+         */
+        fun isClineJdxEntry(entry: JsonObject): Boolean {
+            val transport = entry["transport"]?.jsonObjectOrNull() ?: entry
+            val type = transport["type"]?.jsonPrimitiveOrNull()
+                ?: entry["transportType"]?.jsonPrimitiveOrNull()
+                ?: entry["type"]?.jsonPrimitiveOrNull()
+            if (type != null && !type.equals("stdio", ignoreCase = true)) return false
+            val command = transport["command"]?.jsonPrimitiveOrNull() ?: return false
+            if (!isJdxCommand(command)) return false
+            val args = transport["args"] as? JsonArray ?: return false
+            return args.any { (it as? JsonPrimitive)?.contentOrNull() == "mcp" }
+        }
+
+        /**
+         * Merges the desired Cline entry into [root] (null = fresh file with
+         * just `mcpServers` — that is all the real CLI writes). Every other
+         * server under `mcpServers` is preserved.
+         */
+        fun mergeInstallCline(root: JsonObject?): JsonObject {
+            val base: MutableMap<String, JsonElement> = root?.toMutableMap() ?: mutableMapOf()
+            val servers = root?.get("mcpServers")?.jsonObjectOrNull()?.toMutableMap() ?: mutableMapOf()
+            servers[SERVER_NAME] = desiredClineEntry()
+            base["mcpServers"] = JsonObject(servers)
+            return JsonObject(base)
+        }
+
+        /**
+         * Removes `mcpServers.jdx`; drops an emptied `mcpServers` object to
+         * stay tidy.
+         */
+        fun mergeRemoveCline(root: JsonObject): JsonObject {
+            val base = root.toMutableMap()
+            val servers = root["mcpServers"]?.jsonObjectOrNull()?.toMutableMap() ?: return root
+            servers.remove(SERVER_NAME)
+            if (servers.isEmpty()) base.remove("mcpServers") else base["mcpServers"] = JsonObject(servers)
+            return JsonObject(base)
+        }
+
+        /**
          * Kilo Code project target: the nearest `kilo.json[c]` walking up from
          * [projectDir], preferring the `.kilo/` variant at each level (that is
          * what the Kilo docs name the cleaner setup, and the `.kilo/` file
@@ -661,13 +782,13 @@ class SetupService(
         /** True when either the v1 (`mcp.jdx`) or the v2 (`mcp.servers.jdx`) entry wires `jdx mcp`. */
         fun isInstalledRoot(root: JsonObject): Boolean = isInstalledRoot(root, Agent.OPENCODE)
 
-        /** True when [agent]'s owned entries wire `jdx mcp` (OpenCode: v1 or v2; Kilo: `mcp.jdx`; Claude: `mcpServers.jdx`). */
+        /** True when [agent]'s owned entries wire `jdx mcp` (OpenCode: v1 or v2; Kilo: `mcp.jdx`; Claude/Cline: `mcpServers.jdx`; Codex CLI: TOML text probe). */
         fun isInstalledRootFor(agent: Agent, root: JsonObject): Boolean = isInstalledRoot(root, agent)
 
         /**
          * True when an install is a no-op (every owned entry present): OpenCode
          * needs **both** the v1 and v2 entries — a v1-only file is completed
-         * with the v2 entry — while Kilo, Claude Code, and Codex CLI need only
+         * with the v2 entry — while Kilo, Claude Code, Cline, and Codex CLI need only
          * their single entry. The report-only probe ([isInstalledRoot]) stays
          * lenient (either OpenCode entry counts).
          */
@@ -675,14 +796,16 @@ class SetupService(
             Agent.OPENCODE -> isV1Installed(root) && isV2Installed(root)
             Agent.KILO -> isV1Installed(root)
             Agent.CLAUDE_CODE -> isClaudeInstalled(root)
+            Agent.CLINE -> isClineInstalled(root)
             Agent.CODEX -> error("Codex CLI installs merge TOML text, never JSON")
         }
 
-        /** Agent-aware probe: OpenCode checks v1/v2 entries, Claude Code checks `mcpServers.jdx`, Kilo checks `mcp.jdx`. */
+        /** Agent-aware probe: OpenCode checks v1/v2 entries, Claude Code checks `mcpServers.jdx`, Kilo checks `mcp.jdx`, Cline checks its `mcpServers.jdx` transport entry, Codex CLI probes TOML text. */
         fun isInstalledRoot(root: JsonObject, agent: Agent): Boolean = when (agent) {
             Agent.OPENCODE -> isV1Installed(root) || isV2Installed(root)
             Agent.CLAUDE_CODE -> isClaudeInstalled(root)
             Agent.KILO -> isV1Installed(root)
+            Agent.CLINE -> isClineInstalled(root)
             Agent.CODEX -> error("Codex CLI probes TOML text via isCodexInstalledText, never JSON")
         }
 
@@ -790,6 +913,7 @@ class SetupService(
             Agent.OPENCODE -> mergeInstallOpencode(root)
             Agent.CLAUDE_CODE -> mergeClaudeInstall(root)
             Agent.KILO -> mergeInstallKilo(root)
+            Agent.CLINE -> mergeInstallCline(root)
             Agent.CODEX -> error("Codex CLI installs merge TOML text via mergeCodexInstall, never JSON")
         }
 
@@ -839,6 +963,7 @@ class SetupService(
             Agent.OPENCODE -> mergeRemoveOpencode(root)
             Agent.CLAUDE_CODE -> mergeClaudeRemove(root)
             Agent.KILO -> mergeRemoveKilo(root)
+            Agent.CLINE -> mergeRemoveCline(root)
             Agent.CODEX -> error("Codex CLI removals merge TOML text via mergeCodexRemove, never JSON")
         }
 
@@ -1360,6 +1485,10 @@ class SetupService(
 
         private fun hasEntryFor(agent: Agent, root: JsonObject): Boolean = when (agent) {
             Agent.CLAUDE_CODE -> {
+                val servers = root["mcpServers"]?.jsonObjectOrNull() ?: return false
+                servers.containsKey(SERVER_NAME)
+            }
+            Agent.CLINE -> {
                 val servers = root["mcpServers"]?.jsonObjectOrNull() ?: return false
                 servers.containsKey(SERVER_NAME)
             }

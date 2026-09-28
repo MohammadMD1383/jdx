@@ -11,8 +11,9 @@ import java.nio.file.Path
 
 /**
  * Golden tests for `jdx setup` (issue #33 family): merged `opencode.json`,
- * Claude Code `.mcp.json`, `kilo.json`, and Codex CLI `config.toml` bytes
- * pinned to committed files under `src/test/resources/golden/setup/`.
+ * Claude Code `.mcp.json`, `kilo.json`, Cline `cline_mcp_settings.json`, and
+ * Codex CLI `config.toml` bytes pinned to committed files under
+ * `src/test/resources/golden/setup/`.
  *
  * One test pins all files: [GoldenFiles.verifyAll] fails on orphans, so
  * splitting agents into separate tests would fail each with the other's
@@ -127,6 +128,40 @@ class SetupGoldenTest {
             ),
         ) as SetupService.SetupOutcome.Removed
         contents["remove-keeps-others-kilo.json"] = Files.readString(kiloRemoveOutcome.path)
+
+        val clineHome = root.resolve("cline-home").also { Files.createDirectories(it) }
+        val clineFresh = SetupService(clineHome, project)
+        val clineFreshOutcome = clineFresh.run(
+            SetupService.SetupRequest(
+                agent = SetupService.Agent.CLINE,
+                scope = SetupService.Scope.SYSTEM,
+            ),
+        ) as SetupService.SetupOutcome.Installed
+        contents["cline-fresh-install.json"] = Files.readString(clineFreshOutcome.path)
+
+        val clineMergeHome = root.resolve("cline-merge-home").also { Files.createDirectories(it) }
+        Files.createDirectories(clineMergeHome.resolve(".cline/data/settings"))
+        Files.writeString(
+            clineMergeHome.resolve(".cline/data/settings/cline_mcp_settings.json"),
+            """{"mcpServers":{"other":{"transport":{"type":"stdio","command":"other","args":["x"]}}}}""",
+        )
+        val clineMerge = SetupService(clineMergeHome, project)
+        val clineMergeOutcome = clineMerge.run(
+            SetupService.SetupRequest(
+                agent = SetupService.Agent.CLINE,
+                scope = SetupService.Scope.SYSTEM,
+            ),
+        ) as SetupService.SetupOutcome.Installed
+        contents["cline-merge-preserves.json"] = Files.readString(clineMergeOutcome.path)
+
+        val clineRemoveOutcome = clineMerge.run(
+            SetupService.SetupRequest(
+                agent = SetupService.Agent.CLINE,
+                scope = SetupService.Scope.SYSTEM,
+                remove = true,
+            ),
+        ) as SetupService.SetupOutcome.Removed
+        contents["cline-remove-keeps-others.json"] = Files.readString(clineRemoveOutcome.path)
 
         val codexProject = root.resolve("codex-project").also { Files.createDirectories(it) }
         val codexFresh = SetupService(home, codexProject, home.resolve(".codex"))
