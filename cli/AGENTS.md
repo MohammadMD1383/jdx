@@ -22,7 +22,7 @@ is the CLI surface, pinned by help/parity goldens.)
   `.exe`/`.cmd`/`.bat` (`osName` seam); the `appcds` row is stat-only
   (size + mtime vs the fat jar, WARN-only, never FAIL). `service/UpgradeService` — pure-Java `tar.gz` extraction first
   (external `tar` is the fallback), `.exe`-aware launcher check.
-  `service/SetupService` — agent wiring (`jdx setup --agent opencode|claude-code|kilo|codex|copilot
+  `service/SetupService` — agent wiring (`jdx setup --agent opencode|claude-code|kilo|cline|codex|copilot
   --scope project|system`): JSONC-tolerant `mcp.jdx` (v1) + `mcp.servers.jdx`
   (v2, `enabled` → `disabled`) merge into `opencode.json[c]` (project walk-up,
   else `~/.config/opencode`); `mcpServers.jdx` (`{"command": "jdx", "args":
@@ -30,7 +30,15 @@ is the CLI surface, pinned by help/parity goldens.)
   `.mcp.json` (project walk-up) or `~/.claude.json` (system); Kilo Code
   (OpenCode fork, same `mcp` map shape) single `mcp.jdx` merge into
   `kilo.json[c]` (project walk-up preferring `.kilo/`, else `~/.config/kilo`;
-  fresh files carry no `$schema`); Codex CLI `[mcp_servers.jdx]`
+  fresh files carry no `$schema`); Cline single `mcpServers.jdx` merge in the
+  nested `transport` shape (`{"transport": {"type": "stdio", "command": "jdx",
+  "args": ["mcp"]}}`, the `cline mcp add jdx -- jdx mcp` equivalent) into the
+  single global `~/.cline/data/settings/cline_mcp_settings.json` for BOTH
+  scopes — verified against the real install (cline CLI 3.0.65 +
+  extension 4.1.21 binaries: `resolveMcpSettingsPath`, no project-level MCP
+  file exists, cline/cline#2418 open), so a project-scoped run reports the
+  global path; the probe also accepts the legacy flat `command`/`args` shape;
+  Codex CLI `[mcp_servers.jdx]`
   (`command = "jdx"`, `args = ["mcp"]`, the `codex mcp add jdx -- jdx mcp`
   equivalent, verified against `codex-cli 0.157.1`) merges line-based into
   `.codex/config.toml` (project walk-up) or `$CODEX_HOME/config.toml`

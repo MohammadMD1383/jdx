@@ -542,6 +542,21 @@ class DoctorServiceTest {
     }
 
     @Test
+    fun `the setup row covers cline wiring when nothing is wired`() {
+        val service = DoctorService(fakeEnvironment(tempDir("jdx-doctor-test-")))
+
+        val report = service.probe()
+
+        val setup = report.checks.first { it.name == "setup" }
+        setup.status shouldBe DoctorStatus.WARN
+        setup.detail shouldContain "cline project"
+        setup.detail shouldContain "cline system"
+        setup.detail shouldContain "cline_mcp_settings.json"
+        setup.detail shouldContain "jdx setup --agent cline --scope system"
+        setup.detail shouldContain "jdx setup --agent kilo --scope project"
+    }
+
+    @Test
     fun `the setup row covers codex wiring and presence`() {
         val service = DoctorService(fakeEnvironment(tempDir("jdx-doctor-test-")))
 
@@ -553,6 +568,27 @@ class DoctorServiceTest {
         setup.detail shouldContain "codex system"
         setup.detail shouldContain "codex not found on PATH"
         setup.detail shouldContain "jdx setup --agent codex --scope project"
+    }
+
+    @Test
+    fun `the setup row is OK when only cline is wired`() {
+        val root = tempDir("jdx-doctor-test-")
+        val environment = fakeEnvironment(root)
+        SetupService(environment.userHome, environment.workingDir).run(
+            SetupService.SetupRequest(
+                agent = SetupService.Agent.CLINE,
+                scope = SetupService.Scope.SYSTEM,
+            ),
+        )
+
+        val report = DoctorService(environment).probe()
+
+        val setup = report.checks.first { it.name == "setup" }
+        setup.status shouldBe DoctorStatus.OK
+        // Both Cline scopes name the same single global file.
+        setup.detail shouldContain "cline project installed"
+        setup.detail shouldContain "cline system installed"
+        setup.detail shouldContain "cline_mcp_settings.json"
     }
 
     @Test

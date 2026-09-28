@@ -14,6 +14,7 @@ jdx members java.util.HashMap --limit 5
 # MCP (OpenCode v1+v2): jdx setup --agent opencode --scope project   (then restart opencode)
 # MCP (Claude Code): jdx setup --agent claude-code --scope project   (then restart claude)
 # MCP (Kilo Code): jdx setup --agent kilo --scope project   (then restart Kilo Code)
+# MCP (Cline): jdx setup --agent cline --scope system   (then restart Cline)
 # MCP (Codex CLI): jdx setup --agent codex --scope project   (then restart codex)
 # MCP (GitHub Copilot CLI): jdx setup --agent copilot --scope project   (then restart copilot)
 ```

@@ -483,11 +483,13 @@ class DoctorService(
         // Agent wiring (issue #33 family): reports whether the `jdx mcp`
         // entries are present in the OpenCode (v1/v2 entries), Claude Code
         // (`.mcp.json` / `~/.claude.json`), Kilo Code, Codex CLI
-        // (`.codex/config.toml` / `~/.codex/config.toml`), and GitHub Copilot
-        // CLI (`.mcp.json` / `~/.copilot/mcp-config.json`) project and system
-        // configs, plus which lines are installed for use (OpenCode v1 vs v2
-        // beta — the install covers both, but the operator must know which
-        // binary reads it). Read-only — the same lenient probe as
+        // (`.codex/config.toml` / `~/.codex/config.toml`), GitHub Copilot
+        // CLI (`.mcp.json` / `~/.copilot/mcp-config.json`), and the single
+        // global Cline file (both Cline scopes name it — Cline keeps no
+        // project-level MCP file, verified against the real install), plus
+        // which lines are installed for use (OpenCode v1 vs v2 beta — the
+        // install covers both, but the operator must know which binary reads
+        // it). Read-only — the same lenient probe as
         // `jdx setup --check`, plus best-effort `--version` classifications
         // that never throw. Missing on every scope is a WARN (setup is
         // optional), never a FAIL; an unreadable file names itself.
@@ -497,6 +499,7 @@ class DoctorService(
         val claudeSystem = SetupService.claudeSystemConfigPath(environment.userHome)
         val kiloProjectPath = SetupService.kiloProjectConfigPath(environment.workingDir)
         val kiloSystemPath = SetupService.kiloSystemConfigPath(environment.userHome)
+        val clinePath = SetupService.clineConfigPath(environment.userHome)
         val codexHome = environment.envVars["CODEX_HOME"]
             ?.takeIf { it.isNotBlank() }
             ?.let { Paths.get(it) }
@@ -572,6 +575,13 @@ class DoctorService(
             ?: "no project config (${kiloProjectPath.fileName})"
         val kiloSystemState = stateOf(kiloSystemPath, SetupService.Agent.KILO)
             ?: "no system config ($kiloSystemPath)"
+        // Both Cline scopes resolve to the same global file (verified Cline
+        // layout): one state string per scope keeps the row shape uniform,
+        // and both name the file.
+        val clineProjectState = stateOf(clinePath, SetupService.Agent.CLINE)
+            ?: "no project config (${clinePath.fileName}, global file)"
+        val clineSystemState = stateOf(clinePath, SetupService.Agent.CLINE)
+            ?: "no system config ($clinePath)"
         val codexProjectState = stateOf(codexProject, SetupService.Agent.CODEX)
             ?: "no project config (${codexProject.fileName})"
         val codexSystemState = stateOf(codexSystem, SetupService.Agent.CODEX)
@@ -584,6 +594,7 @@ class DoctorService(
             opencodeProjectState.startsWith("installed") || opencodeSystemState.startsWith("installed") ||
             claudeProjectState.startsWith("installed") || claudeSystemState.startsWith("installed") ||
             kiloProjectState.startsWith("installed") || kiloSystemState.startsWith("installed") ||
+            clineProjectState.startsWith("installed") || clineSystemState.startsWith("installed") ||
             codexProjectState.startsWith("installed") || codexSystemState.startsWith("installed") ||
             copilotProjectState.startsWith("installed") || copilotSystemState.startsWith("installed")
         ) {
@@ -595,6 +606,7 @@ class DoctorService(
             " — run `jdx setup --agent opencode --scope project`, " +
                 "`jdx setup --agent claude-code --scope project`, " +
                 "`jdx setup --agent kilo --scope project`, " +
+                "`jdx setup --agent cline --scope system`, " +
                 "`jdx setup --agent codex --scope project` or " +
                 "`jdx setup --agent copilot --scope project`"
         return check(
@@ -605,6 +617,7 @@ class DoctorService(
                 "claude-code project $claudeProjectState ($claudeDetected); " +
                 "claude-code system $claudeSystemState; " +
                 "kilo project $kiloProjectState; kilo system $kiloSystemState; " +
+                "cline project $clineProjectState; cline system $clineSystemState; " +
                 "codex project $codexProjectState ($codexDetected); " +
                 "codex system $codexSystemState; " +
                 "copilot project $copilotProjectState ($copilotDetected); " +

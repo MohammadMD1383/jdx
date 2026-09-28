@@ -26,16 +26,19 @@ import kotlin.system.exitProcess
  * (`{"command": "jdx", "args": ["mcp"]}`, the `claude mcp add jdx -- jdx mcp`
  * equivalent) entry in `.mcp.json` (project) or `~/.claude.json` (system);
  * Kilo Code (an OpenCode fork sharing the `mcp` map shape) gets the single
- * `mcp.jdx` entry in its `kilo.json[c]` files; Codex CLI gets the
- * `[mcp_servers.jdx]` table (`command = "jdx"`, `args = ["mcp"]`, the
- * `codex mcp add jdx -- jdx mcp` equivalent) in `.codex/config.toml`
- * (project, trusted checkouts) or `~/.codex/config.toml` (system,
- * `$CODEX_HOME` honoured); GitHub Copilot CLI gets the `mcpServers.jdx`
- * (`{"type": "local", "command": "jdx", "args": ["mcp"]}`, the
- * `copilot mcp add jdx -- jdx mcp` equivalent) entry in `.mcp.json`
- * (project) or `~/.copilot/mcp-config.json` (system, `$COPILOT_HOME`
- * honoured). The detected line is reported,
- * never assumed. A thin adapter (D-004): flag parsing, rendering, and exit
+ * `mcp.jdx` entry in its `kilo.json[c]` files; Cline gets the
+ * `mcpServers.jdx` transport entry (the `cline mcp add jdx -- jdx mcp`
+ * equivalent) in the single global `cline_mcp_settings.json` for either
+ * scope — Cline keeps no project-level MCP file (verified against the real
+ * install); Codex CLI gets the `[mcp_servers.jdx]` table
+ * (`command = "jdx"`, `args = ["mcp"]`, the `codex mcp add jdx -- jdx mcp`
+ * equivalent) in `.codex/config.toml` (project, trusted checkouts) or
+ * `~/.codex/config.toml` (system, `$CODEX_HOME` honoured); GitHub Copilot
+ * CLI gets the `mcpServers.jdx` (`{"type": "local", "command": "jdx",
+ * "args": ["mcp"]}`, the `copilot mcp add jdx -- jdx mcp` equivalent)
+ * entry in `.mcp.json` (project) or `~/.copilot/mcp-config.json` (system,
+ * `$COPILOT_HOME` honoured). The detected line is reported, never assumed.
+ * A thin adapter (D-004): flag parsing, rendering, and exit
  * codes only — [SetupService] owns the merge and the version classification.
  */
 class SetupCommand(
@@ -50,12 +53,14 @@ class SetupCommand(
     override fun help(context: Context): String =
         "Wire jdx into an AI agent: write the MCP server entries that launch `jdx mcp` " +
             "into the agent config (project checkout or user-global). " +
-            "--agent opencode|claude-code|kilo|codex|copilot --scope project|system. " +
+            "--agent opencode|claude-code|kilo|cline|codex|copilot --scope project|system. " +
             "OpenCode writes both the v1 (mcp.jdx) and v2 (mcp.servers.jdx) entries so either " +
             "OpenCode line picks it up (v1 support is deprecated, slated for removal); " +
             "Claude Code writes the mcpServers.jdx entry into .mcp.json (project) or " +
             "~/.claude.json (system); " +
             "Kilo Code gets the single mcp.jdx entry in kilo.jsonc (project prefers .kilo/); " +
+            "Cline writes the mcpServers.jdx transport entry into the single global " +
+            "cline_mcp_settings.json for either scope (Cline keeps no project-level MCP file). " +
             "Codex CLI gets the [mcp_servers.jdx] table in .codex/config.toml (project) or " +
             "~/.codex/config.toml (system, \$CODEX_HOME honoured); " +
             "GitHub Copilot CLI gets the mcpServers.jdx entry in .mcp.json (project) or " +
@@ -66,7 +71,7 @@ class SetupCommand(
 
     private val agent by option(
         "--agent",
-        help = "Agent to wire: opencode, claude-code (claude is accepted as an alias), kilo (Kilo Code, an OpenCode fork), codex (Codex CLI), or copilot (GitHub Copilot CLI).",
+        help = "Agent to wire: opencode, claude-code (claude is accepted as an alias), kilo (Kilo Code, an OpenCode fork), cline (Cline), codex (Codex CLI), or copilot (GitHub Copilot CLI).",
     )
 
     private val scope by option(
@@ -75,6 +80,7 @@ class SetupCommand(
             "OpenCode targets opencode.json[c] (~/.config/opencode); " +
             "Claude Code targets .mcp.json (project) or ~/.claude.json (system); " +
             "Kilo Code targets kilo.json[c] (~/.config/kilo, project prefers .kilo/); " +
+            "Cline targets ~/.cline/data/settings/cline_mcp_settings.json for both scopes (single global file). " +
             "Codex CLI targets .codex/config.toml (project) or ~/.codex/config.toml (system, \$CODEX_HOME honoured); " +
             "GitHub Copilot CLI targets .mcp.json (project) or ~/.copilot/mcp-config.json (system, \$COPILOT_HOME honoured).",
     )
@@ -98,7 +104,7 @@ class SetupCommand(
         val parsedAgent = SetupService.parseAgent(agent)
         if (parsedAgent == null) {
             finish(
-                "usage error: unsupported --agent '${agent}' (only --agent opencode|claude-code|kilo|codex|copilot)",
+                "usage error: unsupported --agent '${agent}' (only --agent opencode|claude-code|kilo|cline|codex|copilot)",
                 SetupPayload(agent = agent, message = "unsupported agent '${agent}'"),
                 exitCode = 3,
             )
@@ -138,8 +144,9 @@ class SetupCommand(
             ),
         )
         val path = setupPath(outcome)
-        // Version probes are display-only per backend; Kilo Code skips both
-        // (no `opencode --version` classification to report, no binary probe).
+        // Version probes are display-only per backend; Kilo Code and Cline
+        // skip both (no `opencode --version` classification to report, no
+        // binary probe).
         val opencodeVersion = if (parsedAgent == SetupService.Agent.OPENCODE) versionProbe() else null
         val claudeVersion = if (parsedAgent == SetupService.Agent.CLAUDE_CODE) claudeVersionProbe() else null
         val codexVersion = if (parsedAgent == SetupService.Agent.CODEX) codexVersionProbe() else null
@@ -154,6 +161,7 @@ class SetupCommand(
             SetupService.Agent.COPILOT ->
                 SetupService.describeCopilotVersion(requireNotNull(copilotVersion))
             SetupService.Agent.KILO -> ""
+            SetupService.Agent.CLINE -> ""
         }
         val payload = SetupPayload(
             agent = parsedAgent.cliName,
@@ -282,6 +290,9 @@ private fun setupMessage(outcome: SetupService.SetupOutcome, agent: SetupService
             SetupService.Agent.KILO ->
                 if (outcome.changed) "installed (jdx mcp entry written to ${outcome.path.fileName})"
                 else "already installed (${outcome.path.fileName})"
+            SetupService.Agent.CLINE ->
+                if (outcome.changed) "installed (jdx mcp transport entry written to ${outcome.path.fileName})"
+                else "already installed (${outcome.path.fileName})"
             SetupService.Agent.CODEX ->
                 if (outcome.changed) "installed (mcp_servers jdx mcp entry written to ${outcome.path.fileName})"
                 else "already installed (${outcome.path.fileName}, mcp_servers entry)"
@@ -293,7 +304,7 @@ private fun setupMessage(outcome: SetupService.SetupOutcome, agent: SetupService
         if (outcome.installed) "installed (${outcome.path.fileName})" else "not installed (${outcome.path.fileName})"
     is SetupService.SetupOutcome.Removed ->
         when (agent) {
-            SetupService.Agent.KILO ->
+            SetupService.Agent.KILO, SetupService.Agent.CLINE ->
                 if (outcome.changed) "removed (jdx entry deleted from ${outcome.path.fileName})"
                 else "not installed (nothing to remove)"
             else ->
@@ -311,6 +322,7 @@ private fun setupText(
     detectedVersion: String,
 ): String {
     if (agent == SetupService.Agent.KILO) return setupKiloText(outcome, scope)
+    if (agent == SetupService.Agent.CLINE) return setupClineText(outcome, scope)
     val name = agent.cliName
     val where = if (scope == SetupService.Scope.PROJECT) "project" else "system"
     val detected = "detected: $detectedVersion"
@@ -322,6 +334,7 @@ private fun setupText(
         SetupService.Agent.CODEX -> "$name $where setup installed (mcp_servers entry)"
         SetupService.Agent.COPILOT -> "$name $where setup installed (mcpServers entry)"
         SetupService.Agent.KILO -> "$name $where setup installed"
+        SetupService.Agent.CLINE -> "$name $where setup installed (mcpServers transport entry)"
     }
     return when (outcome) {
         is SetupService.SetupOutcome.Installed ->
@@ -370,5 +383,41 @@ private fun setupKiloText(
             "kilo $where setup unreadable: ${outcome.path}: ${outcome.reason}"
         is SetupService.SetupOutcome.Failed ->
             "kilo $where setup failed: ${outcome.reason}"
+    }
+}
+
+/**
+ * Cline rendering: the single `mcpServers.jdx` transport entry, no version
+ * probe. Both scopes name the same global file (Cline keeps no
+ * project-level MCP file), so project-scoped output says so explicitly.
+ */
+private fun setupClineText(
+    outcome: SetupService.SetupOutcome,
+    scope: SetupService.Scope,
+): String {
+    val where = if (scope == SetupService.Scope.PROJECT) "project" else "system"
+    // The scope collapse is the verified Cline layout, not a fallback: say
+    // it on writes so a project-scoped run is never mistaken for a
+    // checkout-local file.
+    val globalNote = " (global file — Cline keeps no project-level MCP config)"
+    return when (outcome) {
+        is SetupService.SetupOutcome.Installed ->
+            if (outcome.changed) {
+                "cline $where setup installed$globalNote\n  ${outcome.path}\n" +
+                    "next: restart Cline (config loads once at startup)"
+            } else {
+                "cline $where setup already installed (no changes)\n  ${outcome.path}"
+            }
+        is SetupService.SetupOutcome.Checked ->
+            if (outcome.installed) "cline $where setup installed\n  ${outcome.path}"
+            else "cline $where setup not installed\n  ${outcome.path}\n" +
+                "next: jdx setup --agent cline --scope ${where.lowercase()}"
+        is SetupService.SetupOutcome.Removed ->
+            if (outcome.changed) "cline $where setup removed$globalNote\n  ${outcome.path}"
+            else "cline $where setup not installed (nothing to remove)\n  ${outcome.path}"
+        is SetupService.SetupOutcome.Corrupt ->
+            "cline $where setup unreadable: ${outcome.path}: ${outcome.reason}"
+        is SetupService.SetupOutcome.Failed ->
+            "cline $where setup failed: ${outcome.reason}"
     }
 }
