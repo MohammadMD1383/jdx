@@ -40,9 +40,9 @@ class FixtureResolutionOwnershipTest {
     fun `the walk-up corpus resolver lives in one shared helper and core's documented copy`() {
         inRepo {
             val copies = kotlinTestSources()
-                .filter { it.relativeTo(repoRoot).path !in ALLOWED_RESOLVERS }
+                .filter { it.repoPath() !in ALLOWED_RESOLVERS }
                 .filter { file -> file.readText().contains(WALK_UP_MARKER) }
-                .map { it.relativeTo(repoRoot).path }
+                .map { it.repoPath() }
                 .sorted()
 
             assertEquals(
@@ -90,14 +90,34 @@ class FixtureResolutionOwnershipTest {
         }
     }
 
+    /**
+     * Every Kotlin test source in the repository, in both source sets.
+     *
+     * `src/testFixtures/kotlin` is scanned too, and deliberately: the canonical
+     * `FixtureJars` lives *there*, so a source-set-shaped blind spot would let a copy hide
+     * in the one module that owns the rule.
+     */
     private fun kotlinTestSources(): List<File> =
         repoRoot.listFiles { file: File -> file.isDirectory && file.name != "build" }
-            ?.map { module -> File(module, "src/test/kotlin") }
-            ?.filter { it.isDirectory }
-            ?.flatMap { root ->
-                root.walkTopDown().filter { it.isFile && it.extension == "kt" }.toList()
+            ?.flatMap { module ->
+                TEST_SOURCE_DIRS.map { File(module, it) }
+                    .filter { it.isDirectory }
+                    .flatMap { root ->
+                        root.walkTopDown().filter { it.isFile && it.extension == "kt" }.toList()
+                    }
             }
             .orEmpty()
+
+    /**
+     * The repository-relative path with `/` separators.
+     *
+     * `File.path` uses `\` on Windows, so comparing it against a `/`-spelled constant
+     * matches nothing there and the gate passes for the wrong reason. The `windows` CI job
+     * caught exactly that: both *allowed* paths were reported as violations while the real
+     * canonical one was invisible to the scan. `invariantSeparatorsPath` is the fix; a test
+     * that means different things per OS is one nobody trusts.
+     */
+    private fun File.repoPath(): String = relativeTo(repoRoot).invariantSeparatorsPath
 
     /**
      * The scan reaches the whole repository, which only exists when the test runs from the
@@ -114,6 +134,7 @@ class FixtureResolutionOwnershipTest {
 
     private companion object {
         const val WALK_UP_MARKER = "testfixtures/build/libs"
+        val TEST_SOURCE_DIRS = listOf("src/test/kotlin", "src/testFixtures/kotlin")
         val ALLOWED_RESOLVERS = setOf(
             "testfixtures/src/testFixtures/kotlin/dev/jdx/testsupport/fixtures/FixtureJars.kt",
             "core/src/test/kotlin/dev/jdx/core/fixtures/Fixtures.kt",
