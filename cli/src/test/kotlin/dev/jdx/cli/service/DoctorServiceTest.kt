@@ -603,6 +603,21 @@ class DoctorServiceTest {
     }
 
     @Test
+    fun `the setup row covers cline wiring when nothing is wired`() {
+        val service = DoctorService(fakeEnvironment(tempDir("jdx-doctor-test-")))
+
+        val report = service.probe()
+
+        val setup = report.checks.first { it.name == "setup" }
+        setup.status shouldBe DoctorStatus.WARN
+        setup.detail shouldContain "cline project"
+        setup.detail shouldContain "cline system"
+        setup.detail shouldContain "cline_mcp_settings.json"
+        setup.detail shouldContain "jdx setup --agent cline --scope system"
+        setup.detail shouldContain "jdx setup --agent kilo --scope project"
+    }
+
+    @Test
     fun `the setup row covers codex wiring and presence`() {
         val service = DoctorService(fakeEnvironment(tempDir("jdx-doctor-test-")))
 
@@ -614,6 +629,27 @@ class DoctorServiceTest {
         setup.detail shouldContain "codex system"
         setup.detail shouldContain "codex not found on PATH"
         setup.detail shouldContain "jdx setup --agent codex --scope project"
+    }
+
+    @Test
+    fun `the setup row is OK when only cline is wired`() {
+        val root = tempDir("jdx-doctor-test-")
+        val environment = fakeEnvironment(root)
+        SetupService(environment.userHome, environment.workingDir).run(
+            SetupService.SetupRequest(
+                agent = SetupService.Agent.CLINE,
+                scope = SetupService.Scope.SYSTEM,
+            ),
+        )
+
+        val report = DoctorService(environment).probe()
+
+        val setup = report.checks.first { it.name == "setup" }
+        setup.status shouldBe DoctorStatus.OK
+        // Both Cline scopes name the same single global file.
+        setup.detail shouldContain "cline project installed"
+        setup.detail shouldContain "cline system installed"
+        setup.detail shouldContain "cline_mcp_settings.json"
     }
 
     @Test
@@ -683,6 +719,90 @@ class DoctorServiceTest {
         setup.status shouldBe DoctorStatus.OK
         setup.detail shouldContain "codex system installed"
         setup.detail shouldContain codexHome.resolve("config.toml").toString()
+    }
+
+    @Test
+    fun `the setup row covers copilot wiring and presence`() {
+        val service = DoctorService(fakeEnvironment(tempDir("jdx-doctor-test-")))
+
+        val report = service.probe()
+
+        val setup = report.checks.first { it.name == "setup" }
+        setup.status shouldBe DoctorStatus.WARN
+        setup.detail shouldContain "copilot project"
+        setup.detail shouldContain "copilot system"
+        setup.detail shouldContain "copilot not found on PATH"
+        setup.detail shouldContain "jdx setup --agent copilot --scope project"
+    }
+
+    @Test
+    fun `the setup row names the detected copilot binary`() {
+        val runner = ProcessRunner { executable, _ ->
+            if (executable.fileName.toString().substringBefore(".") == "copilot") {
+                ProcessOutcome(0, "GitHub Copilot CLI 1.0.88.", "")
+            } else if (executable.fileName.toString().startsWith("opencode")) {
+                throw IOException("no opencode here")
+            } else {
+                ProcessOutcome(0, "26.0.2.1", "")
+            }
+        }
+        val service = DoctorService(
+            fakeEnvironment(
+                tempDir("jdx-doctor-test-"),
+                runner = runner,
+                copilotBinaries = listOf("copilot"),
+            ),
+        )
+
+        val report = service.probe()
+
+        val setup = report.checks.first { it.name == "setup" }
+        setup.status shouldBe DoctorStatus.WARN
+        setup.detail shouldContain "copilot (GitHub Copilot CLI 1.0.88.)"
+    }
+
+    @Test
+    fun `the setup row is OK when only copilot is wired`() {
+        val root = tempDir("jdx-doctor-test-")
+        val environment = fakeEnvironment(root)
+        SetupService(
+            environment.userHome,
+            environment.workingDir,
+            null,
+            environment.userHome.resolve(".copilot"),
+        ).run(
+            SetupService.SetupRequest(
+                agent = SetupService.Agent.COPILOT,
+                scope = SetupService.Scope.PROJECT,
+            ),
+        )
+
+        val report = DoctorService(environment).probe()
+
+        val setup = report.checks.first { it.name == "setup" }
+        setup.status shouldBe DoctorStatus.OK
+        setup.detail shouldContain "copilot project installed"
+        setup.detail shouldContain "copilot system"
+    }
+
+    @Test
+    fun `the setup row honours COPILOT_HOME for the copilot system scope`() {
+        val root = tempDir("jdx-doctor-test-")
+        val copilotHome = root.resolve("custom-copilot-home")
+        val environment = fakeEnvironment(root, copilotHome = copilotHome)
+        SetupService(environment.userHome, environment.workingDir, null, copilotHome).run(
+            SetupService.SetupRequest(
+                agent = SetupService.Agent.COPILOT,
+                scope = SetupService.Scope.SYSTEM,
+            ),
+        )
+
+        val report = DoctorService(environment).probe()
+
+        val setup = report.checks.first { it.name == "setup" }
+        setup.status shouldBe DoctorStatus.OK
+        setup.detail shouldContain "copilot system installed"
+        setup.detail shouldContain copilotHome.resolve("mcp-config.json").toString()
     }
 
     @Test

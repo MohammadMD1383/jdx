@@ -17,14 +17,35 @@ import java.nio.file.Paths
  * `jdx setup --agent <name> --scope <project|system>` (issue #33 family).
  *
  * Writes, checks, and removes the MCP server entry that launches `jdx mcp` in
- * third-party agent configs. Five backends share this service behind the
+ * third-party agent configs. Seven backends share this service behind the
  * [Agent] seam: OpenCode (`opencode.json[c]`, v1+v2 entries), Claude Code
  * (`.mcp.json` / `~/.claude.json`, `mcpServers.jdx`), Cursor
  * (`.cursor/mcp.json` / `~/.cursor/mcp.json`, `mcpServers.jdx`), Kilo Code (a fork
  * of OpenCode — its `mcp` map carries the same v1-style local-server shape),
- * and Codex CLI (`config.toml`, `[mcp_servers.jdx]`).
+ * Cline (`cline_mcp_settings.json`, `mcpServers.jdx` in the nested
+ * `transport` shape the real CLI writes),
+ * Codex CLI (`config.toml`, `[mcp_servers.jdx]`), and GitHub Copilot CLI
+ * (`mcp-config.json` / `.mcp.json`, `mcpServers.jdx`).
  * All filesystem behaviour lives here; the Clikt command only parses flags,
  * renders, and maps exit codes (D-004).
+ *
+ * GitHub Copilot CLI layout (verified against a real install, `GitHub
+ * Copilot CLI 1.0.88`: `copilot mcp add jdx -- jdx mcp` writes the entry to
+ * `$COPILOT_HOME/mcp-config.json`, default `~/.copilot/mcp-config.json`;
+ * `copilot mcp list` / `copilot mcp get jdx` detect it; project overrides
+ * live in `.mcp.json` (walked up to the repository root) or
+ * `.github/mcp.json`, either under the `mcpServers` object or in the bare
+ * top-level format where each key is a server name — while the user config
+ * requires the `mcpServers` wrapper, so installs always write that shape).
+ * The entry is the local stdio server (verified bytes):
+ *
+ * ```json
+ * {"mcpServers": {"jdx": {"type": "local", "command": "jdx", "args": ["mcp"]}}}
+ * ```
+ *
+ * (`type: stdio` is accepted wherever `local` is — the CLI normalises it —
+ * so the probe counts both; the install always writes `local`, matching
+ * what `copilot mcp add` writes.)
  *
  * Codex CLI layout (verified against a real install, `codex-cli 0.157.1`:
  * `codex mcp add jdx -- jdx mcp` writes the entry to `$CODEX_HOME/config.toml`,
@@ -73,6 +94,26 @@ import java.nio.file.Paths
  * `mcp.servers` namespace. Fresh Kilo files carry no `$schema` (that URL
  * names the OpenCode config schema).
  *
+ * Cline layout (verified against the real install, not the docs: `cline`
+ * CLI 3.0.65 downloaded from npm, plus the VS Code extension bundle 4.1.21;
+ * see the `clineConfigPath` note). Cline keeps a SINGLE global MCP file —
+ * `~/.cline/data/settings/cline_mcp_settings.json` — shared by the CLI, the
+ * IDE extensions, and the SDK via `resolveMcpSettingsPath()`
+ * (`CLINE_MCP_SETTINGS_PATH` > `CLINE_DATA_DIR` > `CLINE_DIR` > `~/.cline`).
+ * No project-level MCP file exists (open cline/cline#2418; every `mcp.json`
+ * string in both binaries is a plugin manifest or a Claude Code `.mcp.json`
+ * reference), so both scopes target the global file and the reported path
+ * always names it. The entry this service owns is `mcpServers.jdx` in the
+ * nested `transport` shape — byte-identical to what
+ * `cline mcp add jdx --yes -- jdx mcp` writes under an isolated HOME:
+ * `{"mcpServers":{"jdx":{"transport":{"type":"stdio","command":"jdx",
+ * "args":["mcp"]}}}}`. The probe additionally accepts the legacy flat shape
+ * (`command`/`args` at the top level, `transportType`/`type` variants), which
+ * the binary's own reader normalises the same way. Legacy globalStorage
+ * (`.../saoudrizwan.claude-dev/settings/cline_mcp_settings.json`) and
+ * `~/Documents/Cline/MCP/` paths are migration-only sources the extension
+ * reads once — never a write target.
+ *
  * Merge discipline: the target file is parsed leniently (JSONC comments and
  * trailing commas are accepted), every unrelated key is preserved byte-free —
  * only the owned entries are added, replaced, or removed. A second
@@ -89,14 +130,23 @@ class SetupService(
      * real home even when the ambient variable is set.
      */
     private val codexHome: Path? = null,
+    /**
+     * Override for `$COPILOT_HOME` (the Copilot CLI user config dir). Null
+     * means "read the ambient `$COPILOT_HOME` at use time, else `~/.copilot`" —
+     * production; tests pass a fake-home-rooted dir so no test touches the
+     * real home even when the ambient variable is set.
+     */
+    private val copilotHome: Path? = null,
 ) {
-    /** Agents with setup support: OpenCode, Claude Code, Cursor, Kilo Code, and Codex CLI. */
+    /** Agents with setup support: OpenCode, Claude Code, Cursor, Kilo Code, Cline, Codex CLI, and GitHub Copilot CLI. */
     enum class Agent(val cliName: String) {
         OPENCODE("opencode"),
         CLAUDE_CODE("claude-code"),
         CURSOR("cursor"),
         KILO("kilo"),
+        CLINE("cline"),
         CODEX("codex"),
+        COPILOT("copilot"),
     }
 
     /** Where the entry is written: the checkout or the user's global config. */
@@ -203,6 +253,24 @@ class SetupService(
         val binary: String? = null,
     )
 
+    /** Whether the `copilot` binary is installed for use. `PRESENT` means the binary answered `--version`. */
+    enum class CopilotVersion(val cliName: String) {
+        PRESENT("present"),
+        ABSENT("absent"),
+        UNKNOWN("unknown"),
+    }
+
+    /**
+     * Best-effort answer to "is copilot installed". [raw] is the trimmed
+     * `--version` output (null when the binary never answered); [binary] names
+     * the probed executable (`copilot`).
+     */
+    data class CopilotVersionInfo(
+        val version: CopilotVersion,
+        val raw: String? = null,
+        val binary: String? = null,
+    )
+
     /** What the caller asked for: install, report-only, or uninstall. */
     data class SetupRequest(
         val agent: Agent = Agent.OPENCODE,
@@ -263,9 +331,18 @@ class SetupService(
             Scope.PROJECT -> kiloProjectConfigPath(projectDir)
             Scope.SYSTEM -> kiloSystemConfigPath(userHome)
         }
+        // Cline keeps a single global MCP file (verified against the real
+        // install — see the class KDoc): both scopes resolve to it, so a
+        // project-scoped run still wires Cline for work in this checkout and
+        // the reported path always names the global file.
+        Agent.CLINE -> clineConfigPath(userHome)
         Agent.CODEX -> when (scope) {
             Scope.PROJECT -> codexProjectConfigPath(projectDir)
             Scope.SYSTEM -> codexSystemConfigPath(userHome, codexHome)
+        }
+        Agent.COPILOT -> when (scope) {
+            Scope.PROJECT -> copilotProjectConfigPath(projectDir)
+            Scope.SYSTEM -> copilotSystemConfigPath(userHome, copilotHome)
         }
     }
 
@@ -372,7 +449,9 @@ class SetupService(
          * `open-code` all match; `Claude Code`, `claude-code`, `claudecode`,
          * `claude` all match Claude Code; `cursor`, `cursor-code`,
          * `cursorcode` match Cursor; `kilo`, `kilo-code`, `kilocode`
-         * match Kilo Code; `codex`, `codex-cli`, `codexcli` match Codex CLI).
+         * match Kilo Code; `cline`, `cline-code`, `clinecode` match Cline;
+         * `codex`, `codex-cli`, `codexcli` match Codex CLI;
+         * `copilot`, `github-copilot`, `copilot-cli` match GitHub Copilot CLI).
          * Null when unsupported — the adapter exits 3 naming it.
          */
         fun parseAgent(raw: String?): Agent? {
@@ -382,7 +461,9 @@ class SetupService(
                 "claudecode", "claude" -> Agent.CLAUDE_CODE
                 "cursor", "cursorcode" -> Agent.CURSOR
                 "kilo", "kilocode" -> Agent.KILO
+                "cline", "clinecode" -> Agent.CLINE
                 "codex", "codexcli" -> Agent.CODEX
+                "copilot", "githubcopilot", "copilotcli", "githubcopilotcli" -> Agent.COPILOT
                 else -> null
             }
         }
@@ -582,6 +663,44 @@ class SetupService(
         }
 
         /**
+         * Answers "is copilot installed for use" from PATH. Probes the
+         * `copilot` binary only (verified: `copilot --version` prints
+         * `GitHub Copilot CLI 1.0.88.`). Never throws: a missing binary reads
+         * as ABSENT, a failing or blank run as UNKNOWN. Pure IO seam
+         * ([ProcessRunner]) so tests inject fakes.
+         */
+        fun probeCopilotVersion(
+            pathDirs: List<Path>,
+            runner: ProcessRunner,
+            osName: String = System.getProperty("os.name", ""),
+        ): CopilotVersionInfo {
+            val executable = pathDirs.firstNotNullOfOrNull { dir ->
+                toolFileNames("copilot", osName)
+                    .map { dir.resolve(it) }
+                    .firstOrNull { Files.isRegularFile(it) && Files.isExecutable(it) }
+            } ?: return CopilotVersionInfo(CopilotVersion.ABSENT)
+            val raw = try {
+                val outcome = runner.run(executable, listOf("--version"))
+                (outcome.stdout + "\n" + outcome.stderr).trim().ifEmpty { null }
+            } catch (_: Exception) {
+                null
+            }
+            if (raw.isNullOrBlank()) return CopilotVersionInfo(CopilotVersion.UNKNOWN, raw, "copilot")
+            return CopilotVersionInfo(CopilotVersion.PRESENT, raw, "copilot")
+        }
+
+        /**
+         * One human line naming the detected Copilot CLI install for `setup`
+         * and `doctor` output (`copilot (GitHub Copilot CLI 1.0.88.)`,
+         * `copilot not found on PATH`). Pure — example-tested.
+         */
+        fun describeCopilotVersion(info: CopilotVersionInfo): String = when (info.version) {
+            CopilotVersion.PRESENT -> "copilot" + (info.raw?.let { " ($it)" } ?: " installed")
+            CopilotVersion.ABSENT -> "copilot not found on PATH"
+            CopilotVersion.UNKNOWN -> "copilot version unknown" + (info.raw?.let { " ($it)" } ?: "")
+        }
+
+        /**
          * Project target: the nearest `opencode.json`/`opencode.jsonc` walking up
          * from [projectDir] (opencode itself walks up to the worktree root), else
          * a fresh `opencode.json` in [projectDir].
@@ -668,6 +787,97 @@ class SetupService(
         }
 
         /**
+         * Cline target for both scopes: the single global MCP file
+         * `~/.cline/data/settings/cline_mcp_settings.json`. Verified against
+         * the real install: `cline` CLI 3.0.65 (`resolveMcpSettingsPath()` in
+         * the platform binary — `CLINE_MCP_SETTINGS_PATH` else
+         * `$CLINE_DATA_DIR/settings` else `$CLINE_DIR/data/settings` else
+         * `~/.cline/data/settings`) and the VS Code extension bundle 4.1.21
+         * (same resolver; legacy globalStorage and `~/Documents/Cline/MCP/`
+         * paths are migration-only read sources). Empirically confirmed by
+         * running `cline mcp add jdx --yes -- jdx mcp` under an isolated
+         * HOME: the entry below appeared at exactly this path. Like the other
+         * system targets this names the default location — Cline itself
+         * honours the `CLINE_*` overrides when reading.
+         */
+        fun clineConfigPath(userHome: Path): Path =
+            userHome.resolve(".cline/data/settings/cline_mcp_settings.json")
+
+        /**
+         * The Cline entry: `jdx mcp` on PATH as a stdio MCP server in the
+         * nested `transport` shape — byte-identical to what
+         * `cline mcp add jdx --yes -- jdx mcp` writes (verified under an
+         * isolated HOME). Key order (`type`, `command`, `args`) matches the
+         * real CLI output so fresh installs diff cleanly against it.
+         */
+        fun desiredClineEntry(): JsonObject = buildJsonObject {
+            put(
+                "transport",
+                buildJsonObject {
+                    put("type", "stdio")
+                    put("command", "jdx")
+                    put("args", JsonArray(listOf(JsonPrimitive("mcp"))))
+                },
+            )
+        }
+
+        /** True when the `mcpServers.jdx` entry is a server that runs `jdx mcp`. */
+        fun isClineInstalled(root: JsonObject): Boolean {
+            val entry = root["mcpServers"]?.jsonObjectOrNull()?.get(SERVER_NAME)?.jsonObjectOrNull()
+                ?: return false
+            return isClineJdxEntry(entry)
+        }
+
+        /**
+         * True when [entry] runs `jdx mcp` in either Cline shape: the nested
+         * `transport` object the real CLI writes, or the legacy flat shape
+         * (`command`/`args` at the top level) the binary's own reader still
+         * normalises (`transport.type ?? transportType ?? type ?? "stdio"`).
+         * Remote shapes (`sse`/`streamableHttp`, `url`-based) never count —
+         * they cannot launch a local `jdx` process. Command matching reuses
+         * [isJdxCommand] (absolute install paths and Windows shims), args
+         * must contain `mcp`. Never throws (hostile configs). The `disabled`
+         * flag is ignored for presence — consistent with the OpenCode
+         * backends — since the wiring itself is what `--check` reports.
+         */
+        fun isClineJdxEntry(entry: JsonObject): Boolean {
+            val transport = entry["transport"]?.jsonObjectOrNull() ?: entry
+            val type = transport["type"]?.jsonPrimitiveOrNull()
+                ?: entry["transportType"]?.jsonPrimitiveOrNull()
+                ?: entry["type"]?.jsonPrimitiveOrNull()
+            if (type != null && !type.equals("stdio", ignoreCase = true)) return false
+            val command = transport["command"]?.jsonPrimitiveOrNull() ?: return false
+            if (!isJdxCommand(command)) return false
+            val args = transport["args"] as? JsonArray ?: return false
+            return args.any { (it as? JsonPrimitive)?.contentOrNull() == "mcp" }
+        }
+
+        /**
+         * Merges the desired Cline entry into [root] (null = fresh file with
+         * just `mcpServers` — that is all the real CLI writes). Every other
+         * server under `mcpServers` is preserved.
+         */
+        fun mergeInstallCline(root: JsonObject?): JsonObject {
+            val base: MutableMap<String, JsonElement> = root?.toMutableMap() ?: mutableMapOf()
+            val servers = root?.get("mcpServers")?.jsonObjectOrNull()?.toMutableMap() ?: mutableMapOf()
+            servers[SERVER_NAME] = desiredClineEntry()
+            base["mcpServers"] = JsonObject(servers)
+            return JsonObject(base)
+        }
+
+        /**
+         * Removes `mcpServers.jdx`; drops an emptied `mcpServers` object to
+         * stay tidy.
+         */
+        fun mergeRemoveCline(root: JsonObject): JsonObject {
+            val base = root.toMutableMap()
+            val servers = root["mcpServers"]?.jsonObjectOrNull()?.toMutableMap() ?: return root
+            servers.remove(SERVER_NAME)
+            if (servers.isEmpty()) base.remove("mcpServers") else base["mcpServers"] = JsonObject(servers)
+            return JsonObject(base)
+        }
+
+        /**
          * Kilo Code project target: the nearest `kilo.json[c]` walking up from
          * [projectDir], preferring the `.kilo/` variant at each level (that is
          * what the Kilo docs name the cleaner setup, and the `.kilo/` file
@@ -742,6 +952,43 @@ class SetupService(
             null
         }
 
+        /**
+         * Copilot CLI project target: the nearest `.mcp.json` walking up from
+         * [projectDir], falling back to `.github/mcp.json` at each level (that
+         * is the shared committed alternative; `.mcp.json` wins in its own
+         * directory), else a fresh `.mcp.json` in [projectDir].
+         */
+        fun copilotProjectConfigPath(projectDir: Path): Path {
+            var dir: Path? = projectDir.toAbsolutePath().normalize()
+            while (dir != null) {
+                val local = dir.resolve(".mcp.json")
+                if (Files.isRegularFile(local)) return local
+                val shared = dir.resolve(".github/mcp.json")
+                if (Files.isRegularFile(shared)) return shared
+                dir = dir.parent
+            }
+            return projectDir.toAbsolutePath().normalize().resolve(".mcp.json")
+        }
+
+        /**
+         * Copilot CLI system target: `$COPILOT_HOME/mcp-config.json` when
+         * [copilotHome] is given (that is what `copilot mcp add` writes),
+         * else the default `~/.copilot/mcp-config.json`. An explicit null
+         * [copilotHome] falls back to the ambient `$COPILOT_HOME`
+         * environment variable.
+         */
+        fun copilotSystemConfigPath(userHome: Path, copilotHome: Path? = null): Path {
+            val base = copilotHome ?: ambientCopilotHome() ?: userHome.resolve(".copilot")
+            return base.resolve("mcp-config.json")
+        }
+
+        /** Reads the ambient `$COPILOT_HOME` (blank means unset). Never throws. */
+        private fun ambientCopilotHome(): Path? = try {
+            System.getenv("COPILOT_HOME")?.takeIf { it.isNotBlank() }?.let { Paths.get(it) }
+        } catch (_: Exception) {
+            null
+        }
+
         /** Report-only probe shared by `--check` and the `doctor` setup row. */
         fun isInstalledAt(path: Path): Boolean = isInstalledAt(path, Agent.OPENCODE)
 
@@ -767,13 +1014,13 @@ class SetupService(
         /** True when either the v1 (`mcp.jdx`) or the v2 (`mcp.servers.jdx`) entry wires `jdx mcp`. */
         fun isInstalledRoot(root: JsonObject): Boolean = isInstalledRoot(root, Agent.OPENCODE)
 
-        /** True when [agent]'s owned entries wire `jdx mcp` (OpenCode: v1 or v2; Kilo: `mcp.jdx`; Claude/Cursor: `mcpServers.jdx`). */
+        /** True when [agent]'s owned entries wire `jdx mcp` (OpenCode: v1 or v2; Kilo: `mcp.jdx`; Claude/Cursor: `mcpServers.jdx`; Cline: `mcpServers.jdx` transport; Copilot: `mcpServers.jdx` or bare `jdx`; Codex CLI: TOML text probe). */
         fun isInstalledRootFor(agent: Agent, root: JsonObject): Boolean = isInstalledRoot(root, agent)
 
         /**
          * True when an install is a no-op (every owned entry present): OpenCode
          * needs **both** the v1 and v2 entries — a v1-only file is completed
-         * with the v2 entry — while Kilo, Claude Code, Cursor, and Codex CLI
+         * with the v2 entry — while Kilo, Claude Code, Cursor, Cline, Copilot, and Codex CLI
          * need only their single entry. The report-only probe
          * ([isInstalledRoot]) stays lenient (either OpenCode entry counts).
          */
@@ -782,15 +1029,19 @@ class SetupService(
             Agent.KILO -> isV1Installed(root)
             Agent.CLAUDE_CODE -> isClaudeInstalled(root)
             Agent.CURSOR -> isCursorInstalled(root)
+            Agent.CLINE -> isClineInstalled(root)
+            Agent.COPILOT -> isCopilotWrapped(root)
             Agent.CODEX -> error("Codex CLI installs merge TOML text, never JSON")
         }
 
-        /** Agent-aware probe: OpenCode checks v1/v2 entries, Claude Code/Cursor check `mcpServers.jdx`, Kilo checks `mcp.jdx`. */
+        /** Agent-aware probe: OpenCode checks v1/v2 entries, Claude Code/Cursor check `mcpServers.jdx`, Kilo checks `mcp.jdx`, Cline checks its `mcpServers.jdx` transport entry, Copilot checks `mcpServers.jdx` (or bare `jdx`), Codex CLI probes TOML text. */
         fun isInstalledRoot(root: JsonObject, agent: Agent): Boolean = when (agent) {
             Agent.OPENCODE -> isV1Installed(root) || isV2Installed(root)
             Agent.CLAUDE_CODE -> isClaudeInstalled(root)
             Agent.CURSOR -> isCursorInstalled(root)
             Agent.KILO -> isV1Installed(root)
+            Agent.CLINE -> isClineInstalled(root)
+            Agent.COPILOT -> isCopilotInstalled(root)
             Agent.CODEX -> error("Codex CLI probes TOML text via isCodexInstalledText, never JSON")
         }
 
@@ -868,6 +1119,70 @@ class SetupService(
             return JsonObject(base)
         }
 
+        /** The Copilot CLI entry: `jdx mcp` on PATH as a local stdio server (verified: what `copilot mcp add jdx -- jdx mcp` writes, minus the defaulted `tools`). */
+        fun desiredCopilotEntry(): JsonObject = buildJsonObject {
+            put("type", "local")
+            put("command", "jdx")
+            put("args", JsonArray(listOf(JsonPrimitive("mcp"))))
+        }
+
+        /**
+         * True when the `mcpServers.jdx` entry — or the bare top-level `jdx`
+         * entry that project files (`.mcp.json`, `.github/mcp.json`) also
+         * accept — is a local server whose command runs `jdx mcp`.
+         */
+        fun isCopilotInstalled(root: JsonObject): Boolean {
+            if (isCopilotWrapped(root)) return true
+            val bare = root[SERVER_NAME]?.jsonObjectOrNull() ?: return false
+            return isCopilotJdxEntry(bare)
+        }
+
+        /**
+         * True when the `mcpServers.jdx` wrapper entry wires `jdx mcp` (the
+         * only shape the user config accepts — so this, not [isCopilotInstalled],
+         * gates the install no-op, mirroring OpenCode's lenient-probe /
+         * strict-complete split: a bare-only project file still probes wired,
+         * but an install completes it with the wrapper).
+         */
+        private fun isCopilotWrapped(root: JsonObject): Boolean {
+            val wrapped = root["mcpServers"]?.jsonObjectOrNull()?.get(SERVER_NAME)?.jsonObjectOrNull()
+                ?: return false
+            return isCopilotJdxEntry(wrapped)
+        }
+
+        /**
+         * True when [entry] runs `jdx mcp` in the Copilot CLI shape
+         * (`{"type": "local", "command": "jdx", "args": ["mcp"]}`, the
+         * `copilot mcp add jdx -- jdx mcp` equivalent). `type: stdio` counts
+         * too (verified: the CLI accepts and normalises it); a missing `type`
+         * counts as well, so hand-written minimal entries still probe true.
+         * Extra keys (`tools`, `env`) are ignored. Never throws (hostile
+         * configs).
+         */
+        fun isCopilotJdxEntry(entry: JsonObject): Boolean {
+            val type = entry["type"]?.jsonPrimitiveOrNull()
+            if (type != null && type != "local" && type != "stdio") return false
+            val command = entry["command"]?.jsonPrimitiveOrNull() ?: return false
+            if (!isJdxCommand(command)) return false
+            val args = entry["args"] as? JsonArray ?: return false
+            return args.any { (it as? JsonPrimitive)?.contentOrNull() == "mcp" }
+        }
+
+        /**
+         * Merges the desired Copilot CLI entry into [root] (null = fresh
+         * file). Always written under the `mcpServers` wrapper — the only
+         * shape the user config accepts — while a bare top-level `jdx` entry
+         * in a project file is left untouched (it keeps working; remove
+         * drops it too). Every other server is preserved.
+         */
+        fun mergeCopilotInstall(root: JsonObject?): JsonObject {
+            val base: MutableMap<String, JsonElement> = root?.toMutableMap() ?: mutableMapOf()
+            val servers = root?.get("mcpServers")?.jsonObjectOrNull()?.toMutableMap() ?: mutableMapOf()
+            servers[SERVER_NAME] = desiredCopilotEntry()
+            base["mcpServers"] = JsonObject(servers)
+            return JsonObject(base)
+        }
+
         /**
          * Removes Cursor `mcpServers.jdx`; drops an emptied `mcpServers`
          * object to stay tidy.
@@ -877,6 +1192,23 @@ class SetupService(
             val servers = root["mcpServers"]?.jsonObjectOrNull()?.toMutableMap() ?: return root
             servers.remove(SERVER_NAME)
             if (servers.isEmpty()) base.remove("mcpServers") else base["mcpServers"] = JsonObject(servers)
+            return JsonObject(base)
+        }
+
+        /**
+         * Removes `mcpServers.jdx` (dropping an emptied `mcpServers` object)
+         * and a bare top-level `jdx` entry when it is ours, to stay tidy.
+         * A foreign bare `jdx` entry is left untouched.
+         */
+        fun mergeCopilotRemove(root: JsonObject): JsonObject {
+            val base = root.toMutableMap()
+            val servers = root["mcpServers"]?.jsonObjectOrNull()?.toMutableMap()
+            if (servers != null) {
+                servers.remove(SERVER_NAME)
+                if (servers.isEmpty()) base.remove("mcpServers") else base["mcpServers"] = JsonObject(servers)
+            }
+            val bare = root[SERVER_NAME]?.jsonObjectOrNull()
+            if (bare != null && isCopilotJdxEntry(bare)) base.remove(SERVER_NAME)
             return JsonObject(base)
         }
 
@@ -939,6 +1271,8 @@ class SetupService(
             Agent.CLAUDE_CODE -> mergeClaudeInstall(root)
             Agent.CURSOR -> mergeCursorInstall(root)
             Agent.KILO -> mergeInstallKilo(root)
+            Agent.CLINE -> mergeInstallCline(root)
+            Agent.COPILOT -> mergeCopilotInstall(root)
             Agent.CODEX -> error("Codex CLI installs merge TOML text via mergeCodexInstall, never JSON")
         }
 
@@ -989,6 +1323,8 @@ class SetupService(
             Agent.CLAUDE_CODE -> mergeClaudeRemove(root)
             Agent.CURSOR -> mergeCursorRemove(root)
             Agent.KILO -> mergeRemoveKilo(root)
+            Agent.CLINE -> mergeRemoveCline(root)
+            Agent.COPILOT -> mergeCopilotRemove(root)
             Agent.CODEX -> error("Codex CLI removals merge TOML text via mergeCodexRemove, never JSON")
         }
 
@@ -1512,6 +1848,15 @@ class SetupService(
             Agent.CLAUDE_CODE, Agent.CURSOR -> {
                 val servers = root["mcpServers"]?.jsonObjectOrNull() ?: return false
                 servers.containsKey(SERVER_NAME)
+            }
+            Agent.CLINE -> {
+                val servers = root["mcpServers"]?.jsonObjectOrNull() ?: return false
+                servers.containsKey(SERVER_NAME)
+            }
+            Agent.COPILOT -> {
+                val servers = root["mcpServers"]?.jsonObjectOrNull()
+                if (servers?.containsKey(SERVER_NAME) == true) return true
+                root.containsKey(SERVER_NAME)
             }
             Agent.KILO -> {
                 val mcp = root["mcp"]?.jsonObjectOrNull() ?: return false
