@@ -557,6 +557,20 @@ class DoctorServiceTest {
     }
 
     @Test
+    fun `the setup row covers codex wiring and presence`() {
+        val service = DoctorService(fakeEnvironment(tempDir("jdx-doctor-test-")))
+
+        val report = service.probe()
+
+        val setup = report.checks.first { it.name == "setup" }
+        setup.status shouldBe DoctorStatus.WARN
+        setup.detail shouldContain "codex project"
+        setup.detail shouldContain "codex system"
+        setup.detail shouldContain "codex not found on PATH"
+        setup.detail shouldContain "jdx setup --agent codex --scope project"
+    }
+
+    @Test
     fun `the setup row is OK when only cline is wired`() {
         val root = tempDir("jdx-doctor-test-")
         val environment = fakeEnvironment(root)
@@ -575,6 +589,75 @@ class DoctorServiceTest {
         setup.detail shouldContain "cline project installed"
         setup.detail shouldContain "cline system installed"
         setup.detail shouldContain "cline_mcp_settings.json"
+    }
+
+    @Test
+    fun `the setup row names the detected codex binary`() {
+        val runner = ProcessRunner { executable, _ ->
+            if (executable.fileName.toString().substringBefore(".") == "codex") {
+                ProcessOutcome(0, "codex-cli 0.157.1", "")
+            } else if (executable.fileName.toString().startsWith("opencode")) {
+                throw IOException("no opencode here")
+            } else {
+                ProcessOutcome(0, "26.0.2.1", "")
+            }
+        }
+        val service = DoctorService(
+            fakeEnvironment(
+                tempDir("jdx-doctor-test-"),
+                runner = runner,
+                codexBinaries = listOf("codex"),
+            ),
+        )
+
+        val report = service.probe()
+
+        val setup = report.checks.first { it.name == "setup" }
+        setup.status shouldBe DoctorStatus.WARN
+        setup.detail shouldContain "codex (codex-cli 0.157.1)"
+    }
+
+    @Test
+    fun `the setup row is OK when only codex is wired`() {
+        val root = tempDir("jdx-doctor-test-")
+        val environment = fakeEnvironment(root)
+        SetupService(
+            environment.userHome,
+            environment.workingDir,
+            environment.userHome.resolve(".codex"),
+        ).run(
+            SetupService.SetupRequest(
+                agent = SetupService.Agent.CODEX,
+                scope = SetupService.Scope.PROJECT,
+            ),
+        )
+
+        val report = DoctorService(environment).probe()
+
+        val setup = report.checks.first { it.name == "setup" }
+        setup.status shouldBe DoctorStatus.OK
+        setup.detail shouldContain "codex project installed"
+        setup.detail shouldContain "codex system"
+    }
+
+    @Test
+    fun `the setup row honours CODEX_HOME for the codex system scope`() {
+        val root = tempDir("jdx-doctor-test-")
+        val codexHome = root.resolve("custom-codex-home")
+        val environment = fakeEnvironment(root, codexHome = codexHome)
+        SetupService(environment.userHome, environment.workingDir, codexHome).run(
+            SetupService.SetupRequest(
+                agent = SetupService.Agent.CODEX,
+                scope = SetupService.Scope.SYSTEM,
+            ),
+        )
+
+        val report = DoctorService(environment).probe()
+
+        val setup = report.checks.first { it.name == "setup" }
+        setup.status shouldBe DoctorStatus.OK
+        setup.detail shouldContain "codex system installed"
+        setup.detail shouldContain codexHome.resolve("config.toml").toString()
     }
 
     @Test

@@ -11,6 +11,7 @@ import kotlinx.serialization.json.put
 import java.io.IOException
 import java.nio.file.Files
 import java.nio.file.Path
+import java.nio.file.Paths
 
 /**
  * `jdx setup --agent <name> --scope <project|system>` (issue #33 family).
@@ -19,11 +20,30 @@ import java.nio.file.Path
  * third-party agent configs. Four backends share this service behind the
  * [Agent] seam: OpenCode (`opencode.json[c]`, v1+v2 entries), Claude Code
  * (`.mcp.json` / `~/.claude.json`, `mcpServers.jdx`), Kilo Code (a fork
- * of OpenCode — its `mcp` map carries the same v1-style local-server shape),
- * and Cline (`cline_mcp_settings.json`, `mcpServers.jdx` in the nested
- * `transport` shape the real CLI writes).
+ *  of OpenCode — its `mcp` map carries the same v1-style local-server shape),
+ *  Cline (`cline_mcp_settings.json`, `mcpServers.jdx` in the nested
+ *  `transport` shape the real CLI writes),
+ *  and Codex CLI (`config.toml`, `[mcp_servers.jdx]`).
  * All filesystem behaviour lives here; the Clikt command only parses flags,
  * renders, and maps exit codes (D-004).
+ *
+ * Codex CLI layout (verified against a real install, `codex-cli 0.157.1`:
+ * `codex mcp add jdx -- jdx mcp` writes the entry to `$CODEX_HOME/config.toml`,
+ * default `~/.codex/config.toml`; `codex mcp list` / `codex mcp get jdx`
+ * detect it; project overrides live in `.codex/config.toml`, loaded for
+ * trusted projects only). The entry is the stdio table:
+ *
+ * ```toml
+ * [mcp_servers.jdx]
+ * command = "jdx"
+ * args = ["mcp"]
+ * ```
+ *
+ * TOML has no parsing library behind it here — the backend is a small line-based
+ * codec (no new dependency for one table): the probe is string-aware
+ * (comments and quoted `#`/`[`/`]`/`=` inside strings never confuse it),
+ * merges preserve every unrelated line byte-free, and a second run is a
+ * byte-exact no-op (nothing is rewritten when the entry is already present).
  *
  * OpenCode layout (verified against a real install: global
  * `~/.config/opencode/opencode.jsonc` with `"$schema":
@@ -83,13 +103,21 @@ import java.nio.file.Path
 class SetupService(
     private val userHome: Path,
     private val projectDir: Path,
+    /**
+     * Override for `$CODEX_HOME` (the Codex CLI system config dir). Null
+     * means "read the ambient `$CODEX_HOME` at use time, else `~/.codex`" —
+     * production; tests pass a fake-home-rooted dir so no test touches the
+     * real home even when the ambient variable is set.
+     */
+    private val codexHome: Path? = null,
 ) {
-    /** Agents with setup support: OpenCode, Claude Code, Kilo Code, and Cline. */
+    /** Agents with setup support: OpenCode, Claude Code, Kilo Code, Cline, and Codex CLI. */
     enum class Agent(val cliName: String) {
         OPENCODE("opencode"),
         CLAUDE_CODE("claude-code"),
         KILO("kilo"),
         CLINE("cline"),
+        CODEX("codex"),
     }
 
     /** Where the entry is written: the checkout or the user's global config. */
@@ -143,6 +171,30 @@ class SetupService(
      */
     data class ClaudeVersionInfo(
         val version: ClaudeVersion,
+        val raw: String? = null,
+        val binary: String? = null,
+    )
+
+    /**
+     * Whether the `codex` binary is installed for use. Codex CLI has no
+     * v1/v2 line split to classify — `PRESENT` means the binary answered
+     * `--version` (verified: `codex-cli 0.157.1`); `ABSENT` means no `codex`
+     * on PATH; `UNKNOWN` means it is present but never answered (or answered
+     * blank).
+     */
+    enum class CodexVersion(val cliName: String) {
+        PRESENT("present"),
+        ABSENT("absent"),
+        UNKNOWN("unknown"),
+    }
+
+    /**
+     * Best-effort answer to "is codex installed". [raw] is the trimmed
+     * `--version` output (null when the binary never answered); [binary] names
+     * the probed executable (`codex`).
+     */
+    data class CodexVersionInfo(
+        val version: CodexVersion,
         val raw: String? = null,
         val binary: String? = null,
     )
@@ -208,9 +260,14 @@ class SetupService(
         // project-scoped run still wires Cline for work in this checkout and
         // the reported path always names the global file.
         Agent.CLINE -> clineConfigPath(userHome)
+        Agent.CODEX -> when (scope) {
+            Scope.PROJECT -> codexProjectConfigPath(projectDir)
+            Scope.SYSTEM -> codexSystemConfigPath(userHome, codexHome)
+        }
     }
 
     private fun installAt(agent: Agent, path: Path): SetupOutcome {
+        if (agent == Agent.CODEX) return installCodexAt(path)
         val current = readRootOrNull(path) ?: return doInstall(agent, path, null)
         val root = current.getOrNull()
             ?: return SetupOutcome.Corrupt(path, current.error ?: "not a JSON object")
@@ -219,6 +276,7 @@ class SetupService(
     }
 
     private fun removeAt(agent: Agent, path: Path): SetupOutcome {
+        if (agent == Agent.CODEX) return removeCodexAt(path)
         if (!Files.isRegularFile(path)) return SetupOutcome.Removed(path, changed = false)
         val current = readRootOrNull(path) ?: return doRemove(agent, path, null)
         val root = current.getOrNull()
@@ -237,6 +295,50 @@ class SetupService(
         if (root == null) return SetupOutcome.Removed(path, changed = false)
         writeRoot(path, mergeRemoveFor(agent, root))
         return SetupOutcome.Removed(path, changed = true)
+    }
+
+    /**
+     * Codex CLI install over raw TOML text (never JSON): a missing file gets
+     * the fresh canonical table; a file already carrying the entry is a
+     * byte-exact no-op; anything else is merged (unrelated lines preserved).
+     * Lenient by design — an unparseable file still gets the entry appended
+     * (degrade, don't fail); Codex itself reports the syntax error.
+     */
+    private fun installCodexAt(path: Path): SetupOutcome {
+        if (!Files.isRegularFile(path)) {
+            writeCodexText(path, mergeCodexInstall(null))
+            return SetupOutcome.Installed(path, changed = true)
+        }
+        val text = try {
+            Files.readString(path)
+        } catch (e: IOException) {
+            return SetupOutcome.Failed(path, e.message ?: e.javaClass.simpleName)
+        }
+        if (isCodexInstalledText(text)) return SetupOutcome.Installed(path, changed = false)
+        writeCodexText(path, mergeCodexInstall(text))
+        return SetupOutcome.Installed(path, changed = true)
+    }
+
+    /**
+     * Codex CLI remove over raw TOML text: drops the `[mcp_servers.jdx]`
+     * table (and any root-level `mcp_servers.jdx.*` dotted keys), leaving
+     * every other line untouched. Already-absent is a no-op.
+     */
+    private fun removeCodexAt(path: Path): SetupOutcome {
+        if (!Files.isRegularFile(path)) return SetupOutcome.Removed(path, changed = false)
+        val text = try {
+            Files.readString(path)
+        } catch (e: IOException) {
+            return SetupOutcome.Failed(path, e.message ?: e.javaClass.simpleName)
+        }
+        if (!hasCodexEntryText(text)) return SetupOutcome.Removed(path, changed = false)
+        writeCodexText(path, mergeCodexRemove(text))
+        return SetupOutcome.Removed(path, changed = true)
+    }
+
+    private fun writeCodexText(path: Path, text: String) {
+        path.parent?.let { Files.createDirectories(it) }
+        Files.writeString(path, text)
     }
 
     companion object {
@@ -265,8 +367,9 @@ class SetupService(
         /**
          * Parses `--agent` case-insensitively (`OpenCode`, `opencode`,
          * `open-code` all match; `Claude Code`, `claude-code`, `claudecode`,
-         * `claude` all match Claude Code; `kilo`, `kilo-code`, `kilocode`
-         * match Kilo Code; `cline`, `cline-code`, `clinecode` match Cline).
+         *   `claude` all match Claude Code; `kilo`, `kilo-code`, `kilocode`
+         *   match Kilo Code; `cline`, `cline-code`, `clinecode` match Cline;
+         *   `codex`, `codex-cli`, `codexcli` match Codex CLI).
          * Null when unsupported — the adapter exits 3 naming it.
          */
         fun parseAgent(raw: String?): Agent? {
@@ -276,6 +379,7 @@ class SetupService(
                 "claudecode", "claude" -> Agent.CLAUDE_CODE
                 "kilo", "kilocode" -> Agent.KILO
                 "cline", "clinecode" -> Agent.CLINE
+                "codex", "codexcli" -> Agent.CODEX
                 else -> null
             }
         }
@@ -392,6 +496,43 @@ class SetupService(
             ClaudeVersion.PRESENT -> "claude-code" + (info.raw?.let { " ($it)" } ?: " installed")
             ClaudeVersion.ABSENT -> "claude-code not found on PATH"
             ClaudeVersion.UNKNOWN -> "claude-code version unknown" + (info.raw?.let { " ($it)" } ?: "")
+        }
+
+        /**
+         * Answers "is codex installed for use" from PATH. Probes the `codex`
+         * binary only (verified: `codex --version` prints `codex-cli 0.157.1`).
+         * Never throws: a missing binary reads as ABSENT, a failing or blank
+         * run as UNKNOWN. Pure IO seam ([ProcessRunner]) so tests inject fakes.
+         */
+        fun probeCodexVersion(
+            pathDirs: List<Path>,
+            runner: ProcessRunner,
+            osName: String = System.getProperty("os.name", ""),
+        ): CodexVersionInfo {
+            val executable = pathDirs.firstNotNullOfOrNull { dir ->
+                toolFileNames("codex", osName)
+                    .map { dir.resolve(it) }
+                    .firstOrNull { Files.isRegularFile(it) && Files.isExecutable(it) }
+            } ?: return CodexVersionInfo(CodexVersion.ABSENT)
+            val raw = try {
+                val outcome = runner.run(executable, listOf("--version"))
+                (outcome.stdout + "\n" + outcome.stderr).trim().ifEmpty { null }
+            } catch (_: Exception) {
+                null
+            }
+            if (raw.isNullOrBlank()) return CodexVersionInfo(CodexVersion.UNKNOWN, raw, "codex")
+            return CodexVersionInfo(CodexVersion.PRESENT, raw, "codex")
+        }
+
+        /**
+         * One human line naming the detected Codex CLI install for `setup`
+         * and `doctor` output (`codex (codex-cli 0.157.1)`,
+         * `codex not found on PATH`). Pure — example-tested.
+         */
+        fun describeCodexVersion(info: CodexVersionInfo): String = when (info.version) {
+            CodexVersion.PRESENT -> "codex" + (info.raw?.let { " ($it)" } ?: " installed")
+            CodexVersion.ABSENT -> "codex not found on PATH"
+            CodexVersion.UNKNOWN -> "codex version unknown" + (info.raw?.let { " ($it)" } ?: "")
         }
 
         /**
@@ -581,12 +722,48 @@ class SetupService(
             return json
         }
 
+        /**
+         * Codex CLI project target: the nearest `.codex/config.toml` walking
+         * up from [projectDir] (mirrors the OpenCode walk-up), else a fresh
+         * `.codex/config.toml` in [projectDir]. Verified shape: project
+         * overrides live in `.codex/config.toml`, loaded for trusted
+         * projects only.
+         */
+        fun codexProjectConfigPath(projectDir: Path): Path {
+            var dir: Path? = projectDir.toAbsolutePath().normalize()
+            while (dir != null) {
+                val candidate = dir.resolve(".codex/config.toml")
+                if (Files.isRegularFile(candidate)) return candidate
+                dir = dir.parent
+            }
+            return projectDir.toAbsolutePath().normalize().resolve(".codex/config.toml")
+        }
+
+        /**
+         * Codex CLI system target: `$CODEX_HOME/config.toml` when [codexHome]
+         * is given (that is what `codex mcp add` writes), else the default
+         * `~/.codex/config.toml`. An explicit null [codexHome] falls back to
+         * the ambient `$CODEX_HOME` environment variable.
+         */
+        fun codexSystemConfigPath(userHome: Path, codexHome: Path? = null): Path {
+            val base = codexHome ?: ambientCodexHome() ?: userHome.resolve(".codex")
+            return base.resolve("config.toml")
+        }
+
+        /** Reads the ambient `$CODEX_HOME` (blank means unset). Never throws. */
+        private fun ambientCodexHome(): Path? = try {
+            System.getenv("CODEX_HOME")?.takeIf { it.isNotBlank() }?.let { Paths.get(it) }
+        } catch (_: Exception) {
+            null
+        }
+
         /** Report-only probe shared by `--check` and the `doctor` setup row. */
         fun isInstalledAt(path: Path): Boolean = isInstalledAt(path, Agent.OPENCODE)
 
         /** Agent-aware report-only probe shared by `--check` and the `doctor` setup row. */
         fun isInstalledAt(path: Path, agent: Agent): Boolean {
             if (!Files.isRegularFile(path)) return false
+            if (agent == Agent.CODEX) return isCodexInstalledText(readCodexText(path))
             return try {
                 val root = readRoot(path).getOrNull() ?: return false
                 isInstalledRoot(root, agent)
@@ -595,16 +772,23 @@ class SetupService(
             }
         }
 
+        /** Reads a TOML config leniently: missing/unreadable is null, never a throw. */
+        private fun readCodexText(path: Path): String? = try {
+            Files.readString(path)
+        } catch (_: IOException) {
+            null
+        }
+
         /** True when either the v1 (`mcp.jdx`) or the v2 (`mcp.servers.jdx`) entry wires `jdx mcp`. */
         fun isInstalledRoot(root: JsonObject): Boolean = isInstalledRoot(root, Agent.OPENCODE)
 
-        /** True when [agent]'s owned entries wire `jdx mcp` (OpenCode: v1 or v2; Kilo: `mcp.jdx`; Claude/Cline: `mcpServers.jdx`). */
+        /** True when [agent]'s owned entries wire `jdx mcp` (OpenCode: v1 or v2; Kilo: `mcp.jdx`; Claude/Cline: `mcpServers.jdx`; Codex CLI: TOML text probe). */
         fun isInstalledRootFor(agent: Agent, root: JsonObject): Boolean = isInstalledRoot(root, agent)
 
         /**
          * True when an install is a no-op (every owned entry present): OpenCode
          * needs **both** the v1 and v2 entries — a v1-only file is completed
-         * with the v2 entry — while Kilo, Claude Code, and Cline need only
+         * with the v2 entry — while Kilo, Claude Code, Cline, and Codex CLI need only
          * their single entry. The report-only probe ([isInstalledRoot]) stays
          * lenient (either OpenCode entry counts).
          */
@@ -613,14 +797,16 @@ class SetupService(
             Agent.KILO -> isV1Installed(root)
             Agent.CLAUDE_CODE -> isClaudeInstalled(root)
             Agent.CLINE -> isClineInstalled(root)
+            Agent.CODEX -> error("Codex CLI installs merge TOML text, never JSON")
         }
 
-        /** Agent-aware probe: OpenCode checks v1/v2 entries, Claude Code checks `mcpServers.jdx`, Kilo checks `mcp.jdx`, Cline checks its `mcpServers.jdx` transport entry. */
+        /** Agent-aware probe: OpenCode checks v1/v2 entries, Claude Code checks `mcpServers.jdx`, Kilo checks `mcp.jdx`, Cline checks its `mcpServers.jdx` transport entry, Codex CLI probes TOML text. */
         fun isInstalledRoot(root: JsonObject, agent: Agent): Boolean = when (agent) {
             Agent.OPENCODE -> isV1Installed(root) || isV2Installed(root)
             Agent.CLAUDE_CODE -> isClaudeInstalled(root)
             Agent.KILO -> isV1Installed(root)
             Agent.CLINE -> isClineInstalled(root)
+            Agent.CODEX -> error("Codex CLI probes TOML text via isCodexInstalledText, never JSON")
         }
 
         /** True when the `mcpServers.jdx` entry is a server whose command runs `jdx mcp`. */
@@ -728,6 +914,7 @@ class SetupService(
             Agent.CLAUDE_CODE -> mergeClaudeInstall(root)
             Agent.KILO -> mergeInstallKilo(root)
             Agent.CLINE -> mergeInstallCline(root)
+            Agent.CODEX -> error("Codex CLI installs merge TOML text via mergeCodexInstall, never JSON")
         }
 
         private fun mergeInstallOpencode(root: JsonObject?): JsonObject {
@@ -777,6 +964,7 @@ class SetupService(
             Agent.CLAUDE_CODE -> mergeClaudeRemove(root)
             Agent.KILO -> mergeRemoveKilo(root)
             Agent.CLINE -> mergeRemoveCline(root)
+            Agent.CODEX -> error("Codex CLI removals merge TOML text via mergeCodexRemove, never JSON")
         }
 
         private fun mergeRemoveOpencode(root: JsonObject): JsonObject {
@@ -804,6 +992,483 @@ class SetupService(
             mcp.remove(SERVER_NAME)
             if (mcp.isEmpty()) base.remove("mcp") else base["mcp"] = JsonObject(mcp)
             return JsonObject(base)
+        }
+
+        // -- Codex CLI backend (config.toml, [mcp_servers.jdx]) --
+        //
+        // A deliberately small line-based TOML codec: the only table this
+        // service owns is `[mcp_servers.jdx]`, and every other line is
+        // preserved byte-free. No new dependency for one table. The scanner
+        // is string-aware throughout (comments and quoted `[`/`]`/`=`/`#`
+        // inside strings never confuse it); exotic TOML the scanner does not
+        // model (multi-line `"""` strings, inline `{...}` tables for our own
+        // entry) simply reads as "entry absent", so install repairs it and
+        // remove leaves it — degrade, don't fail.
+
+        /** The canonical Codex CLI entry — what `codex mcp add jdx -- jdx mcp` writes (verified 0.157.1). */
+        fun desiredCodexBlock(): String = "[mcp_servers.jdx]\ncommand = \"jdx\"\nargs = [\"mcp\"]\n"
+
+        /**
+         * True when [text] carries a `[mcp_servers.jdx]` table (or equivalent
+         * root-level `mcp_servers.jdx.*` dotted keys) whose command runs
+         * `jdx mcp`. Null text (missing file) reads as absent. Never throws
+         * (hostile configs).
+         */
+        fun isCodexInstalledText(text: String?): Boolean {
+            val entry = findCodexEntry(text ?: return false) ?: return false
+            return entry.command != null && isJdxCommand(entry.command) && entry.hasMcpArg
+        }
+
+        /**
+         * True when [text] mentions the owned entry at all (even a broken
+         * one) — the remove guard. Null reads as absent. Never throws.
+         */
+        fun hasCodexEntryText(text: String?): Boolean =
+            text != null && findCodexEntry(text) != null
+
+        /**
+         * Merges the canonical entry into TOML [text] (null = fresh file).
+         * Already-installed input returns byte-identical; otherwise any stale
+         * owned lines are dropped and the canonical block is appended after a
+         * blank separator. Every unrelated line is preserved.
+         */
+        fun mergeCodexInstall(text: String?): String {
+            if (text != null && isCodexInstalledText(text)) return text
+            val kept = if (text == null) emptyList() else dropCodexLines(text.lines())
+                .dropLastWhile { it.isBlank() }
+            val block = desiredCodexBlock().trimEnd('\n').split("\n")
+            return ((if (kept.isEmpty()) block else kept + "" + block).joinToString("\n")) + "\n"
+        }
+
+        /**
+         * Removes the owned entry from TOML [text], leaving every other line
+         * untouched (one adjacent separator blank goes with the block so no
+         * stray gap is left). An entry-less file returns byte-identical; a
+         * file holding nothing else returns empty.
+         */
+        fun mergeCodexRemove(text: String): String {
+            val kept = dropCodexLines(text.lines())
+            if (kept.all { it.isBlank() }) return ""
+            return kept.joinToString("\n").trimEnd('\n') + "\n"
+        }
+
+        /** The owned entry as found by the scan: presence plus the two probed values. */
+        private data class CodexEntry(val command: String?, val hasMcpArg: Boolean)
+
+        /**
+         * Scans [text] for the owned entry: the `[mcp_servers.jdx]` table
+         * (any quote/whitespace variant) or root-level
+         * `mcp_servers.jdx.command` / `mcp_servers.jdx.args` dotted keys.
+         * Null when no owned line exists. `args` arrays may span lines; an
+         * unterminated array bails (reads as absent, never swallows the file).
+         */
+        private fun findCodexEntry(text: String): CodexEntry? {
+            val lines = text.lines()
+            var index = 0
+            var inJdxTable = false
+            var seenHeader = false
+            var tableSeen = false
+            var dottedSeen = false
+            var tableCommand: String? = null
+            var tableHasMcpArg = false
+            var dottedCommand: String? = null
+            var dottedHasMcpArg = false
+            while (index < lines.size) {
+                val stripped = stripTomlComment(lines[index])
+                val header = parseTomlHeader(stripped)
+                if (header != null) {
+                    seenHeader = true
+                    inJdxTable = header == listOf("mcp_servers", "jdx")
+                    if (inJdxTable) tableSeen = true
+                    index++
+                    continue
+                }
+                if (isTomlHeaderLine(stripped)) {
+                    // An array header (`[[...]]`) or anything else bracket-led:
+                    // it still closes the owned table scan.
+                    seenHeader = true
+                    inJdxTable = false
+                    index++
+                    continue
+                }
+                val keyValue = splitTomlKeyValue(stripped)
+                if (keyValue != null) {
+                    val (segments, rawValue) = keyValue
+                    if (inJdxTable && segments.size == 1) {
+                        when (segments[0]) {
+                            "command" -> parseTomlString(rawValue)?.let { tableCommand = it }
+                            "args" -> {
+                                val parsed = parseTomlStringArray(lines, index, rawValue)
+                                if (parsed != null) {
+                                    if (parsed.first.contains("mcp")) tableHasMcpArg = true
+                                    index += parsed.second
+                                    continue
+                                }
+                            }
+                        }
+                    } else if (!seenHeader && segments.size == 3 &&
+                        segments[0] == "mcp_servers" && segments[1] == "jdx"
+                    ) {
+                        when (segments[2]) {
+                            "command" -> parseTomlString(rawValue)?.let {
+                                dottedCommand = it
+                                dottedSeen = true
+                            }
+                            "args" -> {
+                                val parsed = parseTomlStringArray(lines, index, rawValue)
+                                if (parsed != null) {
+                                    if (parsed.first.contains("mcp")) dottedHasMcpArg = true
+                                    dottedSeen = true
+                                    index += parsed.second
+                                    continue
+                                }
+                            }
+                        }
+                    }
+                }
+                index++
+            }
+            return when {
+                tableSeen -> CodexEntry(tableCommand, tableHasMcpArg)
+                dottedSeen -> CodexEntry(dottedCommand, dottedHasMcpArg)
+                else -> null
+            }
+        }
+
+        /**
+         * Drops every owned line: `[mcp_servers.jdx]` table blocks (header to
+         * the next header or EOF) plus root-level `mcp_servers.jdx.*` dotted
+         * keys. One adjacent separator blank goes with each table block (the
+         * preceding one at EOF, else the following one) so removal leaves no
+         * stray gap; all other lines keep their bytes and order.
+         */
+        private fun dropCodexLines(lines: List<String>): List<String> {
+            val drop = BooleanArray(lines.size)
+            var index = 0
+            var seenHeader = false
+            while (index < lines.size) {
+                val stripped = stripTomlComment(lines[index])
+                val header = parseTomlHeader(stripped)
+                if (header != null) {
+                    seenHeader = true
+                    if (header == listOf("mcp_servers", "jdx")) {
+                        var end = index + 1
+                        while (end < lines.size && !isTomlHeaderLine(stripTomlComment(lines[end]))) {
+                            end++
+                        }
+                        for (i in index until end) drop[i] = true
+                        // Swallow one separator blank: the preceding one when
+                        // only blanks follow to EOF, else the following one.
+                        val onlyBlanksFollow = ((end until lines.size).all { lines[it].isBlank() })
+                        if (onlyBlanksFollow) {
+                            if (index > 0 && lines[index - 1].isBlank() && !drop[index - 1]) {
+                                drop[index - 1] = true
+                            }
+                        } else if (end < lines.size && lines[end].isBlank()) {
+                            drop[end] = true
+                        }
+                        index = end
+                        continue
+                    }
+                    index++
+                    continue
+                }
+                if (isTomlHeaderLine(stripped)) {
+                    // Bracket-led but not a `[table]` header (notably
+                    // `[[array]]`): still a header for dotted-key scoping.
+                    seenHeader = true
+                    index++
+                    continue
+                }
+                if (!seenHeader) {
+                    val keyValue = splitTomlKeyValue(stripped)
+                    if (keyValue != null && keyValue.first.size >= 3 &&
+                        keyValue.first[0] == "mcp_servers" && keyValue.first[1] == "jdx"
+                    ) {
+                        drop[index] = true
+                    }
+                }
+                index++
+            }
+            return lines.filterIndexed { i, _ -> !drop[i] }
+        }
+
+        /** Cuts a TOML `#` comment: the first `#` outside strings. Pure — string-aware. */
+        internal fun stripTomlComment(line: String): String {
+            var inBasic = false
+            var inLiteral = false
+            var index = 0
+            while (index < line.length) {
+                val char = line[index]
+                when {
+                    inBasic -> when {
+                        char == '\\' -> index++
+                        char == '"' -> inBasic = false
+                    }
+                    inLiteral -> if (char == '\'') inLiteral = false
+                    char == '"' -> inBasic = true
+                    char == '\'' -> inLiteral = true
+                    char == '#' -> return line.substring(0, index)
+                }
+                index++
+            }
+            return line
+        }
+
+        /**
+         * Parses a `[table.header]` line (already comment-stripped) into its
+         * segments, tolerating whitespace and `"quoted"`/`'quoted'` parts.
+         * Null for non-headers (including `[[array]]` headers, which this
+         * service never owns — see [isTomlHeaderLine] for the boundary check).
+         */
+        internal fun parseTomlHeader(stripped: String): List<String>? {
+            val trimmed = stripped.trim()
+            if (!trimmed.startsWith("[") || trimmed.startsWith("[[")) return null
+            if (!trimmed.endsWith("]")) return null
+            val inner = trimmed.substring(1, trimmed.length - 1)
+            if (inner.isBlank()) return null
+            return splitTomlSegments(inner) ?: return null
+        }
+
+        /**
+         * True when [stripped] (already comment-stripped) opens any TOML
+         * header — `[table]` or `[[array]]`. The block-boundary check: a bare
+         * `[` outside a string is never a key or value line.
+         */
+        internal fun isTomlHeaderLine(stripped: String): Boolean =
+            stripped.trim().startsWith("[")
+
+        /**
+         * Splits `key = value` (already comment-stripped) at the first `=`
+         * outside strings: the key segments plus the raw value text. Null
+         * when there is no `=` outside strings.
+         */
+        internal fun splitTomlKeyValue(stripped: String): Pair<List<String>, String>? {
+            val equals = indexOfTomlEquals(stripped) ?: return null
+            val segments = splitTomlSegments(stripped.substring(0, equals).trim()) ?: return null
+            if (segments.isEmpty()) return null
+            return segments to stripped.substring(equals + 1)
+        }
+
+        /** Index of the first `=` outside strings, or null. */
+        private fun indexOfTomlEquals(text: String): Int? {
+            var inBasic = false
+            var inLiteral = false
+            var index = 0
+            while (index < text.length) {
+                val char = text[index]
+                when {
+                    inBasic -> when {
+                        char == '\\' -> index++
+                        char == '"' -> inBasic = false
+                    }
+                    inLiteral -> if (char == '\'') inLiteral = false
+                    char == '"' -> inBasic = true
+                    char == '\'' -> inLiteral = true
+                    char == '=' -> return index
+                }
+                index++
+            }
+            return null
+        }
+
+        /**
+         * Splits dotted TOML segments (`mcp_servers."jdx".command`),
+         * honouring quotes so dots inside quoted parts never split. Null when
+         * quotes are unbalanced.
+         */
+        internal fun splitTomlSegments(text: String): List<String>? {
+            val segments = mutableListOf<String>()
+            val current = StringBuilder()
+            var inBasic = false
+            var inLiteral = false
+            var quoteChar = ' '
+            var index = 0
+            fun flush() {
+                segments.add(unquoteTomlSegment(current.toString().trim()))
+                current.clear()
+            }
+            while (index < text.length) {
+                val char = text[index]
+                when {
+                    inBasic || inLiteral -> {
+                        current.append(char)
+                        if (char == '\\' && inBasic && index + 1 < text.length) {
+                            current.append(text[index + 1])
+                            index++
+                        } else if (char == quoteChar) {
+                            inBasic = false
+                            inLiteral = false
+                        }
+                    }
+                    char == '"' || char == '\'' -> {
+                        quoteChar = char
+                        if (char == '"') inBasic = true else inLiteral = true
+                        current.append(char)
+                    }
+                    char == '.' -> flush()
+                    else -> current.append(char)
+                }
+                index++
+            }
+            if (inBasic || inLiteral) return null
+            flush()
+            return segments
+        }
+
+        /** Strips one pair of matching quotes, unescaping basic-string content. */
+        private fun unquoteTomlSegment(segment: String): String {
+            if (segment.length >= 2 && segment.startsWith("\"") && segment.endsWith("\"")) {
+                return unescapeTomlString(segment.substring(1, segment.length - 1))
+            }
+            if (segment.length >= 2 && segment.startsWith("'") && segment.endsWith("'")) {
+                return segment.substring(1, segment.length - 1)
+            }
+            return segment
+        }
+
+        /**
+         * Parses a TOML string value (`"basic"` with escapes, or `'literal'`).
+         * Null when the value is not a string (numbers, booleans, arrays).
+         */
+        internal fun parseTomlString(rawValue: String): String? {
+            val trimmed = rawValue.trim()
+            if (trimmed.length >= 2 && trimmed.startsWith("\"")) {
+                val end = endOfBasicString(trimmed, 1) ?: return null
+                if (trimmed.substring(end + 1).trim().isNotEmpty()) return null
+                return unescapeTomlString(trimmed.substring(1, end))
+            }
+            if (trimmed.length >= 2 && trimmed.startsWith("'")) {
+                val end = trimmed.indexOf('\'', 1)
+                if (end < 0 || trimmed.substring(end + 1).trim().isNotEmpty()) return null
+                return trimmed.substring(1, end)
+            }
+            return null
+        }
+
+        /** Index of the closing `"` from [from] (escape-aware), or null. */
+        private fun endOfBasicString(text: String, from: Int): Int? {
+            var index = from
+            while (index < text.length) {
+                when (text[index]) {
+                    '\\' -> index++
+                    '"' -> return index
+                }
+                index++
+            }
+            return null
+        }
+
+        /** Unescapes the common TOML escapes (`\\`, `\"`, `\n`, `\t`, `\r`, `\b`, `\f`, `\uXXXX`); unknown escapes keep their char. */
+        internal fun unescapeTomlString(content: String): String {
+            if (!content.contains('\\')) return content
+            val out = StringBuilder(content.length)
+            var index = 0
+            while (index < content.length) {
+                val char = content[index]
+                if (char != '\\' || index + 1 >= content.length) {
+                    out.append(char)
+                    index++
+                    continue
+                }
+                when (content[index + 1]) {
+                    '\\' -> out.append('\\')
+                    '"' -> out.append('"')
+                    'n' -> out.append('\n')
+                    't' -> out.append('\t')
+                    'r' -> out.append('\r')
+                    'b' -> out.append('\b')
+                    'f' -> out.append('\u000C')
+                    'u' -> {
+                        val hex = content.substring(index + 2, minOf(index + 6, content.length))
+                        out.append(hex.toIntOrNull(16)?.toChar() ?: content[index + 1])
+                    }
+                    else -> out.append(content[index + 1])
+                }
+                index += 2
+            }
+            return out.toString()
+        }
+
+        /**
+         * Parses a TOML array of strings starting at [lines[startIndex]]
+         * ([firstRaw] is that line's value text): returns the string elements
+         * plus how many physical lines were consumed. Multi-line arrays join
+         * continuation lines string-aware; an unterminated array, a line
+         * containing a new table header mid-array, or a non-string element
+         * reads as null (absent — never a guess, never a swallow).
+         */
+        internal fun parseTomlStringArray(
+            lines: List<String>,
+            startIndex: Int,
+            firstRaw: String,
+        ): Pair<List<String>, Int>? {
+            val joined = StringBuilder()
+            var consumed = 0
+            var depth = 0
+            var index = startIndex
+            var raw = firstRaw
+            while (true) {
+                val stripped = if (consumed == 0) stripTomlComment(raw) else stripTomlComment(lines[index])
+                if (consumed > 0 && isTomlHeaderLine(stripped.trim())) return null
+                var inBasic = false
+                var inLiteral = false
+                var i = 0
+                while (i < stripped.length) {
+                    val char = stripped[i]
+                    when {
+                        inBasic -> when {
+                            char == '\\' -> i++
+                            char == '"' -> inBasic = false
+                        }
+                        inLiteral -> if (char == '\'') inLiteral = false
+                        char == '"' -> inBasic = true
+                        char == '\'' -> inLiteral = true
+                        char == '[' -> depth++
+                        char == ']' -> {
+                            depth--
+                            if (depth < 0) return null
+                        }
+                    }
+                    i++
+                }
+                joined.append(stripped).append('\n')
+                consumed++
+                if (depth == 0) break
+                index++
+                if (index >= lines.size) return null
+                raw = ""
+            }
+            val body = joined.toString().trim()
+            if (!body.startsWith("[") || !body.endsWith("]")) return null
+            val inner = body.substring(1, body.length - 1)
+            return (extractTomlStrings(inner) ?: return null) to consumed
+        }
+
+        /** Extracts every string literal in [inner] (basic or literal); null when non-string content appears. */
+        private fun extractTomlStrings(inner: String): List<String>? {
+            val values = mutableListOf<String>()
+            var index = 0
+            while (index < inner.length) {
+                val char = inner[index]
+                when {
+                    char.isWhitespace() || char == ',' -> index++
+                    char == '"' -> {
+                        val end = endOfBasicString(inner, index + 1) ?: return null
+                        values.add(unescapeTomlString(inner.substring(index + 1, end)))
+                        index = end + 1
+                    }
+                    char == '\'' -> {
+                        val end = inner.indexOf('\'', index + 1)
+                        if (end < 0) return null
+                        values.add(inner.substring(index + 1, end))
+                        index = end + 1
+                    }
+                    char == '#' -> return values
+                    else -> return null
+                }
+            }
+            return values
         }
 
         /**
@@ -838,6 +1503,7 @@ class SetupService(
                 if (isServerEntry(servers)) return false
                 servers.containsKey(SERVER_NAME)
             }
+            Agent.CODEX -> error("Codex CLI checks TOML text via hasCodexEntryText, never JSON")
         }
 
         private fun readRootOrNull(path: Path): RootRead? {

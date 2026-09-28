@@ -11,8 +11,9 @@ import java.nio.file.Path
 
 /**
  * Golden tests for `jdx setup` (issue #33 family): merged `opencode.json`,
- * Claude Code `.mcp.json`, `kilo.json`, and Cline `cline_mcp_settings.json`
- * bytes pinned to committed files under `src/test/resources/golden/setup/`.
+ * Claude Code `.mcp.json`, `kilo.json`, Cline `cline_mcp_settings.json`, and
+ * Codex CLI `config.toml` bytes pinned to committed files under
+ * `src/test/resources/golden/setup/`.
  *
  * One test pins all files: [GoldenFiles.verifyAll] fails on orphans, so
  * splitting agents into separate tests would fail each with the other's
@@ -161,6 +162,40 @@ class SetupGoldenTest {
             ),
         ) as SetupService.SetupOutcome.Removed
         contents["cline-remove-keeps-others.json"] = Files.readString(clineRemoveOutcome.path)
+
+        val codexProject = root.resolve("codex-project").also { Files.createDirectories(it) }
+        val codexFresh = SetupService(home, codexProject, home.resolve(".codex"))
+        val codexFreshOutcome = codexFresh.run(
+            SetupService.SetupRequest(
+                agent = SetupService.Agent.CODEX,
+                scope = SetupService.Scope.PROJECT,
+            ),
+        ) as SetupService.SetupOutcome.Installed
+        contents["codex-fresh-install.toml"] = Files.readString(codexFreshOutcome.path)
+
+        val codexMergeDir = root.resolve("codex-merge").also { Files.createDirectories(it) }
+        Files.createDirectories(codexMergeDir.resolve(".codex"))
+        Files.writeString(
+            codexMergeDir.resolve(".codex/config.toml"),
+            "model = \"o4-mini\"\n\n[mcp_servers.other]\ncommand = \"other\"\nargs = [\"x\"]\n",
+        )
+        val codexMerge = SetupService(home, codexMergeDir, home.resolve(".codex"))
+        val codexMergeOutcome = codexMerge.run(
+            SetupService.SetupRequest(
+                agent = SetupService.Agent.CODEX,
+                scope = SetupService.Scope.PROJECT,
+            ),
+        ) as SetupService.SetupOutcome.Installed
+        contents["codex-merge-preserves.toml"] = Files.readString(codexMergeOutcome.path)
+
+        val codexRemoveOutcome = codexMerge.run(
+            SetupService.SetupRequest(
+                agent = SetupService.Agent.CODEX,
+                scope = SetupService.Scope.PROJECT,
+                remove = true,
+            ),
+        ) as SetupService.SetupOutcome.Removed
+        contents["codex-remove-keeps-others.toml"] = Files.readString(codexRemoveOutcome.path)
 
         GoldenFiles.verifyAll(File("src/test/resources/golden/setup"), contents)
     }

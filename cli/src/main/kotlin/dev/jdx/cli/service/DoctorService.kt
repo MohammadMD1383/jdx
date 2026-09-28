@@ -482,12 +482,13 @@ class DoctorService(
     private fun setupCheck(): DoctorCheck {
         // Agent wiring (issue #33 family): reports whether the `jdx mcp`
         // entries are present in the OpenCode (v1/v2 entries), Claude Code
-        // (`.mcp.json` / `~/.claude.json`), Kilo Code project and system
-        // configs, and the single global Cline file (both Cline scopes name
-        // it — Cline keeps no project-level MCP file, verified against the
-        // real install), plus which lines are installed for use (OpenCode v1
-        // vs v2 beta — the install covers both, but the operator must know
-        // which binary reads it). Read-only — the same lenient probe as
+        // (`.mcp.json` / `~/.claude.json`), Kilo Code, Codex CLI
+        // (`.codex/config.toml` / `~/.codex/config.toml`), and the single
+        // global Cline file (both Cline scopes name it — Cline keeps no
+        // project-level MCP file, verified against the real install), plus
+        // which lines are installed for use (OpenCode v1 vs v2 beta — the
+        // install covers both, but the operator must know which binary reads
+        // it). Read-only — the same lenient probe as
         // `jdx setup --check`, plus best-effort `--version` classifications
         // that never throw. Missing on every scope is a WARN (setup is
         // optional), never a FAIL; an unreadable file names itself.
@@ -498,6 +499,11 @@ class DoctorService(
         val kiloProjectPath = SetupService.kiloProjectConfigPath(environment.workingDir)
         val kiloSystemPath = SetupService.kiloSystemConfigPath(environment.userHome)
         val clinePath = SetupService.clineConfigPath(environment.userHome)
+        val codexHome = environment.envVars["CODEX_HOME"]
+            ?.takeIf { it.isNotBlank() }
+            ?.let { Paths.get(it) }
+        val codexProject = SetupService.codexProjectConfigPath(environment.workingDir)
+        val codexSystem = SetupService.codexSystemConfigPath(environment.userHome, codexHome)
         val opencodeDetected = try {
             SetupService.describeVersion(
                 SetupService.probeOpencodeVersion(
@@ -519,6 +525,17 @@ class DoctorService(
             )
         } catch (e: Exception) {
             "claude-code version unknown (${e.message ?: e.javaClass.simpleName})"
+        }
+        val codexDetected = try {
+            SetupService.describeCodexVersion(
+                SetupService.probeCodexVersion(
+                    environment.pathDirs,
+                    environment.processRunner,
+                    environment.osName,
+                ),
+            )
+        } catch (e: Exception) {
+            "codex version unknown (${e.message ?: e.javaClass.simpleName})"
         }
         fun stateOf(path: Path, agent: SetupService.Agent): String? = try {
             when {
@@ -548,11 +565,16 @@ class DoctorService(
             ?: "no project config (${clinePath.fileName}, global file)"
         val clineSystemState = stateOf(clinePath, SetupService.Agent.CLINE)
             ?: "no system config ($clinePath)"
+        val codexProjectState = stateOf(codexProject, SetupService.Agent.CODEX)
+            ?: "no project config (${codexProject.fileName})"
+        val codexSystemState = stateOf(codexSystem, SetupService.Agent.CODEX)
+            ?: "no system config ($codexSystem)"
         val status = if (
             opencodeProjectState.startsWith("installed") || opencodeSystemState.startsWith("installed") ||
             claudeProjectState.startsWith("installed") || claudeSystemState.startsWith("installed") ||
             kiloProjectState.startsWith("installed") || kiloSystemState.startsWith("installed") ||
-            clineProjectState.startsWith("installed") || clineSystemState.startsWith("installed")
+            clineProjectState.startsWith("installed") || clineSystemState.startsWith("installed") ||
+            codexProjectState.startsWith("installed") || codexSystemState.startsWith("installed")
         ) {
             DoctorStatus.OK
         } else {
@@ -561,8 +583,9 @@ class DoctorService(
         val hint = if (status == DoctorStatus.OK) "" else
             " — run `jdx setup --agent opencode --scope project`, " +
                 "`jdx setup --agent claude-code --scope project`, " +
-                "`jdx setup --agent kilo --scope project` or " +
-                "`jdx setup --agent cline --scope system`"
+                "`jdx setup --agent kilo --scope project`, " +
+                "`jdx setup --agent cline --scope system` or " +
+                "`jdx setup --agent codex --scope project`"
         return check(
             "setup",
             status,
@@ -571,7 +594,9 @@ class DoctorService(
                 "claude-code project $claudeProjectState ($claudeDetected); " +
                 "claude-code system $claudeSystemState; " +
                 "kilo project $kiloProjectState; kilo system $kiloSystemState; " +
-                "cline project $clineProjectState; cline system $clineSystemState$hint",
+                "cline project $clineProjectState; cline system $clineSystemState; " +
+                "codex project $codexProjectState ($codexDetected); " +
+                "codex system $codexSystemState$hint",
         )
     }
 

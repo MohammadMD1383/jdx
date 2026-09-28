@@ -1132,11 +1132,33 @@ class SetupServiceTest {
         remove = remove,
     )
 
+    // -- Codex CLI backend (config.toml, [mcp_servers.jdx]) --
+
+    private fun codexProjectRequest(
+        check: Boolean = false,
+        remove: Boolean = false,
+    ): SetupService.SetupRequest = SetupService.SetupRequest(
+        agent = SetupService.Agent.CODEX,
+        scope = SetupService.Scope.PROJECT,
+        check = check,
+        remove = remove,
+    )
+
     private fun clineSystemRequest(
         check: Boolean = false,
         remove: Boolean = false,
     ): SetupService.SetupRequest = SetupService.SetupRequest(
         agent = SetupService.Agent.CLINE,
+        scope = SetupService.Scope.SYSTEM,
+        check = check,
+        remove = remove,
+    )
+
+    private fun codexSystemRequest(
+        check: Boolean = false,
+        remove: Boolean = false,
+    ): SetupService.SetupRequest = SetupService.SetupRequest(
+        agent = SetupService.Agent.CODEX,
         scope = SetupService.Scope.SYSTEM,
         check = check,
         remove = remove,
@@ -1419,6 +1441,285 @@ class SetupServiceTest {
                 removed["mcpServers"]?.jsonObject?.containsKey("jdx") shouldBe false
                 removed["mcpServers"]?.jsonObject?.containsKey(name) shouldBe true
             }
+        }
+    }
+
+    /** A service whose Codex system dir is pinned under the fake home (never the ambient `$CODEX_HOME`). */
+    private fun codexService(dirs: FakeDirs): SetupService =
+        SetupService(dirs.home, dirs.project, dirs.home.resolve(".codex"))
+
+    @Test
+    fun `parseAgent covers codex spellings`() {
+        SetupService.parseAgent("codex") shouldBe SetupService.Agent.CODEX
+        SetupService.parseAgent("Codex") shouldBe SetupService.Agent.CODEX
+        SetupService.parseAgent("codex-cli") shouldBe SetupService.Agent.CODEX
+        SetupService.parseAgent("codexcli") shouldBe SetupService.Agent.CODEX
+        SetupService.parseAgent("CODEX_CLI") shouldBe SetupService.Agent.CODEX
+    }
+
+    @Test
+    fun `a fresh codex project install writes the canonical table`(@TempDir root: Path) {
+        val dirs = fakeDirs(root)
+        val service = codexService(dirs)
+
+        val outcome = service.run(codexProjectRequest())
+
+        val installed = outcome as SetupService.SetupOutcome.Installed
+        installed.changed shouldBe true
+        installed.path shouldBe dirs.project.resolve(".codex/config.toml")
+        setupExitCode(outcome) shouldBe 0
+        Files.readString(installed.path) shouldBe SetupService.desiredCodexBlock()
+        SetupService.isInstalledAt(installed.path, SetupService.Agent.CODEX) shouldBe true
+    }
+
+    @Test
+    fun `codex system scope honours the injected codex home`(@TempDir root: Path) {
+        val dirs = fakeDirs(root)
+        val service = SetupService(dirs.home, dirs.project, root.resolve("custom-codex-home"))
+
+        val outcome = service.run(codexSystemRequest()) as SetupService.SetupOutcome.Installed
+
+        outcome.path shouldBe root.resolve("custom-codex-home/config.toml")
+        SetupService.isInstalledAt(outcome.path, SetupService.Agent.CODEX) shouldBe true
+    }
+
+    @Test
+    fun `codex system scope defaults under the user home`(@TempDir root: Path) {
+        val dirs = fakeDirs(root)
+
+        SetupService.codexSystemConfigPath(dirs.home, dirs.home.resolve(".codex")) shouldBe
+            dirs.home.resolve(".codex/config.toml")
+        SetupService.codexSystemConfigPath(dirs.home) shouldBe
+            dirs.home.resolve(".codex/config.toml")
+    }
+
+    @Test
+    fun `codex project scope walks up to the nearest dot-codex config`(@TempDir root: Path) {
+        val dirs = fakeDirs(root)
+        val nested = dirs.project.resolve("a/b").also { Files.createDirectories(it) }
+        Files.createDirectories(dirs.project.resolve(".codex"))
+        Files.writeString(
+            dirs.project.resolve(".codex/config.toml"),
+            "[mcp_servers.other]\ncommand = \"other\"\nargs = [\"x\"]\n",
+        )
+        val service = SetupService(dirs.home, nested, dirs.home.resolve(".codex"))
+
+        val outcome = service.run(codexProjectRequest()) as SetupService.SetupOutcome.Installed
+
+        outcome.path shouldBe dirs.project.resolve(".codex/config.toml")
+        val stored = Files.readString(outcome.path)
+        stored shouldContain "[mcp_servers.other]"
+        SetupService.isInstalledAt(outcome.path, SetupService.Agent.CODEX) shouldBe true
+    }
+
+    @Test
+    fun `a second codex install is a byte-exact no-op`(@TempDir root: Path) {
+        val dirs = fakeDirs(root)
+        val service = codexService(dirs)
+
+        val first = service.run(codexProjectRequest()) as SetupService.SetupOutcome.Installed
+        val before = Files.readString(first.path)
+        val second = service.run(codexProjectRequest()) as SetupService.SetupOutcome.Installed
+
+        second.changed shouldBe false
+        Files.readString(second.path) shouldBe before
+    }
+
+    @Test
+    fun `codex check and remove round-trip without touching other servers`(@TempDir root: Path) {
+        val dirs = fakeDirs(root)
+        val service = codexService(dirs)
+        val path = dirs.project.resolve(".codex/config.toml")
+        Files.createDirectories(path.parent)
+        Files.writeString(
+            path,
+            "model = \"o4-mini\"\n\n[mcp_servers.other]\ncommand = \"other\"\nargs = [\"x\"]\n",
+        )
+
+        (service.run(codexProjectRequest(check = true)) as SetupService.SetupOutcome.Checked).installed shouldBe false
+
+        val installed = service.run(codexProjectRequest()) as SetupService.SetupOutcome.Installed
+        installed.changed shouldBe true
+        val stored = Files.readString(installed.path)
+        stored shouldContain "model = \"o4-mini\""
+        stored shouldContain "[mcp_servers.other]"
+        stored shouldContain SetupService.desiredCodexBlock().trim()
+        SetupService.isInstalledAt(path, SetupService.Agent.CODEX) shouldBe true
+        (service.run(codexProjectRequest(check = true)) as SetupService.SetupOutcome.Checked).installed shouldBe true
+
+        val removed = service.run(codexProjectRequest(remove = true)) as SetupService.SetupOutcome.Removed
+        removed.changed shouldBe true
+        Files.readString(removed.path) shouldBe
+            "model = \"o4-mini\"\n\n[mcp_servers.other]\ncommand = \"other\"\nargs = [\"x\"]\n"
+        SetupService.isInstalledAt(path, SetupService.Agent.CODEX) shouldBe false
+
+        val again = service.run(codexProjectRequest(remove = true)) as SetupService.SetupOutcome.Removed
+        again.changed shouldBe false
+    }
+
+    @Test
+    fun `codex install repairs a stale entry pointing elsewhere`(@TempDir root: Path) {
+        val dirs = fakeDirs(root)
+        val service = codexService(dirs)
+        val path = dirs.project.resolve(".codex/config.toml")
+        Files.createDirectories(path.parent)
+        Files.writeString(
+            path,
+            "[mcp_servers.jdx]\ncommand = \"other-server\"\nargs = [\"x\"]\n",
+        )
+
+        SetupService.isInstalledAt(path, SetupService.Agent.CODEX) shouldBe false
+        val outcome = service.run(codexProjectRequest()) as SetupService.SetupOutcome.Installed
+
+        outcome.changed shouldBe true
+        Files.readString(outcome.path) shouldBe SetupService.desiredCodexBlock()
+    }
+
+    @Test
+    fun `codex install preserves an absolute jdx command path as installed`(@TempDir root: Path) {
+        val dirs = fakeDirs(root)
+        val service = codexService(dirs)
+        val path = dirs.project.resolve(".codex/config.toml")
+        Files.createDirectories(path.parent)
+        val text = "[mcp_servers.jdx]\ncommand = \"/home/u/.local/bin/jdx\"\nargs = [\"mcp\"]\n"
+        Files.writeString(path, text)
+
+        SetupService.isInstalledAt(path, SetupService.Agent.CODEX) shouldBe true
+        val outcome = service.run(codexProjectRequest()) as SetupService.SetupOutcome.Installed
+
+        outcome.changed shouldBe false
+        Files.readString(outcome.path) shouldBe text
+    }
+
+    @Test
+    fun `codex probe reads quoted headers comments and multiline arrays`(@TempDir root: Path) {
+        // Quoted table segments and trailing comments.
+        SetupService.isCodexInstalledText(
+            "[ mcp_servers.\"jdx\" ] # owned\ncommand = \"jdx\" # launcher\nargs = [\"mcp\"]\n",
+        ) shouldBe true
+        // Literal strings and a multi-line args array.
+        SetupService.isCodexInstalledText(
+            "[mcp_servers.jdx]\ncommand = 'jdx'\nargs = [\n  \"mcp\",\n]\n",
+        ) shouldBe true
+        // Root-level dotted keys.
+        SetupService.isCodexInstalledText(
+            "mcp_servers.jdx.command = \"jdx\"\nmcp_servers.jdx.args = [\"mcp\"]\n",
+        ) shouldBe true
+        // A hostile lookalike: brackets inside strings never confuse the scan.
+        SetupService.isCodexInstalledText(
+            "model = \"[mcp_servers.jdx]\"\n[mcp_servers.other]\ncommand = \"other\"\n",
+        ) shouldBe false
+        // A `[[array]]` header closes the owned table: keys below it are not ours.
+        SetupService.isCodexInstalledText(
+            "[mcp_servers.jdx]\ncommand = \"jdx\"\nargs = [\"mcp\"]\n[[plugins]]\ncommand = \"evil\"\n",
+        ) shouldBe true
+        SetupService.isCodexInstalledText(
+            "[mcp_servers.other]\ncommand = \"jdx\"\nargs = [\"mcp\"]\n",
+        ) shouldBe false
+        SetupService.isCodexInstalledText("") shouldBe false
+        SetupService.isCodexInstalledText(null) shouldBe false
+        SetupService.hasCodexEntryText("[mcp_servers.jdx]\ncommand = \"other\"\n") shouldBe true
+        SetupService.hasCodexEntryText("[mcp_servers.other]\ncommand = \"other\"\n") shouldBe false
+    }
+
+    @Test
+    fun `targetPath resolves the codex scope paths`(@TempDir root: Path) {
+        val dirs = fakeDirs(root)
+        val service = SetupService(dirs.home, dirs.project, dirs.home.resolve(".codex"))
+
+        service.targetPath(SetupService.Agent.CODEX, SetupService.Scope.PROJECT) shouldBe
+            dirs.project.resolve(".codex/config.toml")
+        service.targetPath(SetupService.Agent.CODEX, SetupService.Scope.SYSTEM) shouldBe
+            dirs.home.resolve(".codex/config.toml")
+    }
+
+    @Test
+    fun `codex version probing names presence without guessing`(@TempDir root: Path) {
+        SetupService.probeCodexVersion(
+            emptyList(),
+            ProcessRunner { _, _ -> ProcessOutcome(0, "x", "") },
+        ).version shouldBe SetupService.CodexVersion.ABSENT
+    }
+
+    @Test
+    fun `codex version probe classifies answers`(@TempDir root: Path) {
+        val bin = root.resolve("bin").also { Files.createDirectories(it) }
+        Files.createFile(bin.resolve("codex")).toFile().setExecutable(true)
+
+        val present = SetupService.probeCodexVersion(
+            listOf(bin),
+            ProcessRunner { _, _ -> ProcessOutcome(0, "codex-cli 0.157.1", "") },
+        )
+        present.version shouldBe SetupService.CodexVersion.PRESENT
+        present.raw shouldBe "codex-cli 0.157.1"
+        present.binary shouldBe "codex"
+
+        val blank = SetupService.probeCodexVersion(
+            listOf(bin),
+            ProcessRunner { _, _ -> ProcessOutcome(0, "  ", "") },
+        )
+        blank.version shouldBe SetupService.CodexVersion.UNKNOWN
+
+        val failing = SetupService.probeCodexVersion(
+            listOf(bin),
+            throwingRunner("boom"),
+        )
+        failing.version shouldBe SetupService.CodexVersion.UNKNOWN
+    }
+
+    @Test
+    fun `codex probe resolves the exe shim on windows`(@TempDir root: Path) {
+        val bin = root.resolve("bin").also { Files.createDirectories(it) }
+        Files.createFile(bin.resolve("codex.exe")).toFile().setExecutable(true)
+        val runner = ProcessRunner { _, _ -> ProcessOutcome(0, "codex-cli 0.157.1", "") }
+
+        val info = SetupService.probeCodexVersion(listOf(bin), runner, osName = "Windows 11")
+
+        info.version shouldBe SetupService.CodexVersion.PRESENT
+        info.raw shouldBe "codex-cli 0.157.1"
+        info.binary shouldBe "codex"
+    }
+
+    @Test
+    fun `describeCodexVersion covers every variant`() {
+        SetupService.describeCodexVersion(
+            SetupService.CodexVersionInfo(SetupService.CodexVersion.PRESENT, "codex-cli 0.157.1", "codex"),
+        ) shouldBe "codex (codex-cli 0.157.1)"
+        SetupService.describeCodexVersion(
+            SetupService.CodexVersionInfo(SetupService.CodexVersion.ABSENT),
+        ) shouldBe "codex not found on PATH"
+        SetupService.describeCodexVersion(
+            SetupService.CodexVersionInfo(SetupService.CodexVersion.UNKNOWN, "banana", "codex"),
+        ) shouldBe "codex version unknown (banana)"
+        SetupService.describeCodexVersion(
+            SetupService.CodexVersionInfo(SetupService.CodexVersion.UNKNOWN),
+        ) shouldBe "codex version unknown"
+    }
+
+    // -- generative family: the TOML merge never loses foreign lines --
+
+    @Test
+    fun `codex install is a fixed point over generated configs`() = runBlocking<Unit> {
+        checkAll(200, Arb.string(0..120)) { noise ->
+            val clean = noise.replace(Regex("[\\p{Cntrl}]"), " ")
+                .replace("\"", "'").replace("[", "(").replace("]", ")").replace("=", "-")
+            val text = "# $clean\n[other]\nkey = \"v\"\n"
+            val once = SetupService.mergeCodexInstall(text)
+            SetupService.isCodexInstalledText(once) shouldBe true
+            SetupService.mergeCodexInstall(once) shouldBe once
+            once shouldContain "# $clean"
+            once shouldContain "[other]"
+        }
+    }
+
+    @Test
+    fun `codex remove restores generated foreign content byte-free`() = runBlocking<Unit> {
+        checkAll(200, Arb.string(0..120)) { noise ->
+            val clean = noise.replace(Regex("[\\p{Cntrl}]"), " ")
+                .replace("\"", "'").replace("[", "(").replace("]", ")").replace("=", "-")
+            val foreign = "# $clean\n[other]\nkey = \"v\"\n"
+            val installed = SetupService.mergeCodexInstall(foreign)
+            SetupService.mergeCodexRemove(installed) shouldBe foreign
         }
     }
 }

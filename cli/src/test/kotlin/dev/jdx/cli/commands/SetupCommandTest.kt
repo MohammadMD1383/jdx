@@ -41,11 +41,17 @@ class SetupCommandTest {
         claudeVersion: SetupService.ClaudeVersionInfo = SetupService.ClaudeVersionInfo(
             SetupService.ClaudeVersion.ABSENT,
         ),
+        codexVersion: SetupService.CodexVersionInfo = SetupService.CodexVersionInfo(
+            SetupService.CodexVersion.ABSENT,
+        ),
     ): SetupCommand = SetupCommand(
-        serviceFactory = { _, _ -> SetupService(home, project) },
+        // The Codex system dir is pinned under the fake home so no test can
+        // leak into the real `~/.codex` via the ambient `$CODEX_HOME`.
+        serviceFactory = { _, _ -> SetupService(home, project, home.resolve(".codex")) },
         terminate = { throw SetupExit(it) },
         versionProbe = { version },
         claudeVersionProbe = { claudeVersion },
+        codexVersionProbe = { codexVersion },
     )
 
     private fun kiloCommandFor(home: Path, project: Path): SetupCommand = SetupCommand(
@@ -188,7 +194,7 @@ class SetupCommandTest {
         }
 
         code shouldBe 3
-        output.trim() shouldContain "opencode|claude-code|kilo|cline"
+        output.trim() shouldContain "opencode|claude-code|kilo|cline|codex"
     }
 
     @Test
@@ -556,6 +562,26 @@ class SetupCommandTest {
         ) shouldBe true
     }
 
+    // -- Codex CLI wiring (`--agent codex`) --
+
+    @Test
+    fun `codex install writes the toml table and says what to do next`(@TempDir root: Path) {
+        val (home, project) = fakeDirs(root)
+        val output = captureStdout {
+            JdxCli().subcommands(commandFor(home, project))
+                .parse(listOf("setup", "--agent", "codex", "--scope", "project"))
+        }
+
+        output.trim() shouldContain "codex project setup installed"
+        output.trim() shouldContain "mcp_servers entry"
+        output.trim() shouldContain "restart codex"
+        output.trim() shouldContain "codex not found on PATH"
+        SetupService.isInstalledAt(
+            project.resolve(".codex/config.toml"),
+            SetupService.Agent.CODEX,
+        ) shouldBe true
+    }
+
     @Test
     fun `cline project scope writes the same global file and says so`(@TempDir root: Path) {
         val (home, project) = fakeDirs(root)
@@ -594,6 +620,23 @@ class SetupCommandTest {
     }
 
     @Test
+    fun `codex accepts every documented spelling`(@TempDir root: Path) {
+        listOf("codex", "Codex", "codex-cli", "codexcli").forEachIndexed { index, spelling ->
+            val case = root.resolve("case-$index").also { Files.createDirectories(it) }
+            val (home, project) = fakeDirs(case)
+            captureStdout {
+                JdxCli().subcommands(commandFor(home, project))
+                    .parse(listOf("setup", "--agent", spelling, "--scope", "project"))
+            }
+
+            SetupService.isInstalledAt(
+                project.resolve(".codex/config.toml"),
+                SetupService.Agent.CODEX,
+            ) shouldBe true
+        }
+    }
+
+    @Test
     fun `a second cline install is a no-op reporting already installed`(@TempDir root: Path) {
         val (home, project) = fakeDirs(root)
         val args = listOf("setup", "--agent", "cline", "--scope", "system")
@@ -601,6 +644,35 @@ class SetupCommandTest {
 
         val output = captureStdout {
             JdxCli().subcommands(clineCommandFor(home, project)).parse(args)
+        }
+
+        output.trim() shouldContain "already installed"
+    }
+
+    @Test
+    fun `codex install names the detected binary`(@TempDir root: Path) {
+        val (home, project) = fakeDirs(root)
+        val present = SetupService.CodexVersionInfo(
+            SetupService.CodexVersion.PRESENT,
+            "codex-cli 0.157.1",
+            "codex",
+        )
+        val output = captureStdout {
+            JdxCli().subcommands(commandFor(home, project, codexVersion = present))
+                .parse(listOf("setup", "--agent", "codex", "--scope", "project"))
+        }
+
+        output.trim() shouldContain "detected: codex (codex-cli 0.157.1)"
+    }
+
+    @Test
+    fun `a second codex install is a no-op reporting already installed`(@TempDir root: Path) {
+        val (home, project) = fakeDirs(root)
+        val args = listOf("setup", "--agent", "codex", "--scope", "project")
+        captureStdout { JdxCli().subcommands(commandFor(home, project)).parse(args) }
+
+        val output = captureStdout {
+            JdxCli().subcommands(commandFor(home, project)).parse(args)
         }
 
         output.trim() shouldContain "already installed"
@@ -646,6 +718,59 @@ class SetupCommandTest {
     }
 
     @Test
+    fun `codex system scope writes under the fake home`(@TempDir root: Path) {
+        val (home, project) = fakeDirs(root)
+        captureStdout {
+            JdxCli().subcommands(commandFor(home, project))
+                .parse(listOf("setup", "--agent", "codex", "--scope", "system"))
+        }
+
+        SetupService.isInstalledAt(
+            home.resolve(".codex/config.toml"),
+            SetupService.Agent.CODEX,
+        ) shouldBe true
+    }
+
+    @Test
+    fun `codex check exits 1 when absent and 0 once installed without writing`(@TempDir root: Path) {
+        val (home, project) = fakeDirs(root)
+        val check = listOf("setup", "--agent", "codex", "--scope", "project", "--check")
+
+        val absent = shouldThrow<SetupExit> {
+            captureStdout { JdxCli().subcommands(commandFor(home, project)).parse(check) }
+        }
+        absent.code shouldBe 1
+        Files.exists(project.resolve(".codex/config.toml")) shouldBe false
+
+        captureStdout {
+            JdxCli().subcommands(commandFor(home, project))
+                .parse(listOf("setup", "--agent", "codex", "--scope", "project"))
+        }
+        val installed = captureStdout {
+            JdxCli().subcommands(commandFor(home, project)).parse(check)
+        }
+        installed.trim() shouldContain "codex project setup installed"
+    }
+
+    @Test
+    fun `codex check hint names the codex install command`(@TempDir root: Path) {
+        val (home, project) = fakeDirs(root)
+
+        var code = -1
+        val output = captureStdout {
+            try {
+                JdxCli().subcommands(commandFor(home, project))
+                    .parse(listOf("setup", "--agent", "codex", "--scope", "system", "--check"))
+            } catch (e: SetupExit) {
+                code = e.code
+            }
+        }
+
+        code shouldBe 1
+        output.trim() shouldContain "jdx setup --agent codex --scope system"
+    }
+
+    @Test
     fun `cline remove uninstalls cleanly`(@TempDir root: Path) {
         val (home, project) = fakeDirs(root)
         captureStdout {
@@ -666,6 +791,26 @@ class SetupCommandTest {
     }
 
     @Test
+    fun `codex remove uninstalls cleanly`(@TempDir root: Path) {
+        val (home, project) = fakeDirs(root)
+        captureStdout {
+            JdxCli().subcommands(commandFor(home, project))
+                .parse(listOf("setup", "--agent", "codex", "--scope", "project"))
+        }
+
+        val output = captureStdout {
+            JdxCli().subcommands(commandFor(home, project))
+                .parse(listOf("setup", "--agent", "codex", "--scope", "project", "--remove"))
+        }
+
+        output.trim() shouldContain "codex project setup removed"
+        SetupService.isInstalledAt(
+            project.resolve(".codex/config.toml"),
+            SetupService.Agent.CODEX,
+        ) shouldBe false
+    }
+
+    @Test
     fun `cline json carries the setup payload without version probes`(@TempDir root: Path) {
         val (home, project) = fakeDirs(root)
         val output = captureStdout {
@@ -681,6 +826,38 @@ class SetupCommandTest {
         result["scope"]?.jsonPrimitive?.content shouldBe "system"
         result["installed"]?.jsonPrimitive?.content shouldBe "true"
         // No version probes for Cline: the nullable fields are absent
+        // (`explicitNulls = false`), never null-marked.
+        result.containsKey("opencodeVersion") shouldBe false
+        result.containsKey("opencodeRaw") shouldBe false
+        result.containsKey("claudeVersion") shouldBe false
+        result.containsKey("claudeRaw") shouldBe false
+        result.containsKey("codexVersion") shouldBe false
+        result.containsKey("codexRaw") shouldBe false
+    }
+
+    @Test
+    fun `codex json carries the setup payload without other agent lines`(@TempDir root: Path) {
+        val (home, project) = fakeDirs(root)
+        val present = SetupService.CodexVersionInfo(
+            SetupService.CodexVersion.PRESENT,
+            "codex-cli 0.157.1",
+            "codex",
+        )
+        val output = captureStdout {
+            JdxCli().subcommands(commandFor(home, project, codexVersion = present))
+                .parse(listOf("setup", "--agent", "codex", "--scope", "project", "--json"))
+        }
+
+        val parsed = Json.parseToJsonElement(output.trim()).jsonObject
+        parsed["command"]?.jsonPrimitive?.content shouldBe "setup"
+        parsed["ok"]?.jsonPrimitive?.content shouldBe "true"
+        val result = parsed["result"]!!.jsonObject
+        result["agent"]?.jsonPrimitive?.content shouldBe "codex"
+        result["scope"]?.jsonPrimitive?.content shouldBe "project"
+        result["installed"]?.jsonPrimitive?.content shouldBe "true"
+        result["codexVersion"]?.jsonPrimitive?.content shouldBe "present"
+        result["codexRaw"]?.jsonPrimitive?.content shouldBe "codex-cli 0.157.1"
+        // No other agent's line probe: the nullable fields are absent
         // (`explicitNulls = false`), never null-marked.
         result.containsKey("opencodeVersion") shouldBe false
         result.containsKey("opencodeRaw") shouldBe false
