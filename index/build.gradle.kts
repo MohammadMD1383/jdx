@@ -73,18 +73,10 @@ pitest {
         ),
     )
     // The PIT minion is a fresh JVM: it does not inherit the `test` task's system
-    // properties, but the fixture-corpus tests resolve jars through
-    // `jdx.fixturesDir` (T-006). Forward it as a JVM arg, computed the same way
-    // as the `test`/`tier2Test` wiring above (an absolute path is fine — PIT runs
-    // locally, never in a relocatable cache entry).
-    jvmArgs.add(
-        "-Djdx.fixturesDir=" +
-            project(":testfixtures").layout.buildDirectory.dir("libs").get().asFile.absolutePath,
-    )
-    jvmArgs.add(
-        "-Djdx.diffFixturesDir=" +
-            project(":testfixtures").layout.buildDirectory.dir("diff-fixtures").get().asFile.absolutePath,
-    )
+    // properties, and it does not build the corpus itself. Both the corpus properties
+    // (`jdx.fixturesDir`, `jdx.diffFixturesDir`) and the four `:testfixtures` jar task
+    // dependencies are wired once for every PIT module in the root build (#66) — do not
+    // repeat them here; `verifyPitestWiring` fails the build if a module loses them.
     // #57: same CI relaxation as :core — slow shared runners must not read as
     // killed mutants. Local runs keep the 10 s gate.
     val isCi: Boolean =

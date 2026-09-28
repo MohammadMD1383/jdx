@@ -1,5 +1,6 @@
 package dev.jdx.sources
 
+import dev.jdx.testsupport.fixtures.FixtureJars
 import io.kotest.assertions.throwables.shouldThrow
 import io.kotest.matchers.shouldBe
 import io.kotest.matchers.string.shouldContain
@@ -8,6 +9,7 @@ import java.nio.file.Files
 import java.nio.file.Path
 import java.util.zip.ZipEntry
 import java.util.zip.ZipOutputStream
+import org.junit.jupiter.api.Assumptions.assumeTrue
 import org.junit.jupiter.api.Tag
 import org.junit.jupiter.api.Test
 import org.junit.jupiter.api.io.TempDir
@@ -32,23 +34,16 @@ class SourceRootTest {
         return jar
     }
 
-    private fun fixturesDir(): File {
-        System.getProperty("jdx.fixturesDir")?.let { return File(it) }
-        var dir: File? = File(System.getProperty("user.dir")).absoluteFile
-        while (dir != null) {
-            val candidate = File(dir, "testfixtures/build/libs")
-            if (candidate.isDirectory) return candidate
-            dir = dir.parentFile
-        }
-        error("fixture jars not found: build :testfixtures first")
-    }
-
-    private fun fixtureSourcesJar(dir: File = fixturesDir()): File {
-        val jars = dir.listFiles { file ->
-            file.isFile && file.name.endsWith("-sources.jar")
-        }?.toList().orEmpty()
-        require(jars.size == 1) { "expected exactly one fixture sources jar in $dir, found: $jars" }
-        return jars.single()
+    /**
+     * The fixture `-sources.jar`, or a skip when this machine has no corpus (#66).
+     * See `JavaBodiesSourcesTest.fixtureSourcesJar` — same contract, same reason.
+     */
+    private fun fixtureSourcesJar(): File {
+        assumeTrue(
+            FixtureJars.sourcesCorpusAvailable(),
+            "no testfixtures corpus: build :testfixtures first (docs/TESTING.md §11)",
+        )
+        return FixtureJars.sourcesJar()
     }
 
     @Test

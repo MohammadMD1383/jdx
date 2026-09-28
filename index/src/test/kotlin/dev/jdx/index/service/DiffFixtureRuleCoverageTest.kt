@@ -9,6 +9,7 @@ import dev.jdx.index.service.JdxService.DiffOptions
 import dev.jdx.index.service.JdxService.ServiceOutcome
 import dev.jdx.testsupport.fixtures.DiffFixtureJars
 import io.kotest.matchers.shouldBe
+import org.junit.jupiter.api.Assumptions.assumeTrue
 import org.junit.jupiter.api.Tag
 import org.junit.jupiter.api.Test
 
@@ -122,6 +123,13 @@ class DiffFixtureRuleCoverageTest {
     private val unchanged = listOf("dev.jdx.diffapi.Stable")
 
     private fun diff(v1: java.io.File, v2: java.io.File): ServiceOutcome.Diff {
+        // The pair is a *second* corpus (TESTING.md §11.2); ask before resolving so a
+        // machine without it reports a skip rather than a red that names the differ
+        // (issue #66). Under `./gradlew` the build always builds it first.
+        assumeTrue(
+            DiffFixtureJars.available(),
+            "no diff fixture pair: build :testfixtures:diffV1Jar :testfixtures:diffV2Jar",
+        )
         val outcome = JdxService.diff(
             old = ArtifactSpec(spec = v1.absolutePath),
             new = ArtifactSpec(spec = v2.absolutePath),

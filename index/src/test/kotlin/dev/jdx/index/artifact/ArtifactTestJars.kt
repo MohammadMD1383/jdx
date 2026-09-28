@@ -1,5 +1,6 @@
 package dev.jdx.index.artifact
 
+import dev.jdx.testsupport.fixtures.FixtureJars
 import java.io.File
 import java.nio.file.Files
 import java.nio.file.Path
@@ -12,26 +13,13 @@ import java.util.zip.ZipOutputStream
  */
 internal object ArtifactTestJars {
 
-    /** Directory holding `testfixtures-<version>.jar` + `-sources.jar` (cf. T-006). */
-    fun fixturesDir(): File {
-        System.getProperty("jdx.fixturesDir")?.let { return File(it) }
-        var dir: File? = File(System.getProperty("user.dir")).absoluteFile
-        while (dir != null) {
-            val candidate = File(dir, "testfixtures/build/libs")
-            if (candidate.isDirectory) return candidate
-            dir = dir.parentFile
-        }
-        error("fixture jars not found: build :testfixtures first")
-    }
-
-    fun binaryJar(dir: File = fixturesDir()): File {
-        val jars = dir.listFiles { file ->
-            file.isFile && file.extension == "jar" &&
-                file.name.startsWith("testfixtures-") && !file.name.endsWith("-sources.jar")
-        }?.toList().orEmpty()
-        require(jars.size == 1) { "expected exactly one binary fixture jar in $dir, found: $jars" }
-        return jars.single()
-    }
+    /**
+     * The compiled corpus jar. Delegates to the shared [FixtureJars] rather than carrying a
+     * fifth copy of the walk-up resolver (#66): a resolver duplicated four ways is four
+     * chances to drift away from the build wiring that feeds it, and that drift is exactly
+     * what made the mutation tier fail on a clean checkout for a long time.
+     */
+    fun binaryJar(dir: File = FixtureJars.fixturesDir()): File = FixtureJars.binaryJar(dir)
 
     /** Raw bytes of one fixture class — a zip read, never a class load (D-017). */
     fun fixtureClassBytes(jar: File, entry: String): ByteArray {

@@ -361,10 +361,47 @@ the class and test filters to that glob — never quote a scoped run as the modu
 score (L-056). Three PIT/Kotlin wrinkles are handled in the build files, not worked
 around per-case: test discovery goes through `pitest-junit5-plugin` (JUnit-5-only
 upstream, verified working on this build's JUnit 6); `kotlin.jvm.internal.Intrinsics`
-calls are excluded via `avoidCallsTo` (equivalent mutants by construction); and PIT
-minions don't inherit `test` system properties, so `index` forwards `jdx.fixturesDir`
-via `jvmArgs` (L-055). Build-wiring proof tests (`core.tiers`, the index soak suites)
-are excluded from PIT targets — they assert runner invariants, not product behaviour.
+calls are excluded via `avoidCallsTo` (equivalent mutants by construction); and
+build-wiring proof tests (`core.tiers`, the index soak suites) are excluded from PIT
+targets — they assert runner invariants, not product behaviour.
+
+### 10.1 A mutation gate that cannot run is not a gate
+
+PIT runs its suite once **unmutated** first, to compute line coverage, and refuses to
+start if that run is red: *"N tests did not pass without mutation … Mutation testing
+requires a green suite."* Nothing is mutated, no report is written, and the module's
+score is simply never produced. On a contributor's machine that reads as "a slow run";
+in CI it reads as a red nightly, which is easy to mistake for a mutation problem.
+
+Two environment facts make that pre-scan fail on a **clean checkout only** (issue #66,
+the reason it survived for weeks):
+
+1. A PIT minion is a fresh JVM. It inherits no `test`/`tier2Test` system property, so
+   the corpus property `jdx.fixturesDir` never reaches it and the resolver falls back
+   to walking up for `testfixtures/build/libs` — which a developer's earlier build has
+   left behind and a runner has not.
+2. `dependsOn(":testfixtures:jar", …)` was on `test`/`tier2Test` only, and
+   `./gradlew mutationTest` reaches neither.
+
+So the corpus wiring is **shared, in the root build, for every module that applies the
+PIT plugin** — one place, not a private copy in `index`:
+
+- the four `:testfixtures` jar tasks are dependencies of the `pitest` task;
+- `jdx.fixturesDir` and `jdx.diffFixturesDir` go on `pitest { jvmArgs }` (the *minion*
+  arguments — `PitestTask`'s own `JavaExec` args are the launcher's and would not help).
+
+`./gradlew verifyPitestWiring` asserts both halves for every PIT module and runs in
+every `check`, so a module added tomorrow inherits the wiring and a regression is red on
+a push rather than in a 20-minute weekly run. It also asserts the PIT modules are
+exactly the ones `mutationTest` runs, and that it checked something at all.
+
+**A missing corpus is a machine fact, not a defect.** The shared resolvers expose
+`binaryCorpusAvailable()` / `sourcesCorpusAvailable()` (and `DiffFixtureJars.available()`),
+and the suites that need the corpus `assumeTrue` on them. Resolving optimistically and
+letting the resolver throw is what turned one missing environment detail into a red
+build whose stack trace pointed at product code. `FixtureResolutionOwnershipTest` in
+`:testfixtures` pins both halves: exactly one copy of the walk-up resolver may exist (plus
+core's documented second copy), and the suites rewritten in #66 must stay gated.
 
 ---
 
@@ -449,6 +486,35 @@ to the required list "to make it pass" would claim coverage the corpus does not 
    `Fixtures.classBytes(...)`, never reflection (D-017).
 5. Rebuild twice and compare sha256 of both jars; identical bytes are the acceptance bar.
 
+### 11.3 Resolving the corpus from a test
+
+`dev.jdx.testsupport.fixtures.FixtureJars` is the **single** copy of the resolution, and
+`DiffFixtureJars` the single copy for the v1/v2 pair. Both expose a non-throwing
+`*CorpusAvailable()` / `available()` probe next to the throwing resolvers, and a suite that
+needs the corpus gates on it:
+
+```kotlin
+private fun fixtureSourcesJar(): File {
+    assumeTrue(
+        FixtureJars.sourcesCorpusAvailable(),
+        "no testfixtures corpus: build :testfixtures first (docs/TESTING.md §11)",
+    )
+    return FixtureJars.sourcesJar()
+}
+```
+
+Ask, then resolve — never resolve and catch. A missing corpus is a property of the
+machine, so it deserves a visible SKIP; a stack trace through `singleJar` reads like a
+product defect and, in a mutation pre-scan, is indistinguishable from a real failure
+(§10.1, issue #66).
+
+**Do not write your own resolver.** `FixtureResolutionOwnershipTest` in `:testfixtures`
+scans every module's test sources for the walk-up marker and fails on any copy outside
+`FixtureJars` and core's `Fixtures` (core's test source set must not depend on a
+project — that is the one documented exception). Before adding a copy, ask whether the
+module can take `testImplementation(testFixtures(project(":testfixtures")))`; every module
+that reads the corpus already does.
+
 ---
 
 ## 12. What we deliberately do **not** test
@@ -478,6 +544,7 @@ Testing time is finite; spend it where bugs live.
 ./gradlew bench                      # tier 4 — performance budgets (PROPOSAL §15)
 ./gradlew mutationTest               # tier 4 — mutation score
 ./gradlew testReport                 # aggregated HTML report
+./gradlew verifyPitestWiring         # the PIT corpus wiring gate (also runs in every `check`)
 ```
 
 **Definition of done for any task:** tier 1 and tier 2 green; tier 3 green if you touched

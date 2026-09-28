@@ -41,3 +41,9 @@ dependency, never in the fat jar. `explicitApi()` is on.
   compile dep reds instead of bloating the fat jar.
 - Callable references don't apply defaults — injectable seams narrowing a function
   with defaulted trailing params must use a lambda, never `::ref`.
+- The three tier-2 suites that read the fixture corpus share
+  `dev.jdx.testsupport.fixtures.FixtureJars` and gate on
+  `sourcesCorpusAvailable()` before resolving (#66). They used to carry three private
+  copies of the walk-up, which is why this module's PIT pre-scan was red on every
+  clean runner. `FixtureResolutionOwnershipTest` in `:testfixtures` fails the build if a
+  copy reappears here.

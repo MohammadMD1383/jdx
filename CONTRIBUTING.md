@@ -136,6 +136,16 @@ strategy; this is the two-minute version.
 - **Respect the tiers.** `./gradlew test` must stay under 30 s — anything touching disk,
   network or a real jar belongs in tier 2 or above. A slow inner loop kills TDD, and then it
   kills testing.
+- **A gate that cannot run is not a gate.** If a check can only fail under a condition you
+  never reproduce locally — a clean checkout, a bare CI runner — it will be discovered by a
+  red nightly months later, or never. Give the precondition its own cheap assertion in
+  `check`. `verifyPitestWiring` is the worked example: the `core` mutation gate silently
+  produced no score at all in CI (issue #66), because PIT's pre-scan aborts before mutating
+  anything when the fixture corpus is missing.
+- **Ask, then resolve.** A missing input is a property of the machine, not a defect. Test
+  helpers expose an availability probe and the suite `assumeTrue`s on it, so absence is a
+  visible SKIP rather than a red whose stack trace points at product code
+  (`docs/TESTING.md` §10.1, §11.3).
 
 ```bash
 ./gradlew test                       # tier 1 — the TDD loop (<30s)

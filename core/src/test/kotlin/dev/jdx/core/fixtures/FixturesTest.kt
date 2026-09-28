@@ -50,10 +50,63 @@ class FixturesTest {
 
     @Test
     fun `fixturesDir honors the system property over the directory search`() {
+        withFixturesDir(tempDir) {
+            Fixtures.fixturesDir() shouldBe tempDir
+        }
+    }
+
+    /**
+     * Issue #66: `Fixtures` is core's deliberate second copy of the shared `FixtureJars`
+     * resolution (core's test source set must not depend on a project), so the two must
+     * agree on what "available" means. A suite gates on these to skip rather than fail on
+     * a machine with no corpus, which is a correctness-of-skip question, not a convenience:
+     * a probe that disagreed with its own resolver would skip a suite that could have run.
+     */
+    @Test
+    fun `availability probes agree with what the resolvers would do`() {
+        withFixturesDir(tempDir) {
+            Fixtures.binaryCorpusAvailable() shouldBe false
+            Fixtures.sourcesCorpusAvailable() shouldBe false
+
+            // A directory that exists but holds no jars is the half-built state; `isDirectory`
+            // is not "a corpus is in it".
+            touch("testfixtures-0.1.0-SNAPSHOT.jar")
+            Fixtures.binaryCorpusAvailable() shouldBe true
+            Fixtures.sourcesCorpusAvailable() shouldBe false
+
+            // Two binary-shaped jars is the L-029 ambiguity: unresolvable, so not available.
+            touch("testfixtures-0.1.0-SNAPSHOT-extra.jar")
+            Fixtures.binaryCorpusAvailable() shouldBe false
+
+            File(tempDir, "testfixtures-0.1.0-SNAPSHOT-extra.jar").delete()
+            touch("testfixtures-0.1.0-SNAPSHOT-sources.jar")
+            Fixtures.binaryCorpusAvailable() shouldBe true
+            Fixtures.sourcesCorpusAvailable() shouldBe true
+        }
+    }
+
+    @Test
+    fun `availability probes follow the wired system property`() {
+        withFixturesDir(tempDir) {
+            touch("testfixtures-0.1.0-SNAPSHOT.jar")
+            touch("testfixtures-0.1.0-SNAPSHOT-sources.jar")
+            Fixtures.binaryCorpusAvailable() shouldBe true
+
+            val empty = File(tempDir, "empty").apply { mkdirs() }
+            withFixturesDir(empty) {
+                Fixtures.fixturesDir() shouldBe empty
+                Fixtures.binaryCorpusAvailable() shouldBe false
+                Fixtures.sourcesCorpusAvailable() shouldBe false
+            }
+        }
+    }
+
+    /** Runs [block] with `jdx.fixturesDir` pointed at [dir], restoring it afterwards. */
+    private fun withFixturesDir(dir: File, block: () -> Unit) {
         val original = System.getProperty("jdx.fixturesDir")
         try {
-            System.setProperty("jdx.fixturesDir", tempDir.absolutePath)
-            Fixtures.fixturesDir() shouldBe tempDir
+            System.setProperty("jdx.fixturesDir", dir.absolutePath)
+            block()
         } finally {
             if (original == null) System.clearProperty("jdx.fixturesDir")
             else System.setProperty("jdx.fixturesDir", original)

@@ -28,6 +28,13 @@ via `JsonEscape` — reuse it, never a second escaper). `explicitApi()` is on.
   `docs/PROPOSAL.md` §17.1). Pure path math over explicit `home`/`os`/`env`
   inputs — the single `os.name` branch; production callers pass `System` values.
 - Test generators live in `src/test/.../gen/` — reuse across families.
+- `src/test/.../fixtures/Fixtures.kt` is core's **own** copy of the corpus resolver
+  (its test source set must not depend on a project) and must mirror
+  `dev.jdx.testsupport.fixtures.FixtureJars` exactly, probes included (#66).
+  `FixtureCorpusTest` gates on `Fixtures.binaryCorpusAvailable()` /
+  `sourcesCorpusAvailable()` rather than resolving optimistically — this module's ≥ 80 %
+  mutation gate aborts in the pre-scan if the suite is red, which is a *missing score*,
+  not a failed one.
 
 ## Grammar rules (`SymbolRefParser`, pinned by property tests)
 

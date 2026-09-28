@@ -86,3 +86,7 @@ behaviour lives here** (adapters call in, never the reverse). `explicitApi()` is
 - Text⊆JSON checks must compare `JsonEscape.quote(entity)` minus quotes — result
   payloads legitimately contain envelope field names. Calibrate pairing rules against
   a scratch dump of the real fixture (dump first, rule second).
+- `ArtifactTestJars` is **not** a resolver: `binaryJar` delegates to
+  `dev.jdx.testsupport.fixtures.FixtureJars` (#66 collapsed the copy it used to hold).
+  The `craftJar` / `manifestBytes` hostile-jar builders stay here because they are this
+  module's fault-injection tools, not shared support.

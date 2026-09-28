@@ -168,6 +168,11 @@ answer. Nothing else may bend this table.
   tagged `soak`/`bench`/mutation on demand.
 - `core` TDD-mandatory, mutation gate ≥ 80%; `index`/`sources`/`decompile` ≥ 85% line;
   adapters ungated (parity + goldens instead — gating thin code incentivises padding).
+- **A gate that cannot run is not a gate.** `check` runs `verifyPitestWiring` (alongside
+  `lint`) because the `core` mutation gate aborts in PIT's *pre-scan* — silently, with no
+  score produced at all — when the fixture corpus is missing, and that only shows up on a
+  clean checkout. Any precondition a gate needs gets its own cheap assertion in `check`;
+  don't let a red nightly be the thing that discovers it. `docs/TESTING.md` §10.1.
 - Every behaviour needs a *generative* family (property / `javap`-differential /
   metamorphic / fault-injection / corpus), not just examples.
 - Root `lint` (runs in every `check`): no trailing whitespace, no tabs, no bare
