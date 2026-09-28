@@ -1,3 +1,5 @@
+import info.solidsoft.gradle.pitest.PitestPluginExtension
+import info.solidsoft.gradle.pitest.PitestTask
 import org.gradle.api.tasks.SourceSetContainer
 import org.gradle.api.tasks.testing.Test
 import org.gradle.api.tasks.testing.TestReport
@@ -42,6 +44,13 @@ val jacocoToolVersion = libs.versions.jacoco.get()
 // every tag a runner; the root tasks at the bottom of this file give every tier a command.
 val tier1BudgetSeconds = (findProperty("tier1.budget") as String?)?.toDoubleOrNull() ?: 30.0
 val corpusDir = (findProperty("corpus") as String?) ?: "${System.getProperty("user.home")}/.gradle/caches"
+// The two fixture-corpus system properties, named once so the PIT wiring and its gate
+// cannot drift apart. These strings must equal `FixtureJars.FIXTURES_DIR_PROPERTY` and
+// `DiffFixtureJars.DIR_PROPERTY` in `testfixtures/src/testFixtures/.../fixtures/` — a
+// mismatch is not silent, it turns into a red PIT pre-scan (which is how #66 was found).
+val fixtureJarsDirProperty = "jdx.fixturesDir"
+val diffFixtureJarsDirProperty = "jdx.diffFixturesDir"
+
 // CI mode (#57): `-Pci` (bare or `=true`) or `CI`/`GITHUB_ACTIONS` env. Relaxes
 // wall-clock test gates (tier-1 budget report-only, PIT timeouts lifted) so slow
 // runners never produce false-positive reds. Product timeouts (Vineflower/javap,
@@ -180,14 +189,159 @@ tasks.register("mutationTest") {
     group = "verification"
     description = "Tier-4 mutation testing (PIT): core gate ≥ 80 % mutation score, build-failing. Others measured and reported."
     dependsOn(
-        project(":core").tasks.named("pitest"),
-        project(":index").tasks.named("pitest"),
-        project(":sources").tasks.named("pitest"),
-        project(":decompile").tasks.named("pitest"),
+        pitestModulesRun.map { module -> project(":$module").tasks.named("pitest") } +
+            // #66: check the preconditions first, so a wiring regression reads as one clear
+            // red line instead of four confusing PIT pre-scan aborts 20 minutes in.
+            tasks.named("verifyPitestWiring"),
     )
     doLast {
         logger.lifecycle("mutationTest: PIT reports in <module>/build/reports/pitest (XML + HTML, un-timestamped).")
         logger.lifecycle("mutationTest: core gate is >= 80 % mutation score (build-failing); index/sources/decompile are measured and reported (D-021).")
+    }
+}
+
+// #66: what every PIT module's `pitest` task will (or will not) hand its minion. Filled in
+// at configuration time by the hook below, asserted by `verifyPitestWiring`. Plain strings
+// in a plain list: a captured `Project`/`Task` would break the configuration cache (T-067),
+// and the snapshot has to be a value, not a live view of a changing task model.
+val pitestModules = mutableListOf<String>()
+val pitWiringGaps = mutableListOf<String>()
+
+// The modules tier-4 mutation testing runs over — one list, read by `mutationTest` to
+// build its task graph and by `verifyPitestWiring` to assert that the modules which
+// *apply* the PIT plugin are exactly these. Spelling it twice would be a third copy of a
+// fact that has to agree, which is the whole lesson of #66.
+val pitestModulesRun = listOf("core", "index", "sources", "decompile")
+
+// #66: the fixture-corpus wiring for mutation testing, shared by **every** module that
+// applies the PIT plugin (today core/index/sources/decompile) instead of living as a
+// private copy in `index`. Two facts make this mandatory rather than cosmetic, and both
+// only bite on a clean checkout — which is exactly why it went unnoticed locally:
+//
+//  1. A PIT minion is a *fresh JVM*. It does not inherit the `test`/`tier2Test` system
+//    properties, so a corpus test that reads `jdx.fixturesDir` falls back to walking up
+//    from `user.dir` — which finds a stale `testfixtures/build/libs` on a developer
+//    machine and nothing at all on a runner.
+//  2. `dependsOn(":testfixtures:jar", …)` lives on `test`/`tier2Test` only, and the
+//    `testFixtures(project(":testfixtures"))` test-classpath edge builds the *binary*
+//    jar alone. The `-sources.jar` is produced by `:testfixtures:build`, which
+//    `./gradlew mutationTest` never reaches — so a clean runner has no corpus at all.
+//
+// Together they abort PIT in the *pre-scan* (which runs the suite once unmutated to
+// compute line coverage) with "N tests did not pass without mutation … requires a green
+// suite" — before a single mutant is generated. `core`'s ≥ 80 % gate therefore never ran
+// in CI at all, which is worse than no gate: a gate that cannot execute looks exactly
+// like a passing one. `verifyPitestWiring` below is what stops that from recurring.
+//
+// `projectsEvaluated` rather than a `plugins.withId`/`configureEach` pair, because the
+// task is registered *lazily* by the PIT plugin: `configureEach` would only fire when
+// something realises it (i.e. when `pitest` is actually requested), so a gate that runs
+// in `check` would never see any wiring. This hook realises the four tasks at the end of
+// configuration — the same moment a real `./gradlew mutationTest` would, and after every
+// `pitest {}` extension block has run, so nothing here can pre-empt a module's own
+// configuration. The cost is creating four task objects on every build; the benefit is
+// that the wiring and its gate can never disagree about what a run will see.
+gradle.projectsEvaluated {
+    val fixtureJarsDir = project(":testfixtures").layout.buildDirectory.dir("libs").get().asFile
+    val diffFixtureJarsDir =
+        project(":testfixtures").layout.buildDirectory.dir("diff-fixtures").get().asFile
+    subprojects.forEach { module ->
+        // No `plugins.withId` guard needed: without the PIT plugin there is no task of
+        // this type, so the collection is simply empty.
+        module.tasks.withType(PitestTask::class.java).forEach { pitestTask ->
+            // The properties go on the *extension*, not on the task: `PitestTask` is a
+            // `JavaExec`, and its own `jvmArgs` are the PIT launcher's, while the minions
+            // that run the suite get theirs from `pitest { jvmArgs }`. This is the same
+            // property the module `pitest {}` blocks write to.
+            val extension = module.extensions.getByType(PitestPluginExtension::class.java)
+            extension.jvmArgs.add("-D$fixtureJarsDirProperty=" + fixtureJarsDir.absolutePath)
+            extension.jvmArgs.add(
+                "-D$diffFixtureJarsDirProperty=" + diffFixtureJarsDir.absolutePath,
+            )
+            // Absolute paths are fine here: PIT runs inside this build, never from a
+            // relocatable cache entry, and no test hard-codes a path (T-006).
+            pitestTask.dependsOn(":testfixtures:jar", ":testfixtures:sourcesJar")
+            // The `jdx diff` pair (issue #23, TESTING.md §11.2) has its own directory and
+            // its own property. `:index` is the only module that reads it today, but the
+            // wiring is identical for every PIT module, and splitting it again is how the
+            // triplication started.
+            pitestTask.dependsOn(":testfixtures:diffV1Jar", ":testfixtures:diffV2Jar")
+
+            // Recorded, not asserted, here: the assertion lives in `verifyPitestWiring`,
+            // which every `check` runs, so a future edit that drops one of the facts above
+            // fails on a push instead of in a 20-minute weekly run.
+            pitestModules += module.path.removePrefix(":")
+            val gaps = mutableListOf<String>()
+            val forwarded = extension.jvmArgs.getOrElse(emptyList())
+            listOf(fixtureJarsDirProperty, diffFixtureJarsDirProperty).forEach { property ->
+                if (forwarded.none { it.startsWith("-D$property=") }) {
+                    gaps += "the PIT minion never receives -D$property"
+                }
+            }
+            // The *declared* dependencies, not resolved ones: resolving a task graph is not
+            // allowed this early in the lifecycle (and a gate must never perturb what it
+            // measures). `dependsOn` holds exactly the paths wired two lines above.
+            val declared = pitestTask.dependsOn.toList()
+            listOf("jar", "sourcesJar", "diffV1Jar", "diffV2Jar").forEach { jar ->
+                val path = ":testfixtures:$jar"
+                if (declared.none { it.toString() == path }) {
+                    gaps += "no task dependency on $path, so a clean checkout has no corpus"
+                }
+            }
+            if (gaps.isNotEmpty()) pitWiringGaps += "${module.path}: ${gaps.joinToString()}"
+        }
+    }
+}
+
+// #66: the wiring `mutationTest` depends on, asserted on every `check`.
+//
+// Why a gate at all: the missing PIT corpus wiring only shows up on a *clean* checkout, and
+// its symptom is PIT aborting in the pre-scan — which the weekly `heavy` run reports as a
+// red nightly, not as a broken gate. Nothing in `check` noticed, so `core`'s ≥ 80 %
+// mutation score (T-060) had never actually been enforced in CI. A gate that cannot run
+// is indistinguishable from a passing one, so the preconditions get their own cheap gate:
+// no JVM, no PIT, sub-second, and red on exactly the conditions that produced #66.
+//
+// Three invariants, all cheap, all about *the whole set* rather than one module:
+//  1. some module applied the PIT plugin (otherwise this gate checked nothing and would
+//     pass vacuously — e.g. if the plugin id ever changed);
+//  2. every PIT module forwards both corpus properties and builds all four fixture jars,
+//     so a module added tomorrow inherits the wiring and this proves it did;
+//  3. the PIT modules are exactly the ones `mutationTest` runs, so a fifth module cannot
+//     join the build and be left out of the tier-4 run.
+tasks.register("verifyPitestWiring") {
+    group = "verification"
+    description = "Asserts every PIT module is wired to the fixture corpus (#66) — the precondition for a green PIT pre-scan."
+    // Deferred to execution time on purpose: the gaps are only known once every subproject
+    // has been configured, which is after this task's own configuration block ran. A
+    // provider is captured here (not a script value) so the configuration cache can
+    // serialise it (T-067).
+    val gaps = provider { pitWiringGaps.toList() }
+    val modules = provider { pitestModules.toSortedSet() }
+    val expected = provider { pitestModulesRun.toSortedSet() }
+    doLast {
+        val found = modules.get()
+        if (found.isEmpty()) {
+            throw GradleException(
+                "verifyPitestWiring: no module applied the PIT plugin, so this gate checked " +
+                    "nothing. Has the plugin id `info.solidsoft.pitest` changed?",
+            )
+        }
+        val missing = gaps.get()
+        if (missing.isNotEmpty()) {
+            throw GradleException(
+                "verifyPitestWiring: ${missing.size} PIT module(s) cannot get a green " +
+                    "pre-scan (issue #66):\n" + missing.joinToString("\n"),
+            )
+        }
+        if (found != expected.get()) {
+            throw GradleException(
+                "verifyPitestWiring: PIT runs in [${found.joinToString()}] but mutationTest " +
+                    "runs [${expected.get().joinToString()}]. Add the module to both, or " +
+                    "remove the plugin — a module nobody mutates is a module nobody gates.",
+            )
+        }
+        logger.lifecycle("verifyPitestWiring: PIT wired to the fixture corpus in ${found.joinToString()}.")
     }
 }
 
@@ -363,6 +517,10 @@ subprojects {
         // T-052: the `lint` style gate runs with every `check` (CONTRIBUTING.md
         // promises "tests + lint"). One root task, not per-module duplicates.
         dependsOn(rootProject.tasks.named("lint"))
+        // #66: same treatment for the PIT corpus wiring — the precondition for the
+        // `core` mutation gate to run at all. Cheap, and it is the only thing standing
+        // between a clean checkout and a mutation tier that silently never executes.
+        dependsOn(rootProject.tasks.named("verifyPitestWiring"))
     }
 
     // Line-coverage gates (T-060, docs/TESTING.md §10, D-021). Only the modules with a gate

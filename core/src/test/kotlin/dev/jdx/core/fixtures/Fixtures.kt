@@ -16,8 +16,13 @@ import java.util.zip.ZipFile
  * canonical copy for golden suites in other modules. This object does **not** delegate to it:
  * core's test source set is deliberately dependency-light (property testing only — T-055),
  * and the D-017 marker helpers below are part of the T-006 corpus contract, which lives with
- * core's corpus tests. Resolution logic here is expected to mirror `FixtureJars` exactly;
- * if you change one, change both (the `FixturesTest` assertions pin the same behaviour).
+ * core's corpus tests. Resolution logic here is expected to mirror `FixtureJars` exactly —
+ * including the `*CorpusAvailable()` probes added in #66; if you change one, change both (the
+ * `FixturesTest` and `FixtureJarsTest` assertions pin the same behaviour).
+ *
+ * This is the *last* copy: #66 collapsed the three private resolvers in `sources` and the one
+ * in `index` onto the shared `FixtureJars`. Do not add another — call the shared helper from
+ * a module that already depends on `testFixtures(project(":testfixtures"))`.
  *
  * ## The rule that matters here (D-017)
  *
@@ -36,7 +41,13 @@ object Fixtures {
      * Directory holding the fixture jars: `testfixtures-<version>.jar` and
      * `testfixtures-<version>-sources.jar`.
      */
-    fun fixturesDir(): File {
+    fun fixturesDir(): File =
+        fixturesDirOrNull() ?: error(
+            "fixture jars not found: set -Djdx.fixturesDir=<dir> or build :testfixtures first",
+        )
+
+    /** The same directory, or `null` when no corpus can be located. */
+    fun fixturesDirOrNull(): File? {
         System.getProperty("jdx.fixturesDir")?.let { return File(it) }
         var dir: File? = File(System.getProperty("user.dir")).absoluteFile
         while (dir != null) {
@@ -44,7 +55,26 @@ object Fixtures {
             if (candidate.isDirectory) return candidate
             dir = dir.parentFile
         }
-        error("fixture jars not found: set -Djdx.fixturesDir=<dir> or build :testfixtures first")
+        return null
+    }
+
+    /**
+     * Whether the corpus jars are really there — mirrors
+     * `FixtureJars.binaryCorpusAvailable` / `sourcesCorpusAvailable`, which are the shared
+     * copy of this contract (issue #66).
+     *
+     * A missing corpus is a property of the machine, not a defect, so a suite that needs
+     * one asks and reports a skip. Resolving optimistically and letting [binaryJar] throw
+     * is what turned the missing corpus into a red build rather than a loud skip.
+     */
+    fun binaryCorpusAvailable(): Boolean = resolves(sources = false)
+
+    /** As [binaryCorpusAvailable], for the `-sources` jar. */
+    fun sourcesCorpusAvailable(): Boolean = resolves(sources = true)
+
+    private fun resolves(sources: Boolean): Boolean {
+        val dir = fixturesDirOrNull() ?: return false
+        return runCatching { singleJar(dir, sources) }.isSuccess
     }
 
     /** The compiled fixture jar (never the `-sources` jar). Exactly one must match. */
@@ -54,16 +84,19 @@ object Fixtures {
     fun sourcesJar(dir: File = fixturesDir()): File = singleJar(dir, true)
 
     private fun singleJar(dir: File, sources: Boolean): File {
-        val jars = dir.listFiles { file ->
-            file.isFile && file.extension == "jar" &&
-                file.name.startsWith("testfixtures-") &&
-                file.name.endsWith("-sources.jar") == sources
-        }?.toList().orEmpty()
+        val jars = matchingJars(dir, sources)
         require(jars.size == 1) {
             "expected exactly one ${if (sources) "sources" else "binary"} fixture jar in $dir, found: $jars"
         }
         return jars.single()
     }
+
+    private fun matchingJars(dir: File, sources: Boolean): List<File> =
+        dir.listFiles { file ->
+            file.isFile && file.extension == "jar" &&
+                file.name.startsWith("testfixtures-") &&
+                file.name.endsWith("-sources.jar") == sources
+        }?.toList().orEmpty()
 
     /** Binary names (`com.example.Outer.Inner`) of every class in [jar]. Sorted. */
     fun classNames(jar: File): List<String> =

@@ -11,6 +11,7 @@ import dev.jdx.index.service.JdxService.ServiceOutcome
 import dev.jdx.testsupport.fixtures.DiffFixtureJars
 import io.kotest.matchers.shouldBe
 import java.io.File
+import org.junit.jupiter.api.Assumptions.assumeTrue
 import org.junit.jupiter.api.Tag
 import org.junit.jupiter.api.Test
 
@@ -31,8 +32,25 @@ import org.junit.jupiter.api.Test
 @Tag("tier2")
 class DiffGoldenTest {
 
-    private val v1: File get() = DiffFixtureJars.v1Jar()
-    private val v2: File get() = DiffFixtureJars.v2Jar()
+    // The pair is a *second* corpus with its own directory and property (TESTING.md §11.2).
+    // Ask before resolving: a machine with no pair reports a skip, not a red whose stack
+    // trace points at the differ (issue #66).
+    private val v1: File
+        get() {
+            assumeTrue(
+                DiffFixtureJars.available(),
+                "no diff fixture pair: build :testfixtures:diffV1Jar :testfixtures:diffV2Jar",
+            )
+            return DiffFixtureJars.v1Jar()
+        }
+    private val v2: File
+        get() {
+            assumeTrue(
+                DiffFixtureJars.available(),
+                "no diff fixture pair: build :testfixtures:diffV1Jar :testfixtures:diffV2Jar",
+            )
+            return DiffFixtureJars.v2Jar()
+        }
 
     /** The versioned jar names must never leak into a golden (the T-010 hermeticity rule). */
     private fun normalize(text: String): String = text

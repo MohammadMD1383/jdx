@@ -36,10 +36,7 @@ object DiffFixtureJars {
     fun v2Jar(dir: File = dir()): File = singleJar(dir, "v2")
 
     private fun singleJar(dir: File, version: String): File {
-        val jars = dir.listFiles { file ->
-            file.isFile && file.extension == "jar" &&
-                file.name.startsWith("diff-fixtures-$version-")
-        }?.toList().orEmpty()
+        val jars = matchingJars(dir, version)
         require(jars.size == 1) {
             "expected exactly one diff-fixtures-$version jar in $dir, found: $jars " +
                 "(build :testfixtures:diff${version.uppercase()}Jar)"
@@ -47,13 +44,26 @@ object DiffFixtureJars {
         return jars.single()
     }
 
+    private fun matchingJars(dir: File, version: String): List<File> =
+        dir.listFiles { file ->
+            file.isFile && file.extension == "jar" &&
+                file.name.startsWith("diff-fixtures-$version-")
+        }?.toList().orEmpty()
+
     /**
      * The directory, from the system property when the consuming module's build wired
      * it in, else by walking up from the working directory looking for
      * `testfixtures/build/diff-fixtures` — the same resolution and the same rationale as
      * [FixtureJars.fixturesDir], which exists so no test hard-codes an absolute path.
      */
-    fun dir(): File {
+    fun dir(): File =
+        dirOrNull() ?: error(
+            "diff fixture jars not found: set -D$DIR_PROPERTY=<dir> or build " +
+                ":testfixtures:diffV1Jar :testfixtures:diffV2Jar first",
+        )
+
+    /** The same directory, or `null` when none can be located. See [FixtureJars.fixturesDirOrNull]. */
+    fun dirOrNull(): File? {
         System.getProperty(DIR_PROPERTY)?.let { return File(it) }
         var dir: File? = File(System.getProperty("user.dir")).absoluteFile
         while (dir != null) {
@@ -61,9 +71,19 @@ object DiffFixtureJars {
             if (candidate.isDirectory) return candidate
             dir = dir.parentFile
         }
-        error(
-            "diff fixture jars not found: set -D$DIR_PROPERTY=<dir> or build " +
-                ":testfixtures:diffV1Jar :testfixtures:diffV2Jar first",
-        )
+        return null
+    }
+
+    /**
+     * Whether both halves of the pair resolve, so a diff golden can actually run.
+     *
+     * Same contract and same rationale as [FixtureJars.binaryCorpusAvailable]: a missing
+     * corpus is a property of the machine, so a suite asks and skips rather than resolving
+     * optimistically and throwing (issue #66).
+     */
+    fun available(): Boolean {
+        val dir = dirOrNull() ?: return false
+        return runCatching { singleJar(dir, "v1") }.isSuccess &&
+            runCatching { singleJar(dir, "v2") }.isSuccess
     }
 }

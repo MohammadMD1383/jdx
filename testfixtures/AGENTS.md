@@ -63,3 +63,21 @@ rules below before touching either.
   "exactly one binary fixture jar" assertion sees two jars and fails.
 - Java `-Werror` is on for all `JavaCompile`: the deliberately-`strictfp` fixture
   carries `@SuppressWarnings("strictfp")` at the declaration (don't "fix" it).
+- **This module owns the only copy of the corpus resolver** (#66). `FixtureJars` /
+  `DiffFixtureJars` in `src/testFixtures` are the single walk-up resolution; a suite
+  that needs the corpus `assumeTrue`s `binaryCorpusAvailable()` /
+  `sourcesCorpusAvailable()` / `available()` and *then* resolves.
+  `FixtureResolutionOwnershipTest` (in `src/test`) fails the build on any private copy
+  anywhere else. Don't add one — take
+  `testImplementation(testFixtures(project(":testfixtures")))` instead.
+
+## Gotchas (distilled)
+
+- The four archives have **four different owners**: `jar` (main + noDebug),
+  `sourcesJar`, `testFixturesJar` (redirected to `build/test-fixtures-libs`), and the
+  diff pair in `build/diff-fixtures`. `./gradlew mutationTest` reaches **none** of them
+  on its own — the root build wires all four onto every PIT task and
+  `verifyPitestWiring` fails `check` if that ever stops. That wiring is why the corpus
+  exists on a clean checkout at all (#66): PIT's pre-scan refuses to mutate anything
+  when the suite is red, so a missing `-sources.jar` is a mutation tier that silently
+  produces no score.

@@ -2,6 +2,7 @@ package dev.jdx.sources
 
 import dev.jdx.core.model.MemberSymbolRef
 import dev.jdx.core.model.typeNameFromBinaryName
+import dev.jdx.testsupport.fixtures.FixtureJars
 import io.kotest.assertions.throwables.shouldNotThrowAny
 import io.kotest.matchers.collections.shouldHaveSize
 import io.kotest.matchers.shouldBe
@@ -12,6 +13,7 @@ import java.nio.file.Files
 import java.nio.file.Path
 import java.util.zip.ZipEntry
 import java.util.zip.ZipOutputStream
+import org.junit.jupiter.api.Assumptions.assumeTrue
 import org.junit.jupiter.api.Tag
 import org.junit.jupiter.api.Test
 import org.junit.jupiter.api.io.TempDir
@@ -38,23 +40,20 @@ class JavaBodiesSourcesTest {
         returnType = returns?.let { typeNameFromBinaryName(it) },
     )
 
-    private fun fixturesDir(): File {
-        System.getProperty("jdx.fixturesDir")?.let { return File(it) }
-        var dir: File? = File(System.getProperty("user.dir")).absoluteFile
-        while (dir != null) {
-            val candidate = File(dir, "testfixtures/build/libs")
-            if (candidate.isDirectory) return candidate
-            dir = dir.parentFile
-        }
-        error("fixture jars not found: build :testfixtures first")
-    }
-
-    private fun fixtureSourcesJar(dir: File = fixturesDir()): File {
-        val jars = dir.listFiles { file ->
-            file.isFile && file.name.endsWith("-sources.jar")
-        }?.toList().orEmpty()
-        require(jars.size == 1) { "expected exactly one fixture sources jar in $dir, found: $jars" }
-        return jars.single()
+    /**
+     * The fixture `-sources.jar`, or a skip when this machine has no corpus (#66).
+     *
+     * A missing corpus is a property of the environment, not a defect, so it is reported
+     * as an assumption failure — the same green-via-skip the corpus soak uses. Resolving
+     * optimistically instead would make one missing environment detail look like a broken
+     * test. Under `./gradlew` the corpus is always wired in, so this never skips in CI.
+     */
+    private fun fixtureSourcesJar(): File {
+        assumeTrue(
+            FixtureJars.sourcesCorpusAvailable(),
+            "no testfixtures corpus: build :testfixtures first (docs/TESTING.md §11)",
+        )
+        return FixtureJars.sourcesJar()
     }
 
     private fun foundBodies(root: SourceRoot, ref: MemberSymbolRef): List<SourceBody> =

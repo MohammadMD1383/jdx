@@ -3,12 +3,12 @@ package dev.jdx.sources
 import dev.jdx.core.model.MemberSymbolRef
 import dev.jdx.core.model.typeNameFromBinaryName
 import dev.jdx.core.paths.JdxOs
+import dev.jdx.testsupport.fixtures.FixtureJars
 import dev.jdx.testsupport.paths.symlinkOrCopy
 import io.kotest.matchers.collections.shouldHaveSize
 import io.kotest.matchers.shouldBe
 import io.kotest.matchers.string.shouldContain
 import io.kotest.matchers.types.shouldBeInstanceOf
-import java.io.File
 import java.nio.file.Files
 import java.nio.file.Path
 import org.junit.jupiter.api.Assumptions.assumeTrue
@@ -39,16 +39,6 @@ class KotlinBodiesPsiTest {
         returnType = returns?.let { typeNameFromBinaryName(it) },
     )
 
-    private fun fixturesDir(): File {
-        System.getProperty("jdx.fixturesDir")?.let { return File(it) }
-        var dir: File? = File(System.getProperty("user.dir")).absoluteFile
-        while (dir != null) {
-            val candidate = File(dir, "testfixtures/build/libs")
-            if (candidate.isDirectory) return candidate
-            dir = dir.parentFile
-        }
-        error("fixture jars not found: build :testfixtures first")
-    }
 
     /** The 2.4.20 embeddable compiler from the Gradle module cache, or null. */
     private fun cachedCompilerJar(): Path? =
@@ -82,12 +72,17 @@ class KotlinBodiesPsiTest {
         openKotlinParser(home, ktOs, ktEnv).use(block)
     }
 
+    /**
+     * The fixture `-sources.jar` as a [JarSourceRoot], or a skip when this machine has no
+     * corpus (#66). See `JavaBodiesSourcesTest.fixtureSourcesJar` — same contract, same
+     * reason; the resolution itself is the shared [FixtureJars] helper, not a private copy.
+     */
     private fun fixtureSourcesRoot(): JarSourceRoot {
-        val jars = fixturesDir().listFiles { file ->
-            file.isFile && file.name.endsWith("-sources.jar")
-        }?.toList().orEmpty()
-        require(jars.size == 1) { "expected exactly one fixture sources jar, found: $jars" }
-        return JarSourceRoot(jars.single().toPath())
+        assumeTrue(
+            FixtureJars.sourcesCorpusAvailable(),
+            "no testfixtures corpus: build :testfixtures first (docs/TESTING.md §11)",
+        )
+        return JarSourceRoot(FixtureJars.sourcesJar().toPath())
     }
 
     private fun foundBodies(
