@@ -59,6 +59,8 @@ internal fun fakeEnvironment(
     claudeBinaries: List<String> = emptyList(),
     /** Codex CLI binaries to place on the fake PATH (`codex`); empty means absent. */
     codexBinaries: List<String> = emptyList(),
+    /** Cursor binaries to place on the fake PATH (`cursor-agent`); empty means absent. */
+    cursorBinaries: List<String> = emptyList(),
     /** `$CODEX_HOME` stand-in for the Codex CLI system config dir; null means unset. */
     codexHome: Path? = null,
     /** OS name for `.exe` tool probing; tests inject `"Windows 11"`. */
@@ -95,6 +97,11 @@ internal fun fakeEnvironment(
         }
     }
     for (binary in codexBinaries) {
+        for (name in toolFileNames(binary, osName)) {
+            emptyExecutable(pathBin, name)
+        }
+    }
+    for (binary in cursorBinaries) {
         for (name in toolFileNames(binary, osName)) {
             emptyExecutable(pathBin, name)
         }

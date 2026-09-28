@@ -11,8 +11,9 @@ import java.nio.file.Path
 
 /**
  * Golden tests for `jdx setup` (issue #33 family): merged `opencode.json`,
- * Claude Code `.mcp.json`, `kilo.json`, and Codex CLI `config.toml` bytes
- * pinned to committed files under `src/test/resources/golden/setup/`.
+ * Claude Code `.mcp.json`, Cursor `.cursor/mcp.json`, `kilo.json`, and Codex
+ * CLI `config.toml` bytes pinned to committed files under
+ * `src/test/resources/golden/setup/`.
  *
  * One test pins all files: [GoldenFiles.verifyAll] fails on orphans, so
  * splitting agents into separate tests would fail each with the other's
@@ -94,6 +95,40 @@ class SetupGoldenTest {
             ),
         ) as SetupService.SetupOutcome.Removed
         contents["claude-remove-keeps-others.json"] = Files.readString(claudeRemoveOutcome.path)
+
+        val cursorProject = root.resolve("cursor-project").also { Files.createDirectories(it) }
+        val cursorFresh = SetupService(home, cursorProject)
+        val cursorFreshOutcome = cursorFresh.run(
+            SetupService.SetupRequest(
+                agent = SetupService.Agent.CURSOR,
+                scope = SetupService.Scope.PROJECT,
+            ),
+        ) as SetupService.SetupOutcome.Installed
+        contents["cursor-fresh-install.json"] = Files.readString(cursorFreshOutcome.path)
+
+        val cursorMergeDir = root.resolve("cursor-merge").also { Files.createDirectories(it) }
+        Files.createDirectories(cursorMergeDir.resolve(".cursor"))
+        Files.writeString(
+            cursorMergeDir.resolve(".cursor/mcp.json"),
+            """{"mcpServers":{"other":{"command":"other","args":["x"]}}}""",
+        )
+        val cursorMerge = SetupService(home, cursorMergeDir)
+        val cursorMergeOutcome = cursorMerge.run(
+            SetupService.SetupRequest(
+                agent = SetupService.Agent.CURSOR,
+                scope = SetupService.Scope.PROJECT,
+            ),
+        ) as SetupService.SetupOutcome.Installed
+        contents["cursor-merge-preserves.json"] = Files.readString(cursorMergeOutcome.path)
+
+        val cursorRemoveOutcome = cursorMerge.run(
+            SetupService.SetupRequest(
+                agent = SetupService.Agent.CURSOR,
+                scope = SetupService.Scope.PROJECT,
+                remove = true,
+            ),
+        ) as SetupService.SetupOutcome.Removed
+        contents["cursor-remove-keeps-others.json"] = Files.readString(cursorRemoveOutcome.path)
 
         val kiloProject = root.resolve("kilo-project").also { Files.createDirectories(it) }
         val kiloFresh = SetupService(home, kiloProject)

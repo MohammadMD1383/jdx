@@ -22,12 +22,15 @@ is the CLI surface, pinned by help/parity goldens.)
   `.exe`/`.cmd`/`.bat` (`osName` seam); the `appcds` row is stat-only
   (size + mtime vs the fat jar, WARN-only, never FAIL). `service/UpgradeService` — pure-Java `tar.gz` extraction first
   (external `tar` is the fallback), `.exe`-aware launcher check.
-  `service/SetupService` — agent wiring (`jdx setup --agent opencode|claude-code|kilo|codex
+  `service/SetupService` — agent wiring (`jdx setup --agent opencode|claude-code|cursor|kilo|codex
   --scope project|system`): JSONC-tolerant `mcp.jdx` (v1) + `mcp.servers.jdx`
   (v2, `enabled` → `disabled`) merge into `opencode.json[c]` (project walk-up,
   else `~/.config/opencode`); `mcpServers.jdx` (`{"command": "jdx", "args":
   ["mcp"]}`, the `claude mcp add jdx -- jdx mcp` equivalent) merges into
-  `.mcp.json` (project walk-up) or `~/.claude.json` (system); Kilo Code
+  `.mcp.json` (project walk-up) or `~/.claude.json` (system); Cursor (same
+  `mcpServers.jdx` shape, verified against `cursor-agent 2026.09.26-dd393fe`:
+  `agent mcp list` reads `.cursor/mcp.json`/`~/.cursor/mcp.json`) merges into
+  `.cursor/mcp.json` (project walk-up) or `~/.cursor/mcp.json` (system); Kilo Code
   (OpenCode fork, same `mcp` map shape) single `mcp.jdx` merge into
   `kilo.json[c]` (project walk-up preferring `.kilo/`, else `~/.config/kilo`;
   fresh files carry no `$schema`); Codex CLI `[mcp_servers.jdx]`
@@ -39,7 +42,9 @@ is the CLI surface, pinned by help/parity goldens.)
   line (`opencode` then legacy `opencode2`; v1 = `1.x`, v2 =
   `0.0.0-next/beta/dev-*` or `2.x`, never a guess);
   `probeClaudeVersion`/`describeClaudeVersion` report `claude --version`
-  presence; `probeCodexVersion`/`describeCodexVersion` report `codex --version`
+  presence; `probeCursorVersion`/`describeCursorVersion` report
+  `cursor-agent --version` presence (`agent` shim fallback);
+  `probeCodexVersion`/`describeCodexVersion` report `codex --version`
   presence (`isJdxCommand` accepts Windows shims `jdx.exe`/`.cmd`/`.bat` and
   backslash paths on every host, so `--check`/`doctor` stay true on Windows);
   `doctor` reuses all probes for the setup row.

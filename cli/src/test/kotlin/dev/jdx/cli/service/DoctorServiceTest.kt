@@ -502,6 +502,67 @@ class DoctorServiceTest {
     }
 
     @Test
+    fun `the setup row covers cursor wiring and presence`() {
+        val service = DoctorService(fakeEnvironment(tempDir("jdx-doctor-test-")))
+
+        val report = service.probe()
+
+        val setup = report.checks.first { it.name == "setup" }
+        setup.status shouldBe DoctorStatus.WARN
+        setup.detail shouldContain "cursor project"
+        setup.detail shouldContain "cursor system"
+        setup.detail shouldContain "cursor not found on PATH"
+        setup.detail shouldContain "jdx setup --agent cursor --scope project"
+    }
+
+    @Test
+    fun `the setup row names the detected cursor binary`() {
+        val runner = ProcessRunner { executable, _ ->
+            // Extension-aware: on Windows the probe resolves cursor-agent.exe
+            // (see toolFileNames), so compare the stem, not the raw file name.
+            if (executable.fileName.toString().substringBefore(".") == "cursor-agent") {
+                ProcessOutcome(0, "2026.09.26-dd393fe", "")
+            } else if (executable.fileName.toString().startsWith("opencode")) {
+                throw IOException("no opencode here")
+            } else {
+                ProcessOutcome(0, "26.0.2.1", "")
+            }
+        }
+        val service = DoctorService(
+            fakeEnvironment(
+                tempDir("jdx-doctor-test-"),
+                runner = runner,
+                cursorBinaries = listOf("cursor-agent"),
+            ),
+        )
+
+        val report = service.probe()
+
+        val setup = report.checks.first { it.name == "setup" }
+        setup.status shouldBe DoctorStatus.WARN
+        setup.detail shouldContain "cursor (2026.09.26-dd393fe)"
+    }
+
+    @Test
+    fun `the setup row is OK when only cursor is wired`() {
+        val root = tempDir("jdx-doctor-test-")
+        val environment = fakeEnvironment(root)
+        SetupService(environment.userHome, environment.workingDir).run(
+            SetupService.SetupRequest(
+                agent = SetupService.Agent.CURSOR,
+                scope = SetupService.Scope.PROJECT,
+            ),
+        )
+
+        val report = DoctorService(environment).probe()
+
+        val setup = report.checks.first { it.name == "setup" }
+        setup.status shouldBe DoctorStatus.OK
+        setup.detail shouldContain "cursor project installed"
+        setup.detail shouldContain "cursor system"
+    }
+
+    @Test
     fun `the setup row covers kilo when nothing is wired`() {
         val service = DoctorService(fakeEnvironment(tempDir("jdx-doctor-test-")))
 

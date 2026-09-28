@@ -17,9 +17,10 @@ import java.nio.file.Paths
  * `jdx setup --agent <name> --scope <project|system>` (issue #33 family).
  *
  * Writes, checks, and removes the MCP server entry that launches `jdx mcp` in
- * third-party agent configs. Four backends share this service behind the
+ * third-party agent configs. Five backends share this service behind the
  * [Agent] seam: OpenCode (`opencode.json[c]`, v1+v2 entries), Claude Code
- * (`.mcp.json` / `~/.claude.json`, `mcpServers.jdx`), Kilo Code (a fork
+ * (`.mcp.json` / `~/.claude.json`, `mcpServers.jdx`), Cursor
+ * (`.cursor/mcp.json` / `~/.cursor/mcp.json`, `mcpServers.jdx`), Kilo Code (a fork
  * of OpenCode — its `mcp` map carries the same v1-style local-server shape),
  * and Codex CLI (`config.toml`, `[mcp_servers.jdx]`).
  * All filesystem behaviour lives here; the Clikt command only parses flags,
@@ -89,10 +90,11 @@ class SetupService(
      */
     private val codexHome: Path? = null,
 ) {
-    /** Agents with setup support: OpenCode, Claude Code, Kilo Code, and Codex CLI. */
+    /** Agents with setup support: OpenCode, Claude Code, Cursor, Kilo Code, and Codex CLI. */
     enum class Agent(val cliName: String) {
         OPENCODE("opencode"),
         CLAUDE_CODE("claude-code"),
+        CURSOR("cursor"),
         KILO("kilo"),
         CODEX("codex"),
     }
@@ -166,12 +168,37 @@ class SetupService(
     }
 
     /**
+     * Whether the Cursor agent binary is installed for use. Cursor has no
+     * v1/v2 line split to classify — `PRESENT` means the binary answered
+     * `--version` (verified: `cursor-agent 2026.09.26-dd393fe`); `ABSENT`
+     * means no `cursor-agent` (or legacy `agent` shim) on PATH; `UNKNOWN`
+     * means it is present but never answered (or answered blank).
+     */
+    enum class CursorVersion(val cliName: String) {
+        PRESENT("present"),
+        ABSENT("absent"),
+        UNKNOWN("unknown"),
+    }
+
+    /**
      * Best-effort answer to "is codex installed". [raw] is the trimmed
      * `--version` output (null when the binary never answered); [binary] names
      * the probed executable (`codex`).
      */
     data class CodexVersionInfo(
         val version: CodexVersion,
+        val raw: String? = null,
+        val binary: String? = null,
+    )
+
+    /**
+     * Best-effort answer to "is cursor installed". [raw] is the trimmed
+     * `--version` output (null when the binary never answered); [binary] names
+     * the probed executable (`cursor-agent`, or the `agent` shim when no
+     * `cursor-agent` is on PATH).
+     */
+    data class CursorVersionInfo(
+        val version: CursorVersion,
         val raw: String? = null,
         val binary: String? = null,
     )
@@ -227,6 +254,10 @@ class SetupService(
         Agent.CLAUDE_CODE -> when (scope) {
             Scope.PROJECT -> claudeProjectConfigPath(projectDir)
             Scope.SYSTEM -> claudeSystemConfigPath(userHome)
+        }
+        Agent.CURSOR -> when (scope) {
+            Scope.PROJECT -> cursorProjectConfigPath(projectDir)
+            Scope.SYSTEM -> cursorSystemConfigPath(userHome)
         }
         Agent.KILO -> when (scope) {
             Scope.PROJECT -> kiloProjectConfigPath(projectDir)
@@ -339,7 +370,8 @@ class SetupService(
         /**
          * Parses `--agent` case-insensitively (`OpenCode`, `opencode`,
          * `open-code` all match; `Claude Code`, `claude-code`, `claudecode`,
-         * `claude` all match Claude Code; `kilo`, `kilo-code`, `kilocode`
+         * `claude` all match Claude Code; `cursor`, `cursor-code`,
+         * `cursorcode` match Cursor; `kilo`, `kilo-code`, `kilocode`
          * match Kilo Code; `codex`, `codex-cli`, `codexcli` match Codex CLI).
          * Null when unsupported — the adapter exits 3 naming it.
          */
@@ -348,6 +380,7 @@ class SetupService(
             return when (raw.lowercase().replace("-", "").replace("_", "").replace(" ", "")) {
                 "opencode" -> Agent.OPENCODE
                 "claudecode", "claude" -> Agent.CLAUDE_CODE
+                "cursor", "cursorcode" -> Agent.CURSOR
                 "kilo", "kilocode" -> Agent.KILO
                 "codex", "codexcli" -> Agent.CODEX
                 else -> null
@@ -506,6 +539,49 @@ class SetupService(
         }
 
         /**
+         * Answers "is cursor installed for use" from PATH. Probes the
+         * `cursor-agent` binary first — that is what the install script
+         * puts on PATH — and falls back to the `agent` shim only when no
+         * `cursor-agent` is on PATH (verified: `cursor-agent --version`
+         * prints `2026.09.26-dd393fe`). Never throws: a missing binary
+         * reads as ABSENT, a failing or blank run as UNKNOWN. Pure IO seam
+         * ([ProcessRunner]) so tests inject fakes.
+         */
+        fun probeCursorVersion(
+            pathDirs: List<Path>,
+            runner: ProcessRunner,
+            osName: String = System.getProperty("os.name", ""),
+        ): CursorVersionInfo {
+            for (binary in listOf("cursor-agent", "agent")) {
+                val executable = pathDirs.firstNotNullOfOrNull { dir ->
+                    toolFileNames(binary, osName)
+                        .map { dir.resolve(it) }
+                        .firstOrNull { Files.isRegularFile(it) && Files.isExecutable(it) }
+                } ?: continue
+                val raw = try {
+                    val outcome = runner.run(executable, listOf("--version"))
+                    (outcome.stdout + "\n" + outcome.stderr).trim().ifEmpty { null }
+                } catch (_: Exception) {
+                    null
+                }
+                if (raw.isNullOrBlank()) return CursorVersionInfo(CursorVersion.UNKNOWN, raw, binary)
+                return CursorVersionInfo(CursorVersion.PRESENT, raw, binary)
+            }
+            return CursorVersionInfo(CursorVersion.ABSENT)
+        }
+
+        /**
+         * One human line naming the detected Cursor install for `setup`
+         * and `doctor` output (`cursor (2026.09.26-dd393fe)`,
+         * `cursor not found on PATH`). Pure — example-tested.
+         */
+        fun describeCursorVersion(info: CursorVersionInfo): String = when (info.version) {
+            CursorVersion.PRESENT -> "cursor" + (info.raw?.let { " ($it)" } ?: " installed")
+            CursorVersion.ABSENT -> "cursor not found on PATH"
+            CursorVersion.UNKNOWN -> "cursor version unknown" + (info.raw?.let { " ($it)" } ?: "")
+        }
+
+        /**
          * Project target: the nearest `opencode.json`/`opencode.jsonc` walking up
          * from [projectDir] (opencode itself walks up to the worktree root), else
          * a fresh `opencode.json` in [projectDir].
@@ -557,6 +633,36 @@ class SetupService(
 
         /** The Claude Code entry: `jdx mcp` on PATH as a stdio MCP server under `mcpServers`. */
         fun desiredClaudeEntry(): JsonObject = buildJsonObject {
+            put("command", "jdx")
+            put("args", JsonArray(listOf(JsonPrimitive("mcp"))))
+        }
+
+        /**
+         * Project target for Cursor: the nearest `.cursor/mcp.json` walking up
+         * from [projectDir] (mirrors the OpenCode walk-up, one level deeper —
+         * the file lives inside the `.cursor/` dir), else a fresh
+         * `.cursor/mcp.json` in [projectDir]. Verified against a real install:
+         * `cursor-agent 2026.09.26-dd393fe` (`agent mcp list` reads
+         * `.cursor/mcp.json` in the cwd and `~/.cursor/mcp.json` globally;
+         * `agent mcp --help` names both files) and the documented layout
+         * (project `.cursor/mcp.json`, global `~/.cursor/mcp.json` at
+         * https://cursor.com/docs/mcp#configuration-locations).
+         */
+        fun cursorProjectConfigPath(projectDir: Path): Path {
+            var dir: Path? = projectDir.toAbsolutePath().normalize()
+            while (dir != null) {
+                val candidate = dir.resolve(".cursor/mcp.json")
+                if (Files.isRegularFile(candidate)) return candidate
+                dir = dir.parent
+            }
+            return projectDir.toAbsolutePath().normalize().resolve(".cursor/mcp.json")
+        }
+
+        /** System target for Cursor: the user-global `~/.cursor/mcp.json`. */
+        fun cursorSystemConfigPath(userHome: Path): Path = userHome.resolve(".cursor/mcp.json")
+
+        /** The Cursor entry: `jdx mcp` on PATH as a stdio MCP server under `mcpServers` (same shape as Claude Code). */
+        fun desiredCursorEntry(): JsonObject = buildJsonObject {
             put("command", "jdx")
             put("args", JsonArray(listOf(JsonPrimitive("mcp"))))
         }
@@ -661,27 +767,29 @@ class SetupService(
         /** True when either the v1 (`mcp.jdx`) or the v2 (`mcp.servers.jdx`) entry wires `jdx mcp`. */
         fun isInstalledRoot(root: JsonObject): Boolean = isInstalledRoot(root, Agent.OPENCODE)
 
-        /** True when [agent]'s owned entries wire `jdx mcp` (OpenCode: v1 or v2; Kilo: `mcp.jdx`; Claude: `mcpServers.jdx`). */
+        /** True when [agent]'s owned entries wire `jdx mcp` (OpenCode: v1 or v2; Kilo: `mcp.jdx`; Claude/Cursor: `mcpServers.jdx`). */
         fun isInstalledRootFor(agent: Agent, root: JsonObject): Boolean = isInstalledRoot(root, agent)
 
         /**
          * True when an install is a no-op (every owned entry present): OpenCode
          * needs **both** the v1 and v2 entries — a v1-only file is completed
-         * with the v2 entry — while Kilo, Claude Code, and Codex CLI need only
-         * their single entry. The report-only probe ([isInstalledRoot]) stays
-         * lenient (either OpenCode entry counts).
+         * with the v2 entry — while Kilo, Claude Code, Cursor, and Codex CLI
+         * need only their single entry. The report-only probe
+         * ([isInstalledRoot]) stays lenient (either OpenCode entry counts).
          */
         private fun isCompleteFor(agent: Agent, root: JsonObject): Boolean = when (agent) {
             Agent.OPENCODE -> isV1Installed(root) && isV2Installed(root)
             Agent.KILO -> isV1Installed(root)
             Agent.CLAUDE_CODE -> isClaudeInstalled(root)
+            Agent.CURSOR -> isCursorInstalled(root)
             Agent.CODEX -> error("Codex CLI installs merge TOML text, never JSON")
         }
 
-        /** Agent-aware probe: OpenCode checks v1/v2 entries, Claude Code checks `mcpServers.jdx`, Kilo checks `mcp.jdx`. */
+        /** Agent-aware probe: OpenCode checks v1/v2 entries, Claude Code/Cursor check `mcpServers.jdx`, Kilo checks `mcp.jdx`. */
         fun isInstalledRoot(root: JsonObject, agent: Agent): Boolean = when (agent) {
             Agent.OPENCODE -> isV1Installed(root) || isV2Installed(root)
             Agent.CLAUDE_CODE -> isClaudeInstalled(root)
+            Agent.CURSOR -> isCursorInstalled(root)
             Agent.KILO -> isV1Installed(root)
             Agent.CODEX -> error("Codex CLI probes TOML text via isCodexInstalledText, never JSON")
         }
@@ -725,6 +833,46 @@ class SetupService(
          * stay tidy.
          */
         fun mergeClaudeRemove(root: JsonObject): JsonObject {
+            val base = root.toMutableMap()
+            val servers = root["mcpServers"]?.jsonObjectOrNull()?.toMutableMap() ?: return root
+            servers.remove(SERVER_NAME)
+            if (servers.isEmpty()) base.remove("mcpServers") else base["mcpServers"] = JsonObject(servers)
+            return JsonObject(base)
+        }
+
+        /** True when the Cursor `mcpServers.jdx` entry is a server whose command runs `jdx mcp` (same shape as Claude Code). */
+        fun isCursorInstalled(root: JsonObject): Boolean {
+            val entry = root["mcpServers"]?.jsonObjectOrNull()?.get(SERVER_NAME)?.jsonObjectOrNull()
+                ?: return false
+            return isCursorJdxEntry(entry)
+        }
+
+        /**
+         * True when [entry] runs `jdx mcp` in the Cursor shape
+         * (`{"command": "jdx", "args": ["mcp"]}` — verified: `agent mcp list`
+         * in `cursor-agent 2026.09.26-dd393fe` recognises the entry). Same
+         * codec as Claude Code ([isClaudeJdxEntry]): absolute install paths
+         * and Windows `PATHEXT` shims accepted. Never throws (hostile configs).
+         */
+        fun isCursorJdxEntry(entry: JsonObject): Boolean = isClaudeJdxEntry(entry)
+
+        /**
+         * Merges the desired Cursor entry into [root] (null = fresh file).
+         * Every other server under `mcpServers` is preserved.
+         */
+        fun mergeCursorInstall(root: JsonObject?): JsonObject {
+            val base: MutableMap<String, JsonElement> = root?.toMutableMap() ?: mutableMapOf()
+            val servers = root?.get("mcpServers")?.jsonObjectOrNull()?.toMutableMap() ?: mutableMapOf()
+            servers[SERVER_NAME] = desiredCursorEntry()
+            base["mcpServers"] = JsonObject(servers)
+            return JsonObject(base)
+        }
+
+        /**
+         * Removes Cursor `mcpServers.jdx`; drops an emptied `mcpServers`
+         * object to stay tidy.
+         */
+        fun mergeCursorRemove(root: JsonObject): JsonObject {
             val base = root.toMutableMap()
             val servers = root["mcpServers"]?.jsonObjectOrNull()?.toMutableMap() ?: return root
             servers.remove(SERVER_NAME)
@@ -789,6 +937,7 @@ class SetupService(
         fun mergeInstallFor(agent: Agent, root: JsonObject?): JsonObject = when (agent) {
             Agent.OPENCODE -> mergeInstallOpencode(root)
             Agent.CLAUDE_CODE -> mergeClaudeInstall(root)
+            Agent.CURSOR -> mergeCursorInstall(root)
             Agent.KILO -> mergeInstallKilo(root)
             Agent.CODEX -> error("Codex CLI installs merge TOML text via mergeCodexInstall, never JSON")
         }
@@ -838,6 +987,7 @@ class SetupService(
         fun mergeRemoveFor(agent: Agent, root: JsonObject): JsonObject = when (agent) {
             Agent.OPENCODE -> mergeRemoveOpencode(root)
             Agent.CLAUDE_CODE -> mergeClaudeRemove(root)
+            Agent.CURSOR -> mergeCursorRemove(root)
             Agent.KILO -> mergeRemoveKilo(root)
             Agent.CODEX -> error("Codex CLI removals merge TOML text via mergeCodexRemove, never JSON")
         }
@@ -1359,7 +1509,7 @@ class SetupService(
         private fun hasEntry(root: JsonObject, agent: Agent): Boolean = hasEntryFor(agent, root)
 
         private fun hasEntryFor(agent: Agent, root: JsonObject): Boolean = when (agent) {
-            Agent.CLAUDE_CODE -> {
+            Agent.CLAUDE_CODE, Agent.CURSOR -> {
                 val servers = root["mcpServers"]?.jsonObjectOrNull() ?: return false
                 servers.containsKey(SERVER_NAME)
             }

@@ -1,0 +1,17 @@
+{
+  "mcpServers": {
+    "other": {
+      "command": "other",
+      "args": [
+        "x"
+      ]
+    },
+    "jdx": {
+      "command": "jdx",
+      "args": [
+        "mcp"
+      ]
+    }
+  }
+}
+

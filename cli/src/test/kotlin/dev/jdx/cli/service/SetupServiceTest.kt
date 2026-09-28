@@ -22,8 +22,9 @@ import java.nio.file.Path
 
 /**
  * `SetupService` over fake homes (issue #33 family): install/check/remove for
- * the OpenCode backend, merge discipline, and the JSONC stripper. Every home
- * and project dir is a fresh temp dir — no test touches the real home.
+ * the OpenCode, Claude Code, Cursor, Kilo Code, and Codex CLI backends, merge
+ * discipline, and the JSONC stripper. Every home and project dir is a fresh
+ * temp dir — no test touches the real home.
  *
  * Merged file bytes are pinned separately in `SetupGoldenTest` (tier 2,
  * `src/test/resources/golden/setup/`).
@@ -1055,6 +1056,276 @@ class SetupServiceTest {
             dirs.project.resolve(".mcp.json")
         service.targetPath(SetupService.Agent.CLAUDE_CODE, SetupService.Scope.SYSTEM) shouldBe
             dirs.home.resolve(".claude.json")
+        service.targetPath(SetupService.Agent.CURSOR, SetupService.Scope.PROJECT) shouldBe
+            dirs.project.resolve(".cursor/mcp.json")
+        service.targetPath(SetupService.Agent.CURSOR, SetupService.Scope.SYSTEM) shouldBe
+            dirs.home.resolve(".cursor/mcp.json")
+    }
+
+    // -- Cursor backend (.cursor/mcp.json / ~/.cursor/mcp.json, mcpServers.jdx) --
+    // Verified against a real install: `cursor-agent 2026.09.26-dd393fe`
+    // (`agent mcp list` reads `.cursor/mcp.json` in the cwd and
+    // `~/.cursor/mcp.json` globally; `agent mcp --help` names both files).
+
+    private fun cursorProjectRequest(
+        check: Boolean = false,
+        remove: Boolean = false,
+    ): SetupService.SetupRequest = SetupService.SetupRequest(
+        agent = SetupService.Agent.CURSOR,
+        scope = SetupService.Scope.PROJECT,
+        check = check,
+        remove = remove,
+    )
+
+    private fun cursorSystemRequest(
+        check: Boolean = false,
+        remove: Boolean = false,
+    ): SetupService.SetupRequest = SetupService.SetupRequest(
+        agent = SetupService.Agent.CURSOR,
+        scope = SetupService.Scope.SYSTEM,
+        check = check,
+        remove = remove,
+    )
+
+    @Test
+    fun `parseAgent covers cursor spellings`() {
+        SetupService.parseAgent("cursor") shouldBe SetupService.Agent.CURSOR
+        SetupService.parseAgent("Cursor") shouldBe SetupService.Agent.CURSOR
+        SetupService.parseAgent("cursor-code") shouldBe SetupService.Agent.CURSOR
+        SetupService.parseAgent("cursorcode") shouldBe SetupService.Agent.CURSOR
+        SetupService.parseAgent("CURSOR_CODE") shouldBe SetupService.Agent.CURSOR
+    }
+
+    @Test
+    fun `a fresh cursor project install creates dot-cursor mcp json with the jdx entry`(@TempDir root: Path) {
+        val dirs = fakeDirs(root)
+        val service = SetupService(dirs.home, dirs.project)
+
+        val outcome = service.run(cursorProjectRequest())
+
+        val installed = outcome as SetupService.SetupOutcome.Installed
+        installed.changed shouldBe true
+        installed.path shouldBe dirs.project.resolve(".cursor/mcp.json")
+        setupExitCode(outcome) shouldBe 0
+        val stored = Json.parseToJsonElement(Files.readString(installed.path)).jsonObject
+        val entry = stored["mcpServers"]?.jsonObject?.get("jdx")?.jsonObject
+        entry?.get("command")?.jsonPrimitive?.content shouldBe "jdx"
+        entry?.get("args").toString() shouldBe """["mcp"]"""
+        SetupService.isInstalledRoot(stored, SetupService.Agent.CURSOR) shouldBe true
+        SetupService.isInstalledAt(installed.path, SetupService.Agent.CURSOR) shouldBe true
+        // The Claude probe shares the shape but each agent checks its own file;
+        // a Cursor file is wired for Cursor here.
+        SetupService.isInstalledRoot(stored, SetupService.Agent.CLAUDE_CODE) shouldBe true
+    }
+
+    @Test
+    fun `cursor install preserves other servers and never clobbers`(@TempDir root: Path) {
+        val dirs = fakeDirs(root)
+        Files.createDirectories(dirs.project.resolve(".cursor"))
+        Files.writeString(
+            dirs.project.resolve(".cursor/mcp.json"),
+            """{"mcpServers":{"other":{"command":"other","args":["x"]}}}""",
+        )
+        val service = SetupService(dirs.home, dirs.project)
+
+        val outcome = service.run(cursorProjectRequest()) as SetupService.SetupOutcome.Installed
+
+        outcome.changed shouldBe true
+        val stored = Json.parseToJsonElement(Files.readString(outcome.path)).jsonObject
+        stored["mcpServers"]?.jsonObject?.get("other")?.jsonObject
+            ?.get("command")?.jsonPrimitive?.content shouldBe "other"
+        SetupService.isInstalledRoot(stored, SetupService.Agent.CURSOR) shouldBe true
+    }
+
+    @Test
+    fun `a second cursor install is a byte-identical no-op`(@TempDir root: Path) {
+        val dirs = fakeDirs(root)
+        val service = SetupService(dirs.home, dirs.project)
+
+        val first = service.run(cursorProjectRequest()) as SetupService.SetupOutcome.Installed
+        val before = Files.readAllBytes(first.path)
+        val second = service.run(cursorProjectRequest())
+
+        (second as SetupService.SetupOutcome.Installed).changed shouldBe false
+        Files.readAllBytes(first.path) shouldBe before
+    }
+
+    @Test
+    fun `cursor check reports without writing`(@TempDir root: Path) {
+        val dirs = fakeDirs(root)
+        val service = SetupService(dirs.home, dirs.project)
+
+        val absent = service.run(cursorProjectRequest(check = true))
+        absent as SetupService.SetupOutcome.Checked
+        absent.installed shouldBe false
+        setupExitCode(absent) shouldBe 1
+        Files.exists(dirs.project.resolve(".cursor/mcp.json")) shouldBe false
+
+        service.run(cursorProjectRequest())
+        val present = service.run(cursorProjectRequest(check = true))
+        present as SetupService.SetupOutcome.Checked
+        present.installed shouldBe true
+        setupExitCode(present) shouldBe 0
+    }
+
+    @Test
+    fun `cursor remove deletes only the jdx entry and drops the emptied namespace`(@TempDir root: Path) {
+        val dirs = fakeDirs(root)
+        val service = SetupService(dirs.home, dirs.project)
+        service.run(cursorProjectRequest())
+
+        val outcome = service.run(cursorProjectRequest(remove = true)) as SetupService.SetupOutcome.Removed
+
+        outcome.changed shouldBe true
+        val stored = Json.parseToJsonElement(Files.readString(dirs.project.resolve(".cursor/mcp.json"))).jsonObject
+        stored.containsKey("mcpServers") shouldBe false
+        SetupService.isInstalledAt(dirs.project.resolve(".cursor/mcp.json"), SetupService.Agent.CURSOR) shouldBe false
+
+        val again = service.run(cursorProjectRequest(remove = true))
+        (again as SetupService.SetupOutcome.Removed).changed shouldBe false
+        setupExitCode(again) shouldBe 0
+    }
+
+    @Test
+    fun `cursor remove keeps other servers`(@TempDir root: Path) {
+        val dirs = fakeDirs(root)
+        Files.createDirectories(dirs.project.resolve(".cursor"))
+        Files.writeString(
+            dirs.project.resolve(".cursor/mcp.json"),
+            """{"mcpServers":{"other":{"command":"other","args":["x"]}}}""",
+        )
+        val service = SetupService(dirs.home, dirs.project)
+        service.run(cursorProjectRequest())
+
+        val outcome = service.run(cursorProjectRequest(remove = true)) as SetupService.SetupOutcome.Removed
+
+        outcome.changed shouldBe true
+        val stored = Json.parseToJsonElement(Files.readString(dirs.project.resolve(".cursor/mcp.json"))).jsonObject
+        stored["mcpServers"]?.jsonObject?.containsKey("jdx") shouldBe false
+        stored["mcpServers"]?.jsonObject?.containsKey("other") shouldBe true
+    }
+
+    @Test
+    fun `cursor system scope targets dot-cursor mcp json under the fake home`(@TempDir root: Path) {
+        val dirs = fakeDirs(root)
+        val service = SetupService(dirs.home, dirs.project)
+
+        val created = service.run(cursorSystemRequest()) as SetupService.SetupOutcome.Installed
+
+        created.path shouldBe dirs.home.resolve(".cursor/mcp.json")
+        SetupService.isInstalledAt(created.path, SetupService.Agent.CURSOR) shouldBe true
+    }
+
+    @Test
+    fun `cursor project scope walks up to the nearest dot-cursor mcp json`(@TempDir root: Path) {
+        val dirs = fakeDirs(root)
+        Files.createDirectories(dirs.project.resolve(".cursor"))
+        Files.writeString(dirs.project.resolve(".cursor/mcp.json"), "{}")
+        val nested = dirs.project.resolve("a/b").also { Files.createDirectories(it) }
+        val service = SetupService(dirs.home, nested)
+
+        val outcome = service.run(cursorProjectRequest())
+
+        val installed = outcome as SetupService.SetupOutcome.Installed
+        installed.path shouldBe dirs.project.resolve(".cursor/mcp.json")
+        Files.exists(nested.resolve(".cursor/mcp.json")) shouldBe false
+    }
+
+    @Test
+    fun `a cursor corrupt config exits 5 and names the file`(@TempDir root: Path) {
+        val dirs = fakeDirs(root)
+        Files.createDirectories(dirs.project.resolve(".cursor"))
+        Files.writeString(dirs.project.resolve(".cursor/mcp.json"), "{ not json,")
+        val service = SetupService(dirs.home, dirs.project)
+
+        val outcome = service.run(cursorProjectRequest())
+
+        outcome as SetupService.SetupOutcome.Corrupt
+        setupExitCode(outcome) shouldBe 5
+    }
+
+    @Test
+    fun `cursor version probe prefers cursor-agent over the agent shim`(@TempDir root: Path) {
+        val bin = root.resolve("bin").also { Files.createDirectories(it) }
+        Files.createFile(bin.resolve("cursor-agent")).toFile().setExecutable(true)
+        Files.createFile(bin.resolve("agent")).toFile().setExecutable(true)
+        val seen = mutableListOf<String>()
+        val runner = ProcessRunner { executable, _ ->
+            seen.add(executable.fileName.toString())
+            ProcessOutcome(0, "2026.09.26-dd393fe", "")
+        }
+
+        val info = SetupService.probeCursorVersion(listOf(bin), runner)
+
+        info.version shouldBe SetupService.CursorVersion.PRESENT
+        info.raw shouldBe "2026.09.26-dd393fe"
+        info.binary shouldBe "cursor-agent"
+        seen shouldBe listOf("cursor-agent")
+    }
+
+    @Test
+    fun `cursor version probe falls back to the agent shim`() {
+        val info = SetupService.probeCursorVersion(
+            emptyList(),
+            ProcessRunner { _, _ -> ProcessOutcome(0, "x", "") },
+        )
+        // No binaries on the fake PATH: absent, never a guess.
+        info.version shouldBe SetupService.CursorVersion.ABSENT
+    }
+
+    @Test
+    fun `cursor version probe classifies answers`(@TempDir root: Path) {
+        val bin = root.resolve("bin").also { Files.createDirectories(it) }
+        Files.createFile(bin.resolve("cursor-agent")).toFile().setExecutable(true)
+
+        val present = SetupService.probeCursorVersion(
+            listOf(bin),
+            ProcessRunner { _, _ -> ProcessOutcome(0, "2026.09.26-dd393fe", "") },
+        )
+        present.version shouldBe SetupService.CursorVersion.PRESENT
+        present.raw shouldBe "2026.09.26-dd393fe"
+        present.binary shouldBe "cursor-agent"
+
+        val blank = SetupService.probeCursorVersion(
+            listOf(bin),
+            ProcessRunner { _, _ -> ProcessOutcome(0, "  ", "") },
+        )
+        blank.version shouldBe SetupService.CursorVersion.UNKNOWN
+
+        val failing = SetupService.probeCursorVersion(
+            listOf(bin),
+            throwingRunner("boom"),
+        )
+        failing.version shouldBe SetupService.CursorVersion.UNKNOWN
+    }
+
+    @Test
+    fun `cursor probe resolves the exe shim on windows`(@TempDir root: Path) {
+        val bin = root.resolve("bin").also { Files.createDirectories(it) }
+        Files.createFile(bin.resolve("cursor-agent.exe")).toFile().setExecutable(true)
+        val runner = ProcessRunner { _, _ -> ProcessOutcome(0, "2026.09.26-dd393fe", "") }
+
+        val info = SetupService.probeCursorVersion(listOf(bin), runner, osName = "Windows 11")
+
+        info.version shouldBe SetupService.CursorVersion.PRESENT
+        info.raw shouldBe "2026.09.26-dd393fe"
+        info.binary shouldBe "cursor-agent"
+    }
+
+    @Test
+    fun `describeCursorVersion covers every variant`() {
+        SetupService.describeCursorVersion(
+            SetupService.CursorVersionInfo(SetupService.CursorVersion.PRESENT, "2026.09.26-dd393fe", "cursor-agent"),
+        ) shouldBe "cursor (2026.09.26-dd393fe)"
+        SetupService.describeCursorVersion(
+            SetupService.CursorVersionInfo(SetupService.CursorVersion.ABSENT),
+        ) shouldBe "cursor not found on PATH"
+        SetupService.describeCursorVersion(
+            SetupService.CursorVersionInfo(SetupService.CursorVersion.UNKNOWN, "banana", "cursor-agent"),
+        ) shouldBe "cursor version unknown (banana)"
+        SetupService.describeCursorVersion(
+            SetupService.CursorVersionInfo(SetupService.CursorVersion.UNKNOWN),
+        ) shouldBe "cursor version unknown"
     }
 
     @Test
