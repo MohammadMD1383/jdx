@@ -57,6 +57,10 @@ internal fun fakeEnvironment(
     opencodeBinaries: List<String> = emptyList(),
     /** Claude Code binaries to place on the fake PATH (`claude`); empty means absent. */
     claudeBinaries: List<String> = emptyList(),
+    /** Codex CLI binaries to place on the fake PATH (`codex`); empty means absent. */
+    codexBinaries: List<String> = emptyList(),
+    /** `$CODEX_HOME` stand-in for the Codex CLI system config dir; null means unset. */
+    codexHome: Path? = null,
     /** OS name for `.exe` tool probing; tests inject `"Windows 11"`. */
     osName: String = System.getProperty("os.name", ""),
     /**
@@ -86,6 +90,11 @@ internal fun fakeEnvironment(
         }
     }
     for (binary in claudeBinaries) {
+        for (name in toolFileNames(binary, osName)) {
+            emptyExecutable(pathBin, name)
+        }
+    }
+    for (binary in codexBinaries) {
         for (name in toolFileNames(binary, osName)) {
             emptyExecutable(pathBin, name)
         }
@@ -184,7 +193,7 @@ internal fun fakeEnvironment(
         envVars = mapOf(
             JdxPaths.ENV_CACHE_DIR to cacheRoot.toString(),
             JdxPaths.ENV_CONFIG_DIR to home.resolve(".config/jdx").toString(),
-        ),
+        ) + (codexHome?.let { mapOf("CODEX_HOME" to it.toString()) } ?: emptyMap()),
         runtime = RuntimeInfo(
             version = "26.0.2.1-test",
             jrtReachable = jrtReachable,

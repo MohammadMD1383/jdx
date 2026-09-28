@@ -1,0 +1,10 @@
+model = "o4-mini"
+
+[mcp_servers.other]
+command = "other"
+args = ["x"]
+
+[mcp_servers.jdx]
+command = "jdx"
+args = ["mcp"]
+

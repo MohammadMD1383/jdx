@@ -26,7 +26,11 @@ import kotlin.system.exitProcess
  * (`{"command": "jdx", "args": ["mcp"]}`, the `claude mcp add jdx -- jdx mcp`
  * equivalent) entry in `.mcp.json` (project) or `~/.claude.json` (system);
  * Kilo Code (an OpenCode fork sharing the `mcp` map shape) gets the single
- * `mcp.jdx` entry in its `kilo.json[c]` files. The detected line is reported,
+ * `mcp.jdx` entry in its `kilo.json[c]` files; Codex CLI gets the
+ * `[mcp_servers.jdx]` table (`command = "jdx"`, `args = ["mcp"]`, the
+ * `codex mcp add jdx -- jdx mcp` equivalent) in `.codex/config.toml`
+ * (project, trusted checkouts) or `~/.codex/config.toml` (system,
+ * `$CODEX_HOME` honoured). The detected line is reported,
  * never assumed. A thin adapter (D-004): flag parsing, rendering, and exit
  * codes only — [SetupService] owns the merge and the version classification.
  */
@@ -36,23 +40,26 @@ class SetupCommand(
     private val terminate: (Int) -> Nothing = ::exitProcess,
     private val versionProbe: () -> SetupService.OpencodeVersionInfo = ::systemOpencodeVersion,
     private val claudeVersionProbe: () -> SetupService.ClaudeVersionInfo = ::systemClaudeVersion,
+    private val codexVersionProbe: () -> SetupService.CodexVersionInfo = ::systemCodexVersion,
 ) : CoreCliktCommand(name = "setup") {
     override fun help(context: Context): String =
         "Wire jdx into an AI agent: write the MCP server entries that launch `jdx mcp` " +
             "into the agent config (project checkout or user-global). " +
-            "--agent opencode|claude-code|kilo --scope project|system. " +
+            "--agent opencode|claude-code|kilo|codex --scope project|system. " +
             "OpenCode writes both the v1 (mcp.jdx) and v2 (mcp.servers.jdx) entries so either " +
             "OpenCode line picks it up (v1 support is deprecated, slated for removal); " +
             "Claude Code writes the mcpServers.jdx entry into .mcp.json (project) or " +
             "~/.claude.json (system); " +
-            "Kilo Code gets the single mcp.jdx entry in kilo.jsonc (project prefers .kilo/). " +
+            "Kilo Code gets the single mcp.jdx entry in kilo.jsonc (project prefers .kilo/); " +
+            "Codex CLI gets the [mcp_servers.jdx] table in .codex/config.toml (project) or " +
+            "~/.codex/config.toml (system, \$CODEX_HOME honoured). " +
             "--check reports without writing; --remove uninstalls cleanly. " +
             "Merges (never clobbers unrelated entries); re-runs are no-ops. " +
             "Exits 0 installed/removed/present, 1 checked-absent, 3 bad usage, 5 unreadable config."
 
     private val agent by option(
         "--agent",
-        help = "Agent to wire: opencode, claude-code (claude is accepted as an alias), or kilo (Kilo Code, an OpenCode fork).",
+        help = "Agent to wire: opencode, claude-code (claude is accepted as an alias), kilo (Kilo Code, an OpenCode fork), or codex (Codex CLI).",
     )
 
     private val scope by option(
@@ -60,7 +67,8 @@ class SetupCommand(
         help = "Where to write: project (default) or system. " +
             "OpenCode targets opencode.json[c] (~/.config/opencode); " +
             "Claude Code targets .mcp.json (project) or ~/.claude.json (system); " +
-            "Kilo Code targets kilo.json[c] (~/.config/kilo, project prefers .kilo/).",
+            "Kilo Code targets kilo.json[c] (~/.config/kilo, project prefers .kilo/); " +
+            "Codex CLI targets .codex/config.toml (project) or ~/.codex/config.toml (system, \$CODEX_HOME honoured).",
     )
 
     private val checkOnly by option(
@@ -82,7 +90,7 @@ class SetupCommand(
         val parsedAgent = SetupService.parseAgent(agent)
         if (parsedAgent == null) {
             finish(
-                "usage error: unsupported --agent '${agent}' (only --agent opencode|claude-code|kilo)",
+                "usage error: unsupported --agent '${agent}' (only --agent opencode|claude-code|kilo|codex)",
                 SetupPayload(agent = agent, message = "unsupported agent '${agent}'"),
                 exitCode = 3,
             )
@@ -126,11 +134,14 @@ class SetupCommand(
         // (no `opencode --version` classification to report, no binary probe).
         val opencodeVersion = if (parsedAgent == SetupService.Agent.OPENCODE) versionProbe() else null
         val claudeVersion = if (parsedAgent == SetupService.Agent.CLAUDE_CODE) claudeVersionProbe() else null
+        val codexVersion = if (parsedAgent == SetupService.Agent.CODEX) codexVersionProbe() else null
         val detected = when (parsedAgent) {
             SetupService.Agent.OPENCODE ->
                 SetupService.describeVersion(requireNotNull(opencodeVersion))
             SetupService.Agent.CLAUDE_CODE ->
                 SetupService.describeClaudeVersion(requireNotNull(claudeVersion))
+            SetupService.Agent.CODEX ->
+                SetupService.describeCodexVersion(requireNotNull(codexVersion))
             SetupService.Agent.KILO -> ""
         }
         val payload = SetupPayload(
@@ -153,6 +164,8 @@ class SetupCommand(
             opencodeRaw = opencodeVersion?.raw,
             claudeVersion = claudeVersion?.version?.cliName,
             claudeRaw = claudeVersion?.raw,
+            codexVersion = codexVersion?.version?.cliName,
+            codexRaw = codexVersion?.raw,
             message = setupMessage(outcome, parsedAgent),
         )
         finish(setupText(outcome, parsedAgent, parsedScope, detected), payload, setupExitCode(outcome))
@@ -183,6 +196,10 @@ private data class SetupPayload(
     val claudeVersion: String? = null,
     /** Trimmed `claude --version` output (null when the binary never answered). */
     val claudeRaw: String? = null,
+    /** Detected Codex CLI presence (`present`, `absent`, `unknown`). */
+    val codexVersion: String? = null,
+    /** Trimmed `codex --version` output (null when the binary never answered). */
+    val codexRaw: String? = null,
     val message: String,
 )
 
@@ -204,6 +221,16 @@ private fun systemClaudeVersion(): SetupService.ClaudeVersionInfo {
         ?.map { Paths.get(it) }
         ?: emptyList()
     return SetupService.probeClaudeVersion(pathDirs, RealProcessRunner)
+}
+
+/** Best-effort host probe for display only: PATH `codex` presence, never throws. */
+private fun systemCodexVersion(): SetupService.CodexVersionInfo {
+    val pathDirs = System.getenv("PATH")
+        ?.split(File.pathSeparator)
+        ?.filter { it.isNotEmpty() }
+        ?.map { Paths.get(it) }
+        ?: emptyList()
+    return SetupService.probeCodexVersion(pathDirs, RealProcessRunner)
 }
 
 private fun SetupPayload.toJson(ok: Boolean): String =
@@ -229,6 +256,9 @@ private fun setupMessage(outcome: SetupService.SetupOutcome, agent: SetupService
             SetupService.Agent.KILO ->
                 if (outcome.changed) "installed (jdx mcp entry written to ${outcome.path.fileName})"
                 else "already installed (${outcome.path.fileName})"
+            SetupService.Agent.CODEX ->
+                if (outcome.changed) "installed (mcp_servers jdx mcp entry written to ${outcome.path.fileName})"
+                else "already installed (${outcome.path.fileName}, mcp_servers entry)"
         }
     is SetupService.SetupOutcome.Checked ->
         if (outcome.installed) "installed (${outcome.path.fileName})" else "not installed (${outcome.path.fileName})"
@@ -256,10 +286,11 @@ private fun setupText(
     val where = if (scope == SetupService.Scope.PROJECT) "project" else "system"
     val detected = "detected: $detectedVersion"
     // OpenCode keeps its exact historical wording (pinned by tests); Claude
-    // Code mirrors it with the mcpServers entry and its own restart hint.
+    // Code and Codex CLI mirror it with their entry shape and restart hint.
     val installedChanged = when (agent) {
         SetupService.Agent.OPENCODE -> "$name $where setup installed (v1+v2 entries)"
         SetupService.Agent.CLAUDE_CODE -> "$name $where setup installed (mcpServers entry)"
+        SetupService.Agent.CODEX -> "$name $where setup installed (mcp_servers entry)"
         SetupService.Agent.KILO -> "$name $where setup installed"
     }
     return when (outcome) {

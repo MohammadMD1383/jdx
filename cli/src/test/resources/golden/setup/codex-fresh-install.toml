@@ -1,0 +1,4 @@
+[mcp_servers.jdx]
+command = "jdx"
+args = ["mcp"]
+

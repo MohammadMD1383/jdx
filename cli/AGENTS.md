@@ -22,7 +22,7 @@ is the CLI surface, pinned by help/parity goldens.)
   `.exe`/`.cmd`/`.bat` (`osName` seam); the `appcds` row is stat-only
   (size + mtime vs the fat jar, WARN-only, never FAIL). `service/UpgradeService` — pure-Java `tar.gz` extraction first
   (external `tar` is the fallback), `.exe`-aware launcher check.
-  `service/SetupService` — agent wiring (`jdx setup --agent opencode|claude-code|kilo
+  `service/SetupService` — agent wiring (`jdx setup --agent opencode|claude-code|kilo|codex
   --scope project|system`): JSONC-tolerant `mcp.jdx` (v1) + `mcp.servers.jdx`
   (v2, `enabled` → `disabled`) merge into `opencode.json[c]` (project walk-up,
   else `~/.config/opencode`); `mcpServers.jdx` (`{"command": "jdx", "args":
@@ -30,15 +30,21 @@ is the CLI surface, pinned by help/parity goldens.)
   `.mcp.json` (project walk-up) or `~/.claude.json` (system); Kilo Code
   (OpenCode fork, same `mcp` map shape) single `mcp.jdx` merge into
   `kilo.json[c]` (project walk-up preferring `.kilo/`, else `~/.config/kilo`;
-  fresh files carry no `$schema`), idempotent no-op re-runs, `--check`/`--remove`;
+  fresh files carry no `$schema`); Codex CLI `[mcp_servers.jdx]`
+  (`command = "jdx"`, `args = ["mcp"]`, the `codex mcp add jdx -- jdx mcp`
+  equivalent, verified against `codex-cli 0.157.1`) merges line-based into
+  `.codex/config.toml` (project walk-up) or `$CODEX_HOME/config.toml`
+  (else `~/.codex/config.toml`); idempotent no-op re-runs, `--check`/`--remove`;
   `parseOpencodeVersion`/`probeOpencodeVersion` classify the installed OpenCode
   line (`opencode` then legacy `opencode2`; v1 = `1.x`, v2 =
   `0.0.0-next/beta/dev-*` or `2.x`, never a guess);
   `probeClaudeVersion`/`describeClaudeVersion` report `claude --version`
+  presence; `probeCodexVersion`/`describeCodexVersion` report `codex --version`
   presence (`isJdxCommand` accepts Windows shims `jdx.exe`/`.cmd`/`.bat` and
   backslash paths on every host, so `--check`/`doctor` stay true on Windows);
   `doctor` reuses all probes for the setup row.
-  Tests pin userHome/projectDir to temp dirs, never the real home.
+  Tests pin userHome/projectDir to temp dirs, never the real home
+  (Codex tests additionally pin `$CODEX_HOME` via the `codexHome` ctor arg).
 - `parity/AdapterParityTest` — the §9 contract: CLI `--json` == MCP == HTTP bytes
   over all 18 read commands + failure branches + a hostile-property case.
 - `commands/DiffCommand` is the one query with no `RootsSpec`, no `--jars`/`-w`/`--no-jdk`
