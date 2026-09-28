@@ -44,14 +44,21 @@ class SetupCommandTest {
         codexVersion: SetupService.CodexVersionInfo = SetupService.CodexVersionInfo(
             SetupService.CodexVersion.ABSENT,
         ),
+        copilotVersion: SetupService.CopilotVersionInfo = SetupService.CopilotVersionInfo(
+            SetupService.CopilotVersion.ABSENT,
+        ),
     ): SetupCommand = SetupCommand(
-        // The Codex system dir is pinned under the fake home so no test can
-        // leak into the real `~/.codex` via the ambient `$CODEX_HOME`.
-        serviceFactory = { _, _ -> SetupService(home, project, home.resolve(".codex")) },
+        // The Codex and Copilot system dirs are pinned under the fake home
+        // so no test can leak into the real `~/.codex` / `~/.copilot` via
+        // the ambient `$CODEX_HOME` / `$COPILOT_HOME`.
+        serviceFactory = { _, _ ->
+            SetupService(home, project, home.resolve(".codex"), home.resolve(".copilot"))
+        },
         terminate = { throw SetupExit(it) },
         versionProbe = { version },
         claudeVersionProbe = { claudeVersion },
         codexVersionProbe = { codexVersion },
+        copilotVersionProbe = { copilotVersion },
     )
 
     private fun kiloCommandFor(home: Path, project: Path): SetupCommand = SetupCommand(
@@ -700,6 +707,179 @@ class SetupCommandTest {
         result.containsKey("opencodeRaw") shouldBe false
         result.containsKey("claudeVersion") shouldBe false
         result.containsKey("claudeRaw") shouldBe false
+        result.containsKey("copilotVersion") shouldBe false
+        result.containsKey("copilotRaw") shouldBe false
+    }
+
+    // -- GitHub Copilot CLI wiring (`--agent copilot`) --
+
+    @Test
+    fun `copilot install writes the mcpServers entry and says what to do next`(@TempDir root: Path) {
+        val (home, project) = fakeDirs(root)
+        val output = captureStdout {
+            JdxCli().subcommands(commandFor(home, project))
+                .parse(listOf("setup", "--agent", "copilot", "--scope", "project"))
+        }
+
+        output.trim() shouldContain "copilot project setup installed"
+        output.trim() shouldContain "mcpServers entry"
+        output.trim() shouldContain "restart copilot"
+        output.trim() shouldContain "copilot not found on PATH"
+        SetupService.isInstalledAt(
+            project.resolve(".mcp.json"),
+            SetupService.Agent.COPILOT,
+        ) shouldBe true
+    }
+
+    @Test
+    fun `copilot accepts every documented spelling`(@TempDir root: Path) {
+        listOf("copilot", "Copilot", "github-copilot", "copilot-cli").forEachIndexed { index, spelling ->
+            val case = root.resolve("case-$index").also { Files.createDirectories(it) }
+            val (home, project) = fakeDirs(case)
+            captureStdout {
+                JdxCli().subcommands(commandFor(home, project))
+                    .parse(listOf("setup", "--agent", spelling, "--scope", "project"))
+            }
+
+            SetupService.isInstalledAt(
+                project.resolve(".mcp.json"),
+                SetupService.Agent.COPILOT,
+            ) shouldBe true
+        }
+    }
+
+    @Test
+    fun `copilot install names the detected binary`(@TempDir root: Path) {
+        val (home, project) = fakeDirs(root)
+        val present = SetupService.CopilotVersionInfo(
+            SetupService.CopilotVersion.PRESENT,
+            "GitHub Copilot CLI 1.0.88.",
+            "copilot",
+        )
+        val output = captureStdout {
+            JdxCli().subcommands(commandFor(home, project, copilotVersion = present))
+                .parse(listOf("setup", "--agent", "copilot", "--scope", "project"))
+        }
+
+        output.trim() shouldContain "detected: copilot (GitHub Copilot CLI 1.0.88.)"
+    }
+
+    @Test
+    fun `a second copilot install is a no-op reporting already installed`(@TempDir root: Path) {
+        val (home, project) = fakeDirs(root)
+        val args = listOf("setup", "--agent", "copilot", "--scope", "project")
+        captureStdout { JdxCli().subcommands(commandFor(home, project)).parse(args) }
+
+        val output = captureStdout {
+            JdxCli().subcommands(commandFor(home, project)).parse(args)
+        }
+
+        output.trim() shouldContain "already installed"
+    }
+
+    @Test
+    fun `copilot system scope writes under the fake home`(@TempDir root: Path) {
+        val (home, project) = fakeDirs(root)
+        captureStdout {
+            JdxCli().subcommands(commandFor(home, project))
+                .parse(listOf("setup", "--agent", "copilot", "--scope", "system"))
+        }
+
+        SetupService.isInstalledAt(
+            home.resolve(".copilot/mcp-config.json"),
+            SetupService.Agent.COPILOT,
+        ) shouldBe true
+    }
+
+    @Test
+    fun `copilot check exits 1 when absent and 0 once installed without writing`(@TempDir root: Path) {
+        val (home, project) = fakeDirs(root)
+        val check = listOf("setup", "--agent", "copilot", "--scope", "project", "--check")
+
+        val absent = shouldThrow<SetupExit> {
+            captureStdout { JdxCli().subcommands(commandFor(home, project)).parse(check) }
+        }
+        absent.code shouldBe 1
+        Files.exists(project.resolve(".mcp.json")) shouldBe false
+
+        captureStdout {
+            JdxCli().subcommands(commandFor(home, project))
+                .parse(listOf("setup", "--agent", "copilot", "--scope", "project"))
+        }
+        val installed = captureStdout {
+            JdxCli().subcommands(commandFor(home, project)).parse(check)
+        }
+        installed.trim() shouldContain "copilot project setup installed"
+    }
+
+    @Test
+    fun `copilot check hint names the copilot install command`(@TempDir root: Path) {
+        val (home, project) = fakeDirs(root)
+
+        var code = -1
+        val output = captureStdout {
+            try {
+                JdxCli().subcommands(commandFor(home, project))
+                    .parse(listOf("setup", "--agent", "copilot", "--scope", "system", "--check"))
+            } catch (e: SetupExit) {
+                code = e.code
+            }
+        }
+
+        code shouldBe 1
+        output.trim() shouldContain "jdx setup --agent copilot --scope system"
+    }
+
+    @Test
+    fun `copilot remove uninstalls cleanly`(@TempDir root: Path) {
+        val (home, project) = fakeDirs(root)
+        captureStdout {
+            JdxCli().subcommands(commandFor(home, project))
+                .parse(listOf("setup", "--agent", "copilot", "--scope", "project"))
+        }
+
+        val output = captureStdout {
+            JdxCli().subcommands(commandFor(home, project))
+                .parse(listOf("setup", "--agent", "copilot", "--scope", "project", "--remove"))
+        }
+
+        output.trim() shouldContain "copilot project setup removed"
+        SetupService.isInstalledAt(
+            project.resolve(".mcp.json"),
+            SetupService.Agent.COPILOT,
+        ) shouldBe false
+    }
+
+    @Test
+    fun `copilot json carries the setup payload without other agent lines`(@TempDir root: Path) {
+        val (home, project) = fakeDirs(root)
+        val present = SetupService.CopilotVersionInfo(
+            SetupService.CopilotVersion.PRESENT,
+            "GitHub Copilot CLI 1.0.88.",
+            "copilot",
+        )
+        val output = captureStdout {
+            JdxCli().subcommands(commandFor(home, project, copilotVersion = present))
+                .parse(listOf("setup", "--agent", "copilot", "--scope", "project", "--json"))
+        }
+
+        val parsed = Json.parseToJsonElement(output.trim()).jsonObject
+        parsed["command"]?.jsonPrimitive?.content shouldBe "setup"
+        parsed["ok"]?.jsonPrimitive?.content shouldBe "true"
+        val result = parsed["result"]!!.jsonObject
+        result["agent"]?.jsonPrimitive?.content shouldBe "copilot"
+        result["scope"]?.jsonPrimitive?.content shouldBe "project"
+        result["installed"]?.jsonPrimitive?.content shouldBe "true"
+        result["copilotVersion"]?.jsonPrimitive?.content shouldBe "present"
+        result["copilotRaw"]?.jsonPrimitive?.content shouldBe "GitHub Copilot CLI 1.0.88."
+        // No other agent's line probe: the nullable fields are absent
+        // (`explicitNulls = false`), never null-marked.
+        result.containsKey("opencodeVersion") shouldBe false
+        result.containsKey("opencodeRaw") shouldBe false
+        result.containsKey("claudeVersion") shouldBe false
+        result.containsKey("claudeRaw") shouldBe false
+        result.containsKey("codexVersion") shouldBe false
+        result.containsKey("codexRaw") shouldBe false
     }
 
     private fun captureStdout(block: () -> Unit): String {

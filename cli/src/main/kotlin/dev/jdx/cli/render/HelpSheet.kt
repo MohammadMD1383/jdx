@@ -42,7 +42,7 @@ public val HELP_ROWS: List<HelpRow> = listOf(
     HelpRow("kotlin install", "Fetch the Kotlin PSI sidecar (Kotlin sources)", "jdx kotlin install"),
     HelpRow("daemon start|stop|status|restart", "Warm background JVM (5-min idle shutdown)", "jdx daemon status"),
     HelpRow("serve [--port 7070]", "Local HTTP/JSON API", "jdx serve"),
-    HelpRow("setup --agent opencode|claude-code|kilo|codex --scope project|system", "Wire jdx into an agent (OpenCode, Claude Code, Kilo Code, Codex CLI)", "jdx setup --agent opencode --scope project"),
+    HelpRow("setup --agent opencode|claude-code|kilo|codex|copilot --scope project|system", "Wire jdx into an agent (OpenCode, Claude Code, Kilo Code, Codex CLI, GitHub Copilot CLI)", "jdx setup --agent opencode --scope project"),
     HelpRow("mcp", "MCP stdio server (typed jdx_* tools)", "jdx mcp"),
     HelpRow("batch", "Many queries, one process (NDJSON in/out)", "jdx batch --json < queries.ndjson"),
     HelpRow("bench [--iterations 3]", "Benchmark the read path (timings + §15 targets)", "jdx bench --iterations 1"),

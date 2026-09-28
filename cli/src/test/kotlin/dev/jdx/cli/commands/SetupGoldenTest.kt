@@ -11,8 +11,9 @@ import java.nio.file.Path
 
 /**
  * Golden tests for `jdx setup` (issue #33 family): merged `opencode.json`,
- * Claude Code `.mcp.json`, `kilo.json`, and Codex CLI `config.toml` bytes
- * pinned to committed files under `src/test/resources/golden/setup/`.
+ * Claude Code `.mcp.json`, `kilo.json`, Codex CLI `config.toml`, and GitHub
+ * Copilot CLI `.mcp.json` bytes pinned to committed files under
+ * `src/test/resources/golden/setup/`.
  *
  * One test pins all files: [GoldenFiles.verifyAll] fails on orphans, so
  * splitting agents into separate tests would fail each with the other's
@@ -161,6 +162,39 @@ class SetupGoldenTest {
             ),
         ) as SetupService.SetupOutcome.Removed
         contents["codex-remove-keeps-others.toml"] = Files.readString(codexRemoveOutcome.path)
+
+        val copilotProject = root.resolve("copilot-project").also { Files.createDirectories(it) }
+        val copilotFresh = SetupService(home, copilotProject)
+        val copilotFreshOutcome = copilotFresh.run(
+            SetupService.SetupRequest(
+                agent = SetupService.Agent.COPILOT,
+                scope = SetupService.Scope.PROJECT,
+            ),
+        ) as SetupService.SetupOutcome.Installed
+        contents["copilot-fresh-install.json"] = Files.readString(copilotFreshOutcome.path)
+
+        val copilotMergeDir = root.resolve("copilot-merge").also { Files.createDirectories(it) }
+        Files.writeString(
+            copilotMergeDir.resolve(".mcp.json"),
+            """{"mcpServers":{"other":{"type":"local","command":"other","args":["x"]}}}""",
+        )
+        val copilotMerge = SetupService(home, copilotMergeDir)
+        val copilotMergeOutcome = copilotMerge.run(
+            SetupService.SetupRequest(
+                agent = SetupService.Agent.COPILOT,
+                scope = SetupService.Scope.PROJECT,
+            ),
+        ) as SetupService.SetupOutcome.Installed
+        contents["copilot-merge-preserves.json"] = Files.readString(copilotMergeOutcome.path)
+
+        val copilotRemoveOutcome = copilotMerge.run(
+            SetupService.SetupRequest(
+                agent = SetupService.Agent.COPILOT,
+                scope = SetupService.Scope.PROJECT,
+                remove = true,
+            ),
+        ) as SetupService.SetupOutcome.Removed
+        contents["copilot-remove-keeps-others.json"] = Files.readString(copilotRemoveOutcome.path)
 
         GoldenFiles.verifyAll(File("src/test/resources/golden/setup"), contents)
     }
