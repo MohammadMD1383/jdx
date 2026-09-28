@@ -25,8 +25,10 @@ import kotlin.system.exitProcess
  * whichever line is installed; Claude Code gets the `mcpServers.jdx`
  * (`{"command": "jdx", "args": ["mcp"]}`, the `claude mcp add jdx -- jdx mcp`
  * equivalent) entry in `.mcp.json` (project) or `~/.claude.json` (system);
- * Kilo Code (an OpenCode fork sharing the `mcp` map shape) gets the single
- * `mcp.jdx` entry in its `kilo.json[c]` files; Cline gets the
+ * Cursor gets the same `mcpServers.jdx` shape in `.cursor/mcp.json` (project)
+ * or `~/.cursor/mcp.json` (system); Kilo Code (an OpenCode fork sharing the
+ * `mcp` map shape) gets the single `mcp.jdx` entry in its `kilo.json[c]`
+ * files; Cline gets the
  * `mcpServers.jdx` transport entry (the `cline mcp add jdx -- jdx mcp`
  * equivalent) in the single global `cline_mcp_settings.json` for either
  * scope — Cline keeps no project-level MCP file (verified against the real
@@ -47,17 +49,20 @@ class SetupCommand(
     private val terminate: (Int) -> Nothing = ::exitProcess,
     private val versionProbe: () -> SetupService.OpencodeVersionInfo = ::systemOpencodeVersion,
     private val claudeVersionProbe: () -> SetupService.ClaudeVersionInfo = ::systemClaudeVersion,
+    private val cursorVersionProbe: () -> SetupService.CursorVersionInfo = ::systemCursorVersion,
     private val codexVersionProbe: () -> SetupService.CodexVersionInfo = ::systemCodexVersion,
     private val copilotVersionProbe: () -> SetupService.CopilotVersionInfo = ::systemCopilotVersion,
 ) : CoreCliktCommand(name = "setup") {
     override fun help(context: Context): String =
         "Wire jdx into an AI agent: write the MCP server entries that launch `jdx mcp` " +
             "into the agent config (project checkout or user-global). " +
-            "--agent opencode|claude-code|kilo|cline|codex|copilot --scope project|system. " +
+            "--agent opencode|claude-code|cursor|kilo|cline|codex|copilot --scope project|system. " +
             "OpenCode writes both the v1 (mcp.jdx) and v2 (mcp.servers.jdx) entries so either " +
             "OpenCode line picks it up (v1 support is deprecated, slated for removal); " +
             "Claude Code writes the mcpServers.jdx entry into .mcp.json (project) or " +
             "~/.claude.json (system); " +
+            "Cursor writes the mcpServers.jdx entry into .cursor/mcp.json (project) or " +
+            "~/.cursor/mcp.json (system); " +
             "Kilo Code gets the single mcp.jdx entry in kilo.jsonc (project prefers .kilo/); " +
             "Cline writes the mcpServers.jdx transport entry into the single global " +
             "cline_mcp_settings.json for either scope (Cline keeps no project-level MCP file). " +
@@ -71,7 +76,7 @@ class SetupCommand(
 
     private val agent by option(
         "--agent",
-        help = "Agent to wire: opencode, claude-code (claude is accepted as an alias), kilo (Kilo Code, an OpenCode fork), cline (Cline), codex (Codex CLI), or copilot (GitHub Copilot CLI).",
+        help = "Agent to wire: opencode, claude-code (claude is accepted as an alias), cursor, kilo (Kilo Code, an OpenCode fork), cline (Cline), codex (Codex CLI), or copilot (GitHub Copilot CLI).",
     )
 
     private val scope by option(
@@ -79,6 +84,7 @@ class SetupCommand(
         help = "Where to write: project (default) or system. " +
             "OpenCode targets opencode.json[c] (~/.config/opencode); " +
             "Claude Code targets .mcp.json (project) or ~/.claude.json (system); " +
+            "Cursor targets .cursor/mcp.json (project) or ~/.cursor/mcp.json (system); " +
             "Kilo Code targets kilo.json[c] (~/.config/kilo, project prefers .kilo/); " +
             "Cline targets ~/.cline/data/settings/cline_mcp_settings.json for both scopes (single global file). " +
             "Codex CLI targets .codex/config.toml (project) or ~/.codex/config.toml (system, \$CODEX_HOME honoured); " +
@@ -104,7 +110,7 @@ class SetupCommand(
         val parsedAgent = SetupService.parseAgent(agent)
         if (parsedAgent == null) {
             finish(
-                "usage error: unsupported --agent '${agent}' (only --agent opencode|claude-code|kilo|cline|codex|copilot)",
+                "usage error: unsupported --agent '${agent}' (only --agent opencode|claude-code|cursor|kilo|cline|codex|copilot)",
                 SetupPayload(agent = agent, message = "unsupported agent '${agent}'"),
                 exitCode = 3,
             )
@@ -149,6 +155,7 @@ class SetupCommand(
         // binary probe).
         val opencodeVersion = if (parsedAgent == SetupService.Agent.OPENCODE) versionProbe() else null
         val claudeVersion = if (parsedAgent == SetupService.Agent.CLAUDE_CODE) claudeVersionProbe() else null
+        val cursorVersion = if (parsedAgent == SetupService.Agent.CURSOR) cursorVersionProbe() else null
         val codexVersion = if (parsedAgent == SetupService.Agent.CODEX) codexVersionProbe() else null
         val copilotVersion = if (parsedAgent == SetupService.Agent.COPILOT) copilotVersionProbe() else null
         val detected = when (parsedAgent) {
@@ -156,6 +163,8 @@ class SetupCommand(
                 SetupService.describeVersion(requireNotNull(opencodeVersion))
             SetupService.Agent.CLAUDE_CODE ->
                 SetupService.describeClaudeVersion(requireNotNull(claudeVersion))
+            SetupService.Agent.CURSOR ->
+                SetupService.describeCursorVersion(requireNotNull(cursorVersion))
             SetupService.Agent.CODEX ->
                 SetupService.describeCodexVersion(requireNotNull(codexVersion))
             SetupService.Agent.COPILOT ->
@@ -183,6 +192,8 @@ class SetupCommand(
             opencodeRaw = opencodeVersion?.raw,
             claudeVersion = claudeVersion?.version?.cliName,
             claudeRaw = claudeVersion?.raw,
+            cursorVersion = cursorVersion?.version?.cliName,
+            cursorRaw = cursorVersion?.raw,
             codexVersion = codexVersion?.version?.cliName,
             codexRaw = codexVersion?.raw,
             copilotVersion = copilotVersion?.version?.cliName,
@@ -221,6 +232,10 @@ private data class SetupPayload(
     val codexVersion: String? = null,
     /** Trimmed `codex --version` output (null when the binary never answered). */
     val codexRaw: String? = null,
+    /** Detected Cursor presence (`present`, `absent`, `unknown`). */
+    val cursorVersion: String? = null,
+    /** Trimmed `cursor-agent --version` output (null when the binary never answered). */
+    val cursorRaw: String? = null,
     /** Detected GitHub Copilot CLI presence (`present`, `absent`, `unknown`). */
     val copilotVersion: String? = null,
     /** Trimmed `copilot --version` output (null when the binary never answered). */
@@ -246,6 +261,16 @@ private fun systemClaudeVersion(): SetupService.ClaudeVersionInfo {
         ?.map { Paths.get(it) }
         ?: emptyList()
     return SetupService.probeClaudeVersion(pathDirs, RealProcessRunner)
+}
+
+/** Best-effort host probe for display only: PATH `cursor-agent`/`agent` presence, never throws. */
+private fun systemCursorVersion(): SetupService.CursorVersionInfo {
+    val pathDirs = System.getenv("PATH")
+        ?.split(File.pathSeparator)
+        ?.filter { it.isNotEmpty() }
+        ?.map { Paths.get(it) }
+        ?: emptyList()
+    return SetupService.probeCursorVersion(pathDirs, RealProcessRunner)
 }
 
 /** Best-effort host probe for display only: PATH `codex` presence, never throws. */
@@ -285,6 +310,9 @@ private fun setupMessage(outcome: SetupService.SetupOutcome, agent: SetupService
                 if (outcome.changed) "installed (v1+v2 jdx mcp entries written to ${outcome.path.fileName})"
                 else "already installed (${outcome.path.fileName}, v1+v2 entries)"
             SetupService.Agent.CLAUDE_CODE ->
+                if (outcome.changed) "installed (mcpServers jdx mcp entry written to ${outcome.path.fileName})"
+                else "already installed (${outcome.path.fileName}, mcpServers entry)"
+            SetupService.Agent.CURSOR ->
                 if (outcome.changed) "installed (mcpServers jdx mcp entry written to ${outcome.path.fileName})"
                 else "already installed (${outcome.path.fileName}, mcpServers entry)"
             SetupService.Agent.KILO ->
@@ -327,10 +355,11 @@ private fun setupText(
     val where = if (scope == SetupService.Scope.PROJECT) "project" else "system"
     val detected = "detected: $detectedVersion"
     // OpenCode keeps its exact historical wording (pinned by tests); Claude
-    // Code and Codex CLI mirror it with their entry shape and restart hint.
+    // Code, Cursor, and Codex CLI mirror it with their entry shape and restart hint.
     val installedChanged = when (agent) {
         SetupService.Agent.OPENCODE -> "$name $where setup installed (v1+v2 entries)"
         SetupService.Agent.CLAUDE_CODE -> "$name $where setup installed (mcpServers entry)"
+        SetupService.Agent.CURSOR -> "$name $where setup installed (mcpServers entry)"
         SetupService.Agent.CODEX -> "$name $where setup installed (mcp_servers entry)"
         SetupService.Agent.COPILOT -> "$name $where setup installed (mcpServers entry)"
         SetupService.Agent.KILO -> "$name $where setup installed"

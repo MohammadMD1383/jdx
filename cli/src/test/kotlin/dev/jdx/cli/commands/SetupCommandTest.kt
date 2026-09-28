@@ -44,6 +44,9 @@ class SetupCommandTest {
         codexVersion: SetupService.CodexVersionInfo = SetupService.CodexVersionInfo(
             SetupService.CodexVersion.ABSENT,
         ),
+        cursorVersion: SetupService.CursorVersionInfo = SetupService.CursorVersionInfo(
+            SetupService.CursorVersion.ABSENT,
+        ),
         copilotVersion: SetupService.CopilotVersionInfo = SetupService.CopilotVersionInfo(
             SetupService.CopilotVersion.ABSENT,
         ),
@@ -57,6 +60,7 @@ class SetupCommandTest {
         terminate = { throw SetupExit(it) },
         versionProbe = { version },
         claudeVersionProbe = { claudeVersion },
+        cursorVersionProbe = { cursorVersion },
         codexVersionProbe = { codexVersion },
         copilotVersionProbe = { copilotVersion },
     )
@@ -201,7 +205,7 @@ class SetupCommandTest {
         }
 
         code shouldBe 3
-        output.trim() shouldContain "opencode|claude-code|kilo|cline|codex"
+        output.trim() shouldContain "opencode|claude-code|cursor|kilo|cline|codex|copilot"
     }
 
     @Test
@@ -338,6 +342,132 @@ class SetupCommandTest {
         result["installed"]?.jsonPrimitive?.content shouldBe "true"
         result["claudeVersion"]?.jsonPrimitive?.content shouldBe "present"
         result["claudeRaw"]?.jsonPrimitive?.content shouldBe "1.0.33 (Claude Code)"
+    }
+
+    // -- Cursor wiring (`--agent cursor`) --
+    // Verified against a real install: `cursor-agent 2026.09.26-dd393fe`
+    // (`agent mcp list` reads `.cursor/mcp.json` / `~/.cursor/mcp.json`).
+
+    @Test
+    fun `cursor install writes dot-cursor mcp json and says what to do next`(@TempDir root: Path) {
+        val (home, project) = fakeDirs(root)
+        val output = captureStdout {
+            JdxCli().subcommands(commandFor(home, project))
+                .parse(listOf("setup", "--agent", "cursor", "--scope", "project"))
+        }
+
+        output.trim() shouldContain "cursor project setup installed"
+        output.trim() shouldContain "mcpServers entry"
+        output.trim() shouldContain "restart cursor"
+        output.trim() shouldContain "cursor not found on PATH"
+        SetupService.isInstalledAt(
+            project.resolve(".cursor/mcp.json"),
+            SetupService.Agent.CURSOR,
+        ) shouldBe true
+    }
+
+    @Test
+    fun `cursor install names the detected binary`(@TempDir root: Path) {
+        val (home, project) = fakeDirs(root)
+        val present = SetupService.CursorVersionInfo(
+            SetupService.CursorVersion.PRESENT,
+            "2026.09.26-dd393fe",
+            "cursor-agent",
+        )
+        val output = captureStdout {
+            JdxCli().subcommands(commandFor(home, project, cursorVersion = present))
+                .parse(listOf("setup", "--agent", "cursor", "--scope", "project"))
+        }
+
+        output.trim() shouldContain "detected: cursor (2026.09.26-dd393fe)"
+    }
+
+    @Test
+    fun `a second cursor install is a no-op reporting already installed`(@TempDir root: Path) {
+        val (home, project) = fakeDirs(root)
+        val args = listOf("setup", "--agent", "cursor", "--scope", "project")
+        captureStdout { JdxCli().subcommands(commandFor(home, project)).parse(args) }
+
+        val output = captureStdout {
+            JdxCli().subcommands(commandFor(home, project)).parse(args)
+        }
+
+        output.trim() shouldContain "already installed"
+    }
+
+    @Test
+    fun `cursor system scope writes under the fake home`(@TempDir root: Path) {
+        val (home, project) = fakeDirs(root)
+        captureStdout {
+            JdxCli().subcommands(commandFor(home, project))
+                .parse(listOf("setup", "--agent", "cursor", "--scope", "system"))
+        }
+
+        SetupService.isInstalledAt(
+            home.resolve(".cursor/mcp.json"),
+            SetupService.Agent.CURSOR,
+        ) shouldBe true
+    }
+
+    @Test
+    fun `cursor check exits 1 when absent and 0 once installed`(@TempDir root: Path) {
+        val (home, project) = fakeDirs(root)
+        val check = listOf("setup", "--agent", "cursor", "--scope", "project", "--check")
+
+        val absent = shouldThrow<SetupExit> {
+            captureStdout { JdxCli().subcommands(commandFor(home, project)).parse(check) }
+        }
+        absent.code shouldBe 1
+
+        captureStdout {
+            JdxCli().subcommands(commandFor(home, project))
+                .parse(listOf("setup", "--agent", "cursor", "--scope", "project"))
+        }
+        captureStdout { JdxCli().subcommands(commandFor(home, project)).parse(check) }
+    }
+
+    @Test
+    fun `cursor remove uninstalls cleanly`(@TempDir root: Path) {
+        val (home, project) = fakeDirs(root)
+        captureStdout {
+            JdxCli().subcommands(commandFor(home, project))
+                .parse(listOf("setup", "--agent", "cursor", "--scope", "project"))
+        }
+
+        val output = captureStdout {
+            JdxCli().subcommands(commandFor(home, project))
+                .parse(listOf("setup", "--agent", "cursor", "--scope", "project", "--remove"))
+        }
+
+        output.trim() shouldContain "removed"
+        SetupService.isInstalledAt(
+            project.resolve(".cursor/mcp.json"),
+            SetupService.Agent.CURSOR,
+        ) shouldBe false
+    }
+
+    @Test
+    fun `cursor json carries the cursor payload in the envelope`(@TempDir root: Path) {
+        val (home, project) = fakeDirs(root)
+        val present = SetupService.CursorVersionInfo(
+            SetupService.CursorVersion.PRESENT,
+            "2026.09.26-dd393fe",
+            "cursor-agent",
+        )
+        val output = captureStdout {
+            JdxCli().subcommands(commandFor(home, project, cursorVersion = present))
+                .parse(listOf("setup", "--agent", "cursor", "--scope", "project", "--json"))
+        }
+
+        val parsed = Json.parseToJsonElement(output.trim()).jsonObject
+        parsed["command"]?.jsonPrimitive?.content shouldBe "setup"
+        parsed["ok"]?.jsonPrimitive?.content shouldBe "true"
+        val result = parsed["result"]!!.jsonObject
+        result["agent"]?.jsonPrimitive?.content shouldBe "cursor"
+        result["scope"]?.jsonPrimitive?.content shouldBe "project"
+        result["installed"]?.jsonPrimitive?.content shouldBe "true"
+        result["cursorVersion"]?.jsonPrimitive?.content shouldBe "present"
+        result["cursorRaw"]?.jsonPrimitive?.content shouldBe "2026.09.26-dd393fe"
     }
 
     @Test

@@ -112,6 +112,31 @@ class DoctorWindowsProbeTest {
     }
 
     @Test
+    fun `windows cursor-agent exe shim is detected in the setup row`() {
+        // Same PATHEXT-stem rule as the claude leg: the probe resolves
+        // cursor-agent.exe, so dispatch must match on the stem.
+        val runner = ProcessRunner { executable, _ ->
+            if (executable.fileName.toString().substringBefore(".") == "cursor-agent") {
+                ProcessOutcome(0, "2026.09.26-dd393fe", "")
+            } else {
+                ProcessOutcome(0, "26.0.2.1", "")
+            }
+        }
+        val service = DoctorService(
+            fakeEnvironment(
+                tempDir("jdx-doctor-win-"),
+                runner = runner,
+                cursorBinaries = listOf("cursor-agent"),
+                osName = "Windows 11",
+            ),
+        )
+
+        val setup = service.probe().checks.first { it.name == "setup" }
+
+        setup.detail shouldContain "cursor (2026.09.26-dd393fe)"
+    }
+
+    @Test
     fun `windows claude exe shim is detected in the setup row`() {
         // Reproduces the windows-leg failure: the probe resolves claude.exe
         // (first PATHEXT candidate), so dispatch must match on the stem.

@@ -482,7 +482,8 @@ class DoctorService(
     private fun setupCheck(): DoctorCheck {
         // Agent wiring (issue #33 family): reports whether the `jdx mcp`
         // entries are present in the OpenCode (v1/v2 entries), Claude Code
-        // (`.mcp.json` / `~/.claude.json`), Kilo Code, Codex CLI
+        // (`.mcp.json` / `~/.claude.json`), Cursor
+        // (`.cursor/mcp.json` / `~/.cursor/mcp.json`), Kilo Code, Codex CLI
         // (`.codex/config.toml` / `~/.codex/config.toml`), GitHub Copilot
         // CLI (`.mcp.json` / `~/.copilot/mcp-config.json`), and the single
         // global Cline file (both Cline scopes name it — Cline keeps no
@@ -497,6 +498,8 @@ class DoctorService(
         val opencodeSystem = SetupService.systemConfigPath(environment.userHome)
         val claudeProject = SetupService.claudeProjectConfigPath(environment.workingDir)
         val claudeSystem = SetupService.claudeSystemConfigPath(environment.userHome)
+        val cursorProject = SetupService.cursorProjectConfigPath(environment.workingDir)
+        val cursorSystem = SetupService.cursorSystemConfigPath(environment.userHome)
         val kiloProjectPath = SetupService.kiloProjectConfigPath(environment.workingDir)
         val kiloSystemPath = SetupService.kiloSystemConfigPath(environment.userHome)
         val clinePath = SetupService.clineConfigPath(environment.userHome)
@@ -543,6 +546,17 @@ class DoctorService(
         } catch (e: Exception) {
             "codex version unknown (${e.message ?: e.javaClass.simpleName})"
         }
+        val cursorDetected = try {
+            SetupService.describeCursorVersion(
+                SetupService.probeCursorVersion(
+                    environment.pathDirs,
+                    environment.processRunner,
+                    environment.osName,
+                ),
+            )
+        } catch (e: Exception) {
+            "cursor version unknown (${e.message ?: e.javaClass.simpleName})"
+        }
         val copilotDetected = try {
             SetupService.describeCopilotVersion(
                 SetupService.probeCopilotVersion(
@@ -571,6 +585,10 @@ class DoctorService(
             stateOf(claudeProject, SetupService.Agent.CLAUDE_CODE) ?: "no project config (${claudeProject.fileName})"
         val claudeSystemState =
             stateOf(claudeSystem, SetupService.Agent.CLAUDE_CODE) ?: "no system config ($claudeSystem)"
+        val cursorProjectState =
+            stateOf(cursorProject, SetupService.Agent.CURSOR) ?: "no project config (${cursorProject.fileName})"
+        val cursorSystemState =
+            stateOf(cursorSystem, SetupService.Agent.CURSOR) ?: "no system config ($cursorSystem)"
         val kiloProjectState = stateOf(kiloProjectPath, SetupService.Agent.KILO)
             ?: "no project config (${kiloProjectPath.fileName})"
         val kiloSystemState = stateOf(kiloSystemPath, SetupService.Agent.KILO)
@@ -593,6 +611,7 @@ class DoctorService(
         val status = if (
             opencodeProjectState.startsWith("installed") || opencodeSystemState.startsWith("installed") ||
             claudeProjectState.startsWith("installed") || claudeSystemState.startsWith("installed") ||
+            cursorProjectState.startsWith("installed") || cursorSystemState.startsWith("installed") ||
             kiloProjectState.startsWith("installed") || kiloSystemState.startsWith("installed") ||
             clineProjectState.startsWith("installed") || clineSystemState.startsWith("installed") ||
             codexProjectState.startsWith("installed") || codexSystemState.startsWith("installed") ||
@@ -605,6 +624,7 @@ class DoctorService(
         val hint = if (status == DoctorStatus.OK) "" else
             " — run `jdx setup --agent opencode --scope project`, " +
                 "`jdx setup --agent claude-code --scope project`, " +
+                "`jdx setup --agent cursor --scope project`, " +
                 "`jdx setup --agent kilo --scope project`, " +
                 "`jdx setup --agent cline --scope system`, " +
                 "`jdx setup --agent codex --scope project` or " +
@@ -616,6 +636,8 @@ class DoctorService(
                 "opencode system $opencodeSystemState; " +
                 "claude-code project $claudeProjectState ($claudeDetected); " +
                 "claude-code system $claudeSystemState; " +
+                "cursor project $cursorProjectState ($cursorDetected); " +
+                "cursor system $cursorSystemState; " +
                 "kilo project $kiloProjectState; kilo system $kiloSystemState; " +
                 "cline project $clineProjectState; cline system $clineSystemState; " +
                 "codex project $codexProjectState ($codexDetected); " +
