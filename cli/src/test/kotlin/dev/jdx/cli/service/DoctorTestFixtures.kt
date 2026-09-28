@@ -61,6 +61,10 @@ internal fun fakeEnvironment(
     codexBinaries: List<String> = emptyList(),
     /** `$CODEX_HOME` stand-in for the Codex CLI system config dir; null means unset. */
     codexHome: Path? = null,
+    /** GitHub Copilot CLI binaries to place on the fake PATH (`copilot`); empty means absent. */
+    copilotBinaries: List<String> = emptyList(),
+    /** `$COPILOT_HOME` stand-in for the Copilot CLI system config dir; null means unset. */
+    copilotHome: Path? = null,
     /** OS name for `.exe` tool probing; tests inject `"Windows 11"`. */
     osName: String = System.getProperty("os.name", ""),
     /**
@@ -95,6 +99,11 @@ internal fun fakeEnvironment(
         }
     }
     for (binary in codexBinaries) {
+        for (name in toolFileNames(binary, osName)) {
+            emptyExecutable(pathBin, name)
+        }
+    }
+    for (binary in copilotBinaries) {
         for (name in toolFileNames(binary, osName)) {
             emptyExecutable(pathBin, name)
         }
@@ -193,7 +202,8 @@ internal fun fakeEnvironment(
         envVars = mapOf(
             JdxPaths.ENV_CACHE_DIR to cacheRoot.toString(),
             JdxPaths.ENV_CONFIG_DIR to home.resolve(".config/jdx").toString(),
-        ) + (codexHome?.let { mapOf("CODEX_HOME" to it.toString()) } ?: emptyMap()),
+        ) + (codexHome?.let { mapOf("CODEX_HOME" to it.toString()) } ?: emptyMap()) +
+            (copilotHome?.let { mapOf("COPILOT_HOME" to it.toString()) } ?: emptyMap()),
         runtime = RuntimeInfo(
             version = "26.0.2.1-test",
             jrtReachable = jrtReachable,

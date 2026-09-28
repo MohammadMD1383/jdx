@@ -1696,6 +1696,429 @@ class SetupServiceTest {
         ) shouldBe "codex version unknown"
     }
 
+    // -- GitHub Copilot CLI backend (.mcp.json / ~/.copilot/mcp-config.json, mcpServers.jdx) --
+
+    private fun copilotProjectRequest(
+        check: Boolean = false,
+        remove: Boolean = false,
+    ): SetupService.SetupRequest = SetupService.SetupRequest(
+        agent = SetupService.Agent.COPILOT,
+        scope = SetupService.Scope.PROJECT,
+        check = check,
+        remove = remove,
+    )
+
+    private fun copilotSystemRequest(
+        check: Boolean = false,
+        remove: Boolean = false,
+    ): SetupService.SetupRequest = SetupService.SetupRequest(
+        agent = SetupService.Agent.COPILOT,
+        scope = SetupService.Scope.SYSTEM,
+        check = check,
+        remove = remove,
+    )
+
+    /** A service whose Copilot system dir is pinned under the fake home (never the ambient `$COPILOT_HOME`). */
+    private fun copilotService(dirs: FakeDirs): SetupService =
+        SetupService(dirs.home, dirs.project, null, dirs.home.resolve(".copilot"))
+
+    @Test
+    fun `parseAgent covers copilot spellings`() {
+        SetupService.parseAgent("copilot") shouldBe SetupService.Agent.COPILOT
+        SetupService.parseAgent("Copilot") shouldBe SetupService.Agent.COPILOT
+        SetupService.parseAgent("github-copilot") shouldBe SetupService.Agent.COPILOT
+        SetupService.parseAgent("GitHub Copilot") shouldBe SetupService.Agent.COPILOT
+        SetupService.parseAgent("copilot-cli") shouldBe SetupService.Agent.COPILOT
+        SetupService.parseAgent("COPILOT_CLI") shouldBe SetupService.Agent.COPILOT
+    }
+
+    @Test
+    fun `a fresh copilot project install creates dot mcp json with the jdx entry`(@TempDir root: Path) {
+        val dirs = fakeDirs(root)
+        val service = copilotService(dirs)
+
+        val outcome = service.run(copilotProjectRequest())
+
+        val installed = outcome as SetupService.SetupOutcome.Installed
+        installed.changed shouldBe true
+        installed.path shouldBe dirs.project.resolve(".mcp.json")
+        setupExitCode(outcome) shouldBe 0
+        val stored = Json.parseToJsonElement(Files.readString(installed.path)).jsonObject
+        val entry = stored["mcpServers"]?.jsonObject?.get("jdx")?.jsonObject
+        entry?.get("type")?.jsonPrimitive?.content shouldBe "local"
+        entry?.get("command")?.jsonPrimitive?.content shouldBe "jdx"
+        entry?.get("args").toString() shouldBe """["mcp"]"""
+        SetupService.isInstalledRoot(stored, SetupService.Agent.COPILOT) shouldBe true
+        SetupService.isInstalledAt(installed.path, SetupService.Agent.COPILOT) shouldBe true
+        // Cross-wiring is inherent, not a bug: Claude Code reads the same
+        // `.mcp.json` / `mcpServers.jdx` shape, so one install wires both
+        // readers (unlike Kilo vs OpenCode, which use different files).
+        SetupService.isInstalledAt(installed.path, SetupService.Agent.CLAUDE_CODE) shouldBe true
+    }
+
+    @Test
+    fun `copilot install preserves other servers and never clobbers`(@TempDir root: Path) {
+        val dirs = fakeDirs(root)
+        Files.writeString(
+            dirs.project.resolve(".mcp.json"),
+            """{"mcpServers":{"other":{"type":"local","command":"other","args":["x"]}}}""",
+        )
+        val service = copilotService(dirs)
+
+        val outcome = service.run(copilotProjectRequest()) as SetupService.SetupOutcome.Installed
+
+        outcome.changed shouldBe true
+        val stored = Json.parseToJsonElement(Files.readString(outcome.path)).jsonObject
+        stored["mcpServers"]?.jsonObject?.get("other")?.jsonObject
+            ?.get("command")?.jsonPrimitive?.content shouldBe "other"
+        SetupService.isInstalledRoot(stored, SetupService.Agent.COPILOT) shouldBe true
+    }
+
+    @Test
+    fun `a second copilot install is a byte-identical no-op`(@TempDir root: Path) {
+        val dirs = fakeDirs(root)
+        val service = copilotService(dirs)
+
+        val first = service.run(copilotProjectRequest()) as SetupService.SetupOutcome.Installed
+        val before = Files.readAllBytes(first.path)
+        val second = service.run(copilotProjectRequest())
+
+        (second as SetupService.SetupOutcome.Installed).changed shouldBe false
+        Files.readAllBytes(first.path) shouldBe before
+    }
+
+    @Test
+    fun `copilot check reports without writing`(@TempDir root: Path) {
+        val dirs = fakeDirs(root)
+        val service = copilotService(dirs)
+
+        val absent = service.run(copilotProjectRequest(check = true))
+        absent as SetupService.SetupOutcome.Checked
+        absent.installed shouldBe false
+        setupExitCode(absent) shouldBe 1
+        Files.exists(dirs.project.resolve(".mcp.json")) shouldBe false
+
+        service.run(copilotProjectRequest())
+        val present = service.run(copilotProjectRequest(check = true))
+        present as SetupService.SetupOutcome.Checked
+        present.installed shouldBe true
+        setupExitCode(present) shouldBe 0
+    }
+
+    @Test
+    fun `copilot remove deletes only the jdx entry and drops the emptied namespace`(@TempDir root: Path) {
+        val dirs = fakeDirs(root)
+        val service = copilotService(dirs)
+        service.run(copilotProjectRequest())
+
+        val outcome = service.run(copilotProjectRequest(remove = true)) as SetupService.SetupOutcome.Removed
+
+        outcome.changed shouldBe true
+        val stored = Json.parseToJsonElement(Files.readString(dirs.project.resolve(".mcp.json"))).jsonObject
+        stored.containsKey("mcpServers") shouldBe false
+        SetupService.isInstalledAt(dirs.project.resolve(".mcp.json"), SetupService.Agent.COPILOT) shouldBe false
+
+        val again = service.run(copilotProjectRequest(remove = true))
+        (again as SetupService.SetupOutcome.Removed).changed shouldBe false
+        setupExitCode(again) shouldBe 0
+    }
+
+    @Test
+    fun `copilot remove keeps other servers`(@TempDir root: Path) {
+        val dirs = fakeDirs(root)
+        Files.writeString(
+            dirs.project.resolve(".mcp.json"),
+            """{"mcpServers":{"other":{"type":"local","command":"other","args":["x"]}}}""",
+        )
+        val service = copilotService(dirs)
+        service.run(copilotProjectRequest())
+
+        val outcome = service.run(copilotProjectRequest(remove = true)) as SetupService.SetupOutcome.Removed
+
+        outcome.changed shouldBe true
+        val stored = Json.parseToJsonElement(Files.readString(dirs.project.resolve(".mcp.json"))).jsonObject
+        stored["mcpServers"]?.jsonObject?.containsKey("jdx") shouldBe false
+        stored["mcpServers"]?.jsonObject?.containsKey("other") shouldBe true
+    }
+
+    @Test
+    fun `copilot system scope honours the injected copilot home`(@TempDir root: Path) {
+        val dirs = fakeDirs(root)
+        val service = SetupService(dirs.home, dirs.project, null, root.resolve("custom-copilot-home"))
+
+        val outcome = service.run(copilotSystemRequest()) as SetupService.SetupOutcome.Installed
+
+        outcome.path shouldBe root.resolve("custom-copilot-home/mcp-config.json")
+        SetupService.isInstalledAt(outcome.path, SetupService.Agent.COPILOT) shouldBe true
+    }
+
+    @Test
+    fun `copilot system scope defaults under the user home`(@TempDir root: Path) {
+        val dirs = fakeDirs(root)
+
+        SetupService.copilotSystemConfigPath(dirs.home, dirs.home.resolve(".copilot")) shouldBe
+            dirs.home.resolve(".copilot/mcp-config.json")
+        SetupService.copilotSystemConfigPath(dirs.home) shouldBe
+            dirs.home.resolve(".copilot/mcp-config.json")
+    }
+
+    @Test
+    fun `copilot project scope walks up to the nearest mcp json`(@TempDir root: Path) {
+        val dirs = fakeDirs(root)
+        Files.writeString(dirs.project.resolve(".mcp.json"), "{}")
+        val nested = dirs.project.resolve("a/b").also { Files.createDirectories(it) }
+        val service = SetupService(dirs.home, nested, null, dirs.home.resolve(".copilot"))
+
+        val outcome = service.run(copilotProjectRequest())
+
+        val installed = outcome as SetupService.SetupOutcome.Installed
+        installed.path shouldBe dirs.project.resolve(".mcp.json")
+        Files.exists(nested.resolve(".mcp.json")) shouldBe false
+    }
+
+    @Test
+    fun `copilot project scope falls back to the shared github mcp json`(@TempDir root: Path) {
+        val dirs = fakeDirs(root)
+        Files.createDirectories(dirs.project.resolve(".github"))
+        Files.writeString(dirs.project.resolve(".github/mcp.json"), "{}")
+        val nested = dirs.project.resolve("a/b").also { Files.createDirectories(it) }
+        val service = SetupService(dirs.home, nested, null, dirs.home.resolve(".copilot"))
+
+        val outcome = service.run(copilotProjectRequest())
+
+        val installed = outcome as SetupService.SetupOutcome.Installed
+        installed.path shouldBe dirs.project.resolve(".github/mcp.json")
+        SetupService.isInstalledAt(installed.path, SetupService.Agent.COPILOT) shouldBe true
+    }
+
+    @Test
+    fun `copilot project scope prefers the local mcp json over the shared one`(@TempDir root: Path) {
+        val dirs = fakeDirs(root)
+        Files.writeString(dirs.project.resolve(".mcp.json"), "{}")
+        Files.createDirectories(dirs.project.resolve(".github"))
+        Files.writeString(dirs.project.resolve(".github/mcp.json"), "{}")
+        val service = copilotService(dirs)
+
+        val outcome = service.run(copilotProjectRequest()) as SetupService.SetupOutcome.Installed
+
+        outcome.path shouldBe dirs.project.resolve(".mcp.json")
+    }
+
+    @Test
+    fun `a copilot corrupt config exits 5 and names the file`(@TempDir root: Path) {
+        val dirs = fakeDirs(root)
+        Files.writeString(dirs.project.resolve(".mcp.json"), "{ not json,")
+        val service = copilotService(dirs)
+
+        val outcome = service.run(copilotProjectRequest())
+
+        outcome as SetupService.SetupOutcome.Corrupt
+        setupExitCode(outcome) shouldBe 5
+        outcome.path shouldBe dirs.project.resolve(".mcp.json")
+    }
+
+    @Test
+    fun `copilot entry probe accepts stdio type absolute paths and windows shims`(@TempDir root: Path) {
+        val stdio = buildJsonObject {
+            put("type", "stdio")
+            put("command", "jdx")
+            put("args", JsonArray(listOf(JsonPrimitive("mcp"))))
+        }
+        SetupService.isCopilotJdxEntry(stdio) shouldBe true
+        val absolute = buildJsonObject {
+            put("type", "local")
+            put("command", "/home/dev/.local/bin/jdx")
+            put("args", JsonArray(listOf(JsonPrimitive("mcp"))))
+        }
+        SetupService.isCopilotJdxEntry(absolute) shouldBe true
+        val shim = buildJsonObject {
+            put("type", "local")
+            put("command", "C:\\tools\\jdx.exe")
+            put("args", JsonArray(listOf(JsonPrimitive("mcp"))))
+        }
+        SetupService.isCopilotJdxEntry(shim) shouldBe true
+        val withTools = buildJsonObject {
+            put("type", "local")
+            put("command", "jdx")
+            put("args", JsonArray(listOf(JsonPrimitive("mcp"))))
+            put("tools", JsonArray(listOf(JsonPrimitive("*"))))
+        }
+        SetupService.isCopilotJdxEntry(withTools) shouldBe true
+        val missingType = buildJsonObject {
+            put("command", "jdx")
+            put("args", JsonArray(listOf(JsonPrimitive("mcp"))))
+        }
+        SetupService.isCopilotJdxEntry(missingType) shouldBe true
+    }
+
+    @Test
+    fun `copilot entry probe rejects foreign commands and remote types`(@TempDir root: Path) {
+        val dirs = fakeDirs(root)
+        Files.writeString(
+            dirs.project.resolve(".mcp.json"),
+            """{"mcpServers":{"jdx":{"type":"local","command":"other","args":["mcp"]}}}""",
+        )
+        SetupService.isInstalledAt(
+            dirs.project.resolve(".mcp.json"),
+            SetupService.Agent.COPILOT,
+        ) shouldBe false
+        val http = buildJsonObject {
+            put("type", "http")
+            put("url", "https://mcp.example.com/mcp")
+        }
+        SetupService.isCopilotJdxEntry(http) shouldBe false
+    }
+
+    @Test
+    fun `copilot probe sees the bare top-level format in project files`(@TempDir root: Path) {
+        val dirs = fakeDirs(root)
+        Files.writeString(
+            dirs.project.resolve(".mcp.json"),
+            """{"jdx":{"type":"local","command":"jdx","args":["mcp"]}}""",
+        )
+        val service = copilotService(dirs)
+
+        SetupService.isInstalledAt(
+            dirs.project.resolve(".mcp.json"),
+            SetupService.Agent.COPILOT,
+        ) shouldBe true
+        // A bare-format file is completed via the `mcpServers` wrapper (the
+        // only shape the user config accepts); the bare entry is preserved.
+        val completed = service.run(copilotProjectRequest()) as SetupService.SetupOutcome.Installed
+        completed.changed shouldBe true
+        val stored = Json.parseToJsonElement(Files.readString(completed.path)).jsonObject
+        stored["jdx"]?.jsonObject?.get("command")?.jsonPrimitive?.content shouldBe "jdx"
+        SetupService.isInstalledAt(completed.path, SetupService.Agent.COPILOT) shouldBe true
+
+        // Remove drops both the wrapper and the owned bare entry.
+        val removed = service.run(copilotProjectRequest(remove = true)) as SetupService.SetupOutcome.Removed
+        removed.changed shouldBe true
+        val pruned = Json.parseToJsonElement(Files.readString(removed.path)).jsonObject
+        pruned.containsKey("jdx") shouldBe false
+        pruned.containsKey("mcpServers") shouldBe false
+        SetupService.isInstalledAt(removed.path, SetupService.Agent.COPILOT) shouldBe false
+    }
+
+    @Test
+    fun `copilot remove leaves a foreign bare jdx entry untouched`(@TempDir root: Path) {
+        val dirs = fakeDirs(root)
+        Files.writeString(
+            dirs.project.resolve(".mcp.json"),
+            """{"jdx":{"type":"local","command":"other","args":["x"]},"other":{"a":1}}""",
+        )
+        val service = copilotService(dirs)
+        service.run(copilotProjectRequest())
+
+        val removed = service.run(copilotProjectRequest(remove = true)) as SetupService.SetupOutcome.Removed
+
+        removed.changed shouldBe true
+        val stored = Json.parseToJsonElement(Files.readString(removed.path)).jsonObject
+        stored["jdx"]?.jsonObject?.get("command")?.jsonPrimitive?.content shouldBe "other"
+        stored["other"]?.jsonObject?.get("a")?.jsonPrimitive?.content shouldBe "1"
+    }
+
+    @Test
+    fun `targetPath resolves the copilot scope paths`(@TempDir root: Path) {
+        val dirs = fakeDirs(root)
+        val service = copilotService(dirs)
+
+        service.targetPath(SetupService.Agent.COPILOT, SetupService.Scope.PROJECT) shouldBe
+            dirs.project.resolve(".mcp.json")
+        service.targetPath(SetupService.Agent.COPILOT, SetupService.Scope.SYSTEM) shouldBe
+            dirs.home.resolve(".copilot/mcp-config.json")
+    }
+
+    @Test
+    fun `copilot version probing names presence without guessing`(@TempDir root: Path) {
+        SetupService.probeCopilotVersion(
+            emptyList(),
+            ProcessRunner { _, _ -> ProcessOutcome(0, "x", "") },
+        ).version shouldBe SetupService.CopilotVersion.ABSENT
+    }
+
+    @Test
+    fun `copilot version probe classifies answers`(@TempDir root: Path) {
+        val bin = root.resolve("bin").also { Files.createDirectories(it) }
+        Files.createFile(bin.resolve("copilot")).toFile().setExecutable(true)
+
+        val present = SetupService.probeCopilotVersion(
+            listOf(bin),
+            ProcessRunner { _, _ -> ProcessOutcome(0, "GitHub Copilot CLI 1.0.88.", "") },
+        )
+        present.version shouldBe SetupService.CopilotVersion.PRESENT
+        present.raw shouldBe "GitHub Copilot CLI 1.0.88."
+        present.binary shouldBe "copilot"
+
+        val blank = SetupService.probeCopilotVersion(
+            listOf(bin),
+            ProcessRunner { _, _ -> ProcessOutcome(0, "  ", "") },
+        )
+        blank.version shouldBe SetupService.CopilotVersion.UNKNOWN
+
+        val failing = SetupService.probeCopilotVersion(
+            listOf(bin),
+            throwingRunner("boom"),
+        )
+        failing.version shouldBe SetupService.CopilotVersion.UNKNOWN
+    }
+
+    @Test
+    fun `copilot probe resolves the exe shim on windows`(@TempDir root: Path) {
+        val bin = root.resolve("bin").also { Files.createDirectories(it) }
+        Files.createFile(bin.resolve("copilot.exe")).toFile().setExecutable(true)
+        val runner = ProcessRunner { _, _ -> ProcessOutcome(0, "GitHub Copilot CLI 1.0.88.", "") }
+
+        val info = SetupService.probeCopilotVersion(listOf(bin), runner, osName = "Windows 11")
+
+        info.version shouldBe SetupService.CopilotVersion.PRESENT
+        info.raw shouldBe "GitHub Copilot CLI 1.0.88."
+        info.binary shouldBe "copilot"
+    }
+
+    @Test
+    fun `describeCopilotVersion covers every variant`() {
+        SetupService.describeCopilotVersion(
+            SetupService.CopilotVersionInfo(SetupService.CopilotVersion.PRESENT, "GitHub Copilot CLI 1.0.88.", "copilot"),
+        ) shouldBe "copilot (GitHub Copilot CLI 1.0.88.)"
+        SetupService.describeCopilotVersion(
+            SetupService.CopilotVersionInfo(SetupService.CopilotVersion.ABSENT),
+        ) shouldBe "copilot not found on PATH"
+        SetupService.describeCopilotVersion(
+            SetupService.CopilotVersionInfo(SetupService.CopilotVersion.UNKNOWN, "banana", "copilot"),
+        ) shouldBe "copilot version unknown (banana)"
+        SetupService.describeCopilotVersion(
+            SetupService.CopilotVersionInfo(SetupService.CopilotVersion.UNKNOWN),
+        ) shouldBe "copilot version unknown"
+    }
+
+    // -- generative family: the JSON merge never loses foreign keys --
+
+    @Test
+    fun `copilot install is a fixed point over generated configs`() = runBlocking<Unit> {
+        checkAll(200, Arb.string(0..40)) { noise ->
+            val clean = noise.replace(Regex("[\\p{Cntrl}\"\\\\]"), " ").trim()
+            val foreign = buildJsonObject {
+                put("unrelated-$clean-x", "kept")
+            }
+            val once = SetupService.mergeCopilotInstall(foreign)
+            SetupService.isCopilotInstalled(once) shouldBe true
+            SetupService.mergeCopilotInstall(once) shouldBe once
+            once["unrelated-$clean-x"]?.jsonPrimitive?.content shouldBe "kept"
+        }
+    }
+
+    @Test
+    fun `copilot remove restores generated foreign content`() = runBlocking<Unit> {
+        checkAll(200, Arb.string(0..40)) { noise ->
+            val clean = noise.replace(Regex("[\\p{Cntrl}\"\\\\]"), " ").trim()
+            val foreign = buildJsonObject {
+                put("unrelated-$clean-x", "kept")
+            }
+            val installed = SetupService.mergeCopilotInstall(foreign)
+            SetupService.mergeCopilotRemove(installed) shouldBe foreign
+        }
+    }
+
     // -- generative family: the TOML merge never loses foreign lines --
 
     @Test

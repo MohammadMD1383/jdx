@@ -1,0 +1,19 @@
+{
+  "mcpServers": {
+    "other": {
+      "type": "local",
+      "command": "other",
+      "args": [
+        "x"
+      ]
+    },
+    "jdx": {
+      "type": "local",
+      "command": "jdx",
+      "args": [
+        "mcp"
+      ]
+    }
+  }
+}
+

@@ -22,7 +22,7 @@ is the CLI surface, pinned by help/parity goldens.)
   `.exe`/`.cmd`/`.bat` (`osName` seam); the `appcds` row is stat-only
   (size + mtime vs the fat jar, WARN-only, never FAIL). `service/UpgradeService` — pure-Java `tar.gz` extraction first
   (external `tar` is the fallback), `.exe`-aware launcher check.
-  `service/SetupService` — agent wiring (`jdx setup --agent opencode|claude-code|kilo|cline|codex
+  `service/SetupService` — agent wiring (`jdx setup --agent opencode|claude-code|kilo|cline|codex|copilot
   --scope project|system`): JSONC-tolerant `mcp.jdx` (v1) + `mcp.servers.jdx`
   (v2, `enabled` → `disabled`) merge into `opencode.json[c]` (project walk-up,
   else `~/.config/opencode`); `mcpServers.jdx` (`{"command": "jdx", "args":
@@ -42,17 +42,25 @@ is the CLI surface, pinned by help/parity goldens.)
   (`command = "jdx"`, `args = ["mcp"]`, the `codex mcp add jdx -- jdx mcp`
   equivalent, verified against `codex-cli 0.157.1`) merges line-based into
   `.codex/config.toml` (project walk-up) or `$CODEX_HOME/config.toml`
-  (else `~/.codex/config.toml`); idempotent no-op re-runs, `--check`/`--remove`;
+  (else `~/.codex/config.toml`); GitHub Copilot CLI `mcpServers.jdx`
+  (`{"type": "local", "command": "jdx", "args": ["mcp"]}`, the
+  `copilot mcp add jdx -- jdx mcp` equivalent, verified against
+  `GitHub Copilot CLI 1.0.88`) merges into `.mcp.json` (project walk-up,
+  `.github/mcp.json` as fallback) or `$COPILOT_HOME/mcp-config.json`
+  (else `~/.copilot/mcp-config.json`; `type: stdio` probes true, installs
+  write `local`); idempotent no-op re-runs, `--check`/`--remove`;
   `parseOpencodeVersion`/`probeOpencodeVersion` classify the installed OpenCode
   line (`opencode` then legacy `opencode2`; v1 = `1.x`, v2 =
   `0.0.0-next/beta/dev-*` or `2.x`, never a guess);
   `probeClaudeVersion`/`describeClaudeVersion` report `claude --version`
   presence; `probeCodexVersion`/`describeCodexVersion` report `codex --version`
-  presence (`isJdxCommand` accepts Windows shims `jdx.exe`/`.cmd`/`.bat` and
+  presence; `probeCopilotVersion`/`describeCopilotVersion` report
+  `copilot --version` presence (`isJdxCommand` accepts Windows shims `jdx.exe`/`.cmd`/`.bat` and
   backslash paths on every host, so `--check`/`doctor` stay true on Windows);
   `doctor` reuses all probes for the setup row.
   Tests pin userHome/projectDir to temp dirs, never the real home
-  (Codex tests additionally pin `$CODEX_HOME` via the `codexHome` ctor arg).
+  (Codex tests additionally pin `$CODEX_HOME` via the `codexHome` ctor arg,
+  Copilot tests pin `$COPILOT_HOME` via the `copilotHome` ctor arg).
 - `parity/AdapterParityTest` — the §9 contract: CLI `--json` == MCP == HTTP bytes
   over all 18 read commands + failure branches + a hostile-property case.
 - `commands/DiffCommand` is the one query with no `RootsSpec`, no `--jars`/`-w`/`--no-jdk`

@@ -483,7 +483,8 @@ class DoctorService(
         // Agent wiring (issue #33 family): reports whether the `jdx mcp`
         // entries are present in the OpenCode (v1/v2 entries), Claude Code
         // (`.mcp.json` / `~/.claude.json`), Kilo Code, Codex CLI
-        // (`.codex/config.toml` / `~/.codex/config.toml`), and the single
+        // (`.codex/config.toml` / `~/.codex/config.toml`), GitHub Copilot
+        // CLI (`.mcp.json` / `~/.copilot/mcp-config.json`), and the single
         // global Cline file (both Cline scopes name it — Cline keeps no
         // project-level MCP file, verified against the real install), plus
         // which lines are installed for use (OpenCode v1 vs v2 beta — the
@@ -504,6 +505,11 @@ class DoctorService(
             ?.let { Paths.get(it) }
         val codexProject = SetupService.codexProjectConfigPath(environment.workingDir)
         val codexSystem = SetupService.codexSystemConfigPath(environment.userHome, codexHome)
+        val copilotHome = environment.envVars["COPILOT_HOME"]
+            ?.takeIf { it.isNotBlank() }
+            ?.let { Paths.get(it) }
+        val copilotProject = SetupService.copilotProjectConfigPath(environment.workingDir)
+        val copilotSystem = SetupService.copilotSystemConfigPath(environment.userHome, copilotHome)
         val opencodeDetected = try {
             SetupService.describeVersion(
                 SetupService.probeOpencodeVersion(
@@ -537,6 +543,17 @@ class DoctorService(
         } catch (e: Exception) {
             "codex version unknown (${e.message ?: e.javaClass.simpleName})"
         }
+        val copilotDetected = try {
+            SetupService.describeCopilotVersion(
+                SetupService.probeCopilotVersion(
+                    environment.pathDirs,
+                    environment.processRunner,
+                    environment.osName,
+                ),
+            )
+        } catch (e: Exception) {
+            "copilot version unknown (${e.message ?: e.javaClass.simpleName})"
+        }
         fun stateOf(path: Path, agent: SetupService.Agent): String? = try {
             when {
                 !Files.exists(path) -> null
@@ -569,12 +586,17 @@ class DoctorService(
             ?: "no project config (${codexProject.fileName})"
         val codexSystemState = stateOf(codexSystem, SetupService.Agent.CODEX)
             ?: "no system config ($codexSystem)"
+        val copilotProjectState = stateOf(copilotProject, SetupService.Agent.COPILOT)
+            ?: "no project config (${copilotProject.fileName})"
+        val copilotSystemState = stateOf(copilotSystem, SetupService.Agent.COPILOT)
+            ?: "no system config ($copilotSystem)"
         val status = if (
             opencodeProjectState.startsWith("installed") || opencodeSystemState.startsWith("installed") ||
             claudeProjectState.startsWith("installed") || claudeSystemState.startsWith("installed") ||
             kiloProjectState.startsWith("installed") || kiloSystemState.startsWith("installed") ||
             clineProjectState.startsWith("installed") || clineSystemState.startsWith("installed") ||
-            codexProjectState.startsWith("installed") || codexSystemState.startsWith("installed")
+            codexProjectState.startsWith("installed") || codexSystemState.startsWith("installed") ||
+            copilotProjectState.startsWith("installed") || copilotSystemState.startsWith("installed")
         ) {
             DoctorStatus.OK
         } else {
@@ -584,8 +606,9 @@ class DoctorService(
             " — run `jdx setup --agent opencode --scope project`, " +
                 "`jdx setup --agent claude-code --scope project`, " +
                 "`jdx setup --agent kilo --scope project`, " +
-                "`jdx setup --agent cline --scope system` or " +
-                "`jdx setup --agent codex --scope project`"
+                "`jdx setup --agent cline --scope system`, " +
+                "`jdx setup --agent codex --scope project` or " +
+                "`jdx setup --agent copilot --scope project`"
         return check(
             "setup",
             status,
@@ -596,7 +619,9 @@ class DoctorService(
                 "kilo project $kiloProjectState; kilo system $kiloSystemState; " +
                 "cline project $clineProjectState; cline system $clineSystemState; " +
                 "codex project $codexProjectState ($codexDetected); " +
-                "codex system $codexSystemState$hint",
+                "codex system $codexSystemState; " +
+                "copilot project $copilotProjectState ($copilotDetected); " +
+                "copilot system $copilotSystemState$hint",
         )
     }
 

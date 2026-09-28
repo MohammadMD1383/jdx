@@ -33,10 +33,13 @@ import kotlin.system.exitProcess
  * install); Codex CLI gets the `[mcp_servers.jdx]` table
  * (`command = "jdx"`, `args = ["mcp"]`, the `codex mcp add jdx -- jdx mcp`
  * equivalent) in `.codex/config.toml` (project, trusted checkouts) or
- * `~/.codex/config.toml` (system, `$CODEX_HOME` honoured). The detected line
- * is reported, never assumed. A thin adapter (D-004): flag parsing,
- * rendering, and exit codes only — [SetupService] owns the merge and the
- * version classification.
+ * `~/.codex/config.toml` (system, `$CODEX_HOME` honoured); GitHub Copilot
+ * CLI gets the `mcpServers.jdx` (`{"type": "local", "command": "jdx",
+ * "args": ["mcp"]}`, the `copilot mcp add jdx -- jdx mcp` equivalent)
+ * entry in `.mcp.json` (project) or `~/.copilot/mcp-config.json` (system,
+ * `$COPILOT_HOME` honoured). The detected line is reported, never assumed.
+ * A thin adapter (D-004): flag parsing, rendering, and exit
+ * codes only — [SetupService] owns the merge and the version classification.
  */
 class SetupCommand(
     private val serviceFactory: (userHome: java.nio.file.Path, projectDir: java.nio.file.Path) -> SetupService =
@@ -45,11 +48,12 @@ class SetupCommand(
     private val versionProbe: () -> SetupService.OpencodeVersionInfo = ::systemOpencodeVersion,
     private val claudeVersionProbe: () -> SetupService.ClaudeVersionInfo = ::systemClaudeVersion,
     private val codexVersionProbe: () -> SetupService.CodexVersionInfo = ::systemCodexVersion,
+    private val copilotVersionProbe: () -> SetupService.CopilotVersionInfo = ::systemCopilotVersion,
 ) : CoreCliktCommand(name = "setup") {
     override fun help(context: Context): String =
         "Wire jdx into an AI agent: write the MCP server entries that launch `jdx mcp` " +
             "into the agent config (project checkout or user-global). " +
-            "--agent opencode|claude-code|kilo|cline|codex --scope project|system. " +
+            "--agent opencode|claude-code|kilo|cline|codex|copilot --scope project|system. " +
             "OpenCode writes both the v1 (mcp.jdx) and v2 (mcp.servers.jdx) entries so either " +
             "OpenCode line picks it up (v1 support is deprecated, slated for removal); " +
             "Claude Code writes the mcpServers.jdx entry into .mcp.json (project) or " +
@@ -58,14 +62,16 @@ class SetupCommand(
             "Cline writes the mcpServers.jdx transport entry into the single global " +
             "cline_mcp_settings.json for either scope (Cline keeps no project-level MCP file). " +
             "Codex CLI gets the [mcp_servers.jdx] table in .codex/config.toml (project) or " +
-            "~/.codex/config.toml (system, \$CODEX_HOME honoured). " +
+            "~/.codex/config.toml (system, \$CODEX_HOME honoured); " +
+            "GitHub Copilot CLI gets the mcpServers.jdx entry in .mcp.json (project) or " +
+            "~/.copilot/mcp-config.json (system, \$COPILOT_HOME honoured). " +
             "--check reports without writing; --remove uninstalls cleanly. " +
             "Merges (never clobbers unrelated entries); re-runs are no-ops. " +
             "Exits 0 installed/removed/present, 1 checked-absent, 3 bad usage, 5 unreadable config."
 
     private val agent by option(
         "--agent",
-        help = "Agent to wire: opencode, claude-code (claude is accepted as an alias), kilo (Kilo Code, an OpenCode fork), cline (Cline), or codex (Codex CLI).",
+        help = "Agent to wire: opencode, claude-code (claude is accepted as an alias), kilo (Kilo Code, an OpenCode fork), cline (Cline), codex (Codex CLI), or copilot (GitHub Copilot CLI).",
     )
 
     private val scope by option(
@@ -75,7 +81,8 @@ class SetupCommand(
             "Claude Code targets .mcp.json (project) or ~/.claude.json (system); " +
             "Kilo Code targets kilo.json[c] (~/.config/kilo, project prefers .kilo/); " +
             "Cline targets ~/.cline/data/settings/cline_mcp_settings.json for both scopes (single global file). " +
-            "Codex CLI targets .codex/config.toml (project) or ~/.codex/config.toml (system, \$CODEX_HOME honoured).",
+            "Codex CLI targets .codex/config.toml (project) or ~/.codex/config.toml (system, \$CODEX_HOME honoured); " +
+            "GitHub Copilot CLI targets .mcp.json (project) or ~/.copilot/mcp-config.json (system, \$COPILOT_HOME honoured).",
     )
 
     private val checkOnly by option(
@@ -97,7 +104,7 @@ class SetupCommand(
         val parsedAgent = SetupService.parseAgent(agent)
         if (parsedAgent == null) {
             finish(
-                "usage error: unsupported --agent '${agent}' (only --agent opencode|claude-code|kilo|cline|codex)",
+                "usage error: unsupported --agent '${agent}' (only --agent opencode|claude-code|kilo|cline|codex|copilot)",
                 SetupPayload(agent = agent, message = "unsupported agent '${agent}'"),
                 exitCode = 3,
             )
@@ -143,6 +150,7 @@ class SetupCommand(
         val opencodeVersion = if (parsedAgent == SetupService.Agent.OPENCODE) versionProbe() else null
         val claudeVersion = if (parsedAgent == SetupService.Agent.CLAUDE_CODE) claudeVersionProbe() else null
         val codexVersion = if (parsedAgent == SetupService.Agent.CODEX) codexVersionProbe() else null
+        val copilotVersion = if (parsedAgent == SetupService.Agent.COPILOT) copilotVersionProbe() else null
         val detected = when (parsedAgent) {
             SetupService.Agent.OPENCODE ->
                 SetupService.describeVersion(requireNotNull(opencodeVersion))
@@ -150,6 +158,8 @@ class SetupCommand(
                 SetupService.describeClaudeVersion(requireNotNull(claudeVersion))
             SetupService.Agent.CODEX ->
                 SetupService.describeCodexVersion(requireNotNull(codexVersion))
+            SetupService.Agent.COPILOT ->
+                SetupService.describeCopilotVersion(requireNotNull(copilotVersion))
             SetupService.Agent.KILO -> ""
             SetupService.Agent.CLINE -> ""
         }
@@ -175,6 +185,8 @@ class SetupCommand(
             claudeRaw = claudeVersion?.raw,
             codexVersion = codexVersion?.version?.cliName,
             codexRaw = codexVersion?.raw,
+            copilotVersion = copilotVersion?.version?.cliName,
+            copilotRaw = copilotVersion?.raw,
             message = setupMessage(outcome, parsedAgent),
         )
         finish(setupText(outcome, parsedAgent, parsedScope, detected), payload, setupExitCode(outcome))
@@ -209,6 +221,10 @@ private data class SetupPayload(
     val codexVersion: String? = null,
     /** Trimmed `codex --version` output (null when the binary never answered). */
     val codexRaw: String? = null,
+    /** Detected GitHub Copilot CLI presence (`present`, `absent`, `unknown`). */
+    val copilotVersion: String? = null,
+    /** Trimmed `copilot --version` output (null when the binary never answered). */
+    val copilotRaw: String? = null,
     val message: String,
 )
 
@@ -242,6 +258,15 @@ private fun systemCodexVersion(): SetupService.CodexVersionInfo {
     return SetupService.probeCodexVersion(pathDirs, RealProcessRunner)
 }
 
+/** Best-effort host probe for display only: PATH `copilot` presence, never throws. */
+private fun systemCopilotVersion(): SetupService.CopilotVersionInfo {
+    val pathDirs = System.getenv("PATH")
+        ?.split(File.pathSeparator)
+        ?.filter { it.isNotEmpty() }
+        ?.map { Paths.get(it) }
+        ?: emptyList()
+    return SetupService.probeCopilotVersion(pathDirs, RealProcessRunner)
+}
 private fun SetupPayload.toJson(ok: Boolean): String =
     envelopeJson("setup", ok, JdxJson.encodeToJsonElement(this))
 
@@ -271,6 +296,9 @@ private fun setupMessage(outcome: SetupService.SetupOutcome, agent: SetupService
             SetupService.Agent.CODEX ->
                 if (outcome.changed) "installed (mcp_servers jdx mcp entry written to ${outcome.path.fileName})"
                 else "already installed (${outcome.path.fileName}, mcp_servers entry)"
+            SetupService.Agent.COPILOT ->
+                if (outcome.changed) "installed (mcpServers jdx mcp entry written to ${outcome.path.fileName})"
+                else "already installed (${outcome.path.fileName}, mcpServers entry)"
         }
     is SetupService.SetupOutcome.Checked ->
         if (outcome.installed) "installed (${outcome.path.fileName})" else "not installed (${outcome.path.fileName})"
@@ -304,6 +332,7 @@ private fun setupText(
         SetupService.Agent.OPENCODE -> "$name $where setup installed (v1+v2 entries)"
         SetupService.Agent.CLAUDE_CODE -> "$name $where setup installed (mcpServers entry)"
         SetupService.Agent.CODEX -> "$name $where setup installed (mcp_servers entry)"
+        SetupService.Agent.COPILOT -> "$name $where setup installed (mcpServers entry)"
         SetupService.Agent.KILO -> "$name $where setup installed"
         SetupService.Agent.CLINE -> "$name $where setup installed (mcpServers transport entry)"
     }
