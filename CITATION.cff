@@ -1,0 +1,23 @@
+cff-version: 1.2.0
+message: "If you use jdx in research or writing, please cite it as below."
+type: software
+title: "jdx: an IDE for AI agents, as a command line tool"
+abstract: >-
+  jdx answers the questions an IDE answers for a human (members, method bodies,
+  usages, type hierarchies, call graphs, public-API diffs) for AI coding agents,
+  from JVM jars, sources jars, class and source directories, Maven coordinates
+  and the JDK. It ships as a CLI and a Model Context Protocol (MCP) server.
+authors:
+  - alias: MohammadMD1383
+repository-code: "https://github.com/MohammadMD1383/jdx"
+url: "https://mohammadmd1383.github.io/jdx/"
+license: Apache-2.0
+keywords:
+  - AI coding agents
+  - Model Context Protocol
+  - Java
+  - Kotlin
+  - JVM
+  - bytecode
+  - code navigation
+  - developer tools

@@ -8,6 +8,8 @@
 [![License](https://img.shields.io/github/license/MohammadMD1383/jdx)](LICENSE)
 [![M8ven Score](https://m8ven.ai/badge/mcp/mohammadmd1383/jdx)](https://m8ven.ai/mcp/mohammadmd1383/jdx)
 
+**Website & docs: [mohammadmd1383.github.io/jdx](https://mohammadmd1383.github.io/jdx/)**
+
 ## Try it in 30 seconds
 
 ```bash
@@ -64,7 +66,7 @@ reading a reconstruction (pass `--engine javap` for raw opcodes instead).
 > **Proof, not promises.** One real task — *list Gson's API, then show only
 > `toJson(Object)`* — measured on gson-2.14.0:
 >
-> | | calls | bytes in context (~tokens) |
+> | Approach | calls | bytes in context (~tokens) |
 > |---|---|---|
 > | `unzip` + `javap` + `grep` + `sed` | 5 | ~17.5 KB (~4.4k) — and `head -200` misses the method (line 542 of 1265) |
 > | `jdx members` + `jdx body` | **2** | **~4.6 KB (~1.2k)** — exact method, 267 bytes (~67 tokens) |
@@ -188,6 +190,8 @@ yet); call hierarchy is exact name+descriptor matching, not override-aware. Full
 
 | | |
 |---|---|
+| [Website](https://mohammadmd1383.github.io/jdx/) | Guides, generated command and MCP reference, integrations, FAQ |
+| [`docs/guide/`](docs/guide/introduction.md) | User guides: install, quickstart, AI agents, classpath, reading and navigating code, API diff |
 | [`docs/COMMANDS.md`](docs/COMMANDS.md) | Full command reference (flags, exit codes, symbol grammar) |
 | [`AGENTS.md`](AGENTS.md) (+ per-module `AGENTS.md`) | Contributor notes: architecture rules, gotchas, build/test |
 | [`docs/PROPOSAL.md`](docs/PROPOSAL.md) | Full design specification (Appendix B is the flag reference) |

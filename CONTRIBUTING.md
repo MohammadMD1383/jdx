@@ -109,6 +109,8 @@ source of half-done work.
 - [ ] Row in the docs/COMMANDS.md command table
 - [ ] Flag documented in `docs/PROPOSAL.md` Appendix B
 - [ ] GitHub Issue filed/updated if behaviour or limitations changed
+- [ ] `./gradlew :site:buildSite` green — the website runs every `console exec` doc example and
+      checks documented flags against `--help`; update `docs/guide/` if users need to know
 
 ---
 
