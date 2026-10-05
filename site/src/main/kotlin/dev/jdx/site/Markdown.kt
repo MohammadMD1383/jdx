@@ -101,6 +101,26 @@ object Markdown {
         return result
     }
 
+    /**
+     * Shifts every heading so the shallowest one lands on [topLevel], keeping relative depth
+     * (capped at H6). Embedding foreign Markdown (release notes) under a page heading must not
+     * skip levels — screen readers navigate by them, and Lighthouse fails `heading-order`.
+     */
+    fun nestHeadings(document: Document, topLevel: Int): Document {
+        val levels = mutableListOf<Int>()
+        document.accept(object : AbstractVisitor() {
+            override fun visit(heading: Heading) { levels += heading.level }
+        })
+        val shift = topLevel - (levels.minOrNull() ?: return document)
+        document.accept(object : AbstractVisitor() {
+            override fun visit(heading: Heading) {
+                heading.level = (heading.level + shift).coerceIn(1, 6)
+                visitChildren(heading)
+            }
+        })
+        return document
+    }
+
     /** Rewrites every link and image destination through [rewrite] (null = leave as is). */
     fun rewriteLinks(document: Node, rewrite: (destination: String, isImage: Boolean) -> String?) {
         document.accept(object : AbstractVisitor() {

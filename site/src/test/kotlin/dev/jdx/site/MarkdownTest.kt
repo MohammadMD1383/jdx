@@ -63,6 +63,14 @@ class MarkdownTest {
     }
 
     @Test
+    fun `nested headings start at the requested level and never skip one`() {
+        val document = Markdown.nestHeadings(Markdown.parse("## Release\n\n### Install\n\n#### Detail\n"), topLevel = 3)
+        Markdown.headings(document).map { it.level } shouldBe listOf(3, 4, 5)
+        val deep = Markdown.nestHeadings(Markdown.parse("# A\n\n###### B\n"), topLevel = 3)
+        Markdown.headings(deep).map { it.level } shouldBe listOf(3, 6)
+    }
+
+    @Test
     fun `console blocks split prompt, command and output`() {
         val html = Html.codeBlock("$ jdx show Foo\nclass Foo\n[exit 2]", "console", executed = true)
         html shouldContain "<span class=\"cmd\">jdx show Foo</span>"

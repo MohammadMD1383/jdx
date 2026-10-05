@@ -381,7 +381,8 @@ class ProductPages(
             html.append("<h2 id=\"$id\"><a href=\"${Html.attr(release.url)}\">${Html.text(release.name)}</a>")
             html.append("<a class=\"anchor\" href=\"#$id\" aria-label=\"Link to this section\">#</a></h2>")
             html.append("<p class=\"release-date\"><time datetime=\"${Html.attr(release.date)}\">$date</time></p>")
-            val body = demoteHeadings(Markdown.parse(release.body))
+            // Notes sit under this release's H2, so their top heading becomes H3 (no skipped levels).
+            val body = Markdown.nestHeadings(Markdown.parse(release.body), topLevel = 3)
             // Release notes are written on GitHub, not reviewed like repo docs: raw HTML is escaped,
             // and heading ids are prefixed because every release repeats "What's Changed".
             html.append(Markdown.renderHtml(body, escapeHtml = true, idPrefix = "$id-") { null })
@@ -398,16 +399,6 @@ class ProductPages(
             markdown = markdown.toString(),
             lastModified = releases.firstOrNull()?.date ?: latestTag?.let { project.tagDate(it) },
         )
-    }
-
-    private fun demoteHeadings(document: Document): Document {
-        document.accept(object : org.commonmark.node.AbstractVisitor() {
-            override fun visit(heading: Heading) {
-                heading.level = (heading.level + 2).coerceAtMost(6)
-                visitChildren(heading)
-            }
-        })
-        return document
     }
 
     fun docsIndex(sectionPages: Map<SiteManifest.Section, List<Page>>, commandPages: List<Page>, extraReference: List<Page>): Page {
