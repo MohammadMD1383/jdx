@@ -106,7 +106,9 @@ jdx/
 ├── <module>/AGENTS.md         per-module notes — read only the one(s) you touch
 ├── docs/
 │   ├── PROPOSAL.md            full design document (the spec)
-│   └── TESTING.md             testing strategy — read before writing tests
+│   ├── TESTING.md             testing strategy — read before writing tests
+│   ├── guide/                 user guides (website "Getting started" + "Guides" sections)
+│   └── FAQ.md                 user FAQ (website /faq/, FAQPage structured data)
 ├── gradle/libs.versions.toml  version catalog (single source of dependency versions)
 ├── core/                      model, symbol refs, resolution, rendering. Pure Kotlin, no IO.
 ├── index/                     ASM readers, Kotlin metadata, SQLite store, indexer, JdxService
@@ -116,7 +118,8 @@ jdx/
 ├── mcp/                       MCP stdio server
 ├── server/                    HTTP/JSON API + daemon
 ├── app/                       fat-jar assembly + `jdx` launcher script
-└── testfixtures/              nasty Java/Kotlin classes → binary jar + -sources.jar
+├── testfixtures/              nasty Java/Kotlin classes → binary jar + -sources.jar
+└── site/                      GitHub Pages website generator (build-time only; site/AGENTS.md)
 ```
 
 **Dependency rule:** `core` depends on nothing project-local. Everything depends on `core`.
@@ -205,7 +208,8 @@ answer. Nothing else may bend this table.
   thin adapter in `cli`, `--help` text, text renderer, JSON renderer, exit codes,
   truncation, golden tests for both renderers, at least one *generative* test family,
   docs/COMMANDS.md table row, Appendix B flag entry, GitHub Issue filed/updated if behaviour or
-  limitations changed.
+  limitations changed, and `./gradlew :site:buildSite` green (the website executes doc
+  examples and checks every documented flag against `--help` — see `site/AGENTS.md`).
 - **Report honestly.** Failing tests get pasted, not summarised away. Documented
   half-finished work is useful; half-finished work reported as done is a trap.
 - **Write for a stranger.** Explicit over clever, named over inlined, invariants stated
@@ -221,6 +225,10 @@ answer. Nothing else may bend this table.
 - GitHub Issues — known limitations + phase-2 backlog (the roadmap).
 - docs/COMMANDS.md is the user-facing catalogue; every shipped flag must appear in
   `jdx <cmd> --help`, the docs/COMMANDS.md table, and Appendix B.
+- **Website** ([mohammadmd1383.github.io/jdx](https://mohammadmd1383.github.io/jdx/)) is
+  generated from README.md, docs/ and the built binary by `site/` and deployed by
+  `.github/workflows/pages.yml` on every push to `main` and every release. Never edit it by
+  hand; change the source. Hierarchy and URLs live in `site/.../SiteManifest.kt`.
 
 ## 10. Dogfood rule — built by agents, for agents
 
