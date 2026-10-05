@@ -19,10 +19,10 @@ object OgImage {
 
     private val background = Color(0x0c, 0x0e, 0x13)
     private val surface = Color(0x15, 0x19, 0x22)
-    private val accent = Color(0xff, 0x8a, 0x3d)
+    private val accent = Color(0x4a, 0xde, 0x80)
     private val ink = Color(0xf2, 0xf0, 0xea)
     private val muted = Color(0x9a, 0xa3, 0xb5)
-    private val teal = Color(0x5e, 0xe0, 0xc8)
+    private val teal = Color(0x86, 0xef, 0xac)
 
     fun render(title: String, subtitle: String, footer: String, badge: String?): ByteArray {
         System.setProperty("java.awt.headless", "true")
@@ -91,7 +91,7 @@ object OgImage {
         try {
             g.setRenderingHint(RenderingHints.KEY_ANTIALIASING, RenderingHints.VALUE_ANTIALIAS_ON)
             val unit = size / 32.0
-            g.color = Color(0xe8, 0x59, 0x0c)
+            g.color = Color(0x16, 0xa3, 0x4a)
             g.fillRect(0, 0, size, size)
             g.color = Color.WHITE
             g.stroke = BasicStroke((2.6 * unit).toFloat(), BasicStroke.CAP_ROUND, BasicStroke.JOIN_ROUND)
