@@ -8,8 +8,12 @@ name: pages
 #   - a `jdx <cmd> --flag` mentioned in the docs is not in the real `--help`,
 #   - an internal link or #anchor is broken, a doc is missing from the site manifest,
 #   - a README section the landing page quotes was renamed,
-# and the Lighthouse step fails when performance / accessibility / SEO / agent-readiness
-# budgets regress. So docs cannot go out of sync with `main` silently.
+# So docs cannot go out of sync with `main` silently. A failed build never breaks the live
+# site: nothing deploys, and the last good version stays up.
+#
+# Lighthouse (performance / accessibility / SEO / agent readiness) is WARN-ONLY: misses show
+# as warning annotations and a job-summary table, and never block a deploy — not even when
+# Lighthouse itself crashes (owner decision on PR #89).
 #
 # Triggers that redeploy: push to main (docs and CLI changes), a finished `release` workflow
 # (new version number, changelog — a release created by GITHUB_TOKEN cannot trigger
@@ -82,7 +86,8 @@ jobs:
         with:
           node-version: "22"
 
-      - name: Lighthouse budgets (performance, accessibility, SEO, agent readiness)
+      - name: Lighthouse report (warn only — never blocks deploy)
+        continue-on-error: true
         env:
           SITE_BASE_URL: ${{ vars.SITE_BASE_URL || 'https://mohammadmd1383.github.io/jdx/' }}
         run: |

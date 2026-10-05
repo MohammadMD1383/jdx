@@ -18,7 +18,12 @@ The site is **generated from the repository and the freshly built `jdx`**, and t
 | README marketing section renamed | `Markdown.extractSection` (landing quotes README by heading) |
 | new `jdx setup --agent` value | `ProductPages.AGENT_NAMES` must name it, or the build fails |
 | machine paths in output | `SiteBuilder` path-leak check |
-| perf / a11y / SEO / agent-readiness regressions | `site/lighthouse/check.mjs` in `pages.yml` |
+| perf / a11y / SEO / agent-readiness regressions | `site/lighthouse/check.mjs` in `pages.yml` — **warn only** |
+
+Everything above the last row **blocks** (a failing build deploys nothing; the last good site
+stays live). Lighthouse **never blocks**: misses are warning annotations plus a job-summary
+table, by owner decision — quality scores must not stand between a fix and a working site.
+Run it locally with `--strict` to make misses fail.
 
 ## Commands
 
