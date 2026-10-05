@@ -29,6 +29,7 @@ local.properties
 # Logs and scratch
 *.log
 scratch/
+posting-checklist.md
 
 # Website generator (site/): Lighthouse gate dependencies and reports
 site/lighthouse/node_modules/
