@@ -13,6 +13,7 @@ import io.kotest.property.arbitrary.of
 import io.kotest.property.checkAll
 import java.nio.file.Path
 import kotlinx.coroutines.runBlocking
+import org.junit.jupiter.api.Tag
 import org.junit.jupiter.api.Test
 
 /**
@@ -25,6 +26,7 @@ import org.junit.jupiter.api.Test
  * agrees with the reference set. All over [FakeIndexStore] and invented
  * `/fake` paths: no SQLite, no disk, 1,000 cases each.
  */
+@Tag("integration")
 class CacheServicePropertyTest {
 
     private data class GenArtifact(val path: String, val classes: Int, val jrt: Boolean)

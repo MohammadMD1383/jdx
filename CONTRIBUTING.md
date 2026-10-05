@@ -151,7 +151,7 @@ strategy; this is the two-minute version.
 ./gradlew test                       # tier 1 — the TDD loop (<30s)
 ./gradlew check                      # tier 2 — pre-commit (<3min)
 ./gradlew soak                       # tier 3 — real jar corpus (tagged, needs local jars)
-./gradlew bench mutationTest         # tier 4 — performance budgets and mutation score
+./gradlew bench mutationTest -PconfirmTier4=true # tier 4 — performance budgets and mutation score
 ./gradlew test -Pgolden.update=true  # rewrite goldens — THEN READ THE DIFF
 ```
 

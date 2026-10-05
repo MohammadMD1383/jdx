@@ -181,7 +181,7 @@ val installDist = tasks.register("installDist") {
 // The launcher and install.sh tests run the real built artifacts. Both tiers that run
 // them (`test` for the stub-JDK suites, `tier2Test` for the real-JVM end-to-end tests)
 // need the distribution built first.
-listOf("test", "tier2Test").forEach { taskName ->
+listOf("test", "integrationTest").forEach { taskName ->
     tasks.named<Test>(taskName) { dependsOn(installDist) }
 }
 

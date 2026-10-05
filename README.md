@@ -1,8 +1,11 @@
 # `jdx` — an IDE for AI agents
 
-[![Release](https://img.shields.io/github/v/release/MohammadMD1383/jdx)](https://github.com/MohammadMD1383/jdx/releases)
+[![Latest Release](https://img.shields.io/github/v/release/MohammadMD1383/jdx)](https://github.com/MohammadMD1383/jdx/releases)
+[![Linux CI](https://github.com/MohammadMD1383/jdx/actions/workflows/linux.yml/badge.svg)](https://github.com/MohammadMD1383/jdx/actions/workflows/linux.yml)
+[![macOS CI](https://github.com/MohammadMD1383/jdx/actions/workflows/macos.yml/badge.svg)](https://github.com/MohammadMD1383/jdx/actions/workflows/macos.yml)
+[![Windows CI](https://github.com/MohammadMD1383/jdx/actions/workflows/windows.yml/badge.svg)](https://github.com/MohammadMD1383/jdx/actions/workflows/windows.yml)
+[![Release CI](https://github.com/MohammadMD1383/jdx/actions/workflows/release.yml/badge.svg)](https://github.com/MohammadMD1383/jdx/actions/workflows/release.yml)
 [![License](https://img.shields.io/github/license/MohammadMD1383/jdx)](LICENSE)
-[![Build](https://github.com/MohammadMD1383/jdx/actions/workflows/release.yml/badge.svg)](https://github.com/MohammadMD1383/jdx/actions/workflows/release.yml)
 [![M8ven Score](https://m8ven.ai/badge/mcp/mohammadmd1383/jdx)](https://m8ven.ai/mcp/mohammadmd1383/jdx)
 
 ## Try it in 30 seconds

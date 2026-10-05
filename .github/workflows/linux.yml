@@ -1,4 +1,4 @@
-name: ci
+name: linux
 
 # Main Linux check (issue #55, part of #61).
 # Runs the full pre-commit gate (`./gradlew check` = tier-1 `test` + tier-2
@@ -18,7 +18,7 @@ permissions:
   contents: read
 
 concurrency:
-  group: ci-${{ github.ref }}
+  group: linux-${{ github.ref }}
   cancel-in-progress: true
 
 jobs:

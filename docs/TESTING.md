@@ -56,7 +56,7 @@ without anyone writing them.**
 | 1 | `./gradlew test` | **< 30 s** | every save; the TDD loop |
 | 2 | `./gradlew check` | **< 3 min** | before every commit |
 | 3 | `./gradlew soak` | minutes | before finishing a task; needs local jars |
-| 4 | `./gradlew bench mutationTest` | long | on demand / before a milestone closes |
+| 4 | `./gradlew bench mutationTest -PconfirmTier4=true` | long | on demand / before a milestone closes |
 
 A tier-1 suite that creeps past 30 s kills TDD, and then it kills testing. Guard it: anything
 touching disk, network, or a real jar belongs in tier 2 or above.
@@ -65,14 +65,14 @@ touching disk, network, or a real jar belongs in tier 2 or above.
 
 | Tag | Runs in | Meaning |
 |---|---|---|
-| *(none)* | `test` (tier 1) | fast unit tests only — no disk, no subprocesses, no real jars |
-| `tier2` | `tier2Test`, via `check` (tier 2) | slow suites: jar reads, JVM spawns, golden files, fault injection, parity |
+| *(none)* | `test` (tier 1, alias `unitTest`) | fast unit tests only — no disk, no subprocesses, no real jars |
+| `integration`, `tier2` | `integrationTest` (tier 2, alias `tier2Test`), via `check` | slow suites: jar reads, JVM spawns, golden files, fault injection, parity |
 | `soak` | `soakTest`, via `soak` (tier 3) | corpus soak over real jars; never runs in `check` |
 | `bench` | `benchTest`, via `bench` (tier 4) | benchmarks |
 
-The wiring lives in the root `build.gradle.kts`: per-module `tier2Test`/`soakTest`/
-`benchTest` `Test` tasks with `includeTags`, `test` excluding all three tags plus `tier2`,
-`check` depending on `tier2Test`, and root `soak`/`bench`/`mutationTest`/`testReport`
+The wiring lives in the root `build.gradle.kts`: per-module `integrationTest`/`tier2Test`/`soakTest`/
+`benchTest` tasks with `includeTags`, `test` excluding all four tags (`integration`, `tier2`, `soak`, `bench`),
+`check` depending on `integrationTest`, and root `soak`/`bench`/`mutationTest`/`testReport`
 commands. `SoakExclusionProofTest` (`core/.../tiers/`) is the deliberate proof that a
 `soak`-tagged test cannot run in tier 1 or 2: it asserts `-Djdx.tier=soak`, a property only
 the `soakTest` task sets, so broken exclusion fails the build instead of silently slowing
@@ -80,22 +80,22 @@ the loop. Soak tests read the corpus directory from `-Djdx.corpusDir` (default
 `~/.gradle/caches`, override with `-Pcorpus=<dir>`) and must skip — never fail — when it
 is absent, so `check` stays green on machines with no corpus.
 
-**The tier-1 budget is enforced, not aspirational.** Every `test` task is finalised by
-`verifyTier1Budget`, which sums the JUnit XML times, prints the total and the 10 slowest
-tests at the end of the run, and fails the build when the total exceeds 30 s (override
-with `-Ptier1.budget=<seconds>`). When it fires, the fix is to move the slowest suite to
-tier 2 with `@Tag("tier2")` — never to raise the budget without a note in the session log
-saying why.
+**The per-test budget is enforced, not aspirational.** Every `test` and `integrationTest` task is finalised by
+`verifyPerTestBudget`, which inspects JUnit XML times, prints total test time, the 10 slowest
+tests, and any budget violations at the end of the run. Unit tests (`test`) must finish in <= 2.5 s
+(override with `-Punit.test.budget=<seconds>`), while integration tests (`integrationTest`) must finish in <= 120.0 s
+(override with `-Pintegration.test.budget=<seconds>`). When a unit test exceeds its budget, the fix is to optimize
+it or move it to integration with `@Tag("integration")`.
 
 **CI mode (`-Pci`, issues #57/#61).** CI runners are slow, shared, and variable — the
 same suite passes locally and reds on CI with 0 test failures (issue #2). CI workflows
 pass `-Pci` (also auto-detected via `CI`/`GITHUB_ACTIONS` env), which relaxes *only*
-wall-clock test gates: `verifyTier1Budget` becomes report-only (a slow runner with 0
+wall-clock test gates: `verifyPerTestBudget` becomes report-only (a slow runner with 0
 failures stays green) and PIT `timeoutConstInMillis` lifts from 10 s to 60 s in every
 gated module. No per-task `Test` timeout is set in either mode (fail-open by policy).
 Real product timeouts (Vineflower/javap 30 s, Maven connect/read) are degradation
 behavior and stay intact — never weaken product behavior to green CI. A local
-`verifyTier1Budget` red (issue #2) is a machine-variance signal to move a suite to
+`verifyPerTestBudget` red (issue #2) is a machine-variance signal to move a suite to
 tier 2; a CI-infra red is a runner problem — do not confuse the two.
 
 ---
@@ -350,11 +350,12 @@ Targets:
 Run in tier 4. A surviving mutant in `core` is a genuine gap: either write the test that
 kills it, or delete the unreachable code.
 
-Runbook: `./gradlew mutationTest` runs PIT over `core`, `index`, `sources` and
+Runbook: `./gradlew mutationTest -PconfirmTier4=true` (or `-PallowHeavy=true`) runs PIT over `core`, `index`, `sources` and
 `decompile` (only `core`'s ≥ 80 % gate fails the build; the rest are measured and
 reported per D-021). Reports land in `<module>/build/reports/pitest` (XML + HTML,
 un-timestamped); JaCoCo line reports sit beside them under `build/reports/jacoco/test/`.
 The full run takes ~30 min (the `index` suite dominates) and never runs in `check`.
+Explicit permission is required via `-PconfirmTier4=true` or `-PallowHeavy=true`.
 For fast iteration on one surviving mutant,
 `./gradlew :core:pitest -PpitestScope='dev.jdx.core.render.Truncation*'` narrows both
 the class and test filters to that glob — never quote a scoped run as the module's
@@ -541,8 +542,8 @@ Testing time is finite; spend it where bugs live.
 ./gradlew test -Pgolden.update=true  # rewrite golden files — THEN READ THE DIFF
 ./gradlew soak                       # tier 3 — corpus, needs local jars
 ./gradlew soak -Pcorpus=~/.m2        # ...against your own corpus
-./gradlew bench                      # tier 4 — performance budgets (PROPOSAL §15)
-./gradlew mutationTest               # tier 4 — mutation score
+./gradlew bench -PconfirmTier4=true        # tier 4 — performance budgets (PROPOSAL §15)
+./gradlew mutationTest -PconfirmTier4=true # tier 4 — mutation score
 ./gradlew testReport                 # aggregated HTML report
 ./gradlew verifyPitestWiring         # the PIT corpus wiring gate (also runs in every `check`)
 ```

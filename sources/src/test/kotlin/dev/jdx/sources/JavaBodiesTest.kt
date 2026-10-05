@@ -13,6 +13,7 @@ import io.kotest.property.arbitrary.of
 import io.kotest.property.arbitrary.string
 import io.kotest.property.checkAll
 import kotlinx.coroutines.runBlocking
+import org.junit.jupiter.api.Tag
 import org.junit.jupiter.api.Test
 
 /**
@@ -21,6 +22,7 @@ import org.junit.jupiter.api.Test
  * `-sources.jar` reads, crafted hostile jars) lives in the tier-2 suite;
  * generating coverage lives in the properties below.
  */
+@Tag("integration")
 class JavaBodiesTest {
 
     private fun ref(

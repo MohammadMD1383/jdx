@@ -8,6 +8,7 @@ import io.kotest.property.Arb
 import io.kotest.property.arbitrary.string
 import io.kotest.property.checkAll
 import kotlinx.coroutines.runBlocking
+import org.junit.jupiter.api.Tag
 import org.junit.jupiter.api.Test
 
 /**
@@ -15,6 +16,7 @@ import org.junit.jupiter.api.Test
  * binary names map to safe staged paths, hostile names map to `null` — never
  * a throw, never an escape from the staging dir. No IO, no engine.
  */
+@Tag("integration")
 class VineflowerStagingTest {
 
     @Test

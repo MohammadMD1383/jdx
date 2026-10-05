@@ -163,9 +163,11 @@ answer. Nothing else may bend this table.
 
 ## 7. Build, test, lint
 
-- Build only via the Gradle wrapper (`./gradlew`); JDK 21+ required. Tiers: `test`
-  (fast loop, < 30 s) · `check` (pre-commit: tiers 1–2 + lint, < 3 min) ·
-  tagged `soak`/`bench`/mutation on demand.
+- Build only via the Gradle wrapper (`./gradlew`); JDK 21+ required. Categories: `test`
+  (fast unit loop, per-test budget <= 2.5 s) · `integrationTest` (integration suites,
+  per-test budget <= 120 s) · `check` (pre-commit: unit + integration + lint + coverage) ·
+  `soak`/`bench`/`mutationTest` on demand (`bench` and `mutationTest` require explicit
+  confirmation via `-PconfirmTier4=true` or `-PallowHeavy=true`).
 - `core` TDD-mandatory, mutation gate ≥ 80%; `index`/`sources`/`decompile` ≥ 85% line;
   adapters ungated (parity + goldens instead — gating thin code incentivises padding).
 - **A gate that cannot run is not a gate.** `check` runs `verifyPitestWiring` (alongside
@@ -181,7 +183,7 @@ answer. Nothing else may bend this table.
 - `-Pgolden.update=true` is the most dangerous command here: **read every golden diff
   before committing it.** An unread golden update is a deleted test.
 - CI mode `-Pci` (also auto-detected via `CI`/`GITHUB_ACTIONS`): wall-clock test gates
-  relax on slow runners — tier-1 budget report-only, PIT timeouts 10 s → 60 s.
+  relax on slow runners — per-test budget report-only, PIT timeouts 10 s → 60 s.
   Local loop unchanged. Product timeouts untouched. See `docs/TESTING.md` §2.
 - Line counting is POSIX: one trailing `\n` is a terminator, not a line.
 

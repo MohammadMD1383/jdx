@@ -5,6 +5,7 @@ import io.kotest.property.Arb
 import io.kotest.property.arbitrary.of
 import io.kotest.property.checkAll
 import kotlinx.coroutines.runBlocking
+import org.junit.jupiter.api.Tag
 import org.junit.jupiter.api.Test
 import org.junit.jupiter.api.io.TempDir
 import java.nio.file.Files
@@ -15,10 +16,9 @@ import java.util.concurrent.atomic.AtomicInteger
  * Tests for [JdkLayout] (T-012): the shared `src.zip` lookup behind both the `jrt:/`
  * root's `jdkSources` and the `doctor` `jdk-sources` row.
  *
- * Temp-dir homes only — no real JDK, no environment surgery — so this suite stays in
- * tier 1 (docs/TESTING.md §2). Callers needing the real `jrt:/` live in
- * [ArtifactLoaderTest] (tier 2).
+ * Generates simulated JDK disk home layouts and searches for src.zip.
  */
+@Tag("integration")
 class JdkLayoutTest {
 
     @TempDir

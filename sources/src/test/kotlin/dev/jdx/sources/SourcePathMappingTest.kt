@@ -8,6 +8,7 @@ import io.kotest.property.arbitrary.of
 import io.kotest.property.arbitrary.string
 import io.kotest.property.checkAll
 import kotlinx.coroutines.runBlocking
+import org.junit.jupiter.api.Tag
 import org.junit.jupiter.api.Test
 
 /**
@@ -15,6 +16,7 @@ import org.junit.jupiter.api.Test
  * the tier-1 half of the acceptance. Disk behaviour lives in `SourceRootTest`
  * (tier 2); generating coverage lives in the properties below.
  */
+@Tag("integration")
 class SourcePathMappingTest {
 
     @Test

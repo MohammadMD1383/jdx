@@ -9,13 +9,14 @@ import io.kotest.property.arbitrary.string
 import io.kotest.property.checkAll
 import java.nio.file.Path
 import kotlinx.coroutines.runBlocking
+import org.junit.jupiter.api.Tag
 import org.junit.jupiter.api.Test
 
 /**
  * Pure cache-key math behind [DecompileCache] (T-026): deterministic,
  * collision-free across bytes, and filename-safe for hostile engine labels.
- * No IO here — reads and writes are tier 2.
  */
+@Tag("integration")
 class DecompileCacheKeyTest {
 
     private val cache = DecompileCache(Path.of("unused"))

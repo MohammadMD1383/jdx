@@ -10,6 +10,7 @@ import io.kotest.property.arbitrary.list
 import io.kotest.property.arbitrary.string
 import io.kotest.property.checkAll
 import kotlinx.coroutines.runBlocking
+import org.junit.jupiter.api.Tag
 import org.junit.jupiter.api.Test
 
 /**
@@ -17,6 +18,7 @@ import org.junit.jupiter.api.Test
  * splits into member sections, descriptors match members — never a throw, no
  * process, no disk.
  */
+@Tag("integration")
 class JavapOutputTest {
 
     private val sample = """

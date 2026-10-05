@@ -12,6 +12,7 @@ import io.kotest.property.arbitrary.list
 import io.kotest.property.arbitrary.string
 import io.kotest.property.checkAll
 import kotlinx.coroutines.runBlocking
+import org.junit.jupiter.api.Tag
 import org.junit.jupiter.api.Test
 
 /**
@@ -20,6 +21,7 @@ import org.junit.jupiter.api.Test
  * are pure over the model, so this suite pins every law without a compiler.
  * Real PSI ranges live in `KotlinBodiesPsiTest` (tier 2).
  */
+@Tag("integration")
 class KotlinBodiesTest {
 
     private fun ref(

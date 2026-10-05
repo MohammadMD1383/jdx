@@ -42,7 +42,14 @@ val jacocoToolVersion = libs.versions.jacoco.get()
 // files, fault injection, parity) that run in `check` but not in the fast `test` loop;
 // `@Tag("soak")` and `@Tag("bench")` mark tiers 3 and 4. The per-module tasks below give
 // every tag a runner; the root tasks at the bottom of this file give every tier a command.
-val tier1BudgetSeconds = (findProperty("tier1.budget") as String?)?.toDoubleOrNull() ?: 30.0
+val unitTestBudgetSeconds =
+    (findProperty("unit.test.budget") as String?)?.toDoubleOrNull()
+        ?: (findProperty("tier1.budget") as String?)?.toDoubleOrNull()
+        ?: 2.5
+val integrationTestBudgetSeconds =
+    (findProperty("integration.test.budget") as String?)?.toDoubleOrNull()
+        ?: (findProperty("tier2.budget") as String?)?.toDoubleOrNull()
+        ?: 120.0
 val corpusDir = (findProperty("corpus") as String?) ?: "${System.getProperty("user.home")}/.gradle/caches"
 // The two fixture-corpus system properties, named once so the PIT wiring and its gate
 // cannot drift apart. These strings must equal `FixtureJars.FIXTURES_DIR_PROPERTY` and
@@ -52,7 +59,7 @@ val fixtureJarsDirProperty = "jdx.fixturesDir"
 val diffFixtureJarsDirProperty = "jdx.diffFixturesDir"
 
 // CI mode (#57): `-Pci` (bare or `=true`) or `CI`/`GITHUB_ACTIONS` env. Relaxes
-// wall-clock test gates (tier-1 budget report-only, PIT timeouts lifted) so slow
+// wall-clock test gates (per-test budget report-only, PIT timeouts lifted) so slow
 // runners never produce false-positive reds. Product timeouts (Vineflower/javap,
 // Maven) are untouched. NOTE: a bare `-Pci` does not yield the string "true" from
 // `findProperty`, so presence (anything but explicit `=false`) means CI here.
@@ -61,85 +68,150 @@ val isCi: Boolean =
         System.getenv("CI") != null ||
         System.getenv("GITHUB_ACTIONS") == "true"
 
-// Prints the tier-1 total test time and the 10 slowest tests, and fails the build when the
-// total exceeds the tier-1 budget (override with `-Ptier1.budget=<seconds>`). Wired as a
-// finalizer of every module's `test` task, so the report always prints at the end of a
-// `./gradlew test` run. Times come from the JUnit XML results (`test-results/test`), so the
-// gate is meaningful on a full run; a single-module run aggregates stale results from the
-// other modules (said in the report, not hidden). When tests themselves failed the budget
-// gate stays silent — the build is already red, and one failure at a time is enough.
-tasks.register("verifyTier1Budget") {
+// Tier 4 guard: Tier 4 tests (benchmarks and mutation testing) take ~30 minutes
+// and consume heavy CPU/resources. Explicit permission is required via
+// `-PconfirmTier4=true` or `-PallowHeavy=true`.
+val isTier4Confirmed: Boolean =
+    findProperty("confirmTier4")?.toString().equals("true", ignoreCase = true) ||
+        findProperty("allowHeavy")?.toString().equals("true", ignoreCase = true)
+val tier4PermissionMessage =
+    "Tier 4 tests are resource-intensive and long-running (~30 minutes, heavy CPU). " +
+        "Tier 4 tests must not run without explicit user permission. " +
+        "To run them intentionally, pass -PconfirmTier4=true (or -PallowHeavy=true)."
+
+// Enforces per-test budgets: unit tests <= 2.5s (-Punit.test.budget), integration tests <= 120.0s
+// (-Pintegration.test.budget). Wired as a finalizer of every module's `test` and `integrationTest` tasks.
+// Times come from JUnit XML results. In CI mode (-Pci), violations are report-only.
+tasks.register("verifyPerTestBudget") {
     group = "verification"
-    description = "Enforces the tier-1 <30 s budget: prints total test time and the 10 slowest tests (docs/TESTING.md §2)."
-    // Resolved here, at configuration time: touching `subprojects`, the project
-    // version, or any script-level value from `doLast` captures the script object
-    // in the action and breaks the configuration cache (T-067). Plain values
-    // captured as locals serialize fine.
-    val tier1ResultsDirs: List<java.io.File> =
+    description = "Enforces per-test budgets across unit and integration tests (docs/TESTING.md §2)."
+    val unitResultsDirs: List<java.io.File> =
         subprojects.map { it.layout.buildDirectory.dir("test-results/test").get().asFile }
-    val tier1Budget: Double = tier1BudgetSeconds
+    val integrationResultsDirs: List<java.io.File> =
+        subprojects.flatMap { subproject ->
+            listOf(
+                subproject.layout.buildDirectory.dir("test-results/integrationTest").get().asFile,
+                subproject.layout.buildDirectory.dir("test-results/tier2Test").get().asFile,
+            )
+        }
+    val unitBudget: Double = unitTestBudgetSeconds
+    val integrationBudget: Double = integrationTestBudgetSeconds
     val ciMode: Boolean = isCi
     doLast {
         var totalTime = 0.0
         var testCount = 0
         var failureCount = 0
-        val slowest = mutableListOf<Triple<Double, String, String>>()
-        tier1ResultsDirs.forEach { resultsDir ->
-            if (!resultsDir.isDirectory) return@forEach
-            resultsDir.walkTopDown().filter { it.isFile && it.extension == "xml" }.forEach { xml ->
-                try {
-                    val suite = javax.xml.parsers.DocumentBuilderFactory.newInstance()
-                        .newDocumentBuilder().parse(xml).documentElement
-                    totalTime += suite.getAttribute("time").toDoubleOrNull() ?: 0.0
-                    testCount += suite.getAttribute("tests").toIntOrNull() ?: 0
-                    failureCount += (suite.getAttribute("failures").toIntOrNull() ?: 0) +
-                        (suite.getAttribute("errors").toIntOrNull() ?: 0)
-                    val cases = suite.getElementsByTagName("testcase")
-                    for (i in 0 until cases.length) {
-                        val case = cases.item(i) as org.w3c.dom.Element
-                        val time = case.getAttribute("time").toDoubleOrNull() ?: 0.0
-                        slowest.add(
-                            Triple(
-                                time,
-                                "${case.getAttribute("classname")}",
-                                case.getAttribute("name"),
-                            ),
-                        )
+        val slowest = mutableListOf<ParsedTestCase>()
+        val violations = mutableListOf<ParsedTestCase>()
+
+        fun parseResults(dirs: List<java.io.File>, tier: String, budget: Double) {
+            dirs.forEach { resultsDir ->
+                if (!resultsDir.isDirectory) return@forEach
+                resultsDir.walkTopDown().filter { it.isFile && it.extension == "xml" }.forEach { xml ->
+                    try {
+                        val suite = javax.xml.parsers.DocumentBuilderFactory.newInstance()
+                            .newDocumentBuilder().parse(xml).documentElement
+                        totalTime += suite.getAttribute("time").toDoubleOrNull() ?: 0.0
+                        testCount += suite.getAttribute("tests").toIntOrNull() ?: 0
+                        failureCount += (suite.getAttribute("failures").toIntOrNull() ?: 0) +
+                            (suite.getAttribute("errors").toIntOrNull() ?: 0)
+                        val cases = suite.getElementsByTagName("testcase")
+                        for (i in 0 until cases.length) {
+                            val case = cases.item(i) as org.w3c.dom.Element
+                            val time = case.getAttribute("time").toDoubleOrNull() ?: 0.0
+                            val className = case.getAttribute("classname")
+                            val name = case.getAttribute("name")
+                            val tc = ParsedTestCase(
+                                time = time,
+                                className = className,
+                                name = name,
+                                tier = tier,
+                                budget = budget,
+                            )
+                            slowest.add(tc)
+                            if (time > budget) {
+                                violations.add(tc)
+                            }
+                        }
+                    } catch (_: Exception) {
+                        logger.warn("verifyPerTestBudget: could not parse {}", xml)
                     }
-                } catch (_: Exception) {
-                    // A concurrently-written or corrupt XML must never fail the budget gate;
-                    // the test task itself already reports real failures.
-                    logger.warn("verifyTier1Budget: could not parse {}", xml)
                 }
             }
         }
+
+        parseResults(unitResultsDirs, "unit", unitBudget)
+        parseResults(integrationResultsDirs, "integration", integrationBudget)
+
         logger.lifecycle(
-            "[tier1] total test time: %.1fs (budget %.1fs) across %d tests".format(
+            "[test-budget] total test time: %.1fs across %d tests (budgets: unit %.1fs, integration %.1fs)".format(
                 totalTime,
-                tier1Budget,
                 testCount,
+                unitBudget,
+                integrationBudget,
             ),
         )
-        slowest.sortedByDescending { it.first }.take(10).forEach { (time, className, name) ->
-            logger.lifecycle("[tier1] slowest: %6.2fs %s — %s".format(time, className, name))
+        logger.lifecycle("[test-budget] top 10 slowest tests:")
+        slowest.sortedByDescending { it.time }.take(10).forEachIndexed { index, tc ->
+            val exceeded = if (tc.time > tc.budget) " [EXCEEDED > %.1fs]".format(tc.budget) else ""
+            logger.lifecycle(
+                "[test-budget]   %2d. %6.2fs [%s] %s — %s%s".format(
+                    index + 1,
+                    tc.time,
+                    tc.tier,
+                    tc.className,
+                    tc.name,
+                    exceeded,
+                ),
+            )
         }
-        if (failureCount == 0 && totalTime > tier1Budget) {
-            if (ciMode) {
-                // #57: report-only on CI — a slow runner with 0 failures stays green.
+
+        if (violations.isNotEmpty()) {
+            logger.lifecycle("[test-budget] %d test(s) exceeded per-test budget:".format(violations.size))
+            violations.sortedByDescending { it.time }.take(10).forEach { tc ->
                 logger.lifecycle(
-                    "[tier1] CI mode (-Pci): budget exceeded (%.1fs > %.1fs) — report only, build stays green.".format(
-                        totalTime,
-                        tier1Budget,
+                    "[test-budget]   - [%s] %s.%s took %.2fs > %.1fs budget".format(
+                        tc.tier,
+                        tc.className,
+                        tc.name,
+                        tc.time,
+                        tc.budget,
+                    ),
+                )
+            }
+            if (violations.size > 10) {
+                logger.lifecycle("[test-budget]   ... and %d more".format(violations.size - 10))
+            }
+        }
+
+        if (failureCount == 0 && violations.isNotEmpty()) {
+            if (ciMode) {
+                logger.lifecycle(
+                    "[test-budget] CI mode (-Pci): %d test(s) exceeded budget — report only, build stays green.".format(
+                        violations.size,
                     ),
                 )
             } else {
+                val unitViolation = violations.filter { it.tier == "unit" }.maxByOrNull { it.time }
+                val worst = unitViolation ?: violations.maxByOrNull { it.time } ?: violations.first()
+                val advice = if (worst.tier == "unit") {
+                    "Optimize this test or categorize it as an integration test (@Tag(\"integration\"))."
+                } else {
+                    "Optimize this test or increase budget via -Pintegration.test.budget=<seconds>."
+                }
                 throw GradleException(
-                    ("Tier-1 budget exceeded: %.1fs > %.1fs. Move the slowest suite to tier 2 " +
-                        "(@Tag(\"tier2\"), docs/TESTING.md §2).").format(totalTime, tier1Budget),
+                    "Per-test budget exceeded: test '${worst.className}.${worst.name}' took ${"%.2f".format(worst.time)}s > budget ${"%.2f".format(worst.budget)}s. $advice",
                 )
             }
         }
     }
+}
+
+// Deprecated alias for backwards compatibility
+tasks.register("verifyTier1Budget") {
+    group = "verification"
+    description = "Deprecated alias: delegates to verifyPerTestBudget."
+    dependsOn("verifyPerTestBudget")
 }
 
 // Aggregated HTML report across all modules and tiers 1–2 (docs/TESTING.md §13).
@@ -150,7 +222,7 @@ tasks.register<TestReport>("testReport") {
     testResults.from(
         files(
             subprojects.flatMap { subproject ->
-                listOf("test", "tier2Test").map { taskName ->
+                listOf("test", "integrationTest", "tier2Test").map { taskName ->
                     subproject.layout.buildDirectory.dir("test-results/$taskName")
                 }
             },
@@ -158,9 +230,30 @@ tasks.register<TestReport>("testReport") {
     )
     dependsOn(
         subprojects.flatMap { subproject ->
-            listOf(subproject.tasks.named("test"), subproject.tasks.named("tier2Test"))
+            listOf(subproject.tasks.named("test"), subproject.tasks.named("integrationTest"))
         },
     )
+}
+
+// Root task: integrationTest runs integration tests across all modules
+tasks.register("integrationTest") {
+    group = "verification"
+    description = "Integration tests across all modules (@Tag(\"integration\"), @Tag(\"tier2\"))."
+    dependsOn(subprojects.map { it.tasks.named("integrationTest") })
+}
+
+// Compatibility alias for integrationTest
+tasks.register("tier2Test") {
+    group = "verification"
+    description = "Compatibility alias: delegates to integrationTest."
+    dependsOn("integrationTest")
+}
+
+// Alias for test
+tasks.register("unitTest") {
+    group = "verification"
+    description = "Unit tests across all modules (runs `test`)."
+    dependsOn(subprojects.map { it.tasks.named("test") })
 }
 
 // Tier 3: the corpus soak (docs/TESTING.md §8). Deliberately NOT part of `check`, so
@@ -173,12 +266,33 @@ tasks.register("soak") {
     dependsOn(subprojects.map { it.tasks.named("soakTest") })
 }
 
+// Guard task for Tier 4 tests. Runs early to fail fast before long compiles or test runs.
+val enforceTier4Permission = tasks.register("enforceTier4Permission") {
+    group = "verification"
+    description = "Enforces explicit user permission for Tier 4 tests (-PconfirmTier4=true or -PallowHeavy=true)."
+    val confirmed = isTier4Confirmed
+    val message = tier4PermissionMessage
+    doLast {
+        if (!confirmed) {
+            throw GradleException(message)
+        }
+    }
+}
+
 // Tier 4: benchmarks (PROPOSAL.md §15, T-050). The `bench` smoke lives in
 // `:cli` (`BenchSmokeTest`, @Tag("bench"), over the fixture jar); per-module
 // `benchTest` tasks run every `@Tag("bench")` test.
 tasks.register("bench") {
     group = "verification"
     description = "Tier-4 benchmarks. See BenchSmokeTest (T-050) for the smoke run."
+    val confirmed = isTier4Confirmed
+    val message = tier4PermissionMessage
+    doFirst {
+        if (!confirmed) {
+            throw GradleException(message)
+        }
+    }
+    dependsOn(enforceTier4Permission)
     dependsOn(subprojects.map { it.tasks.named("benchTest") })
 }
 
@@ -188,6 +302,14 @@ tasks.register("bench") {
 tasks.register("mutationTest") {
     group = "verification"
     description = "Tier-4 mutation testing (PIT): core gate ≥ 80 % mutation score, build-failing. Others measured and reported."
+    val confirmed = isTier4Confirmed
+    val message = tier4PermissionMessage
+    doFirst {
+        if (!confirmed) {
+            throw GradleException(message)
+        }
+    }
+    dependsOn(enforceTier4Permission)
     dependsOn(
         pitestModulesRun.map { module -> project(":$module").tasks.named("pitest") } +
             // #66: check the preconditions first, so a wiring regression reads as one clear
@@ -266,6 +388,15 @@ gradle.projectsEvaluated {
             // wiring is identical for every PIT module, and splitting it again is how the
             // triplication started.
             pitestTask.dependsOn(":testfixtures:diffV1Jar", ":testfixtures:diffV2Jar")
+            val confirmed = isTier4Confirmed
+            val message = tier4PermissionMessage
+            pitestTask.doFirst {
+                if (!confirmed) {
+                    throw GradleException(message)
+                }
+            }
+            pitestTask.dependsOn(enforceTier4Permission)
+            pitestTask.mustRunAfter(enforceTier4Permission)
 
             // Recorded, not asserted, here: the assertion lives in `verifyPitestWiring`,
             // which every `check` runs, so a future edit that drops one of the facts above
@@ -409,6 +540,87 @@ tasks.register("lint") {
     }
 }
 
+data class ParsedTestCase(
+    val time: Double,
+    val className: String,
+    val name: String,
+    val tier: String,
+    val budget: Double,
+) : java.io.Serializable
+
+open class JdxTestProgressListener(
+    val taskPath: String,
+    val slowThresholdSeconds: Double,
+) : org.gradle.api.tasks.testing.TestListener {
+    private var taskStartTime: Long = 0L
+    private val testStartTimes = java.util.concurrent.ConcurrentHashMap<String, Long>()
+    private val completedCount = java.util.concurrent.atomic.AtomicInteger(0)
+
+    override fun beforeSuite(suite: org.gradle.api.tasks.testing.TestDescriptor) {
+        if (suite.parent == null && taskStartTime == 0L) {
+            taskStartTime = System.currentTimeMillis()
+        }
+    }
+
+    override fun afterSuite(suite: org.gradle.api.tasks.testing.TestDescriptor, result: org.gradle.api.tasks.testing.TestResult) {
+        if (suite.parent == null) {
+            val totalSec = if (taskStartTime > 0L) (System.currentTimeMillis() - taskStartTime) / 1000.0 else 0.0
+            println("[$taskPath] Finished ${completedCount.get()} tests in ${"%.2f".format(totalSec)}s (${result.successfulTestCount} passed, ${result.failedTestCount} failed, ${result.skippedTestCount} skipped)")
+        } else if (result.resultType == org.gradle.api.tasks.testing.TestResult.ResultType.FAILURE) {
+            println("[$taskPath] [SUITE FAILED] ${suite.name}")
+            result.exceptions.forEach { ex ->
+                val sw = java.io.StringWriter()
+                ex.printStackTrace(java.io.PrintWriter(sw))
+                println(sw.toString().trimEnd())
+            }
+        }
+    }
+
+    override fun beforeTest(testDescriptor: org.gradle.api.tasks.testing.TestDescriptor) {
+        if (taskStartTime == 0L) {
+            taskStartTime = System.currentTimeMillis()
+        }
+        val key = System.identityHashCode(testDescriptor).toString()
+        testStartTimes[key] = System.currentTimeMillis()
+    }
+
+    override fun afterTest(testDescriptor: org.gradle.api.tasks.testing.TestDescriptor, result: org.gradle.api.tasks.testing.TestResult) {
+        val count = completedCount.incrementAndGet()
+        val key = System.identityHashCode(testDescriptor).toString()
+        val startedAt = testStartTimes.remove(key)
+        val measuredSec = if (startedAt != null) (System.currentTimeMillis() - startedAt) / 1000.0 else 0.0
+        val resultSec = (result.endTime - result.startTime).coerceAtLeast(0L) / 1000.0
+        val durationSec = if (resultSec > 0.0) resultSec else measuredSec
+        val elapsedSec = if (taskStartTime > 0L) (System.currentTimeMillis() - taskStartTime) / 1000.0 else durationSec
+
+        val displayClass = testDescriptor.className?.substringAfterLast('.') ?: (testDescriptor.parent?.name ?: "Unknown")
+        val methodName = testDescriptor.name
+        val isSlow = durationSec > slowThresholdSeconds
+        val rate = if (elapsedSec > 0.1) "%.1f tests/s".format(count / elapsedSec) else ""
+
+        if (isSlow) {
+            println("[$taskPath] [SLOW TEST] $displayClass > $methodName took ${"%.3f".format(durationSec)}s (> ${"%.1f".format(slowThresholdSeconds)}s threshold)")
+        }
+
+        when (result.resultType) {
+            org.gradle.api.tasks.testing.TestResult.ResultType.SUCCESS -> {
+                println("[$taskPath] #$count [SUCCESS] $displayClass > $methodName (${"%.3f".format(durationSec)}s, elapsed ${"%.1f".format(elapsedSec)}s${if (rate.isNotEmpty()) ", $rate" else ""})")
+            }
+            org.gradle.api.tasks.testing.TestResult.ResultType.SKIPPED -> {
+                println("[$taskPath] #$count [SKIPPED] $displayClass > $methodName (elapsed ${"%.1f".format(elapsedSec)}s)")
+            }
+            org.gradle.api.tasks.testing.TestResult.ResultType.FAILURE -> {
+                println("[$taskPath] #$count [FAILED] $displayClass > $methodName (took ${"%.3f".format(durationSec)}s, elapsed ${"%.1f".format(elapsedSec)}s)")
+                result.exceptions.forEach { ex ->
+                    val sw = java.io.StringWriter()
+                    ex.printStackTrace(java.io.PrintWriter(sw))
+                    println(sw.toString().trimEnd())
+                }
+            }
+        }
+    }
+}
+
 subprojects {
     apply(plugin = "org.jetbrains.kotlin.jvm")
 
@@ -462,43 +674,46 @@ subprojects {
         "testImplementation"(kotestAssertions)
     }
 
-    // Every Test task uses JUnit Platform and the same failure-focused logging. Tag filters
-    // are set per task below — never here — so each tier reads as one self-contained block.
+    // Every Test task uses JUnit Platform and live progress logging via JdxTestProgressListener.
     // #57 CI policy: no per-task `timeout` is set here or in CI — Test tasks stay
     // fail-open on wall-clock so slow runners never produce false-positive reds.
-    // Only the tier-1 budget gate (`verifyTier1Budget`, report-only under `-Pci`)
-    // and PIT `timeoutConstInMillis` (lifted under `-Pci`) are wall-clock gates.
+    // Per-test budgets (verifyPerTestBudget, report-only under -Pci) and PIT
+    // timeoutConstInMillis (lifted under -Pci) are wall-clock gates.
     tasks.withType<Test>().configureEach {
         useJUnitPlatform()
         testLogging {
-            events("failed", "skipped")
+            // Keep empty events so JdxTestProgressListener handles all output cleanly without duplicate stack traces
+            events()
             exceptionFormat = org.gradle.api.tasks.testing.logging.TestExceptionFormat.FULL
             showStackTraces = true
         }
+        val tPath = path
+        val isUnit = name == "test" || name == "unitTest"
+        val slowThreshold = if (isUnit) 1.0 else 5.0
+        addTestListener(JdxTestProgressListener(tPath, slowThreshold))
     }
 
-    // Tier 1 (`test`): the TDD loop, budget < 30 s enforced by `verifyTier1Budget`.
-    // Anything touching disk, a subprocess, or a real jar belongs in tier 2 or above.
+    // Tier 1 (`test`): the TDD loop, per-test budget enforced by `verifyPerTestBudget`.
+    // Anything touching disk, a subprocess, or a real jar belongs in integration / tier 2 or above.
     tasks.named<Test>("test") {
         useJUnitPlatform {
-            excludeTags("tier2", "soak", "bench")
+            excludeTags("integration", "tier2", "soak", "bench")
         }
-        finalizedBy(rootProject.tasks.named("verifyTier1Budget"))
+        finalizedBy(rootProject.tasks.named("verifyPerTestBudget"))
     }
 
-    // Tier 2: slow suites (golden, fault-injection, parity, jar/JVM tests). `check` runs
-    // both `test` and this, so tier 2 is a strict superset of tier 1. A custom `Test` task
-    // gets no test classes by convention — point it at the `test` source set explicitly,
-    // or it silently runs NO-SOURCE and the tier looks green while testing nothing.
-    val tier2Test = tasks.register<Test>("tier2Test") {
+    // Integration tests (`integrationTest`): slow suites (golden, fault-injection, parity, jar/JVM tests).
+    // `check` runs both `test` and this.
+    val integrationTest = tasks.register<Test>("integrationTest") {
         group = "verification"
-        description = "Tier-2 slow suites for this module (@Tag(\"tier2\")). Runs as part of `check`."
+        description = "Integration tests for this module (@Tag(\"integration\"), @Tag(\"tier2\")). Runs as part of `check`."
         val testSets = project.extensions.getByType<SourceSetContainer>().getByName("test")
         testClassesDirs = testSets.output.classesDirs
         classpath = testSets.runtimeClasspath
         useJUnitPlatform {
-            includeTags("tier2")
+            includeTags("integration", "tier2")
         }
+        finalizedBy(rootProject.tasks.named("verifyPerTestBudget"))
         // Golden-file update mode (T-054, TESTING.md §14): `./gradlew check
         // -Pgolden.update=true` rewrites every golden under
         // `src/test/resources/golden`. Centralised here so every module's
@@ -512,8 +727,23 @@ subprojects {
             testLogging.showStandardStreams = true
         }
     }
+
+    // Compatibility alias: tier2Test delegates to integrationTest
+    tasks.register("tier2Test") {
+        group = "verification"
+        description = "Compatibility alias: delegates to integrationTest."
+        dependsOn(integrationTest)
+    }
+
+    // Alias: unitTest delegates to test
+    tasks.register("unitTest") {
+        group = "verification"
+        description = "Alias: delegates to test."
+        dependsOn(tasks.named("test"))
+    }
+
     tasks.named("check") {
-        dependsOn(tier2Test)
+        dependsOn(integrationTest)
         // T-052: the `lint` style gate runs with every `check` (CONTRIBUTING.md
         // promises "tests + lint"). One root task, not per-module duplicates.
         dependsOn(rootProject.tasks.named("lint"))
@@ -540,10 +770,11 @@ subprojects {
         // punish the tier split from T-053, where jar-reading tests live in tier 2.
         val coverageExecData = files(
             layout.buildDirectory.file("jacoco/test.exec"),
+            layout.buildDirectory.file("jacoco/integrationTest.exec"),
             layout.buildDirectory.file("jacoco/tier2Test.exec"),
         )
         tasks.withType<JacocoReport>().configureEach {
-            dependsOn("test", "tier2Test")
+            dependsOn("test", "integrationTest")
             executionData(coverageExecData)
             reports {
                 xml.required.set(true)
@@ -551,7 +782,7 @@ subprojects {
             }
         }
         tasks.named<JacocoCoverageVerification>("jacocoTestCoverageVerification") {
-            dependsOn("test", "tier2Test")
+            dependsOn("test", "integrationTest")
             executionData(coverageExecData)
             violationRules {
                 rule {
@@ -601,5 +832,14 @@ subprojects {
         useJUnitPlatform {
             includeTags("bench")
         }
+        val confirmed = isTier4Confirmed
+        val message = tier4PermissionMessage
+        doFirst {
+            if (!confirmed) {
+                throw GradleException(message)
+            }
+        }
+        dependsOn(rootProject.tasks.named("enforceTier4Permission"))
+        mustRunAfter(rootProject.tasks.named("enforceTier4Permission"))
     }
 }

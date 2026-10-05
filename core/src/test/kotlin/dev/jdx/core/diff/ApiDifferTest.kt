@@ -10,6 +10,7 @@ import dev.jdx.core.model.TypeName
 import dev.jdx.core.model.typeNameFromBinaryName
 import io.kotest.matchers.shouldBe
 import io.kotest.matchers.string.shouldContain
+import org.junit.jupiter.api.BeforeAll
 import org.junit.jupiter.api.Test
 
 /**
@@ -22,6 +23,14 @@ import org.junit.jupiter.api.Test
  * quietly re-classified by the differ.
  */
 class ApiDifferTest {
+
+    companion object {
+        @JvmStatic
+        @BeforeAll
+        fun warmup() {
+            DiffGate(FailOn.NONE, breakingCount = 0, findingCount = 0).tripped shouldBe false
+        }
+    }
 
     // -- the floor ---------------------------------------------------------------
 

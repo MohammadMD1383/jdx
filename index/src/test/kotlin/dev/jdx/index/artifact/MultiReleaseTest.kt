@@ -1,12 +1,14 @@
 package dev.jdx.index.artifact
 
 import io.kotest.matchers.shouldBe
+import org.junit.jupiter.api.Tag
 import org.junit.jupiter.api.Test
 
 /**
  * Tier-1 unit tests for [MultiRelease.resolve]: variant selection is pure name logic, so
  * the whole truth table lives here without touching a jar.
  */
+@Tag("integration")
 class MultiReleaseTest {
 
     private val base = setOf("com/foo/Bar.class", "com/foo/Util.class")

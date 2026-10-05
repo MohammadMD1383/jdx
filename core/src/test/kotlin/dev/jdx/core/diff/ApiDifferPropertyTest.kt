@@ -26,6 +26,7 @@ import io.kotest.property.arbitrary.int
 import io.kotest.property.arbitrary.of
 import io.kotest.property.checkAll
 import kotlinx.coroutines.runBlocking
+import org.junit.jupiter.api.Tag
 import org.junit.jupiter.api.Test
 
 /**
@@ -37,6 +38,7 @@ import org.junit.jupiter.api.Test
  * thousands of generated artifact pairs, byte-determinism, the truncation law, and
  * text⊆JSON over a report nobody wrote by hand.
  */
+@Tag("integration")
 class ApiDifferPropertyTest {
 
     private fun reportFor(

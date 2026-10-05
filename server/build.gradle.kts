@@ -23,7 +23,7 @@ dependencies {
 }
 
 // Dispatch tests (T-082) run the real `JdxService` over the `testfixtures` jars.
-listOf("test", "tier2Test").forEach { taskName ->
+listOf("test", "integrationTest").forEach { taskName ->
     tasks.named<Test>(taskName) {
         dependsOn(":testfixtures:jar", ":testfixtures:sourcesJar")
         systemProperty(

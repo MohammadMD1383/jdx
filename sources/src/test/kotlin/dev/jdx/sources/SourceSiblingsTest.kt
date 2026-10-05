@@ -13,6 +13,7 @@ import io.kotest.property.arbitrary.of
 import io.kotest.property.arbitrary.string
 import io.kotest.property.checkAll
 import kotlinx.coroutines.runBlocking
+import org.junit.jupiter.api.Tag
 import org.junit.jupiter.api.Test
 
 /**
@@ -20,6 +21,7 @@ import org.junit.jupiter.api.Test
  * `Annos.java`, so the outer-file-only mapping resolved them to no source
  * file. Pure in-memory roots here — disk behaviour lives in the tier-2 suite.
  */
+@Tag("integration")
 class SourceSiblingsTest {
 
     private fun ref(type: String, name: String): MemberSymbolRef = MemberSymbolRef(

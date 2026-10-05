@@ -3,6 +3,7 @@ package dev.jdx.testsupport.fixtures
 import io.kotest.matchers.shouldBe
 import java.io.File
 import java.nio.file.Files
+import org.junit.jupiter.api.Tag
 import org.junit.jupiter.api.Test
 import org.junit.jupiter.api.io.TempDir
 
@@ -12,6 +13,7 @@ import org.junit.jupiter.api.io.TempDir
  * path. This is test scaffolding, but Windows CI is its only real exerciser
  * (9-minute feedback loop) — a red here must never read as a product red.
  */
+@Tag("integration")
 class SidecarJarsTest {
 
     @TempDir

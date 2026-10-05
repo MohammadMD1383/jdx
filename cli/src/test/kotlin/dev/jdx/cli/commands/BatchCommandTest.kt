@@ -16,6 +16,7 @@ import kotlinx.serialization.json.booleanOrNull
 import kotlinx.serialization.json.intOrNull
 import kotlinx.serialization.json.jsonObject
 import kotlinx.serialization.json.jsonPrimitive
+import org.junit.jupiter.api.Tag
 import org.junit.jupiter.api.Test
 
 /**
@@ -183,6 +184,7 @@ class BatchCommandTest {
     }
 
     @Test
+    @Tag("integration")
     fun `doctor answers in-process with its own envelope`() {
         val stdinText = """{"command":"doctor","query":""}"""
         val run = run(stdinText)

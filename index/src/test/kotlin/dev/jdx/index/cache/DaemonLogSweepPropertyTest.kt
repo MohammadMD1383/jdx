@@ -11,6 +11,7 @@ import io.kotest.property.checkAll
 import java.nio.file.Files
 import java.nio.file.Path
 import kotlinx.coroutines.runBlocking
+import org.junit.jupiter.api.Tag
 import org.junit.jupiter.api.Test
 import org.junit.jupiter.api.io.TempDir
 
@@ -25,6 +26,7 @@ import org.junit.jupiter.api.io.TempDir
  * real `@TempDir` layouts; the never-throws law is structural (any throw
  * fails the case).
  */
+@Tag("integration")
 class DaemonLogSweepPropertyTest {
 
     @TempDir

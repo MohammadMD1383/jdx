@@ -68,7 +68,7 @@ pitest {
 // dependency is up-to-date-checked, so the incremental loop pays nothing after the first build.
 // Both tiers that touch jars (`test` for the fast `FixturesTest`, `tier2Test` for the heavy
 // `FixtureCorpusTest`) need the wiring; `soakTest` inherits nothing here — T-059 wires it.
-listOf("test", "tier2Test").forEach { taskName ->
+listOf("test", "integrationTest").forEach { taskName ->
     tasks.named<Test>(taskName) {
         dependsOn(":testfixtures:jar", ":testfixtures:sourcesJar")
         systemProperty(

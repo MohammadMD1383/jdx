@@ -8,6 +8,7 @@ import kotlinx.serialization.json.Json
 import kotlinx.serialization.json.jsonArray
 import kotlinx.serialization.json.jsonObject
 import kotlinx.serialization.json.jsonPrimitive
+import org.junit.jupiter.api.Tag
 import org.junit.jupiter.api.Test
 import java.nio.file.Files
 import java.nio.file.attribute.PosixFilePermissions
@@ -19,6 +20,7 @@ import java.nio.file.attribute.PosixFilePermissions
  * contract invariants (never throws, exit code law, text↔JSON parity, determinism) plus the
  * targeted severity for the injected fault.
  */
+@Tag("integration")
 class DoctorEnvironmentTest {
 
     private enum class CacheState { ABSENT, EMPTY, WITH_FILES, UNREADABLE }

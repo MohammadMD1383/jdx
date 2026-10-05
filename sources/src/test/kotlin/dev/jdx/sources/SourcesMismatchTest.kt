@@ -25,6 +25,7 @@ import io.kotest.property.arbitrary.int
 import io.kotest.property.arbitrary.list
 import io.kotest.property.checkAll
 import kotlinx.coroutines.runBlocking
+import org.junit.jupiter.api.Tag
 import org.junit.jupiter.api.Test
 
 /**
@@ -603,6 +604,7 @@ class SourcesMismatchTest {
         detectKotlinSourcesMismatch(info, sources, "widget-sources.jar").shouldBeNull()
     }
 
+    @Tag("integration")
     @Test
     fun `kotlin detection never throws on hostile input`() = runBlocking<Unit> {
         checkAll(500, Arb.list(Arb.int(0..999), 0..6), Arb.list(Arb.int(0..999), 0..6)) { a, b ->
@@ -610,6 +612,7 @@ class SourcesMismatchTest {
         }
     }
 
+    @Tag("integration")
     @Test
     fun `kotlin detection is deterministic`() = runBlocking<Unit> {
         checkAll(500, Arb.list(Arb.int(0..999), 0..6), Arb.list(Arb.int(0..999), 0..6)) { a, b ->

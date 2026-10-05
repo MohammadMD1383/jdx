@@ -23,7 +23,7 @@ dependencies {
 // checkout cannot run against stale ones, and hand the directory in as a system
 // property so tests never hard-code an absolute path (same pattern as
 // `core/build.gradle.kts` and `index/build.gradle.kts`, T-006).
-listOf("test", "tier2Test").forEach { taskName ->
+listOf("test", "integrationTest").forEach { taskName ->
     tasks.named<Test>(taskName) {
         dependsOn(":testfixtures:jar", ":testfixtures:sourcesJar")
         systemProperty(

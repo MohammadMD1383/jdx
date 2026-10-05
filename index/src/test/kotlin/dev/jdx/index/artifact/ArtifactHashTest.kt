@@ -2,16 +2,16 @@ package dev.jdx.index.artifact
 
 import io.kotest.matchers.shouldBe
 import io.kotest.matchers.shouldNotBe
+import org.junit.jupiter.api.Tag
 import org.junit.jupiter.api.Test
 import org.junit.jupiter.api.io.TempDir
 import java.nio.file.Files
 import java.nio.file.Path
 
 /**
- * Tier-1 unit tests for [ArtifactHash]: known vectors, stability, and directory semantics.
- * Hashing real fixture jars is tier 2 ([ArtifactLoaderTest]); everything here is bytes and
- * temp dirs, milliseconds each.
+ * Tests for [ArtifactHash]: known vectors, stability, and directory semantics.
  */
+@Tag("integration")
 class ArtifactHashTest {
 
     @Test
