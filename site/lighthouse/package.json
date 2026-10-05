@@ -1,0 +1,10 @@
+{
+  "name": "jdx-site-lighthouse",
+  "private": true,
+  "description": "Lighthouse budget gate for the jdx website (see check.mjs). Not part of the product.",
+  "type": "module",
+  "dependencies": {
+    "chrome-launcher": "1.2.2",
+    "lighthouse": "13.5.0"
+  }
+}

@@ -1,0 +1,130 @@
+name: pages
+
+# The jdx website (GitHub Pages). See site/AGENTS.md.
+#
+# Every pull request BUILDS and VALIDATES the site; only `main` (and releases) DEPLOY it.
+# The build is the docs-drift gate: it fails when
+#   - a `console exec` example in the docs no longer runs or its exit code changed,
+#   - a `jdx <cmd> --flag` mentioned in the docs is not in the real `--help`,
+#   - an internal link or #anchor is broken, a doc is missing from the site manifest,
+#   - a README section the landing page quotes was renamed,
+# and the Lighthouse step fails when performance / accessibility / SEO / agent-readiness
+# budgets regress. So docs cannot go out of sync with `main` silently.
+#
+# Triggers that redeploy: push to main (docs and CLI changes), a finished `release` workflow
+# (new version number, changelog — a release created by GITHUB_TOKEN cannot trigger
+# `release: published`, hence workflow_run), a weekly refresh, and manual dispatch.
+#
+# One-time setup (repository owner): Settings → Pages → Source: "GitHub Actions".
+# Optional repository variables: SITE_BASE_URL (custom domain, e.g. https://jdx.dev/ — the
+# build then writes CNAME), GOOGLE_SITE_VERIFICATION, BING_SITE_VERIFICATION.
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+  workflow_dispatch:
+  workflow_run:
+    workflows: [release]
+    types: [completed]
+  schedule:
+    - cron: "23 5 * * 1"
+
+permissions:
+  contents: read
+
+concurrency:
+  group: pages-${{ github.event_name == 'pull_request' && github.ref || 'deploy' }}
+  cancel-in-progress: ${{ github.event_name == 'pull_request' }}
+
+jobs:
+  build:
+    if: github.event_name != 'workflow_run' || github.event.workflow_run.conclusion == 'success'
+    runs-on: ubuntu-latest
+    timeout-minutes: 40
+    steps:
+      - name: Check out
+        uses: actions/checkout@v4
+        with:
+          # Full history + tags: page "last updated" dates come from git, the version from tags.
+          fetch-depth: 0
+
+      - name: Set up JDK 21
+        uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: "21"
+
+      - name: Set up Gradle
+        uses: gradle/actions/setup-gradle@v4
+
+      - name: Fetch release metadata
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          gh api "repos/${GITHUB_REPOSITORY}/releases?per_page=100" > "$RUNNER_TEMP/releases.json" \
+            || echo '[]' > "$RUNNER_TEMP/releases.json"
+
+      - name: Build and validate the site
+        env:
+          SITE_BASE_URL: ${{ vars.SITE_BASE_URL }}
+          GOOGLE_SITE_VERIFICATION: ${{ vars.GOOGLE_SITE_VERIFICATION }}
+          BING_SITE_VERIFICATION: ${{ vars.BING_SITE_VERIFICATION }}
+        run: |
+          args=(-Pci "-Psite.releases=$RUNNER_TEMP/releases.json")
+          [ -n "$SITE_BASE_URL" ] && args+=("-Psite.baseUrl=$SITE_BASE_URL")
+          [ -n "$GOOGLE_SITE_VERIFICATION" ] && args+=("-Psite.googleVerification=$GOOGLE_SITE_VERIFICATION")
+          [ -n "$BING_SITE_VERIFICATION" ] && args+=("-Psite.bingVerification=$BING_SITE_VERIFICATION")
+          ./gradlew :site:test :site:integrationTest :site:buildSite "${args[@]}"
+
+      - name: Set up Node (Lighthouse)
+        uses: actions/setup-node@v4
+        with:
+          node-version: "22"
+
+      - name: Lighthouse budgets (performance, accessibility, SEO, agent readiness)
+        env:
+          SITE_BASE_URL: ${{ vars.SITE_BASE_URL || 'https://mohammadmd1383.github.io/jdx/' }}
+        run: |
+          npm install --prefix site/lighthouse --no-audit --no-fund
+          # Serve the build under the same path prefix as production, so root-relative links resolve.
+          base_path=$(python3 -c "import sys,urllib.parse;print(urllib.parse.urlparse(sys.argv[1]).path or '/')" "$SITE_BASE_URL")
+          if [ "$base_path" = "/" ]; then
+            root="$PWD/site/build/site"
+          else
+            root="$RUNNER_TEMP/serve"
+            mkdir -p "$(dirname "$root${base_path%/}")"
+            ln -s "$PWD/site/build/site" "$root${base_path%/}"
+          fi
+          python3 -m http.server 8000 --bind 127.0.0.1 --directory "$root" > /dev/null 2>&1 &
+          for _ in $(seq 1 20); do curl -sf -o /dev/null "http://127.0.0.1:8000${base_path}" && break; sleep 0.5; done
+          node site/lighthouse/check.mjs "http://127.0.0.1:8000${base_path}"
+
+      - name: Upload Lighthouse reports
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: lighthouse-reports
+          path: lighthouse-reports/
+          if-no-files-found: ignore
+
+      - name: Upload Pages artifact
+        uses: actions/upload-pages-artifact@v5
+        with:
+          path: site/build/site
+
+  deploy:
+    needs: build
+    if: github.event_name != 'pull_request' && github.ref == 'refs/heads/main'
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    permissions:
+      pages: write
+      id-token: write
+    environment:
+      name: github-pages
+      url: ${{ steps.deployment.outputs.page_url }}
+    steps:
+      - name: Deploy to GitHub Pages
+        id: deployment
+        uses: actions/deploy-pages@v5

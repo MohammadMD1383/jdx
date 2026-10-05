@@ -29,3 +29,8 @@ local.properties
 # Logs and scratch
 *.log
 scratch/
+
+# Website generator (site/): Lighthouse gate dependencies and reports
+site/lighthouse/node_modules/
+site/lighthouse/package-lock.json
+lighthouse-reports/
