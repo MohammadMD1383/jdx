@@ -23,6 +23,7 @@ jdx members java.util.HashMap --limit 5
 # MCP (Cline): jdx setup --agent cline --scope system   (then restart Cline)
 # MCP (Codex CLI): jdx setup --agent codex --scope project   (then restart codex)
 # MCP (GitHub Copilot CLI): jdx setup --agent copilot --scope project   (then restart copilot)
+# MCP (Antigravity): jdx setup --agent antigravity --scope project   (then restart Antigravity)
 ```
 
 ---

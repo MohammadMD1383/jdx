@@ -22,9 +22,10 @@ import java.nio.file.Path
 
 /**
  * `SetupService` over fake homes (issue #33 family): install/check/remove for
- * the OpenCode, Claude Code, Cursor, Kilo Code, and Codex CLI backends, merge
- * discipline, and the JSONC stripper. Every home and project dir is a fresh
- * temp dir — no test touches the real home.
+ * the OpenCode, Claude Code, Cursor, Kilo Code, Cline, Codex CLI, GitHub
+ * Copilot CLI, and Antigravity backends, merge discipline, and the JSONC
+ * stripper. Every home and project dir is a fresh temp dir — no test touches
+ * the real home.
  *
  * Merged file bytes are pinned separately in `SetupGoldenTest` (tier 2,
  * `src/test/resources/golden/setup/`).
@@ -2414,6 +2415,345 @@ class SetupServiceTest {
             val foreign = "# $clean\n[other]\nkey = \"v\"\n"
             val installed = SetupService.mergeCodexInstall(foreign)
             SetupService.mergeCodexRemove(installed) shouldBe foreign
+        }
+    }
+
+    // -- Antigravity backend (.agents/mcp_config.json / ~/.gemini/config/mcp_config.json, mcpServers.jdx) --
+    // Verified against a real install: `agy` 1.3.0 (`agy mcp add jdx -- jdx
+    // mcp` writes `~/.gemini/config/mcp_config.json`; `agy mcp list`
+    // recognises the entry; workspace overrides live in
+    // `.agents/mcp_config.json` per https://antigravity.google/docs/mcp).
+
+    private fun antigravityProjectRequest(
+        check: Boolean = false,
+        remove: Boolean = false,
+    ): SetupService.SetupRequest = SetupService.SetupRequest(
+        agent = SetupService.Agent.ANTIGRAVITY,
+        scope = SetupService.Scope.PROJECT,
+        check = check,
+        remove = remove,
+    )
+
+    private fun antigravitySystemRequest(
+        check: Boolean = false,
+        remove: Boolean = false,
+    ): SetupService.SetupRequest = SetupService.SetupRequest(
+        agent = SetupService.Agent.ANTIGRAVITY,
+        scope = SetupService.Scope.SYSTEM,
+        check = check,
+        remove = remove,
+    )
+
+    @Test
+    fun `parseAgent covers antigravity spellings`() {
+        SetupService.parseAgent("antigravity") shouldBe SetupService.Agent.ANTIGRAVITY
+        SetupService.parseAgent("Antigravity") shouldBe SetupService.Agent.ANTIGRAVITY
+        SetupService.parseAgent("agy") shouldBe SetupService.Agent.ANTIGRAVITY
+        SetupService.parseAgent("AGY") shouldBe SetupService.Agent.ANTIGRAVITY
+        SetupService.parseAgent("antigravity-cli") shouldBe SetupService.Agent.ANTIGRAVITY
+        SetupService.parseAgent("ANTIGRAVITY_CLI") shouldBe SetupService.Agent.ANTIGRAVITY
+    }
+
+    @Test
+    fun `a fresh antigravity project install creates dot-agents mcp config with the jdx entry`(@TempDir root: Path) {
+        val dirs = fakeDirs(root)
+        val service = SetupService(dirs.home, dirs.project)
+
+        val outcome = service.run(antigravityProjectRequest())
+
+        val installed = outcome as SetupService.SetupOutcome.Installed
+        installed.changed shouldBe true
+        installed.path shouldBe dirs.project.resolve(".agents/mcp_config.json")
+        setupExitCode(outcome) shouldBe 0
+        val stored = Json.parseToJsonElement(Files.readString(installed.path)).jsonObject
+        val entry = stored["mcpServers"]?.jsonObject?.get("jdx")?.jsonObject
+        entry?.get("command")?.jsonPrimitive?.content shouldBe "jdx"
+        entry?.get("args").toString() shouldBe """["mcp"]"""
+        SetupService.isInstalledRoot(stored, SetupService.Agent.ANTIGRAVITY) shouldBe true
+        SetupService.isInstalledAt(installed.path, SetupService.Agent.ANTIGRAVITY) shouldBe true
+        // The Claude/Cursor probe shares the shape but each agent checks its
+        // own file; an Antigravity file is wired for Antigravity here.
+        SetupService.isInstalledRoot(stored, SetupService.Agent.CURSOR) shouldBe true
+    }
+
+    @Test
+    fun `antigravity install preserves other servers and never clobbers`(@TempDir root: Path) {
+        val dirs = fakeDirs(root)
+        Files.createDirectories(dirs.project.resolve(".agents"))
+        Files.writeString(
+            dirs.project.resolve(".agents/mcp_config.json"),
+            """{"mcpServers":{"other":{"command":"other","args":["x"]}}}""",
+        )
+        val service = SetupService(dirs.home, dirs.project)
+
+        val outcome = service.run(antigravityProjectRequest()) as SetupService.SetupOutcome.Installed
+
+        outcome.changed shouldBe true
+        val stored = Json.parseToJsonElement(Files.readString(outcome.path)).jsonObject
+        stored["mcpServers"]?.jsonObject?.get("other")?.jsonObject
+            ?.get("command")?.jsonPrimitive?.content shouldBe "other"
+        SetupService.isInstalledRoot(stored, SetupService.Agent.ANTIGRAVITY) shouldBe true
+    }
+
+    @Test
+    fun `a second antigravity install is a byte-identical no-op`(@TempDir root: Path) {
+        val dirs = fakeDirs(root)
+        val service = SetupService(dirs.home, dirs.project)
+
+        val first = service.run(antigravityProjectRequest()) as SetupService.SetupOutcome.Installed
+        val before = Files.readAllBytes(first.path)
+        val second = service.run(antigravityProjectRequest())
+
+        (second as SetupService.SetupOutcome.Installed).changed shouldBe false
+        Files.readAllBytes(first.path) shouldBe before
+    }
+
+    @Test
+    fun `antigravity check reports without writing`(@TempDir root: Path) {
+        val dirs = fakeDirs(root)
+        val service = SetupService(dirs.home, dirs.project)
+
+        val absent = service.run(antigravityProjectRequest(check = true))
+        absent as SetupService.SetupOutcome.Checked
+        absent.installed shouldBe false
+        setupExitCode(absent) shouldBe 1
+        Files.exists(dirs.project.resolve(".agents/mcp_config.json")) shouldBe false
+
+        service.run(antigravityProjectRequest())
+        val present = service.run(antigravityProjectRequest(check = true))
+        present as SetupService.SetupOutcome.Checked
+        present.installed shouldBe true
+        setupExitCode(present) shouldBe 0
+    }
+
+    @Test
+    fun `antigravity remove deletes only the jdx entry and drops the emptied namespace`(@TempDir root: Path) {
+        val dirs = fakeDirs(root)
+        val service = SetupService(dirs.home, dirs.project)
+        service.run(antigravityProjectRequest())
+
+        val outcome = service.run(antigravityProjectRequest(remove = true)) as SetupService.SetupOutcome.Removed
+
+        outcome.changed shouldBe true
+        val stored = Json.parseToJsonElement(Files.readString(dirs.project.resolve(".agents/mcp_config.json"))).jsonObject
+        stored.containsKey("mcpServers") shouldBe false
+        SetupService.isInstalledAt(dirs.project.resolve(".agents/mcp_config.json"), SetupService.Agent.ANTIGRAVITY) shouldBe false
+
+        val again = service.run(antigravityProjectRequest(remove = true))
+        (again as SetupService.SetupOutcome.Removed).changed shouldBe false
+        setupExitCode(again) shouldBe 0
+    }
+
+    @Test
+    fun `antigravity remove keeps other servers`(@TempDir root: Path) {
+        val dirs = fakeDirs(root)
+        Files.createDirectories(dirs.project.resolve(".agents"))
+        Files.writeString(
+            dirs.project.resolve(".agents/mcp_config.json"),
+            """{"mcpServers":{"other":{"command":"other","args":["x"]}}}""",
+        )
+        val service = SetupService(dirs.home, dirs.project)
+        service.run(antigravityProjectRequest())
+
+        val outcome = service.run(antigravityProjectRequest(remove = true)) as SetupService.SetupOutcome.Removed
+
+        outcome.changed shouldBe true
+        val stored = Json.parseToJsonElement(Files.readString(dirs.project.resolve(".agents/mcp_config.json"))).jsonObject
+        stored["mcpServers"]?.jsonObject?.containsKey("jdx") shouldBe false
+        stored["mcpServers"]?.jsonObject?.containsKey("other") shouldBe true
+    }
+
+    @Test
+    fun `antigravity system scope targets the gemini config under the fake home`(@TempDir root: Path) {
+        val dirs = fakeDirs(root)
+        val service = SetupService(dirs.home, dirs.project)
+
+        val created = service.run(antigravitySystemRequest()) as SetupService.SetupOutcome.Installed
+
+        created.path shouldBe dirs.home.resolve(".gemini/config/mcp_config.json")
+        SetupService.isInstalledAt(created.path, SetupService.Agent.ANTIGRAVITY) shouldBe true
+    }
+
+    @Test
+    fun `antigravity project scope walks up to the nearest dot-agents mcp config`(@TempDir root: Path) {
+        val dirs = fakeDirs(root)
+        Files.createDirectories(dirs.project.resolve(".agents"))
+        Files.writeString(dirs.project.resolve(".agents/mcp_config.json"), "{}")
+        val nested = dirs.project.resolve("a/b").also { Files.createDirectories(it) }
+        val service = SetupService(dirs.home, nested)
+
+        val outcome = service.run(antigravityProjectRequest())
+
+        val installed = outcome as SetupService.SetupOutcome.Installed
+        installed.path shouldBe dirs.project.resolve(".agents/mcp_config.json")
+        Files.exists(nested.resolve(".agents/mcp_config.json")) shouldBe false
+    }
+
+    @Test
+    fun `an antigravity corrupt config exits 5 and names the file`(@TempDir root: Path) {
+        val dirs = fakeDirs(root)
+        Files.createDirectories(dirs.project.resolve(".agents"))
+        Files.writeString(dirs.project.resolve(".agents/mcp_config.json"), "{ not json,")
+        val service = SetupService(dirs.home, dirs.project)
+
+        val outcome = service.run(antigravityProjectRequest())
+
+        outcome as SetupService.SetupOutcome.Corrupt
+        setupExitCode(outcome) shouldBe 5
+    }
+
+    @Test
+    fun `antigravity install over real agy bytes is a byte-identical no-op`(@TempDir root: Path) {
+        // Byte-identical to what `agy mcp add jdx -- jdx mcp` wrote under an
+        // isolated HOME (`agy` 1.3.0): key order and the `disabled` flag are
+        // the real CLI's, and our probe/install must accept them as-is.
+        val dirs = fakeDirs(root)
+        Files.createDirectories(dirs.project.resolve(".agents"))
+        val realBytes = "{\n  \"mcpServers\": {\n    \"jdx\": {\n      \"args\": [\n        \"mcp\"\n      ],\n      \"command\": \"jdx\",\n      \"disabled\": false\n    }\n  }\n}\n"
+        Files.writeString(dirs.project.resolve(".agents/mcp_config.json"), realBytes)
+        val service = SetupService(dirs.home, dirs.project)
+
+        SetupService.isInstalledAt(
+            dirs.project.resolve(".agents/mcp_config.json"),
+            SetupService.Agent.ANTIGRAVITY,
+        ) shouldBe true
+        val outcome = service.run(antigravityProjectRequest())
+
+        (outcome as SetupService.SetupOutcome.Installed).changed shouldBe false
+        Files.readString(dirs.project.resolve(".agents/mcp_config.json")) shouldBe realBytes
+    }
+
+    @Test
+    fun `antigravity entry probe accepts disabled flags absolute paths and windows shims`(@TempDir root: Path) {
+        val disabled = buildJsonObject {
+            put("command", "jdx")
+            put("args", JsonArray(listOf(JsonPrimitive("mcp"))))
+            put("disabled", false)
+        }
+        SetupService.isAntigravityJdxEntry(disabled) shouldBe true
+        val absolute = buildJsonObject {
+            put("command", "/home/dev/.local/bin/jdx")
+            put("args", JsonArray(listOf(JsonPrimitive("mcp"))))
+        }
+        SetupService.isAntigravityJdxEntry(absolute) shouldBe true
+        val shim = buildJsonObject {
+            put("command", "C:\\tools\\jdx.exe")
+            put("args", JsonArray(listOf(JsonPrimitive("mcp"))))
+        }
+        SetupService.isAntigravityJdxEntry(shim) shouldBe true
+    }
+
+    @Test
+    fun `antigravity entry probe rejects foreign commands`(@TempDir root: Path) {
+        val dirs = fakeDirs(root)
+        Files.createDirectories(dirs.project.resolve(".agents"))
+        Files.writeString(
+            dirs.project.resolve(".agents/mcp_config.json"),
+            """{"mcpServers":{"jdx":{"command":"other","args":["mcp"]}}}""",
+        )
+        SetupService.isInstalledAt(
+            dirs.project.resolve(".agents/mcp_config.json"),
+            SetupService.Agent.ANTIGRAVITY,
+        ) shouldBe false
+    }
+
+    @Test
+    fun `targetPath resolves the antigravity scope paths`(@TempDir root: Path) {
+        val dirs = fakeDirs(root)
+        val service = SetupService(dirs.home, dirs.project)
+
+        service.targetPath(SetupService.Agent.ANTIGRAVITY, SetupService.Scope.PROJECT) shouldBe
+            dirs.project.resolve(".agents/mcp_config.json")
+        service.targetPath(SetupService.Agent.ANTIGRAVITY, SetupService.Scope.SYSTEM) shouldBe
+            dirs.home.resolve(".gemini/config/mcp_config.json")
+    }
+
+    @Test
+    fun `antigravity version probing names presence without guessing`(@TempDir root: Path) {
+        SetupService.probeAntigravityVersion(
+            emptyList(),
+            ProcessRunner { _, _ -> ProcessOutcome(0, "x", "") },
+        ).version shouldBe SetupService.AntigravityVersion.ABSENT
+    }
+
+    @Test
+    fun `antigravity version probe classifies answers`(@TempDir root: Path) {
+        val bin = root.resolve("bin").also { Files.createDirectories(it) }
+        Files.createFile(bin.resolve("agy")).toFile().setExecutable(true)
+
+        val present = SetupService.probeAntigravityVersion(
+            listOf(bin),
+            ProcessRunner { _, _ -> ProcessOutcome(0, "1.3.0", "") },
+        )
+        present.version shouldBe SetupService.AntigravityVersion.PRESENT
+        present.raw shouldBe "1.3.0"
+        present.binary shouldBe "agy"
+
+        val blank = SetupService.probeAntigravityVersion(
+            listOf(bin),
+            ProcessRunner { _, _ -> ProcessOutcome(0, "  ", "") },
+        )
+        blank.version shouldBe SetupService.AntigravityVersion.UNKNOWN
+
+        val failing = SetupService.probeAntigravityVersion(
+            listOf(bin),
+            throwingRunner("boom"),
+        )
+        failing.version shouldBe SetupService.AntigravityVersion.UNKNOWN
+    }
+
+    @Test
+    fun `antigravity probe resolves the exe shim on windows`(@TempDir root: Path) {
+        val bin = root.resolve("bin").also { Files.createDirectories(it) }
+        Files.createFile(bin.resolve("agy.exe")).toFile().setExecutable(true)
+        val runner = ProcessRunner { _, _ -> ProcessOutcome(0, "1.3.0", "") }
+
+        val info = SetupService.probeAntigravityVersion(listOf(bin), runner, osName = "Windows 11")
+
+        info.version shouldBe SetupService.AntigravityVersion.PRESENT
+        info.raw shouldBe "1.3.0"
+        info.binary shouldBe "agy"
+    }
+
+    @Test
+    fun `describeAntigravityVersion covers every variant`() {
+        SetupService.describeAntigravityVersion(
+            SetupService.AntigravityVersionInfo(SetupService.AntigravityVersion.PRESENT, "1.3.0", "agy"),
+        ) shouldBe "antigravity (1.3.0)"
+        SetupService.describeAntigravityVersion(
+            SetupService.AntigravityVersionInfo(SetupService.AntigravityVersion.ABSENT),
+        ) shouldBe "antigravity not found on PATH"
+        SetupService.describeAntigravityVersion(
+            SetupService.AntigravityVersionInfo(SetupService.AntigravityVersion.UNKNOWN, "banana", "agy"),
+        ) shouldBe "antigravity version unknown (banana)"
+        SetupService.describeAntigravityVersion(
+            SetupService.AntigravityVersionInfo(SetupService.AntigravityVersion.UNKNOWN),
+        ) shouldBe "antigravity version unknown"
+    }
+
+    @Test
+    fun `antigravity install is a fixed point over generated configs`() = runBlocking<Unit> {
+        checkAll(200, Arb.string(0..40)) { noise ->
+            val clean = noise.replace(Regex("[\\p{Cntrl}\"\\\\]"), " ").trim()
+            val foreign = buildJsonObject {
+                put("unrelated-$clean-x", "kept")
+            }
+            val once = SetupService.mergeAntigravityInstall(foreign)
+            SetupService.isAntigravityInstalled(once) shouldBe true
+            SetupService.mergeAntigravityInstall(once) shouldBe once
+            once["unrelated-$clean-x"]?.jsonPrimitive?.content shouldBe "kept"
+        }
+    }
+
+    @Test
+    fun `antigravity remove restores generated foreign content`() = runBlocking<Unit> {
+        checkAll(200, Arb.string(0..40)) { noise ->
+            val clean = noise.replace(Regex("[\\p{Cntrl}\"\\\\]"), " ").trim()
+            val foreign = buildJsonObject {
+                put("unrelated-$clean-x", "kept")
+            }
+            val installed = SetupService.mergeAntigravityInstall(foreign)
+            SetupService.mergeAntigravityRemove(installed) shouldBe foreign
         }
     }
 }

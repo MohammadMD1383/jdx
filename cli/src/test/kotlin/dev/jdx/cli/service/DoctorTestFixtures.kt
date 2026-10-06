@@ -67,6 +67,8 @@ internal fun fakeEnvironment(
     copilotBinaries: List<String> = emptyList(),
     /** `$COPILOT_HOME` stand-in for the Copilot CLI system config dir; null means unset. */
     copilotHome: Path? = null,
+    /** Antigravity binaries to place on the fake PATH (`agy`); empty means absent. */
+    antigravityBinaries: List<String> = emptyList(),
     /** OS name for `.exe` tool probing; tests inject `"Windows 11"`. */
     osName: String = System.getProperty("os.name", ""),
     /**
@@ -111,6 +113,11 @@ internal fun fakeEnvironment(
         }
     }
     for (binary in copilotBinaries) {
+        for (name in toolFileNames(binary, osName)) {
+            emptyExecutable(pathBin, name)
+        }
+    }
+    for (binary in antigravityBinaries) {
         for (name in toolFileNames(binary, osName)) {
             emptyExecutable(pathBin, name)
         }

@@ -17,15 +17,17 @@ import java.nio.file.Paths
  * `jdx setup --agent <name> --scope <project|system>` (issue #33 family).
  *
  * Writes, checks, and removes the MCP server entry that launches `jdx mcp` in
- * third-party agent configs. Seven backends share this service behind the
+ * third-party agent configs. Eight backends share this service behind the
  * [Agent] seam: OpenCode (`opencode.json[c]`, v1+v2 entries), Claude Code
  * (`.mcp.json` / `~/.claude.json`, `mcpServers.jdx`), Cursor
  * (`.cursor/mcp.json` / `~/.cursor/mcp.json`, `mcpServers.jdx`), Kilo Code (a fork
  * of OpenCode — its `mcp` map carries the same v1-style local-server shape),
  * Cline (`cline_mcp_settings.json`, `mcpServers.jdx` in the nested
  * `transport` shape the real CLI writes),
- * Codex CLI (`config.toml`, `[mcp_servers.jdx]`), and GitHub Copilot CLI
- * (`mcp-config.json` / `.mcp.json`, `mcpServers.jdx`).
+ * Codex CLI (`config.toml`, `[mcp_servers.jdx]`), GitHub Copilot CLI
+ * (`mcp-config.json` / `.mcp.json`, `mcpServers.jdx`), and Antigravity
+ * (`.agents/mcp_config.json` / `~/.gemini/config/mcp_config.json`,
+ * `mcpServers.jdx`).
  * All filesystem behaviour lives here; the Clikt command only parses flags,
  * renders, and maps exit codes (D-004).
  *
@@ -114,6 +116,25 @@ import java.nio.file.Paths
  * `~/Documents/Cline/MCP/` paths are migration-only sources the extension
  * reads once — never a write target.
  *
+ * Antigravity layout (verified against a real install, `agy` 1.3.0:
+ * `agy mcp add jdx -- jdx mcp` writes the entry to
+ * `~/.gemini/config/mcp_config.json` under an isolated HOME;
+ * `agy mcp list` / `agy mcp enable` / `agy mcp disable` / `agy mcp remove`
+ * all operate on that user-level file; workspace overrides live in
+ * `.agents/mcp_config.json` per the MCP docs at
+ * https://antigravity.google/docs/mcp — hand-edited, since `agy mcp`
+ * manages the user-level file only). The entry is the stdio server:
+ *
+ * ```json
+ * {"mcpServers": {"jdx": {"command": "jdx", "args": ["mcp"]}}}
+ * ```
+ *
+ * (`agy mcp list` recognises exactly this minimal shape, verified under an
+ * isolated HOME; `agy mcp add` additionally writes `"disabled": false` and
+ * `agy mcp enable` drops the key again, so the probe ignores `disabled` —
+ * presence of `command`/`args` wiring `jdx mcp` is what counts, consistent
+ * with the other backends.)
+ *
  * Merge discipline: the target file is parsed leniently (JSONC comments and
  * trailing commas are accepted), every unrelated key is preserved byte-free —
  * only the owned entries are added, replaced, or removed. A second
@@ -138,7 +159,7 @@ class SetupService(
      */
     private val copilotHome: Path? = null,
 ) {
-    /** Agents with setup support: OpenCode, Claude Code, Cursor, Kilo Code, Cline, Codex CLI, and GitHub Copilot CLI. */
+    /** Agents with setup support: OpenCode, Claude Code, Cursor, Kilo Code, Cline, Codex CLI, GitHub Copilot CLI, and Antigravity. */
     enum class Agent(val cliName: String) {
         OPENCODE("opencode"),
         CLAUDE_CODE("claude-code"),
@@ -147,6 +168,7 @@ class SetupService(
         CLINE("cline"),
         CODEX("codex"),
         COPILOT("copilot"),
+        ANTIGRAVITY("antigravity"),
     }
 
     /** Where the entry is written: the checkout or the user's global config. */
@@ -271,6 +293,24 @@ class SetupService(
         val binary: String? = null,
     )
 
+    /** Whether the `agy` binary is installed for use. `PRESENT` means the binary answered `--version`. */
+    enum class AntigravityVersion(val cliName: String) {
+        PRESENT("present"),
+        ABSENT("absent"),
+        UNKNOWN("unknown"),
+    }
+
+    /**
+     * Best-effort answer to "is antigravity installed". [raw] is the trimmed
+     * `--version` output (null when the binary never answered); [binary] names
+     * the probed executable (`agy`).
+     */
+    data class AntigravityVersionInfo(
+        val version: AntigravityVersion,
+        val raw: String? = null,
+        val binary: String? = null,
+    )
+
     /** What the caller asked for: install, report-only, or uninstall. */
     data class SetupRequest(
         val agent: Agent = Agent.OPENCODE,
@@ -343,6 +383,10 @@ class SetupService(
         Agent.COPILOT -> when (scope) {
             Scope.PROJECT -> copilotProjectConfigPath(projectDir)
             Scope.SYSTEM -> copilotSystemConfigPath(userHome, copilotHome)
+        }
+        Agent.ANTIGRAVITY -> when (scope) {
+            Scope.PROJECT -> antigravityProjectConfigPath(projectDir)
+            Scope.SYSTEM -> antigravitySystemConfigPath(userHome)
         }
     }
 
@@ -451,7 +495,8 @@ class SetupService(
          * `cursorcode` match Cursor; `kilo`, `kilo-code`, `kilocode`
          * match Kilo Code; `cline`, `cline-code`, `clinecode` match Cline;
          * `codex`, `codex-cli`, `codexcli` match Codex CLI;
-         * `copilot`, `github-copilot`, `copilot-cli` match GitHub Copilot CLI).
+         * `copilot`, `github-copilot`, `copilot-cli` match GitHub Copilot CLI;
+         * `antigravity`, `agy`, `antigravity-cli` match Antigravity).
          * Null when unsupported — the adapter exits 3 naming it.
          */
         fun parseAgent(raw: String?): Agent? {
@@ -464,6 +509,7 @@ class SetupService(
                 "cline", "clinecode" -> Agent.CLINE
                 "codex", "codexcli" -> Agent.CODEX
                 "copilot", "githubcopilot", "copilotcli", "githubcopilotcli" -> Agent.COPILOT
+                "antigravity", "agy", "antigravitycli" -> Agent.ANTIGRAVITY
                 else -> null
             }
         }
@@ -698,6 +744,43 @@ class SetupService(
             CopilotVersion.PRESENT -> "copilot" + (info.raw?.let { " ($it)" } ?: " installed")
             CopilotVersion.ABSENT -> "copilot not found on PATH"
             CopilotVersion.UNKNOWN -> "copilot version unknown" + (info.raw?.let { " ($it)" } ?: "")
+        }
+
+        /**
+         * Answers "is antigravity installed for use" from PATH. Probes the
+         * `agy` binary only (verified: `agy --version` prints `1.3.0`).
+         * Never throws: a missing binary reads as ABSENT, a failing or blank
+         * run as UNKNOWN. Pure IO seam ([ProcessRunner]) so tests inject fakes.
+         */
+        fun probeAntigravityVersion(
+            pathDirs: List<Path>,
+            runner: ProcessRunner,
+            osName: String = System.getProperty("os.name", ""),
+        ): AntigravityVersionInfo {
+            val executable = pathDirs.firstNotNullOfOrNull { dir ->
+                toolFileNames("agy", osName)
+                    .map { dir.resolve(it) }
+                    .firstOrNull { Files.isRegularFile(it) && Files.isExecutable(it) }
+            } ?: return AntigravityVersionInfo(AntigravityVersion.ABSENT)
+            val raw = try {
+                val outcome = runner.run(executable, listOf("--version"))
+                (outcome.stdout + "\n" + outcome.stderr).trim().ifEmpty { null }
+            } catch (_: Exception) {
+                null
+            }
+            if (raw.isNullOrBlank()) return AntigravityVersionInfo(AntigravityVersion.UNKNOWN, raw, "agy")
+            return AntigravityVersionInfo(AntigravityVersion.PRESENT, raw, "agy")
+        }
+
+        /**
+         * One human line naming the detected Antigravity install for `setup`
+         * and `doctor` output (`antigravity (1.3.0)`,
+         * `antigravity not found on PATH`). Pure — example-tested.
+         */
+        fun describeAntigravityVersion(info: AntigravityVersionInfo): String = when (info.version) {
+            AntigravityVersion.PRESENT -> "antigravity" + (info.raw?.let { " ($it)" } ?: " installed")
+            AntigravityVersion.ABSENT -> "antigravity not found on PATH"
+            AntigravityVersion.UNKNOWN -> "antigravity version unknown" + (info.raw?.let { " ($it)" } ?: "")
         }
 
         /**
@@ -989,6 +1072,42 @@ class SetupService(
             null
         }
 
+        /**
+         * Antigravity project target: the nearest `.agents/mcp_config.json`
+         * walking up from [projectDir] (mirrors the Cursor walk-up, one level
+         * deeper — the file lives inside the `.agents/` dir), else a fresh
+         * `.agents/mcp_config.json` in [projectDir]. Verified against a real
+         * install (`agy` 1.3.0) and the documented layout (workspace
+         * `.agents/mcp_config.json`, global `~/.gemini/config/mcp_config.json`
+         * at https://antigravity.google/docs/mcp): `agy mcp add/list/remove`
+         * manage the user-level file only, so the workspace file is
+         * hand-edited in the same `mcpServers` shape.
+         */
+        fun antigravityProjectConfigPath(projectDir: Path): Path {
+            var dir: Path? = projectDir.toAbsolutePath().normalize()
+            while (dir != null) {
+                val candidate = dir.resolve(".agents/mcp_config.json")
+                if (Files.isRegularFile(candidate)) return candidate
+                dir = dir.parent
+            }
+            return projectDir.toAbsolutePath().normalize().resolve(".agents/mcp_config.json")
+        }
+
+        /**
+         * Antigravity system target: the user-global
+         * `~/.gemini/config/mcp_config.json`. Verified against a real
+         * install: `agy mcp add jdx -- jdx mcp` under an isolated HOME wrote
+         * the entry to exactly this path, and `agy mcp list` detects it.
+         */
+        fun antigravitySystemConfigPath(userHome: Path): Path =
+            userHome.resolve(".gemini/config/mcp_config.json")
+
+        /** The Antigravity entry: `jdx mcp` on PATH as a stdio MCP server under `mcpServers` (same shape as Claude Code — verified: `agy mcp list` recognises the entry). */
+        fun desiredAntigravityEntry(): JsonObject = buildJsonObject {
+            put("command", "jdx")
+            put("args", JsonArray(listOf(JsonPrimitive("mcp"))))
+        }
+
         /** Report-only probe shared by `--check` and the `doctor` setup row. */
         fun isInstalledAt(path: Path): Boolean = isInstalledAt(path, Agent.OPENCODE)
 
@@ -1014,13 +1133,13 @@ class SetupService(
         /** True when either the v1 (`mcp.jdx`) or the v2 (`mcp.servers.jdx`) entry wires `jdx mcp`. */
         fun isInstalledRoot(root: JsonObject): Boolean = isInstalledRoot(root, Agent.OPENCODE)
 
-        /** True when [agent]'s owned entries wire `jdx mcp` (OpenCode: v1 or v2; Kilo: `mcp.jdx`; Claude/Cursor: `mcpServers.jdx`; Cline: `mcpServers.jdx` transport; Copilot: `mcpServers.jdx` or bare `jdx`; Codex CLI: TOML text probe). */
+        /** True when [agent]'s owned entries wire `jdx mcp` (OpenCode: v1 or v2; Kilo: `mcp.jdx`; Claude/Cursor/Antigravity: `mcpServers.jdx`; Cline: `mcpServers.jdx` transport; Copilot: `mcpServers.jdx` or bare `jdx`; Codex CLI: TOML text probe). */
         fun isInstalledRootFor(agent: Agent, root: JsonObject): Boolean = isInstalledRoot(root, agent)
 
         /**
          * True when an install is a no-op (every owned entry present): OpenCode
          * needs **both** the v1 and v2 entries — a v1-only file is completed
-         * with the v2 entry — while Kilo, Claude Code, Cursor, Cline, Copilot, and Codex CLI
+         * with the v2 entry — while Kilo, Claude Code, Cursor, Cline, Copilot, Antigravity, and Codex CLI
          * need only their single entry. The report-only probe
          * ([isInstalledRoot]) stays lenient (either OpenCode entry counts).
          */
@@ -1031,10 +1150,11 @@ class SetupService(
             Agent.CURSOR -> isCursorInstalled(root)
             Agent.CLINE -> isClineInstalled(root)
             Agent.COPILOT -> isCopilotWrapped(root)
+            Agent.ANTIGRAVITY -> isAntigravityInstalled(root)
             Agent.CODEX -> error("Codex CLI installs merge TOML text, never JSON")
         }
 
-        /** Agent-aware probe: OpenCode checks v1/v2 entries, Claude Code/Cursor check `mcpServers.jdx`, Kilo checks `mcp.jdx`, Cline checks its `mcpServers.jdx` transport entry, Copilot checks `mcpServers.jdx` (or bare `jdx`), Codex CLI probes TOML text. */
+        /** Agent-aware probe: OpenCode checks v1/v2 entries, Claude Code/Cursor/Antigravity check `mcpServers.jdx`, Kilo checks `mcp.jdx`, Cline checks its `mcpServers.jdx` transport entry, Copilot checks `mcpServers.jdx` (or bare `jdx`), Codex CLI probes TOML text. */
         fun isInstalledRoot(root: JsonObject, agent: Agent): Boolean = when (agent) {
             Agent.OPENCODE -> isV1Installed(root) || isV2Installed(root)
             Agent.CLAUDE_CODE -> isClaudeInstalled(root)
@@ -1042,6 +1162,7 @@ class SetupService(
             Agent.KILO -> isV1Installed(root)
             Agent.CLINE -> isClineInstalled(root)
             Agent.COPILOT -> isCopilotInstalled(root)
+            Agent.ANTIGRAVITY -> isAntigravityInstalled(root)
             Agent.CODEX -> error("Codex CLI probes TOML text via isCodexInstalledText, never JSON")
         }
 
@@ -1195,6 +1316,49 @@ class SetupService(
             return JsonObject(base)
         }
 
+        /** True when the Antigravity `mcpServers.jdx` entry is a server whose command runs `jdx mcp` (same shape as Claude Code). */
+        fun isAntigravityInstalled(root: JsonObject): Boolean {
+            val entry = root["mcpServers"]?.jsonObjectOrNull()?.get(SERVER_NAME)?.jsonObjectOrNull()
+                ?: return false
+            return isAntigravityJdxEntry(entry)
+        }
+
+        /**
+         * True when [entry] runs `jdx mcp` in the Antigravity shape
+         * (`{"command": "jdx", "args": ["mcp"]}` — verified: `agy mcp list`
+         * in `agy` 1.3.0 recognises the entry). Same codec as Claude Code
+         * ([isClaudeJdxEntry]): absolute install paths and Windows `PATHEXT`
+         * shims accepted. The `disabled` flag the real CLI writes (`agy mcp
+         * add` writes `disabled: false`, `agy mcp enable` drops the key) is
+         * ignored for presence — the wiring itself is what `--check`
+         * reports. Never throws (hostile configs).
+         */
+        fun isAntigravityJdxEntry(entry: JsonObject): Boolean = isClaudeJdxEntry(entry)
+
+        /**
+         * Merges the desired Antigravity entry into [root] (null = fresh file).
+         * Every other server under `mcpServers` is preserved.
+         */
+        fun mergeAntigravityInstall(root: JsonObject?): JsonObject {
+            val base: MutableMap<String, JsonElement> = root?.toMutableMap() ?: mutableMapOf()
+            val servers = root?.get("mcpServers")?.jsonObjectOrNull()?.toMutableMap() ?: mutableMapOf()
+            servers[SERVER_NAME] = desiredAntigravityEntry()
+            base["mcpServers"] = JsonObject(servers)
+            return JsonObject(base)
+        }
+
+        /**
+         * Removes Antigravity `mcpServers.jdx`; drops an emptied `mcpServers`
+         * object to stay tidy.
+         */
+        fun mergeAntigravityRemove(root: JsonObject): JsonObject {
+            val base = root.toMutableMap()
+            val servers = root["mcpServers"]?.jsonObjectOrNull()?.toMutableMap() ?: return root
+            servers.remove(SERVER_NAME)
+            if (servers.isEmpty()) base.remove("mcpServers") else base["mcpServers"] = JsonObject(servers)
+            return JsonObject(base)
+        }
+
         /**
          * Removes `mcpServers.jdx` (dropping an emptied `mcpServers` object)
          * and a bare top-level `jdx` entry when it is ours, to stay tidy.
@@ -1273,6 +1437,7 @@ class SetupService(
             Agent.KILO -> mergeInstallKilo(root)
             Agent.CLINE -> mergeInstallCline(root)
             Agent.COPILOT -> mergeCopilotInstall(root)
+            Agent.ANTIGRAVITY -> mergeAntigravityInstall(root)
             Agent.CODEX -> error("Codex CLI installs merge TOML text via mergeCodexInstall, never JSON")
         }
 
@@ -1325,6 +1490,7 @@ class SetupService(
             Agent.KILO -> mergeRemoveKilo(root)
             Agent.CLINE -> mergeRemoveCline(root)
             Agent.COPILOT -> mergeCopilotRemove(root)
+            Agent.ANTIGRAVITY -> mergeAntigravityRemove(root)
             Agent.CODEX -> error("Codex CLI removals merge TOML text via mergeCodexRemove, never JSON")
         }
 
@@ -1845,7 +2011,7 @@ class SetupService(
         private fun hasEntry(root: JsonObject, agent: Agent): Boolean = hasEntryFor(agent, root)
 
         private fun hasEntryFor(agent: Agent, root: JsonObject): Boolean = when (agent) {
-            Agent.CLAUDE_CODE, Agent.CURSOR -> {
+            Agent.CLAUDE_CODE, Agent.CURSOR, Agent.ANTIGRAVITY -> {
                 val servers = root["mcpServers"]?.jsonObjectOrNull() ?: return false
                 servers.containsKey(SERVER_NAME)
             }

@@ -12,8 +12,8 @@ import java.nio.file.Path
 /**
  * Golden tests for `jdx setup` (issue #33 family): merged `opencode.json`,
  * Claude Code `.mcp.json`, Cursor `.cursor/mcp.json`, `kilo.json`, Cline `cline_mcp_settings.json`,
- * Codex CLI `config.toml`, and GitHub Copilot CLI `.mcp.json` bytes pinned
- * to committed files under
+ * Codex CLI `config.toml`, GitHub Copilot CLI `.mcp.json`, and Antigravity
+ * `.agents/mcp_config.json` bytes pinned to committed files under
  * `src/test/resources/golden/setup/`.
  *
  * One test pins all files: [GoldenFiles.verifyAll] fails on orphans, so
@@ -264,6 +264,40 @@ class SetupGoldenTest {
             ),
         ) as SetupService.SetupOutcome.Removed
         contents["copilot-remove-keeps-others.json"] = Files.readString(copilotRemoveOutcome.path)
+
+        val antigravityProject = root.resolve("antigravity-project").also { Files.createDirectories(it) }
+        val antigravityFresh = SetupService(home, antigravityProject)
+        val antigravityFreshOutcome = antigravityFresh.run(
+            SetupService.SetupRequest(
+                agent = SetupService.Agent.ANTIGRAVITY,
+                scope = SetupService.Scope.PROJECT,
+            ),
+        ) as SetupService.SetupOutcome.Installed
+        contents["antigravity-fresh-install.json"] = Files.readString(antigravityFreshOutcome.path)
+
+        val antigravityMergeDir = root.resolve("antigravity-merge").also { Files.createDirectories(it) }
+        Files.createDirectories(antigravityMergeDir.resolve(".agents"))
+        Files.writeString(
+            antigravityMergeDir.resolve(".agents/mcp_config.json"),
+            """{"mcpServers":{"other":{"command":"other","args":["x"]}}}""",
+        )
+        val antigravityMerge = SetupService(home, antigravityMergeDir)
+        val antigravityMergeOutcome = antigravityMerge.run(
+            SetupService.SetupRequest(
+                agent = SetupService.Agent.ANTIGRAVITY,
+                scope = SetupService.Scope.PROJECT,
+            ),
+        ) as SetupService.SetupOutcome.Installed
+        contents["antigravity-merge-preserves.json"] = Files.readString(antigravityMergeOutcome.path)
+
+        val antigravityRemoveOutcome = antigravityMerge.run(
+            SetupService.SetupRequest(
+                agent = SetupService.Agent.ANTIGRAVITY,
+                scope = SetupService.Scope.PROJECT,
+                remove = true,
+            ),
+        ) as SetupService.SetupOutcome.Removed
+        contents["antigravity-remove-keeps-others.json"] = Files.readString(antigravityRemoveOutcome.path)
 
         GoldenFiles.verifyAll(File("src/test/resources/golden/setup"), contents)
     }
