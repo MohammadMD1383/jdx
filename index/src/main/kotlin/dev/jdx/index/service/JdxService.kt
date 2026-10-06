@@ -5733,7 +5733,8 @@ public object JdxService {
      * answer differs only in provenance. Mirrors the sources loop above; the
      * two degrade differently (a root with sources answers from ground truth,
      * a root without answers here), which is why they are two loops and not
-     * one parametrised one.
+     * one parametrised one. The decompiled slice is lenient: a single
+     * Vineflower token JavaParser rejects no longer hides the member.
      */
     private fun decompiledBodyOutcome(
         memberRef: MemberSymbolRef,
@@ -5760,7 +5761,7 @@ public object JdxService {
         val decompiledRoot = dev.jdx.sources.MemorySourceRoot(mapOf(javaPathFor(binary) to text))
         var memberNotFound = false
         for (lookupRef in lookupRefs) {
-            when (val found = dev.jdx.sources.findJavaBodies(decompiledRoot, lookupRef)) {
+            when (val found = dev.jdx.sources.findJavaBodiesLenient(decompiledRoot, lookupRef)) {
                 is dev.jdx.sources.JavaBodyResult.Found -> {
                     if (!specified && found.bodies.size > 1) {
                         return ServiceOutcome.Failure(ErrorResult.ambiguous(rawRef, matchRefs))
@@ -5819,6 +5820,8 @@ public object JdxService {
                         ErrorResult.notFound(
                             rawRef,
                             detail = "could not parse decompiled text for $binary: ${found.message} " +
+                                "(member exists in bytecode; file view still works: " +
+                                "jdx source '$binary' --engine vineflower) " +
                                 "(raw bytecode: --engine javap)",
                         ),
                     )
@@ -5893,7 +5896,7 @@ public object JdxService {
      * Serves `--around <member-ref>` from reconstructed text (T-026): the
      * member is located through the T-021 seam over the decompiled file, with
      * overload ambiguity decided from bytecode first (D-009) exactly like the
-     * sources path ([aroundOutcome]).
+     * sources path ([aroundOutcome]). The slice is lenient like [decompiledBodyOutcome].
      */
     private fun decompiledAroundOutcome(
         binary: String,
@@ -5912,7 +5915,7 @@ public object JdxService {
         val decompiledRoot = dev.jdx.sources.MemorySourceRoot(mapOf(javaPathFor(binary) to text))
         var memberNotFound = false
         for (lookupRef in lookupRefs) {
-            when (val found = dev.jdx.sources.findJavaBodies(decompiledRoot, lookupRef)) {
+            when (val found = dev.jdx.sources.findJavaBodiesLenient(decompiledRoot, lookupRef)) {
                 is dev.jdx.sources.JavaBodyResult.Found -> {
                     if (!specified && found.bodies.size > 1) {
                         return ServiceOutcome.Failure(ErrorResult.ambiguous(aroundRaw, matchRefs))
@@ -5963,6 +5966,8 @@ public object JdxService {
                         ErrorResult.notFound(
                             rawRef,
                             detail = "could not parse decompiled text for $binary: ${found.message} " +
+                                "(member exists in bytecode; file view still works: " +
+                                "jdx source '$binary' --engine vineflower) " +
                                 "(raw bytecode: --engine javap)",
                         ),
                     )

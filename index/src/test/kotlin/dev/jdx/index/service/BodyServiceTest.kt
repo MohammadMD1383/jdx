@@ -354,6 +354,57 @@ class BodyServiceTest {
     }
 
     @Test
+    fun `a single bad vineflower token no longer hides the member`(@TempDir tempDir: Path) {
+        // Vineflower occasionally emits one token JavaParser rejects
+        // (`import foo.1;` for synthetic `$1` siblings); the member far from
+        // it must still slice, verbatim, with vineflower provenance.
+        val binary = bareJar(tempDir)
+        val roots = RootsSpec(jarSpecs = listOf(binary.toString()), includeJdk = false)
+        val scripted = ScriptedDecompiler(
+            "package dev.jdx.fixtures;\n" +
+                "import foo.1;\n" +
+                "public class Generics {\n" +
+                "    public <U> U identity(U value) {\n" +
+                "        return value;\n" +
+                "    }\n" +
+                "}\n",
+        )
+        val outcome = JdxService.body(
+            "dev.jdx.fixtures.Generics#identity(java.lang.Object)",
+            roots,
+            BodyOptions(engine = DecompilerId.VINEFLOWER, decompiler = scripted),
+        )
+        outcome.exitCode shouldBe 0
+        val text = textOf(outcome)
+        text shouldContain "decompiled by vineflower from bare.jar"
+        text shouldContain "return value;"
+        text shouldContain "reconstructed"
+        outcome.toJson("body") shouldContain "\"origin\":\"decompiled-vineflower\""
+    }
+
+    @Test
+    fun `an unrecoverable vineflower parse names the file view that still works`(@TempDir tempDir: Path) {
+        // When even lenient parsing fails, the error must not read as "symbol
+        // does not exist": it names the member as bytecode-proven and points
+        // at the whole-file view (which needs no parse) plus the javap hatch.
+        val binary = bareJar(tempDir)
+        val roots = RootsSpec(jarSpecs = listOf(binary.toString()), includeJdk = false)
+        val scripted = ScriptedDecompiler("this is not java {{{")
+        val outcome = JdxService.body(
+            "dev.jdx.fixtures.Generics#identity(java.lang.Object)",
+            roots,
+            BodyOptions(engine = DecompilerId.VINEFLOWER, decompiler = scripted),
+        )
+        outcome.exitCode shouldBe 1
+        val text = textOf(outcome)
+        text shouldContain "could not parse decompiled text for dev.jdx.fixtures.Generics"
+        text shouldContain "member exists in bytecode"
+        text shouldContain "jdx source 'dev.jdx.fixtures.Generics' --engine vineflower"
+        text shouldContain "--engine javap"
+        outcome.toJson("body") shouldContain "member exists in bytecode"
+    }
+
+    @Test
     fun `a member missing from reconstructed text falls back to disassembly`(@TempDir tempDir: Path) {
         // The same gap on the default ladder answers from `javap` (T-073):
         // the member exists in bytecode, so disassembly serves it.
