@@ -18,7 +18,7 @@ Narrow by edge kind with `--kind`:
 | `read` / `write` | field reads and writes |
 | `new` | constructor call sites |
 | `ref` | any other reference (casts, `instanceof`, class literals, signatures) |
-| `throw` | methods declaring the type in `throws` |
+| `throw` | methods declaring the type in `throws` (declaration-level, not `ATHROW` throw sites) |
 | `annotation` | classes and members carrying the annotation |
 
 `--in` / `--exclude` filter by artifact (jar file name, JDK module or source directory), and
@@ -68,5 +68,6 @@ $ jdx samples 'com.google.gson.JsonParser#parseString(String)' --coord com.googl
 - Call matching is exact name + descriptor, not override-aware: a call through an interface is
   attributed to the interface method.
 - Usages found in source directories are textual (`ref` kind only).
+- `usages --kind throw` reads `throws` declarations, not `ATHROW` sites (needs data-flow; future `jdx flow` work).
 
 Open limitations are tracked in [GitHub Issues](https://github.com/MohammadMD1383/jdx/issues).
