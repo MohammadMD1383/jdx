@@ -82,7 +82,8 @@ import dev.jdx.index.workspace.WorkspaceStore
  * - `resolve`: `limit`.
  * - `ls`: `limit` (empty query lists every package).
  * - `tree`: `depth`, `counts`, `limit` (empty query covers every artifact).
- * - `usages`: `kind` (all|call|read|write|ref|new|throw|annotation),
+ * - `usages`: `kind` (all|call|read|write|ref|new|throw|annotation;
+ *   throw reads `throws` declarations, not `ATHROW` sites),
  *   `in`, `exclude`, `limit`, `context`.
  * - `hierarchy`: `up`, `down`, `direct`, `depth`, `in`, `exclude`, `limit`.
  * - `implementors`: `direct`, `depth`, `in`, `exclude`, `limit`.
