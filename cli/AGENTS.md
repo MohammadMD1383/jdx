@@ -22,7 +22,7 @@ is the CLI surface, pinned by help/parity goldens.)
   `.exe`/`.cmd`/`.bat` (`osName` seam); the `appcds` row is stat-only
   (size + mtime vs the fat jar, WARN-only, never FAIL). `service/UpgradeService` — pure-Java `tar.gz` extraction first
   (external `tar` is the fallback), `.exe`-aware launcher check.
-  `service/SetupService` — agent wiring (`jdx setup --agent opencode|claude-code|cursor|kilo|cline|codex|copilot
+  `service/SetupService` — agent wiring (`jdx setup --agent opencode|claude-code|cursor|kilo|cline|codex|copilot|antigravity
   --scope project|system`): JSONC-tolerant `mcp.jdx` (v1) + `mcp.servers.jdx`
   (v2, `enabled` → `disabled`) merge into `opencode.json[c]` (project walk-up,
   else `~/.config/opencode`); `mcpServers.jdx` (`{"command": "jdx", "args":
@@ -51,7 +51,12 @@ is the CLI surface, pinned by help/parity goldens.)
   `GitHub Copilot CLI 1.0.88`) merges into `.mcp.json` (project walk-up,
   `.github/mcp.json` as fallback) or `$COPILOT_HOME/mcp-config.json`
   (else `~/.copilot/mcp-config.json`; `type: stdio` probes true, installs
-  write `local`); idempotent no-op re-runs, `--check`/`--remove`;
+  write `local`); Antigravity `mcpServers.jdx` (same `{"command": "jdx",
+  "args": ["mcp"]}` shape, the `agy mcp add jdx -- jdx mcp` equivalent,
+  verified against `agy` 1.3.0: `agy mcp list` reads the user-level file)
+  merges into `.agents/mcp_config.json` (project walk-up) or
+  `~/.gemini/config/mcp_config.json` (system; the `disabled` flag the real
+  CLI writes probes true); idempotent no-op re-runs, `--check`/`--remove`;
   `parseOpencodeVersion`/`probeOpencodeVersion` classify the installed OpenCode
   line (`opencode` then legacy `opencode2`; v1 = `1.x`, v2 =
   `0.0.0-next/beta/dev-*` or `2.x`, never a guess);
@@ -59,8 +64,10 @@ is the CLI surface, pinned by help/parity goldens.)
   presence; `probeCursorVersion`/`describeCursorVersion` report
   `cursor-agent --version` presence (`agent` shim fallback);
   `probeCodexVersion`/`describeCodexVersion` report `codex --version`
-  presence; `probeCopilotVersion`/`describeCopilotVersion` report
-  `copilot --version` presence (`isJdxCommand` accepts Windows shims `jdx.exe`/`.cmd`/`.bat` and
+  presence;   `probeCopilotVersion`/`describeCopilotVersion` report
+  `copilot --version` presence;
+  `probeAntigravityVersion`/`describeAntigravityVersion` report
+  `agy --version` presence (`isJdxCommand` accepts Windows shims `jdx.exe`/`.cmd`/`.bat` and
   backslash paths on every host, so `--check`/`doctor` stay true on Windows);
   `doctor` reuses all probes for the setup row.
   Tests pin userHome/projectDir to temp dirs, never the real home

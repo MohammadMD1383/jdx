@@ -806,6 +806,68 @@ class DoctorServiceTest {
     }
 
     @Test
+    fun `the setup row covers antigravity wiring and presence`() {
+        val service = DoctorService(fakeEnvironment(tempDir("jdx-doctor-test-")))
+
+        val report = service.probe()
+
+        val setup = report.checks.first { it.name == "setup" }
+        setup.status shouldBe DoctorStatus.WARN
+        setup.detail shouldContain "antigravity project"
+        setup.detail shouldContain "antigravity system"
+        setup.detail shouldContain "antigravity not found on PATH"
+        setup.detail shouldContain "jdx setup --agent antigravity --scope project"
+    }
+
+    @Test
+    fun `the setup row names the detected agy binary`() {
+        val runner = ProcessRunner { executable, _ ->
+            if (executable.fileName.toString().substringBefore(".") == "agy") {
+                ProcessOutcome(0, "1.3.0", "")
+            } else if (executable.fileName.toString().startsWith("opencode")) {
+                throw IOException("no opencode here")
+            } else {
+                ProcessOutcome(0, "26.0.2.1", "")
+            }
+        }
+        val service = DoctorService(
+            fakeEnvironment(
+                tempDir("jdx-doctor-test-"),
+                runner = runner,
+                antigravityBinaries = listOf("agy"),
+            ),
+        )
+
+        val report = service.probe()
+
+        val setup = report.checks.first { it.name == "setup" }
+        setup.status shouldBe DoctorStatus.WARN
+        setup.detail shouldContain "antigravity (1.3.0)"
+    }
+
+    @Test
+    fun `the setup row is OK when only antigravity is wired`() {
+        val root = tempDir("jdx-doctor-test-")
+        val environment = fakeEnvironment(root)
+        SetupService(
+            environment.userHome,
+            environment.workingDir,
+        ).run(
+            SetupService.SetupRequest(
+                agent = SetupService.Agent.ANTIGRAVITY,
+                scope = SetupService.Scope.PROJECT,
+            ),
+        )
+
+        val report = DoctorService(environment).probe()
+
+        val setup = report.checks.first { it.name == "setup" }
+        setup.status shouldBe DoctorStatus.OK
+        setup.detail shouldContain "antigravity project installed"
+        setup.detail shouldContain "antigravity system"
+    }
+
+    @Test
     fun `stale sockets are WARN naming the files, never claiming the daemon runs`() {        // Dummy `.sock` files answer nothing, so the real default probe reads them as stale.
         val service = DoctorService(fakeEnvironment(tempDir("jdx-doctor-test-"), socketCount = 2))
 

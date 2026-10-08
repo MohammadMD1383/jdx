@@ -485,7 +485,9 @@ class DoctorService(
         // (`.mcp.json` / `~/.claude.json`), Cursor
         // (`.cursor/mcp.json` / `~/.cursor/mcp.json`), Kilo Code, Codex CLI
         // (`.codex/config.toml` / `~/.codex/config.toml`), GitHub Copilot
-        // CLI (`.mcp.json` / `~/.copilot/mcp-config.json`), and the single
+        // CLI (`.mcp.json` / `~/.copilot/mcp-config.json`), Antigravity
+        // (`.agents/mcp_config.json` / `~/.gemini/config/mcp_config.json`,
+        // verified against the real `agy` install), and the single
         // global Cline file (both Cline scopes name it — Cline keeps no
         // project-level MCP file, verified against the real install), plus
         // which lines are installed for use (OpenCode v1 vs v2 beta — the
@@ -513,6 +515,8 @@ class DoctorService(
             ?.let { Paths.get(it) }
         val copilotProject = SetupService.copilotProjectConfigPath(environment.workingDir)
         val copilotSystem = SetupService.copilotSystemConfigPath(environment.userHome, copilotHome)
+        val antigravityProject = SetupService.antigravityProjectConfigPath(environment.workingDir)
+        val antigravitySystem = SetupService.antigravitySystemConfigPath(environment.userHome)
         val opencodeDetected = try {
             SetupService.describeVersion(
                 SetupService.probeOpencodeVersion(
@@ -568,6 +572,17 @@ class DoctorService(
         } catch (e: Exception) {
             "copilot version unknown (${e.message ?: e.javaClass.simpleName})"
         }
+        val antigravityDetected = try {
+            SetupService.describeAntigravityVersion(
+                SetupService.probeAntigravityVersion(
+                    environment.pathDirs,
+                    environment.processRunner,
+                    environment.osName,
+                ),
+            )
+        } catch (e: Exception) {
+            "antigravity version unknown (${e.message ?: e.javaClass.simpleName})"
+        }
         fun stateOf(path: Path, agent: SetupService.Agent): String? = try {
             when {
                 !Files.exists(path) -> null
@@ -608,6 +623,10 @@ class DoctorService(
             ?: "no project config (${copilotProject.fileName})"
         val copilotSystemState = stateOf(copilotSystem, SetupService.Agent.COPILOT)
             ?: "no system config ($copilotSystem)"
+        val antigravityProjectState = stateOf(antigravityProject, SetupService.Agent.ANTIGRAVITY)
+            ?: "no project config (${antigravityProject.fileName})"
+        val antigravitySystemState = stateOf(antigravitySystem, SetupService.Agent.ANTIGRAVITY)
+            ?: "no system config ($antigravitySystem)"
         val status = if (
             opencodeProjectState.startsWith("installed") || opencodeSystemState.startsWith("installed") ||
             claudeProjectState.startsWith("installed") || claudeSystemState.startsWith("installed") ||
@@ -615,7 +634,8 @@ class DoctorService(
             kiloProjectState.startsWith("installed") || kiloSystemState.startsWith("installed") ||
             clineProjectState.startsWith("installed") || clineSystemState.startsWith("installed") ||
             codexProjectState.startsWith("installed") || codexSystemState.startsWith("installed") ||
-            copilotProjectState.startsWith("installed") || copilotSystemState.startsWith("installed")
+            copilotProjectState.startsWith("installed") || copilotSystemState.startsWith("installed") ||
+            antigravityProjectState.startsWith("installed") || antigravitySystemState.startsWith("installed")
         ) {
             DoctorStatus.OK
         } else {
@@ -627,8 +647,9 @@ class DoctorService(
                 "`jdx setup --agent cursor --scope project`, " +
                 "`jdx setup --agent kilo --scope project`, " +
                 "`jdx setup --agent cline --scope system`, " +
-                "`jdx setup --agent codex --scope project` or " +
-                "`jdx setup --agent copilot --scope project`"
+                "`jdx setup --agent codex --scope project`, " +
+                "`jdx setup --agent copilot --scope project` or " +
+                "`jdx setup --agent antigravity --scope project`"
         return check(
             "setup",
             status,
@@ -643,7 +664,9 @@ class DoctorService(
                 "codex project $codexProjectState ($codexDetected); " +
                 "codex system $codexSystemState; " +
                 "copilot project $copilotProjectState ($copilotDetected); " +
-                "copilot system $copilotSystemState$hint",
+                "copilot system $copilotSystemState; " +
+                "antigravity project $antigravityProjectState ($antigravityDetected); " +
+                "antigravity system $antigravitySystemState$hint",
         )
     }
 

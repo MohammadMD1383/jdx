@@ -476,6 +476,7 @@ class ProductPages(
             "cline" to "Cline",
             "codex" to "Codex CLI",
             "copilot" to "GitHub Copilot CLI",
+            "antigravity" to "Antigravity",
         )
     }
 }

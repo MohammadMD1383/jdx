@@ -1,6 +1,6 @@
 # Use with AI agents
 
-Wire jdx into Claude Code, Cursor, Codex, GitHub Copilot, OpenCode, Kilo Code, Cline or any MCP client with one command — or let any shell-capable agent call the CLI directly.
+Wire jdx into Claude Code, Cursor, Codex, GitHub Copilot, Antigravity, OpenCode, Kilo Code, Cline or any MCP client with one command — or let any shell-capable agent call the CLI directly.
 
 ## Option 1: MCP, wired by `jdx setup` (recommended)
 

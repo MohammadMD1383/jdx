@@ -8,7 +8,7 @@ jdx is an IDE for AI agents, as a command line tool. It answers the questions an
 
 ## Which AI agents does it work with?
 
-Any agent that speaks the Model Context Protocol or can run shell commands. `jdx setup` wires it into Claude Code, Cursor, Codex CLI, GitHub Copilot CLI, OpenCode, Kilo Code and Cline with one command; other MCP clients take a one-line config. See [Use with AI agents](guide/ai-agents.md).
+Any agent that speaks the Model Context Protocol or can run shell commands. `jdx setup` wires it into Claude Code, Cursor, Codex CLI, GitHub Copilot CLI, Antigravity, OpenCode, Kilo Code and Cline with one command; other MCP clients take a one-line config. See [Use with AI agents](guide/ai-agents.md).
 
 ## How is it different from javap, unzip and grep?
 

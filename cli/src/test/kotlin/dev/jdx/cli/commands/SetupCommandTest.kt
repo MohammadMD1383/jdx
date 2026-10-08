@@ -50,6 +50,9 @@ class SetupCommandTest {
         copilotVersion: SetupService.CopilotVersionInfo = SetupService.CopilotVersionInfo(
             SetupService.CopilotVersion.ABSENT,
         ),
+        antigravityVersion: SetupService.AntigravityVersionInfo = SetupService.AntigravityVersionInfo(
+            SetupService.AntigravityVersion.ABSENT,
+        ),
     ): SetupCommand = SetupCommand(
         // The Codex and Copilot system dirs are pinned under the fake home
         // so no test can leak into the real `~/.codex` / `~/.copilot` via
@@ -63,6 +66,7 @@ class SetupCommandTest {
         cursorVersionProbe = { cursorVersion },
         codexVersionProbe = { codexVersion },
         copilotVersionProbe = { copilotVersion },
+        antigravityVersionProbe = { antigravityVersion },
     )
 
     private fun kiloCommandFor(home: Path, project: Path): SetupCommand = SetupCommand(
@@ -205,7 +209,7 @@ class SetupCommandTest {
         }
 
         code shouldBe 3
-        output.trim() shouldContain "opencode|claude-code|cursor|kilo|cline|codex|copilot"
+        output.trim() shouldContain "opencode|claude-code|cursor|kilo|cline|codex|copilot|antigravity"
     }
 
     @Test
@@ -1165,6 +1169,181 @@ class SetupCommandTest {
         result["installed"]?.jsonPrimitive?.content shouldBe "true"
         result["copilotVersion"]?.jsonPrimitive?.content shouldBe "present"
         result["copilotRaw"]?.jsonPrimitive?.content shouldBe "GitHub Copilot CLI 1.0.88."
+        // No other agent's line probe: the nullable fields are absent
+        // (`explicitNulls = false`), never null-marked.
+        result.containsKey("opencodeVersion") shouldBe false
+        result.containsKey("opencodeRaw") shouldBe false
+        result.containsKey("claudeVersion") shouldBe false
+        result.containsKey("claudeRaw") shouldBe false
+        result.containsKey("codexVersion") shouldBe false
+        result.containsKey("codexRaw") shouldBe false
+    }
+
+    // -- Antigravity wiring (`--agent antigravity`) --
+    // Verified against a real install: `agy` 1.3.0 (`agy mcp add jdx --
+    // jdx mcp` writes `~/.gemini/config/mcp_config.json`; `agy mcp list`
+    // detects the entry; workspace overrides live in
+    // `.agents/mcp_config.json`).
+
+    @Test
+    fun `antigravity install writes dot-agents mcp config and says what to do next`(@TempDir root: Path) {
+        val (home, project) = fakeDirs(root)
+        val output = captureStdout {
+            JdxCli().subcommands(commandFor(home, project))
+                .parse(listOf("setup", "--agent", "antigravity", "--scope", "project"))
+        }
+
+        output.trim() shouldContain "antigravity project setup installed"
+        output.trim() shouldContain "mcpServers entry"
+        output.trim() shouldContain "restart antigravity"
+        output.trim() shouldContain "antigravity not found on PATH"
+        SetupService.isInstalledAt(
+            project.resolve(".agents/mcp_config.json"),
+            SetupService.Agent.ANTIGRAVITY,
+        ) shouldBe true
+    }
+
+    @Test
+    fun `antigravity accepts every documented spelling`(@TempDir root: Path) {
+        listOf("antigravity", "Antigravity", "agy", "AGY", "antigravity-cli").forEachIndexed { index, spelling ->
+            val case = root.resolve("case-$index").also { Files.createDirectories(it) }
+            val (home, project) = fakeDirs(case)
+            captureStdout {
+                JdxCli().subcommands(commandFor(home, project))
+                    .parse(listOf("setup", "--agent", spelling, "--scope", "project"))
+            }
+
+            SetupService.isInstalledAt(
+                project.resolve(".agents/mcp_config.json"),
+                SetupService.Agent.ANTIGRAVITY,
+            ) shouldBe true
+        }
+    }
+
+    @Test
+    fun `antigravity install names the detected binary`(@TempDir root: Path) {
+        val (home, project) = fakeDirs(root)
+        val present = SetupService.AntigravityVersionInfo(
+            SetupService.AntigravityVersion.PRESENT,
+            "1.3.0",
+            "agy",
+        )
+        val output = captureStdout {
+            JdxCli().subcommands(commandFor(home, project, antigravityVersion = present))
+                .parse(listOf("setup", "--agent", "antigravity", "--scope", "project"))
+        }
+
+        output.trim() shouldContain "detected: antigravity (1.3.0)"
+    }
+
+    @Test
+    fun `a second antigravity install is a no-op reporting already installed`(@TempDir root: Path) {
+        val (home, project) = fakeDirs(root)
+        val args = listOf("setup", "--agent", "antigravity", "--scope", "project")
+        captureStdout { JdxCli().subcommands(commandFor(home, project)).parse(args) }
+
+        val output = captureStdout {
+            JdxCli().subcommands(commandFor(home, project)).parse(args)
+        }
+
+        output.trim() shouldContain "already installed"
+    }
+
+    @Test
+    fun `antigravity system scope writes under the fake home`(@TempDir root: Path) {
+        val (home, project) = fakeDirs(root)
+        captureStdout {
+            JdxCli().subcommands(commandFor(home, project))
+                .parse(listOf("setup", "--agent", "antigravity", "--scope", "system"))
+        }
+
+        SetupService.isInstalledAt(
+            home.resolve(".gemini/config/mcp_config.json"),
+            SetupService.Agent.ANTIGRAVITY,
+        ) shouldBe true
+    }
+
+    @Test
+    fun `antigravity check exits 1 when absent and 0 once installed without writing`(@TempDir root: Path) {
+        val (home, project) = fakeDirs(root)
+        val check = listOf("setup", "--agent", "antigravity", "--scope", "project", "--check")
+
+        val absent = shouldThrow<SetupExit> {
+            captureStdout { JdxCli().subcommands(commandFor(home, project)).parse(check) }
+        }
+        absent.code shouldBe 1
+        Files.exists(project.resolve(".agents/mcp_config.json")) shouldBe false
+
+        captureStdout {
+            JdxCli().subcommands(commandFor(home, project))
+                .parse(listOf("setup", "--agent", "antigravity", "--scope", "project"))
+        }
+        val installed = captureStdout {
+            JdxCli().subcommands(commandFor(home, project)).parse(check)
+        }
+        installed.trim() shouldContain "antigravity project setup installed"
+    }
+
+    @Test
+    fun `antigravity check hint names the antigravity install command`(@TempDir root: Path) {
+        val (home, project) = fakeDirs(root)
+
+        var code = -1
+        val output = captureStdout {
+            try {
+                JdxCli().subcommands(commandFor(home, project))
+                    .parse(listOf("setup", "--agent", "antigravity", "--scope", "system", "--check"))
+            } catch (e: SetupExit) {
+                code = e.code
+            }
+        }
+
+        code shouldBe 1
+        output.trim() shouldContain "jdx setup --agent antigravity --scope system"
+    }
+
+    @Test
+    fun `antigravity remove uninstalls cleanly`(@TempDir root: Path) {
+        val (home, project) = fakeDirs(root)
+        captureStdout {
+            JdxCli().subcommands(commandFor(home, project))
+                .parse(listOf("setup", "--agent", "antigravity", "--scope", "project"))
+        }
+
+        val output = captureStdout {
+            JdxCli().subcommands(commandFor(home, project))
+                .parse(listOf("setup", "--agent", "antigravity", "--scope", "project", "--remove"))
+        }
+
+        output.trim() shouldContain "antigravity project setup removed"
+        SetupService.isInstalledAt(
+            project.resolve(".agents/mcp_config.json"),
+            SetupService.Agent.ANTIGRAVITY,
+        ) shouldBe false
+    }
+
+    @Test
+    fun `antigravity json carries the setup payload without other agent lines`(@TempDir root: Path) {
+        val (home, project) = fakeDirs(root)
+        val present = SetupService.AntigravityVersionInfo(
+            SetupService.AntigravityVersion.PRESENT,
+            "1.3.0",
+            "agy",
+        )
+        val output = captureStdout {
+            JdxCli().subcommands(commandFor(home, project, antigravityVersion = present))
+                .parse(listOf("setup", "--agent", "antigravity", "--scope", "project", "--json"))
+        }
+
+        val parsed = Json.parseToJsonElement(output.trim()).jsonObject
+        parsed["command"]?.jsonPrimitive?.content shouldBe "setup"
+        parsed["ok"]?.jsonPrimitive?.content shouldBe "true"
+        val result = parsed["result"]!!.jsonObject
+        result["agent"]?.jsonPrimitive?.content shouldBe "antigravity"
+        result["scope"]?.jsonPrimitive?.content shouldBe "project"
+        result["installed"]?.jsonPrimitive?.content shouldBe "true"
+        result["antigravityVersion"]?.jsonPrimitive?.content shouldBe "present"
+        result["antigravityRaw"]?.jsonPrimitive?.content shouldBe "1.3.0"
         // No other agent's line probe: the nullable fields are absent
         // (`explicitNulls = false`), never null-marked.
         result.containsKey("opencodeVersion") shouldBe false
