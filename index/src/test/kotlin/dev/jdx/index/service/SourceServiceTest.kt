@@ -324,6 +324,40 @@ class SourceServiceTest {
     }
 
     @Test
+    fun `around centers even when vineflower emits one bad token`(@TempDir tempDir: Path) {
+        // Same lenient seam as `body`: the bad import must not hide the
+        // `--around` slice, which `source` whole-file already serves unparsed.
+        val binary = bareJar(tempDir)
+        val roots = RootsSpec(jarSpecs = listOf(binary.toString()), includeJdk = false)
+        val scripted = object : DecompilerEngine {
+            override val id: DecompilerId = DecompilerId.VINEFLOWER
+            override fun decompileClass(
+                classBytes: ByteArray,
+                binaryName: String,
+                classpath: List<Path>,
+            ): DecompileResult = DecompileResult.Decompiled(
+                "package dev.jdx.fixtures;\n" +
+                    "import foo.1;\n" +
+                    "public class Generics {\n" +
+                    "    public <U> U identity(U value) {\n" +
+                    "        return value;\n" +
+                    "    }\n" +
+                    "}\n",
+                "test",
+            )
+        }
+        val options = SourceOptions(
+            aroundRef = "dev.jdx.fixtures.Generics#identity(java.lang.Object)",
+            engine = DecompilerId.VINEFLOWER,
+            decompiler = scripted,
+        )
+        val outcome = JdxService.source("dev.jdx.fixtures.Generics", roots, options)
+        outcome.exitCode shouldBe 0
+        textOf(outcome) shouldContain "decompiled by vineflower"
+        textOf(outcome) shouldContain "return value;"
+    }
+
+    @Test
     fun `paired sources never touch the decompiler`() {
         val fake = FailingDecompiler()
         val outcome = JdxService.source(

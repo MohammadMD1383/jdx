@@ -138,6 +138,35 @@ public fun findJavaBodies(root: SourceRoot, ref: MemberSymbolRef): JavaBodyResul
 }
 
 /**
+ * Lenient member slice for reconstructed (decompiled) text: same as
+ * [findJavaBodies] but parses through [parseJavaUnitLenient], so a single
+ * Vineflower token JavaParser rejects no longer hides every member. Paired
+ * sources never use this — only the T-026 reconstruction path, where the
+ * whole-file `source` view already serves the same text unparsed.
+ */
+public fun findJavaBodiesLenient(root: SourceRoot, ref: MemberSymbolRef): JavaBodyResult {
+    return when (val loaded = loadJavaUnitLenient(root, ref.declaringType.binaryName)) {
+        is JavaUnit.Unit -> {
+            val target = navigateToType(loaded.compilationUnit, ref.declaringType.binaryName)
+                ?: return JavaBodyResult.MemberNotFound
+            val matches = narrowBySignature(matchByName(target, ref), ref)
+            if (matches.isEmpty()) return JavaBodyResult.MemberNotFound
+            val bodies = matches.mapNotNull { sliceBody(loaded, it, ref) }
+            if (bodies.isEmpty()) {
+                JavaBodyResult.ParseError(
+                    "source read error: ${loaded.path} has no position for ${ref.name}",
+                )
+            } else {
+                JavaBodyResult.Found(bodies)
+            }
+        }
+        is JavaUnit.NoSource -> JavaBodyResult.NoSource
+        is JavaUnit.NotJava -> JavaBodyResult.NotJava
+        is JavaUnit.ParseError -> JavaBodyResult.ParseError(loaded.message)
+    }
+}
+
+/**
  * Every member the declaring type's `.java` file declares, in file order.
  * Overloads appear once per declaration and multi-declarator fields once per
  * variable; synthetic/bridge members never appear — they exist only in
@@ -194,6 +223,29 @@ internal fun loadJavaUnit(root: SourceRoot, binaryName: String): JavaUnit {
 }
 
 /**
+ * Lenient `binaryName → parsed `.java`` for reconstructed text: same
+ * resolution as [loadJavaUnit] but parses through [parseJavaUnitLenient].
+ * Only the T-026 decompiled path uses this.
+ */
+internal fun loadJavaUnitLenient(root: SourceRoot, binaryName: String): JavaUnit {
+    if (binaryName.isBlank()) return JavaUnit.NoSource
+    val path = try {
+        findJavaSourcePath(root, binaryName)
+    } catch (e: Exception) {
+        return JavaUnit.ParseError(
+            "source read error: cannot list ${root.displayName}: ${e.message}",
+        )
+    } ?: return JavaUnit.NoSource
+    if (!path.endsWith(".java")) return JavaUnit.NotJava
+    val text = try {
+        root.openSource(path).use { it.readBytes().toString(Charsets.UTF_8) }
+    } catch (e: Exception) {
+        return JavaUnit.ParseError("source read error: cannot read $path: ${e.message}")
+    }
+    return parseJavaUnitLenient(path, text)
+}
+
+/**
  * Parses one `.java` file; positions are sliced from [text] afterward, so
  * callers must pass the exact bytes that were parsed.
  */
@@ -218,6 +270,127 @@ internal fun parseJavaUnit(path: String, text: String): JavaUnit {
     // Split once: every body below is a verbatim sub-slice of these lines.
     val lines = text.split('\n').map { it.removeSuffix("\r") }
     return JavaUnit.Unit(path, lines, parsed.result.get())
+}
+
+/**
+ * Lenient parse for reconstructed (decompiled) text: Vineflower occasionally
+ * emits a single token JavaParser rejects (`import foo.1;`, `return this.1;`
+ * for synthetic `$1` siblings — `.1` where `.`/`;` is expected). A whole-file
+ * failure would then hide every member, even ones far from the bad token that
+ * `jdx source` serves fine unparsed. A failed parse retries with the
+ * offending token blanked to spaces (line breaks and lengths preserved, so
+ * ranges still address the original lines) up to [MAX_PARSE_REPAIRS] times;
+ * slices always cut the original [text], so the shown body is ground truth
+ * even when the parse needed a repair elsewhere. Paired sources never use
+ * this — a corrupt `-sources.jar` stays an honest `ParseError` (exit 5).
+ */
+internal fun parseJavaUnitLenient(path: String, text: String): JavaUnit {
+    when (val strict = parseJavaUnit(path, text)) {
+        is JavaUnit.Unit -> return strict
+        is JavaUnit.NoSource -> return strict
+        is JavaUnit.NotJava -> return strict
+        is JavaUnit.ParseError -> Unit
+    }
+    val configuration = ParserConfiguration()
+        .setLanguageLevel(ParserConfiguration.LanguageLevel.BLEEDING_EDGE)
+    val firstMessage = try {
+        JavaParser(configuration)
+            .parse(ParseStart.COMPILATION_UNIT, Providers.provider(text))
+            .problems.firstOrNull()?.message?.singleLine()?.take(200)
+            ?: "unknown parse failure"
+    } catch (e: Exception) {
+        return JavaUnit.ParseError("source read error: $path does not parse: ${e.message}")
+    }
+    // The original lines stay the slicing ground truth; only the repair copy
+    // is blanked, so a successful repair still serves original bytes.
+    val originalLines = text.split('\n').map { it.removeSuffix("\r") }
+    val repair = StringBuilder(text)
+    repeat(MAX_PARSE_REPAIRS) {
+        val parsed = try {
+            JavaParser(configuration)
+                .parse(ParseStart.COMPILATION_UNIT, Providers.provider(repair.toString()))
+        } catch (_: Exception) {
+            return JavaUnit.ParseError("source read error: $path does not parse: $firstMessage")
+        }
+        if (parsed.isSuccessful && parsed.result.isPresent) {
+            return JavaUnit.Unit(path, originalLines, parsed.result.get())
+        }
+        val problem = parsed.problems.firstOrNull()
+            ?: return JavaUnit.ParseError("source read error: $path does not parse: $firstMessage")
+        val range = offendingTokenRange(problem)
+            ?: return JavaUnit.ParseError("source read error: $path does not parse: $firstMessage")
+        if (!maskRangeWithSpaces(repair, range)) {
+            return JavaUnit.ParseError("source read error: $path does not parse: $firstMessage")
+        }
+    }
+    return JavaUnit.ParseError("source read error: $path does not parse: $firstMessage")
+}
+
+/** Upper bound on single-token blanking retries in [parseJavaUnitLenient]. */
+internal const val MAX_PARSE_REPAIRS: Int = 10
+
+/**
+ * The single token that broke the parse, for blanking by [maskRangeWithSpaces]:
+ * the quoted `Found "..."` text's first occurrence inside the problem's token
+ * window, else the window's first token (guaranteed progress without ever
+ * blanking the window's whole run to EOF).
+ */
+internal fun offendingTokenRange(problem: com.github.javaparser.Problem): com.github.javaparser.Range? {
+    val window = problem.location.orElse(null) ?: return null
+    val quoted = Regex("Found\\s+\"([^\"]+)\"").find(problem.message)?.groupValues?.getOrNull(1)
+        ?: Regex("Found\\s+'([^']+)'").find(problem.message)?.groupValues?.getOrNull(1)
+    if (quoted != null) {
+        for (token in window) {
+            if (token.text == quoted) {
+                token.range.orElse(null)?.let { return it }
+            }
+        }
+    }
+    // Fallback: the window's first real token (never whitespace, never the
+    // whole window — blanking to EOF would erase the file).
+    for (token in window) {
+        if (token.text.isNotBlank()) {
+            token.range.orElse(null)?.let { return it }
+        }
+    }
+    return null
+}
+
+/**
+ * Blanks [range] (1-based inclusive) to spaces, preserving `\n`/`\r` so line
+ * breaks and line lengths — and therefore every other range — survive.
+ * Returns false when nothing changed (already blank or out of bounds).
+ */
+internal fun maskRangeWithSpaces(repair: StringBuilder, range: com.github.javaparser.Range): Boolean {
+    val lineStarts = mutableListOf(0)
+    for (i in repair.indices) {
+        if (repair[i] == '\n') lineStarts.add(i + 1)
+    }
+    fun lineLength(line: Int): Int {
+        if (line < 1 || line > lineStarts.size) return -1
+        val start = lineStarts[line - 1]
+        val end = if (line < lineStarts.size) lineStarts[line] - 1 else repair.length
+        // Exclude a trailing \r from the column math (split/\r parity above).
+        return if (end > start && repair[end - 1] == '\r') end - 1 - start else end - start
+    }
+    var changed = false
+    for (line in range.begin.line..range.end.line) {
+        val len = lineLength(line)
+        if (len < 0) continue
+        val fromCol = if (line == range.begin.line) range.begin.column else 1
+        val toCol = if (line == range.end.line) range.end.column else len + 1
+        for (col in fromCol..toCol) {
+            val idx = lineStarts[line - 1] + (col - 1)
+            if (idx < 0 || idx >= repair.length) continue
+            val ch = repair[idx]
+            if (ch == '\n' || ch == '\r') continue
+            if (ch != ' ') {
+                repair.setCharAt(idx, ' ')
+                changed = true
+            }
+        }
+    }
+    return changed
 }
 
 private fun String.singleLine(): String = replace('\n', ' ').replace('\r', ' ')
