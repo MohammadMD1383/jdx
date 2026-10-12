@@ -276,7 +276,7 @@ public val ALL_MCP_TOOLS: List<McpToolDefinition> = listOf(
             queryParam(), workspaceParam(),
             McpParam(
                 name = "kind", kind = McpParamKind.STRING,
-                description = "Edge kind: all, call, read, write, ref, new, throw or annotation (default all).",
+                description = "Edge kind: all, call, read, write, ref, new, throw (throws declarations, not ATHROW sites) or annotation (default all).",
             ),
             inParam(), excludeParam(), limitParam(50),
             McpParam(name = "context", kind = McpParamKind.INTEGER, description = "Snippet lines around each hit (default 0)."),

@@ -38,7 +38,7 @@ paired; `--engine javap` shows raw bytecode. Decompiled output is always labelle
 
 | Command | IDE equivalent | Key flags |
 |---|---|---|
-| `jdx usages <symbol>` | Find usages (`Alt+F7`) | `--kind all\|call\|read\|write\|ref\|new\|throw\|annotation` (`impl`/`override` redirect to `hierarchy`/`implementors`; `--context` redirects to `samples`), `--in` / `--exclude <artifact-glob>`, `--limit` (50), `--src <dir>` (repeatable source-dir roots). `new` = constructor call sites; `throw` = methods declaring the type in `throws`; `annotation` = annotated classes/members. Source-dir hits are textual mentions (`ref` only). |
+| `jdx usages <symbol>` | Find usages (`Alt+F7`) | `--kind all\|call\|read\|write\|ref\|new\|throw\|annotation` (`impl`/`override` redirect to `hierarchy`/`implementors`; `--context` redirects to `samples`), `--in` / `--exclude <artifact-glob>`, `--limit` (50), `--src <dir>` (repeatable source-dir roots). `new` = constructor call sites; `throw` = methods declaring the type in `throws` (declaration-level, not `ATHROW` throw sites); `annotation` = annotated classes/members. Source-dir hits are textual mentions (`ref` only). |
 | `jdx hierarchy <type>` | Type hierarchy (`Ctrl+H`) | `--up` / `--down` (default both), `--direct`, `--depth N`, `--in` / `--exclude`, `--limit` (50). Member refs exit 3. |
 | `jdx implementors <type>` | Who implements this? | Alias for `hierarchy --down`: `--direct`, `--depth N`, `--in` / `--exclude`, `--limit` (50) |
 | `jdx callers <member>` | Call hierarchy in (`Ctrl+Alt+H`) | `--depth N` (default 1), `--in` / `--exclude`, `--limit` (50). Methods + constructors only; type/field refs exit 3. Cycle-safe (`…(cycle)`). Exact name+descriptor matching — not override-aware (see limitations). |

@@ -422,6 +422,7 @@ Find Usages across **all workspace jars plus the project's own source dirs**.
 - `--kind call|ref|impl|override|read|write|new|throw|annotation|all`
 - `--in <artifact-glob>`, `--exclude <glob>`, `--limit N`, `--context N`
 - Groups by artifact, then by declaring method, with the canonical ref of each call site.
+- `--kind throw` matches `throws` declarations (declaration-level), not `ATHROW` throw sites.
 
 #### `jdx callers <method>` / `jdx calls <method>`
 Incoming / outgoing call edges. `--depth N` walks the tree (cycle-safe, with `…(cycle)`

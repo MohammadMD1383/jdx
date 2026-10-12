@@ -50,7 +50,8 @@ class UsagesCommand(
             "line (source dirs, ref kind). " +
             "--kind narrows to call|read|write|ref|new|throw|annotation (default: all); " +
             "new shows constructor <init> call sites, throw shows methods declaring " +
-            "the type in throws, annotation shows annotated classes and members; " +
+            "the type in throws (declaration-level, not ATHROW throw sites), " +
+            "annotation shows annotated classes and members; " +
             "source-dir hits are textual mentions (ref only), so call|read|write|new|throw|annotation " +
             "show bytecode-backed edges alone. " +
             "impl|override land with hierarchy (jdx hierarchy, jdx implementors). " +
@@ -63,6 +64,7 @@ class UsagesCommand(
     private val kind by option(
         "--kind",
         help = "Edge kind: call, read, write, ref, new, throw, annotation or all (default all). " +
+            "throw = throws declarations, not ATHROW sites. " +
             "impl|override land with hierarchy (jdx hierarchy, jdx implementors).",
     ).choice(
         "all", "call", "read", "write", "ref",

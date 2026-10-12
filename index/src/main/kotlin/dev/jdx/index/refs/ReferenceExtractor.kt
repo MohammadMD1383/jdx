@@ -29,12 +29,19 @@ import org.objectweb.asm.tree.TypeInsnNode
  * Edges are deduplicated (one row per distinct edge per method — a loop calling
  * `foo()` ten times is one edge) and returned in [sortedEdges] order, so
  * indexing the same bytes twice yields identical rows (D-007).
+ *
+ * `ATHROW` is intentionally not extracted: attributing the thrown type needs
+ * data-flow the extractor deliberately skips, so `usages --kind throw` is a
+ * `throws`-declaration view (see `JdxService.collectMetadataUsages`); site
+ * attribution is deferred to future `jdx flow` work.
  */
 public object ReferenceExtractor {
 
     /**
      * Extracts every reference edge from [classBytes]. Never throws: anything
      * ASM cannot parse degrades to fewer (or zero) edges, never an exception.
+     * `ATHROW` sites are intentionally not extracted (no data-flow to
+     * attribute the thrown type).
      */
     public fun extract(classBytes: ByteArray): List<ReferenceEdge> {
         val fromClass = try {

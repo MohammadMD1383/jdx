@@ -2454,8 +2454,11 @@ public object JdxService {
      * are parsed here so `--help` shows the full proposal vocabulary, but
      * rejected naming the hierarchy commands. `new` filters the vocabulary to
      * constructor `<init>` calls; `throw`/`annotation` read `ClassInfo`
-     * metadata (`throws`, annotations) over the same live-roots scan (T-075,
-     * D-053).
+     * metadata (`throws` declarations, annotations) over the same live-roots
+     * scan (T-075, D-053). `throw` is declaration-level only: it reads
+     * `throws` declarations, not `ATHROW` sites — the extractor deliberately
+     * skips `ATHROW` (no data-flow to attribute the thrown type); site
+     * attribution is deferred to future `jdx flow` work.
      */
     public enum class UsageKindFilter(public val flag: String) {
         ALL("all"),
@@ -2693,8 +2696,11 @@ public object JdxService {
 
             // T-075 graph enrichment (D-053): `new` is a filtered view over
             // the T-029 vocabulary (METHOD_CALL to `<init>`); `throw` reads
-            // `throws` declarations and `annotation` reads annotation uses
-            // from ClassInfo metadata over the same live-roots scan. `all`
+            // `throws` declarations (declaration-level, not `ATHROW` sites —
+            // the extractor deliberately skips `ATHROW`/data-flow; site
+            // attribution is deferred to future `jdx flow` work) and
+            // `annotation` reads annotation uses from ClassInfo metadata over
+            // the same live-roots scan. `all`
             // is edges plus the two metadata kinds (constructors stay under
             // their `call`/`ref` rows there, so nothing double-counts).
             // Metadata kinds are type-level: a member ref with `throw` or
@@ -2868,7 +2874,10 @@ public object JdxService {
 
     /**
      * Collects the T-075 metadata hits for one class file: `throw` rows for
-     * every method whose `throws` declares [targetBinary], `annotation` rows
+     * every method whose `throws` declares [targetBinary] (declaration-level,
+     * not `ATHROW` sites — the extractor deliberately skips `ATHROW` since
+     * attributing the thrown type needs data-flow; site attribution is
+     * deferred to future `jdx flow` work), `annotation` rows
      * for the class and each member annotated with it. One row per declaring
      * method / annotated element, kind-led like the edge rows. Never throws:
      * unparseable bytes warn once via [reported] and read as no hits (D-017).
