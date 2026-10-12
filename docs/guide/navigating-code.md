@@ -68,6 +68,6 @@ $ jdx samples 'com.google.gson.JsonParser#parseString(String)' --coord com.googl
 - Call matching is exact name + descriptor, not override-aware: a call through an interface is
   attributed to the interface method.
 - Usages found in source directories are textual (`ref` kind only).
-- `usages --kind throw` reads `throws` declarations, not `ATHROW` sites (needs data-flow; future `jdx flow` work).
+- `usages --kind throw` reads `throws` declarations, not `ATHROW` sites (throw-site attribution needs data-flow analysis and is deferred to future work).
 
 Open limitations are tracked in [GitHub Issues](https://github.com/MohammadMD1383/jdx/issues).
