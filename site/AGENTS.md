@@ -76,4 +76,6 @@ Reference → Advanced). URLs are flat `docs/<slug>/` and must never change once
 - Every page gets an `index.md` twin; agents read Markdown far better than HTML.
 - `robots.txt` / `llms.txt` only count at a host root. On `github.io/jdx/` they are ignored by
   crawlers; a custom domain (`SITE_BASE_URL` repo variable) fixes that and writes `CNAME`.
-- The launcher fails when `JAVA_TOOL_OPTIONS` is set (#88); `ProcessJdxRunner` unsets it.
+- `JAVA_TOOL_OPTIONS` / `_JAVA_OPTIONS` / `JDK_JAVA_OPTIONS`: the launcher tolerates their
+  `Picked up ...` banners since #88, but `ProcessJdxRunner` still unsets them — published
+  output must never depend on the host's JVM options.
