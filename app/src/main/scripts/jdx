@@ -127,9 +127,16 @@ else
 fi
 
 version_output=$("$java_exe" -version 2>&1) || die "could not run '$java_exe -version' — is it a working JDK?"
-version=$(printf '%s\n' "$version_output" | sed -n '1s/^.*version "\([^"]*\)".*/\1/p')
+# The version is the first line containing `version "`, never necessarily line 1: when
+# JAVA_TOOL_OPTIONS / _JAVA_OPTIONS / JDK_JAVA_OPTIONS is set (containers, CI, corporate
+# machines) the JVM prints a `Picked up <VAR>: ...` banner *before* it (issue #88).
+# Two `sed` passes — extract every match, keep the first — so `sed` stays the only
+# external tool this script needs (no `head`; the tools-only-PATH fault tests).
+version=$(printf '%s\n' "$version_output" | sed -n 's/^.*version "\([^"]*\)".*/\1/p' | sed -n '1p')
 if [ -z "$version" ]; then
-    first_line=$(printf '%s\n' "$version_output" | sed -n '1p')
+    # Name a real content line of the version output, not a `Picked up` option
+    # banner — the banner is not the problem, the missing version is (issue #88).
+    first_line=$(printf '%s\n' "$version_output" | sed -n '/^Picked up /d; p; q')
     die "no version string in output of '$java_exe -version': $first_line"
 fi
 

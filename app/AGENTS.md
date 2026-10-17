@@ -13,6 +13,10 @@ Fat-jar assembly + the `jdx` launchers (POSIX + Windows) + AppCDS archive.
   CDS diagnostics stay off so the mismatch never prints as `[error]` noise).
   More than one `jdx-*-all.jar` is an ambiguous install: exit 6 naming every
   jar (never a first-glob-wins guess, which once reported the wrong version).
+  The `java -version` probe takes the **first line containing `version "`**, never
+  line 1 — `JAVA_TOOL_OPTIONS`/`_JAVA_OPTIONS`/`JDK_JAVA_OPTIONS` print a
+  `Picked up ...` banner first, which used to cost every command exit 6 (#88);
+  the no-version error likewise names the first non-banner line.
   `$JDX_JAVA_HOME_HELPER` overrides the macOS helper path (test seam).
   Installer scripts use no `--` anywhere: BSD mkdir/cp/chmod reject it.
 - `src/main/scripts/jdx.bat` (+ `jdx.ps1`) — Windows launchers (#46): same
@@ -23,6 +27,10 @@ Fat-jar assembly + the `jdx` launchers (POSIX + Windows) + AppCDS archive.
   never a silent fall-through) → `where java.exe` → registry
   (`JavaSoft` / `Adoptium` `JavaHome` values) → `%ProgramFiles%\Java` (+
   `ProgramFiles(x86)`) probes; minimum Java 21 with legacy `1.x` mapping.
+  Version gate (#88): `findstr /i version` drops the `Picked up ...` banners and
+  the token-3 must be **quoted** (`if not "%%v"=="%%~v"`) — a banner whose value
+  merely contains the word "version" can never supply the version. `jdx.ps1`'s
+  regex already scans the whole output, not line 1, so it needs no change.
   `jdx.bat` is the default entry point (no execution-policy step); `jdx.ps1`
   is the PowerShell twin. The `.bat` is committed CRLF (`*.bat text eol=crlf`).
 - `build.gradle.kts` — `generateCdsClassList` + `createCdsArchive` (incremental,
@@ -54,7 +62,10 @@ Fat-jar assembly + the `jdx` launchers (POSIX + Windows) + AppCDS archive.
   by `InstallReleaseScriptTest` for both extensions.
 - Launcher behaviour is pinned by present/absent exec-args tests — flag order
   (`-Xshare:auto` before `-XX:SharedArchiveFile`) is what makes stale archives
-  degrade instead of fail. The Windows launchers carry the same pin
+  degrade instead of fail — and by present/absent option-banner tests (#88): the
+  stub JDK emulates `Picked up <VAR>: ...`, so each of the three option
+  variables is exercised through the real launcher (plus a real-JVM repro and a
+  Windows-CI `.bat` smoke). The Windows launchers carry the same pin
   (`WindowsLauncherScriptTest`): tier-1 pins the `.bat` statically (no cmd.exe
   on a Linux host); tier-2 execs `jdx.ps1` for real under pwsh against a stub
   `bin/java.exe` on any host, and execs the real `jdx.bat` on Windows CI (#52).

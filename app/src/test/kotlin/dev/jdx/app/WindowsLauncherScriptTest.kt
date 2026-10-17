@@ -1,6 +1,7 @@
 package dev.jdx.app
 
 import io.kotest.matchers.shouldBe
+import io.kotest.matchers.collections.shouldContain
 import io.kotest.matchers.string.shouldContain
 import org.junit.jupiter.api.Assumptions.assumeTrue
 import org.junit.jupiter.api.Tag
@@ -217,6 +218,17 @@ class WindowsLauncherScriptTest {
     }
 
     @Test
+    fun `the bat only accepts a quoted version token so an option banner can never win the version gate`() {
+        // #88: findstr /i version drops the normal `Picked up ...` banners, but a
+        // banner whose value merely contains the word "version" would still reach
+        // tokens=3 — only a quoted token-3 counts (%%~v strips the quotes, so the
+        // comparison differs exactly when they were present).
+        val text = bat()
+        text shouldContain "findstr /i version"
+        text shouldContain """if not defined JDX_RAWVER if not "%%v"=="%%~v" set "JDX_RAWVER=%%v""""
+    }
+
+    @Test
     fun `every bat failure is a jdx-prefixed stderr line with exit 6`() {
         val text = bat()
         text shouldContain "1>&2 echo jdx: "
@@ -235,6 +247,11 @@ class WindowsLauncherScriptTest {
 
     private fun runProcess(command: List<String>, environment: Map<String, String> = emptyMap()): ProcessResult {
         val builder = ProcessBuilder(command)
+        // JVM option-variable banners (#88) are opted into per test, never
+        // inherited from the host environment by accident.
+        builder.environment().remove("JAVA_TOOL_OPTIONS")
+        builder.environment().remove("_JAVA_OPTIONS")
+        builder.environment().remove("JDK_JAVA_OPTIONS")
         builder.environment().putAll(environment)
         val process = builder.start()
         // Outputs here are tiny (a few lines); sequential reads cannot deadlock a pipe.
@@ -268,6 +285,22 @@ class WindowsLauncherScriptTest {
         result.exitCode shouldBe 6
         result.stderr shouldContain "jdx: "
         result.stderr shouldContain "JAVA_HOME"
+    }
+
+    @Test
+    @Tag("tier2")
+    fun `regression #88 - jdx-bat version runs with JAVA_TOOL_OPTIONS set on Windows`() {
+        // The exact repro from the issue, on Windows: a real java.exe prints
+        // `Picked up JAVA_TOOL_OPTIONS: ...` before the version line, and the
+        // version gate must read through it (runs in Windows CI, #52).
+        assumeTrue(isWindows(), "cmd.exe smoke needs Windows (runs in Windows CI, #52)")
+        assumeTrue(builtBat.isFile, "app/build/jdx.bat missing — run :app:installDist")
+        val result = runBat(
+            listOf("version"),
+            environment = mapOf("JAVA_TOOL_OPTIONS" to "-Dfoo=bar"),
+        )
+        result.exitCode shouldBe 0
+        result.stdout.trim() shouldContain "jdx version"
     }
 
     // ------------------------------------------------------------------ tier-2: real pwsh execution
@@ -313,6 +346,18 @@ class WindowsLauncherScriptTest {
             """
             #!/bin/sh
             if [ "${'$'}1" = "-version" ]; then
+                # Emulate the JVM's option-variable banners (#88): when an option
+                # variable is set, a real `java -version` prints `Picked up <VAR>:
+                # ...` on stderr *before* the version line.
+                if [ -n "${'$'}JAVA_TOOL_OPTIONS" ]; then
+                    printf 'Picked up JAVA_TOOL_OPTIONS: %s\n' "${'$'}JAVA_TOOL_OPTIONS" >&2
+                fi
+                if [ -n "${'$'}_JAVA_OPTIONS" ]; then
+                    printf 'Picked up _JAVA_OPTIONS: %s\n' "${'$'}_JAVA_OPTIONS" >&2
+                fi
+                if [ -n "${'$'}JDK_JAVA_OPTIONS" ]; then
+                    printf 'Picked up JDK_JAVA_OPTIONS: %s\n' "${'$'}JDK_JAVA_OPTIONS" >&2
+                fi
                 printf '%s\n' "${'$'}STUB_VERSION_LINE" >&2
                 exit "${'$'}STUB_VERSION_EXIT"
             fi
@@ -450,6 +495,52 @@ class WindowsLauncherScriptTest {
                 stubExeEnvironment(File(install, "ea-args.txt"), versionLine = """openjdk version "22-ea""""),
         )
         earlyAccess.exitCode shouldBe 0
+    }
+
+    @Test
+    @Tag("tier2")
+    fun `regression #88 - jdx-ps1 ignores Picked up banners from option variables`() {
+        // present: each of the three JVM option variables on its own, like the
+        // exec-args present/absent pins — a real java.exe prints `Picked up
+        // <VAR>: ...` before the version line (#88).
+        assumePosixPwsh()
+        for (variable in listOf("JAVA_TOOL_OPTIONS", "_JAVA_OPTIONS", "JDK_JAVA_OPTIONS")) {
+            val install = newPs1FakeInstall()
+            val stubJdk = newStubJavaExe()
+            val argsFile = File(install, "$variable-args.txt")
+
+            // The stub stands in for the JVM here: prove it really prints the
+            // banner, or the launcher run below would prove nothing.
+            val probe = runProcess(
+                listOf(File(stubJdk, "bin/java.exe").absolutePath, "-version"),
+                mapOf(variable to "-Dfoo=bar"),
+            )
+            probe.stderr shouldContain "Picked up $variable: -Dfoo=bar"
+
+            val result = runPs1(
+                File(install, "jdx.ps1"),
+                listOf("--version"),
+                mapOf("JAVA_HOME" to stubJdk.absolutePath) +
+                    stubExeEnvironment(argsFile) +
+                    mapOf(variable to "-Dfoo=bar"),
+            )
+
+            result.exitCode shouldBe 0
+            recordedArgs(argsFile) shouldContain "-jar"
+        }
+
+        // absent: no banner, no behaviour change.
+        val install = newPs1FakeInstall()
+        val stubJdk = newStubJavaExe()
+        val argsFile = File(install, "absent-args.txt")
+
+        val absent = runPs1(
+            File(install, "jdx.ps1"),
+            listOf("--version"),
+            mapOf("JAVA_HOME" to stubJdk.absolutePath) + stubExeEnvironment(argsFile),
+        )
+        absent.exitCode shouldBe 0
+        recordedArgs(argsFile) shouldContain "-jar"
     }
 
     @Test

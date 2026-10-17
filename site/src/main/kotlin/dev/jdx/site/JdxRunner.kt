@@ -19,8 +19,9 @@ fun interface JdxRunner {
  * Runs the real `jdx` launcher in a hermetic sandbox: private cache/config/runtime dirs under
  * [sandboxDir] (so a developer's own workspaces never leak into published output), an empty
  * working directory in the system temp dir — outside any Gradle/Maven project, so project
- * auto-discovery never picks up this repository — UTF-8 output, and no `JAVA_TOOL_OPTIONS`
- * (whose "Picked up ..." banner breaks the launcher's JDK probe, issue #88).
+ * auto-discovery never picks up this repository — UTF-8 output, and no `JAVA_TOOL_OPTIONS` /
+ * `_JAVA_OPTIONS` / `JDK_JAVA_OPTIONS` (the launcher tolerates their "Picked up ..." banners
+ * since #88, but published output must never depend on the host's JVM options either).
  *
  * Results are memoised by (arguments, stdin): docs repeat commands, and output is
  * deterministic for a fixed build (AGENTS.md §2.5), so re-running would only cost time.

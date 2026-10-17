@@ -100,7 +100,13 @@ if not defined JAVA_EXE (
 rem --- version gate: accept exactly major 21 or newer. ---
 rem tokens=3 on `openjdk version "21.0.8" ...` is the quoted version; a
 rem non-zero `java -version` leaves JDX_RAWVER unset (findstr matches nothing).
-for /f "tokens=3" %%v in ('"%JAVA_EXE%" -version 2^>^&1 ^| findstr /i version') do if not defined JDX_RAWVER set "JDX_RAWVER=%%v"
+rem findstr drops the `Picked up JAVA_TOOL_OPTIONS: ...` banner lines that a
+rem JVM prints before the version when an option variable is set (#88); the
+rem quoted-token test (`%%~v` strips the quotes, so the comparison differs
+rem exactly when they were present) is the belt to that suspenders: a banner
+rem whose value merely contains the word "version" can never supply the
+rem version -- only a real `version "..."` line can.
+for /f "tokens=3" %%v in ('"%JAVA_EXE%" -version 2^>^&1 ^| findstr /i version') do if not defined JDX_RAWVER if not "%%v"=="%%~v" set "JDX_RAWVER=%%v"
 if not defined JDX_RAWVER (
   1>&2 echo jdx: could not run '"%JAVA_EXE%" -version' -- is it a working JDK?
   exit /b 6

@@ -108,6 +108,21 @@ class LauncherScriptTest {
             """
             #!/bin/sh
             if [ "${'$'}1" = "-version" ]; then
+                # Emulate the JVM's option-variable banners (#88): when an option
+                # variable is set, a real `java -version` prints `Picked up <VAR>:
+                # ...` on stderr *before* the version line.
+                if [ -n "${'$'}JAVA_TOOL_OPTIONS" ]; then
+                    printf 'Picked up JAVA_TOOL_OPTIONS: %s\n' "${'$'}JAVA_TOOL_OPTIONS" >&2
+                fi
+                if [ -n "${'$'}_JAVA_OPTIONS" ]; then
+                    printf 'Picked up _JAVA_OPTIONS: %s\n' "${'$'}_JAVA_OPTIONS" >&2
+                fi
+                if [ -n "${'$'}JDK_JAVA_OPTIONS" ]; then
+                    printf 'Picked up JDK_JAVA_OPTIONS: %s\n' "${'$'}JDK_JAVA_OPTIONS" >&2
+                fi
+                if [ -n "${'$'}STUB_VERSION_PREAMBLE" ]; then
+                    printf '%s\n' "${'$'}STUB_VERSION_PREAMBLE" >&2
+                fi
                 printf '%s\n' "${'$'}STUB_VERSION_LINE" >&2
                 exit "${'$'}STUB_VERSION_EXIT"
             fi
@@ -127,9 +142,11 @@ class LauncherScriptTest {
         versionLine: String = """openjdk version "26.0.1"""",
         versionExit: Int = 0,
         execExit: Int = 0,
+        versionPreamble: String = "",
     ): Map<String, String> = mapOf(
         "STUB_ARGS_FILE" to argsFile.absolutePath,
         "STUB_VERSION_LINE" to versionLine,
+        "STUB_VERSION_PREAMBLE" to versionPreamble,
         "STUB_VERSION_EXIT" to versionExit.toString(),
         "STUB_EXEC_EXIT" to execExit.toString(),
         "STUB_EXEC_STDOUT" to "stub-stdout",
@@ -144,6 +161,12 @@ class LauncherScriptTest {
         removeJavaHome: Boolean = true,
     ): ProcessResult = runCommand(listOf(launcherFile.absolutePath) + args, workingDir) {
         if (removeJavaHome) remove("JAVA_HOME")
+        // A CI image's own option variables would make the stub print a banner in
+        // tests that never asked for one (#88); a test opts in by putting the
+        // variable into `environment` (applied after this removal).
+        remove("JAVA_TOOL_OPTIONS")
+        remove("_JAVA_OPTIONS")
+        remove("JDK_JAVA_OPTIONS")
         putAll(environment)
     }
 
@@ -334,6 +357,69 @@ class LauncherScriptTest {
 
         result.exitCode shouldBe 0
         recordedArgs(argsFile) shouldContain File(install, "libs/jdx-0.0.0-all.jar").absolutePath
+    }
+
+    // ------------------------------------------------------------------ option-variable banners (issue #88)
+
+    @Test
+    fun `regression #88 - Picked up banners from option variables never break the version gate`() {
+        // present: each of the three JVM option variables on its own, like the
+        // exec-args present/absent pins — a real JVM prints `Picked up <VAR>: ...`
+        // before the version line, which the old line-1 probe could not see past.
+        for (variable in listOf("JAVA_TOOL_OPTIONS", "_JAVA_OPTIONS", "JDK_JAVA_OPTIONS")) {
+            val install = newFakeInstall()
+            val stubJdk = newStubJdk()
+            val argsFile = File(install, "$variable-args.txt")
+
+            // The stub stands in for the JVM here: prove it really prints the
+            // banner, or the launcher run below would prove nothing.
+            val probe = runCommand(listOf(File(stubJdk, "bin/java").absolutePath, "-version"), install) {
+                put(variable, "-Dfoo=bar")
+            }
+            probe.stderr shouldContain "Picked up $variable: -Dfoo=bar"
+
+            val result = runLauncher(
+                File(install, "jdx"), install, args = listOf("--version"),
+                environment = mapOf("JAVA_HOME" to stubJdk.absolutePath) +
+                    stubEnvironment(argsFile) +
+                    mapOf(variable to "-Dfoo=bar"),
+            )
+
+            result.exitCode shouldBe 0
+            recordedArgs(argsFile) shouldContain "-jar"
+        }
+
+        // absent: no banner, no behaviour change.
+        val install = newFakeInstall()
+        val stubJdk = newStubJdk()
+        val argsFile = File(install, "absent-args.txt")
+
+        val result = runLauncher(
+            File(install, "jdx"), install, args = listOf("--version"),
+            environment = mapOf("JAVA_HOME" to stubJdk.absolutePath) + stubEnvironment(argsFile),
+        )
+
+        result.exitCode shouldBe 0
+        recordedArgs(argsFile) shouldContain "-jar"
+    }
+
+    @Test
+    fun `a no-version error names a real content line, not an option banner`() {
+        // Same failure the issue reported, one layer down: when there is genuinely
+        // no version anywhere, the banner must not be what the message blames.
+        val install = newFakeInstall()
+        val stubJdk = newStubJdk()
+        val argsFile = File(install, "stub-args.txt")
+
+        val result = runLauncher(
+            File(install, "jdx"), install, args = listOf("--version"),
+            environment = mapOf("JAVA_HOME" to stubJdk.absolutePath) +
+                stubEnvironment(argsFile, versionLine = "the quick brown fox") +
+                mapOf("JAVA_TOOL_OPTIONS" to "-Dfoo=bar"),
+        )
+
+        assertCleanFailure(result, "no version string", "the quick brown fox")
+        result.stderr shouldNotContain "Picked up JAVA_TOOL_OPTIONS"
     }
 
     // ------------------------------------------------------------------ failure paths (all must be human-readable, exit 6)
@@ -620,6 +706,39 @@ class LauncherScriptTest {
         }
     }
 
+    @Test
+    fun `arbitrary preamble lines in java -version output never change the version gate outcome`() = runBlocking<Unit> {
+        // Metamorphic (TESTING.md §6, issue #88): prepending lines that carry no
+        // quoted `version "` marker — every banner shape except a fake version
+        // line — must never flip the gate, whatever the real version line is.
+        // The old line-1 probe failed this on the very first preamble.
+        val install = newFakeInstall()
+        val stubJdk = newStubJdk()
+        val argsFile = File(install, "stub-args.txt")
+        // No quote anywhere: a preamble containing `version "` would be a second
+        // version line, and "which version wins then" is not this property's claim.
+        val preambleArb = Arb.string(1..40).filter { '"' !in it && it.isNotBlank() }
+
+        checkAll(100, versionLineArb, preambleArb) { generated, preamble ->
+            val result = runLauncher(
+                File(install, "jdx"), install, args = listOf("--version"),
+                environment = mapOf("JAVA_HOME" to stubJdk.absolutePath) +
+                    stubEnvironment(
+                        argsFile,
+                        versionLine = generated.versionLine,
+                        versionPreamble = preamble,
+                    ),
+            )
+            if (generated.effectiveMajor >= 21) {
+                result.exitCode shouldBe 0
+                recordedArgs(argsFile) shouldContain "-XX:TieredStopAtLevel=1"
+            } else {
+                result.exitCode shouldBe 6
+                result.stderr.shouldStartWith("jdx: ")
+            }
+        }
+    }
+
     // ------------------------------------------------------------------ end to end (real launcher, real fat jar, real JVM)
 
     @Test
@@ -732,6 +851,26 @@ class LauncherScriptTest {
 
         result.exitCode shouldBe 0
         result.stdout.trim() shouldBe "jdx version ${dev.jdx.cli.BuildInfo.version}"
+    }
+
+    @Test
+    fun `regression #88 - JAVA_TOOL_OPTIONS set on a real JVM still runs jdx version`() {
+        // The exact repro from the issue: a container whose environment sets
+        // JAVA_TOOL_OPTIONS makes every real `java -version` print a `Picked up`
+        // banner before the version line, and the old line-1 probe died on it.
+        assumeTrue(javaIsAvailable(), "no java on PATH or /usr/lib/jvm/default")
+        assumeTrue(builtLauncher.isFile, "app/build/jdx missing — run :app:installDist")
+
+        val result = runLauncher(
+            builtLauncher, projectDir,
+            args = listOf("version"),
+            environment = mapOf("JAVA_TOOL_OPTIONS" to "-Dfoo=bar"),
+        )
+
+        result.exitCode shouldBe 0
+        result.stdout.trim() shouldBe "jdx version ${dev.jdx.cli.BuildInfo.version}"
+        // The JVM echoes the banner on stderr — proof the repro was actually live.
+        result.stderr shouldContain "Picked up JAVA_TOOL_OPTIONS"
     }
 
     @Test
