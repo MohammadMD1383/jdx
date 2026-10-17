@@ -3,7 +3,7 @@ name: opencode
 # Lets /opencode (or /oc) mentions in issues and PRs drive an agent that can
 # read the thread, edit code, run ./gradlew tests, and open/update a PR.
 # Auth: OpenCode Zen via OPENCODE_API_KEY secret, model pinned to the free
-# Muse Spark contributor tier (opencode/muse-spark-1.3-contributor-free).
+# MiMo-V2.6-Flash tier (opencode/mimo-v2.6-flash-free).
 # GitHub auth: OIDC (id-token: write) exchanged for the opencode-agent App
 # installation token — no GITHUB_TOKEN passthrough needed.
 
@@ -71,4 +71,4 @@ jobs:
           # process tree, so local opencode sessions keep their own rules.
           OPENCODE_PERMISSION: '{"*":"allow","doom_loop":"deny","question":"deny"}'
         with:
-          model: opencode/muse-spark-1.3-contributor-free
+          model: opencode/mimo-v2.6-flash-free
