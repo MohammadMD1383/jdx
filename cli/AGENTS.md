@@ -69,6 +69,10 @@ is the CLI surface, pinned by help/parity goldens.)
   `probeAntigravityVersion`/`describeAntigravityVersion` report
   `agy --version` presence (`isJdxCommand` accepts Windows shims `jdx.exe`/`.cmd`/`.bat` and
   backslash paths on every host, so `--check`/`doctor` stay true on Windows);
+  every `describe*Version` path runs the probe raw through
+  `sanitizeVersionRawForDisplay` (issue #84: first non-blank line, ANSI/controls
+  stripped, whitespace collapsed, capped at `VERSION_RAW_DISPLAY_MAX`) so the
+  text `detected:` line stays one line — JSON `*Raw` fields keep the full probe;
   `doctor` reuses all probes for the setup row.
   Tests pin userHome/projectDir to temp dirs, never the real home
   (Codex tests additionally pin `$CODEX_HOME` via the `codexHome` ctor arg,

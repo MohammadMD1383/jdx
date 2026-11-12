@@ -1,7 +1,9 @@
 package dev.jdx.cli.service
 
+import io.kotest.matchers.ints.shouldBeLessThanOrEqual
 import io.kotest.matchers.shouldBe
 import io.kotest.matchers.string.shouldContain
+import io.kotest.matchers.string.shouldNotContain
 import io.kotest.property.Arb
 import io.kotest.property.arbitrary.int
 import io.kotest.property.arbitrary.string
@@ -682,6 +684,53 @@ class SetupServiceTest {
         SetupService.describeVersion(
             SetupService.OpencodeVersionInfo(SetupService.OpencodeVersion.UNKNOWN),
         ) shouldBe "opencode version unknown"
+    }
+
+    @Test
+    fun `sanitizeVersionRawForDisplay keeps the first non-blank line only`() {
+        val raw = """codex-cli 0.157.1
+
+WARNING: proceeding, even though we could not create PATH aliases: Refusing to create helper binaries under temporary dir "/tmp" (codex_home: AbsolutePathBuf("/tmp/sandbox/.codex"))"""
+        SetupService.sanitizeVersionRawForDisplay(raw) shouldBe "codex-cli 0.157.1"
+        SetupService.describeCodexVersion(
+            SetupService.CodexVersionInfo(SetupService.CodexVersion.PRESENT, raw, "codex"),
+        ) shouldBe "codex (codex-cli 0.157.1)"
+    }
+
+    @Test
+    fun `sanitizeVersionRawForDisplay collapses whitespace strips ansi and truncates`() {
+        SetupService.sanitizeVersionRawForDisplay("  foo\t\tbar  ") shouldBe "foo bar"
+        SetupService.sanitizeVersionRawForDisplay("\u001B[32mcodex-cli 0.157.1\u001B[0m") shouldBe
+            "codex-cli 0.157.1"
+        val long = "a".repeat(SetupService.VERSION_RAW_DISPLAY_MAX + 20)
+        val truncated = SetupService.sanitizeVersionRawForDisplay(long)
+        truncated.length shouldBe SetupService.VERSION_RAW_DISPLAY_MAX
+        truncated.endsWith("…") shouldBe true
+        truncated.take(SetupService.VERSION_RAW_DISPLAY_MAX - 1) shouldBe
+            "a".repeat(SetupService.VERSION_RAW_DISPLAY_MAX - 1)
+    }
+
+    @Test
+    fun `sanitizeVersionRawForDisplay is always one safe bounded line`(): Unit = runBlocking {
+        // Generative family for issue #84: hostile probe blobs (newlines, NULs,
+        // ANSI, huge length, blank lines) must never break the one-line contract.
+        checkAll(500, Arb.string(0..400)) { raw ->
+            val cleaned = SetupService.sanitizeVersionRawForDisplay(raw)
+            cleaned.none { it.isISOControl() } shouldBe true
+            cleaned.contains('\n') shouldBe false
+            cleaned.contains('\r') shouldBe false
+            cleaned.contains("  ") shouldBe false
+            cleaned.length shouldBeLessThanOrEqual SetupService.VERSION_RAW_DISPLAY_MAX
+            if (cleaned.isNotEmpty()) {
+                cleaned.lines().size shouldBe 1
+            }
+            SetupService.describeCodexVersion(
+                SetupService.CodexVersionInfo(SetupService.CodexVersion.PRESENT, raw, "codex"),
+            ).lines().size shouldBe 1
+            SetupService.describeVersion(
+                SetupService.OpencodeVersionInfo(SetupService.OpencodeVersion.UNKNOWN, raw, "opencode"),
+            ).lines().size shouldBe 1
+        }
     }
 
     private fun executableBin(root: Path, vararg names: String): Path {

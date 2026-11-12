@@ -580,15 +580,73 @@ class SetupService(
         }
 
         /**
+         * Cap on the parenthetical raw inside text `detected:` lines
+         * (issue #84). Version probes are short; anything longer is noise
+         * (warnings, paths) that must not spill the one-line contract.
+         */
+        internal const val VERSION_RAW_DISPLAY_MAX: Int = 80
+
+        /**
+         * CSI / OSC ANSI escapes that chatty CLIs occasionally paint into
+         * `--version` output. Stripped before the first-line collapse so a
+         * colourised probe cannot leave `[32m` debris after controls drop.
+         */
+        private val ANSI_ESCAPE: Regex =
+            Regex("""\u001B(?:\[[0-9;?]*[ -/]*[@-~]|].*?(?:\u0007|\u001B\\))""")
+
+        /**
+         * Turns a version-probe stdout/stderr blob into one safe text token
+         * for the `detected:` provenance line (issue #84): first non-blank
+         * line, ANSI and control chars stripped, whitespace collapsed,
+         * length-bounded with an ellipsis. The JSON envelope still carries
+         * the unsanitized raw ([OpencodeVersionInfo.raw] and siblings).
+         */
+        internal fun sanitizeVersionRawForDisplay(
+            raw: String,
+            maxLength: Int = VERSION_RAW_DISPLAY_MAX,
+        ): String {
+            require(maxLength >= 1) { "maxLength must be >= 1, got $maxLength" }
+            val firstLine = raw.lineSequence()
+                .map { it.trim() }
+                .firstOrNull { it.isNotEmpty() }
+                ?: return ""
+            val withoutAnsi = ANSI_ESCAPE.replace(firstLine, "")
+            // Whitespace (including tab) before ISO-control: tab is both, and
+            // must collapse to a space rather than vanish.
+            val cleaned = buildString(withoutAnsi.length) {
+                for (ch in withoutAnsi) {
+                    when {
+                        ch.isWhitespace() -> {
+                            if (isNotEmpty() && last() != ' ') append(' ')
+                        }
+                        ch.isISOControl() -> Unit
+                        else -> append(ch)
+                    }
+                }
+            }.trim()
+            if (cleaned.length <= maxLength) return cleaned
+            if (maxLength == 1) return "…"
+            return cleaned.take(maxLength - 1) + "…"
+        }
+
+        /** Parenthetical raw for text `detected:` lines; empty when nothing printable remains. */
+        private fun rawDisplaySuffix(raw: String?): String {
+            val cleaned = raw?.let(::sanitizeVersionRawForDisplay)?.takeIf { it.isNotEmpty() }
+                ?: return ""
+            return " ($cleaned)"
+        }
+
+        /**
          * One human line naming the detected OpenCode line for `setup` and
          * `doctor` output (`opencode v2 (0.0.0-next-17403)`,
-         * `opencode not found on PATH`). Pure — example-tested.
+         * `opencode not found on PATH`). Pure — example-tested. The raw is
+         * sanitized to one line (issue #84); JSON keeps the full probe.
          */
         fun describeVersion(info: OpencodeVersionInfo): String = when (info.version) {
-            OpencodeVersion.V1 -> "opencode v1" + (info.raw?.let { " ($it)" } ?: "")
-            OpencodeVersion.V2 -> "opencode v2" + (info.raw?.let { " ($it)" } ?: "")
+            OpencodeVersion.V1 -> "opencode v1" + rawDisplaySuffix(info.raw)
+            OpencodeVersion.V2 -> "opencode v2" + rawDisplaySuffix(info.raw)
             OpencodeVersion.ABSENT -> "opencode not found on PATH"
-            OpencodeVersion.UNKNOWN -> "opencode version unknown" + (info.raw?.let { " ($it)" } ?: "")
+            OpencodeVersion.UNKNOWN -> "opencode version unknown" + rawDisplaySuffix(info.raw)
         }
 
         /**
@@ -620,12 +678,14 @@ class SetupService(
         /**
          * One human line naming the detected Claude Code install for `setup`
          * and `doctor` output (`claude-code (1.0.33)`,
-         * `claude-code not found on PATH`). Pure — example-tested.
+         * `claude-code not found on PATH`). Pure — example-tested. The raw is
+         * sanitized to one line (issue #84); JSON keeps the full probe.
          */
         fun describeClaudeVersion(info: ClaudeVersionInfo): String = when (info.version) {
-            ClaudeVersion.PRESENT -> "claude-code" + (info.raw?.let { " ($it)" } ?: " installed")
+            ClaudeVersion.PRESENT ->
+                "claude-code" + (rawDisplaySuffix(info.raw).ifEmpty { " installed" })
             ClaudeVersion.ABSENT -> "claude-code not found on PATH"
-            ClaudeVersion.UNKNOWN -> "claude-code version unknown" + (info.raw?.let { " ($it)" } ?: "")
+            ClaudeVersion.UNKNOWN -> "claude-code version unknown" + rawDisplaySuffix(info.raw)
         }
 
         /**
@@ -657,12 +717,14 @@ class SetupService(
         /**
          * One human line naming the detected Codex CLI install for `setup`
          * and `doctor` output (`codex (codex-cli 0.157.1)`,
-         * `codex not found on PATH`). Pure — example-tested.
+         * `codex not found on PATH`). Pure — example-tested. The raw is
+         * sanitized to one line (issue #84); JSON keeps the full probe.
          */
         fun describeCodexVersion(info: CodexVersionInfo): String = when (info.version) {
-            CodexVersion.PRESENT -> "codex" + (info.raw?.let { " ($it)" } ?: " installed")
+            CodexVersion.PRESENT ->
+                "codex" + (rawDisplaySuffix(info.raw).ifEmpty { " installed" })
             CodexVersion.ABSENT -> "codex not found on PATH"
-            CodexVersion.UNKNOWN -> "codex version unknown" + (info.raw?.let { " ($it)" } ?: "")
+            CodexVersion.UNKNOWN -> "codex version unknown" + rawDisplaySuffix(info.raw)
         }
 
         /**
@@ -700,12 +762,14 @@ class SetupService(
         /**
          * One human line naming the detected Cursor install for `setup`
          * and `doctor` output (`cursor (2026.09.26-dd393fe)`,
-         * `cursor not found on PATH`). Pure — example-tested.
+         * `cursor not found on PATH`). Pure — example-tested. The raw is
+         * sanitized to one line (issue #84); JSON keeps the full probe.
          */
         fun describeCursorVersion(info: CursorVersionInfo): String = when (info.version) {
-            CursorVersion.PRESENT -> "cursor" + (info.raw?.let { " ($it)" } ?: " installed")
+            CursorVersion.PRESENT ->
+                "cursor" + (rawDisplaySuffix(info.raw).ifEmpty { " installed" })
             CursorVersion.ABSENT -> "cursor not found on PATH"
-            CursorVersion.UNKNOWN -> "cursor version unknown" + (info.raw?.let { " ($it)" } ?: "")
+            CursorVersion.UNKNOWN -> "cursor version unknown" + rawDisplaySuffix(info.raw)
         }
 
         /**
@@ -738,12 +802,14 @@ class SetupService(
         /**
          * One human line naming the detected Copilot CLI install for `setup`
          * and `doctor` output (`copilot (GitHub Copilot CLI 1.0.88.)`,
-         * `copilot not found on PATH`). Pure — example-tested.
+         * `copilot not found on PATH`). Pure — example-tested. The raw is
+         * sanitized to one line (issue #84); JSON keeps the full probe.
          */
         fun describeCopilotVersion(info: CopilotVersionInfo): String = when (info.version) {
-            CopilotVersion.PRESENT -> "copilot" + (info.raw?.let { " ($it)" } ?: " installed")
+            CopilotVersion.PRESENT ->
+                "copilot" + (rawDisplaySuffix(info.raw).ifEmpty { " installed" })
             CopilotVersion.ABSENT -> "copilot not found on PATH"
-            CopilotVersion.UNKNOWN -> "copilot version unknown" + (info.raw?.let { " ($it)" } ?: "")
+            CopilotVersion.UNKNOWN -> "copilot version unknown" + rawDisplaySuffix(info.raw)
         }
 
         /**
@@ -775,12 +841,15 @@ class SetupService(
         /**
          * One human line naming the detected Antigravity install for `setup`
          * and `doctor` output (`antigravity (1.3.0)`,
-         * `antigravity not found on PATH`). Pure — example-tested.
+         * `antigravity not found on PATH`). Pure — example-tested. The raw is
+         * sanitized to one line (issue #84); JSON keeps the full probe.
          */
         fun describeAntigravityVersion(info: AntigravityVersionInfo): String = when (info.version) {
-            AntigravityVersion.PRESENT -> "antigravity" + (info.raw?.let { " ($it)" } ?: " installed")
+            AntigravityVersion.PRESENT ->
+                "antigravity" + (rawDisplaySuffix(info.raw).ifEmpty { " installed" })
             AntigravityVersion.ABSENT -> "antigravity not found on PATH"
-            AntigravityVersion.UNKNOWN -> "antigravity version unknown" + (info.raw?.let { " ($it)" } ?: "")
+            AntigravityVersion.UNKNOWN ->
+                "antigravity version unknown" + rawDisplaySuffix(info.raw)
         }
 
         /**
