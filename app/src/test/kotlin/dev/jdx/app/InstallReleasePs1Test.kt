@@ -113,7 +113,12 @@ class InstallReleasePs1Test {
     @Test
     fun `script is present and documents the Windows defaults`() {
         assumeTrue(installScript.isFile, "install-release.ps1 missing")
-        val text = installScript.readText()
+        val bytes = installScript.readBytes()
+        // Windows PowerShell 5.1 reads .ps1 as the system ANSI code page unless a
+        // BOM is present; non-ASCII UTF-8 (em dashes, etc.) corrupts the parse
+        // and breaks the windows.yml smoke that runs under `shell: powershell`.
+        bytes.any { it < 0 } shouldBe false
+        val text = bytes.toString(Charsets.US_ASCII)
         text shouldContain "LOCALAPPDATA"
         text shouldContain "Programs\\jdx"
         text shouldContain "jdx-<version>-windows.zip"

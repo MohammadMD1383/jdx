@@ -105,7 +105,11 @@ class InstallPs1Test {
     @Test
     fun `script is present and documents the source-build defaults`() {
         assumeTrue(installScript.isFile, "install.ps1 missing")
-        val text = installScript.readText()
+        val bytes = installScript.readBytes()
+        // Windows PowerShell 5.1 + no BOM: keep the script ASCII-only (see
+        // InstallReleasePs1Test's same pin).
+        bytes.any { it < 0 } shouldBe false
+        val text = bytes.toString(Charsets.US_ASCII)
         text shouldContain "issue #92"
         text shouldContain ".local\\bin"
         text shouldContain "jdx.cmd"

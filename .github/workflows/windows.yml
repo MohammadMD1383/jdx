@@ -98,9 +98,10 @@ jobs:
         run: app\build\jdx.bat doctor
 
       # install-release.ps1 smoke (issue #92): pack the just-built dist as a
-      # fake windows zip and install into a temp LOCALAPPDATA — proves the
-      # PowerShell installer on a real Windows runner (unit tests already
-      # cover the same script under Linux pwsh).
+      # fake windows zip and install into a temp LOCALAPPDATA. Uses Windows
+      # PowerShell 5.1 on purpose (not pwsh): that is the default host for
+      # `irm | iex`, and it mis-parses UTF-8-without-BOM scripts — the unit
+      # suite under Linux pwsh cannot catch that. Scripts are ASCII-only.
       - name: Windows release-installer smoke (install-release.ps1)
         shell: powershell
         run: |

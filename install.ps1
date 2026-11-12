@@ -1,16 +1,16 @@
-# install.ps1 — shim the built Windows `jdx.bat` onto the user PATH (issue #92).
+# install.ps1 - shim the built Windows `jdx.bat` onto the user PATH (issue #92).
 #
 # Windows twin of install.sh. Per-user only: never requires Administrator (an
 # elevated shell still lands under USERPROFILE\.local\bin, with a note).
-# Refuses to overwrite an existing, unrelated `jdx.cmd` without -Force —
+# Refuses to overwrite an existing, unrelated `jdx.cmd` without -Force -
 # clobbering another tool silently is the one unforgivable sin of an installer.
 #
 # Usage: ./install.ps1 [-Force] [-BinDir DIR]
 #
 # Env overrides: JDX_BIN_DIR (shim directory; default %USERPROFILE%\.local\bin),
-# JDX_SKIP_USER_PATH=1 (skip the persistent user-PATH mutation — tests / CI).
+# JDX_SKIP_USER_PATH=1 (skip the persistent user-PATH mutation - tests / CI).
 #
-# Creates a small `jdx.cmd` forwarder (no symlink — Windows Developer Mode is
+# Creates a small `jdx.cmd` forwarder (no symlink - Windows Developer Mode is
 # not assumed) pointing at `app\build\jdx.bat` from a `:app:installDist` build.
 
 [CmdletBinding()]
@@ -50,35 +50,35 @@ function Test-IsAdministrator {
     }
 }
 
-# Warn when elevated, but do not refuse — see install-release.ps1 (same rationale:
+# Warn when elevated, but do not refuse - see install-release.ps1 (same rationale:
 # elevated shells are common on Windows, and the default target stays under the
 # interactive user's profile).
 if ($script:JdxIsWindows -and (Test-IsAdministrator)) {
-    [Console]::Error.WriteLine('note: running elevated — still installing per-user into the USERPROFILE\.local\bin target')
+    [Console]::Error.WriteLine('note: running elevated - still installing per-user into the USERPROFILE\.local\bin target')
 }
 
 $repoRoot = Split-Path -Parent $MyInvocation.MyCommand.Path
 $launcher = Join-Path $repoRoot 'app\build\jdx.bat'
 if (-not (Test-Path -LiteralPath $launcher -PathType Leaf)) {
-    Write-InstallError "no built launcher at '$launcher' — build it first: gradlew.bat :app:installDist"
+    Write-InstallError "no built launcher at '$launcher' - build it first: gradlew.bat :app:installDist"
 }
 $jarMatches = @(Get-ChildItem -Path (Join-Path $repoRoot 'app\build\libs') -Filter 'jdx-*-all.jar' -File -ErrorAction SilentlyContinue)
 if ($jarMatches.Count -eq 0) {
-    Write-InstallError "no jdx fat jar in '$(Join-Path $repoRoot 'app\build\libs')' — rebuild with gradlew.bat :app:installDist"
+    Write-InstallError "no jdx fat jar in '$(Join-Path $repoRoot 'app\build\libs')' - rebuild with gradlew.bat :app:installDist"
 }
 
 # AppCDS archive (T-048): the launcher resolves jar + jdx.jsa relative to its
-# own directory, so a missing archive is not fatal — warn only.
+# own directory, so a missing archive is not fatal - warn only.
 $cds = Join-Path $repoRoot 'app\build\libs\jdx.jsa'
 if (-not (Test-Path -LiteralPath $cds -PathType Leaf)) {
-    [Console]::Error.WriteLine('note: no AppCDS archive at app\build\libs\jdx.jsa — cold start without AppCDS (rebuild with gradlew.bat :app:installDist; see `jdx doctor` appcds row)')
+    [Console]::Error.WriteLine('note: no AppCDS archive at app\build\libs\jdx.jsa - cold start without AppCDS (rebuild with gradlew.bat :app:installDist; see `jdx doctor` appcds row)')
 }
 
 if (-not $BinDir) {
     if (-not $env:USERPROFILE -and -not $env:HOME) {
-        Write-InstallError 'USERPROFILE/HOME is unset — pass -BinDir or set JDX_BIN_DIR'
+        Write-InstallError 'USERPROFILE/HOME is unset - pass -BinDir or set JDX_BIN_DIR'
     }
-    # Not `$home` — that collides with the read-only automatic `$Home` variable
+    # Not `$home` - that collides with the read-only automatic `$Home` variable
     # (PowerShell is case-insensitive for variable names).
     $userHome = if ($env:USERPROFILE) { $env:USERPROFILE } else { $env:HOME }
     $BinDir = Join-Path $userHome '.local\bin'
@@ -90,19 +90,19 @@ $launcherFull = [System.IO.Path]::GetFullPath($launcher)
 
 if (Test-Path -LiteralPath $target) {
     if (Test-Path -LiteralPath $target -PathType Container) {
-        Write-InstallError "'$target' is a directory — refusing to replace it even with -Force"
+        Write-InstallError "'$target' is a directory - refusing to replace it even with -Force"
     }
     $existing = Get-Content -LiteralPath $target -Raw
     $ours = $existing -match [regex]::Escape($launcherFull)
     if (-not $ours -and -not $Force) {
-        Write-InstallError "'$target' already exists and is not this jdx build — rerun with -Force to replace it"
+        Write-InstallError "'$target' already exists and is not this jdx build - rerun with -Force to replace it"
     }
     Remove-Item -LiteralPath $target -Force
 }
 
 $shim = @"
 @echo off
-rem jdx PATH shim — forwards to the source-build launcher (install.ps1).
+rem jdx PATH shim - forwards to the source-build launcher (install.ps1).
 "$launcherFull" %*
 "@
 $crlf = $shim -replace "`r`n", "`n" -replace "`n", "`r`n"

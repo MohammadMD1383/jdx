@@ -1,9 +1,9 @@
-# install-release.ps1 — install `jdx` from a GitHub Release zip (per-user, Windows).
+# install-release.ps1 - install `jdx` from a GitHub Release zip (per-user, Windows).
 #
 # Windows twin of install-release.sh (issue #92). Downloads the versioned
 # `jdx-<version>-windows.zip` asset from GitHub Releases (Explorer/Defender are
 # zip-first; the POSIX script keeps the bare `.tar.gz` for Linux/macOS) and
-# unpacks it into `%LOCALAPPDATA%\Programs\jdx` (docs/PROPOSAL.md §17.1). The
+# unpacks it into `%LOCALAPPDATA%\Programs\jdx` (docs/PROPOSAL.md section 17.1). The
 # install directory is added to the user PATH so `jdx` resolves via `jdx.bat`
 # (PATHEXT); no symlink and no Administrator rights.
 #
@@ -13,7 +13,7 @@
 #
 # Env overrides: JDX_VERSION (tag like v0.2.0, or `latest`), JDX_REPO
 # (default MohammadMD1383/jdx), JDX_INSTALL_DIR, JDX_BIN_DIR, JDX_TARBALL
-# (local .zip for offline installs and tests — skips the download).
+# (local .zip for offline installs and tests - skips the download).
 # JDX_SKIP_USER_PATH=1 skips the persistent user-PATH mutation (tests / CI);
 # the script still reports when the bin dir is missing from PATH.
 #
@@ -57,7 +57,7 @@ if ($Help) {
 
 if (-not $Dir) {
     if (-not $env:LOCALAPPDATA) {
-        Write-InstallError 'LOCALAPPDATA is unset — pass -Dir or set JDX_INSTALL_DIR'
+        Write-InstallError 'LOCALAPPDATA is unset - pass -Dir or set JDX_INSTALL_DIR'
     }
     $Dir = Join-Path $env:LOCALAPPDATA 'Programs\jdx'
 }
@@ -83,7 +83,7 @@ function Test-IsAdministrator {
 # Program Files. Offline -Tarball tests on non-Windows hosts skip this branch
 # ($JdxIsWindows is false under Linux/macOS pwsh).
 if ($script:JdxIsWindows -and (Test-IsAdministrator)) {
-    [Console]::Error.WriteLine('note: running elevated — still installing per-user into the LOCALAPPDATA target (not Program Files)')
+    [Console]::Error.WriteLine('note: running elevated - still installing per-user into the LOCALAPPDATA target (not Program Files)')
 }
 
 function Get-LatestTag([string]$Repository) {
@@ -91,12 +91,12 @@ function Get-LatestTag([string]$Repository) {
     try {
         $response = Invoke-WebRequest -Uri $api -UseBasicParsing
     } catch {
-        Write-InstallError "could not query '$api' — pass -Version explicitly"
+        Write-InstallError "could not query '$api' - pass -Version explicitly"
     }
     if ($response.Content -match '"tag_name"\s*:\s*"([^"]+)"') {
         return $Matches[1]
     }
-    Write-InstallError "could not parse the latest release tag from '$api' — pass -Version explicitly"
+    Write-InstallError "could not parse the latest release tag from '$api' - pass -Version explicitly"
 }
 
 function Get-Sha256Hex([string]$Path) {
@@ -161,7 +161,7 @@ function Test-PathContains([string]$Entry) {
 function Write-Shim([string]$ShimPath, [string]$LauncherPath) {
     $content = @"
 @echo off
-rem jdx PATH shim — forwards to the release install (install-release.ps1).
+rem jdx PATH shim - forwards to the release install (install-release.ps1).
 "$LauncherPath" %*
 "@
     # cmd.exe shims are CRLF (*.bat / *.cmd eol=crlf).
@@ -215,7 +215,7 @@ try {
         try {
             Invoke-WebRequest -Uri "$baseUrl/$assetName" -OutFile $archive -UseBasicParsing
         } catch {
-            Write-InstallError "could not download '$baseUrl/$assetName' — does release $Version exist?"
+            Write-InstallError "could not download '$baseUrl/$assetName' - does release $Version exist?"
         }
         $checksumFile = Join-Path $tmpRoot "$assetName.sha256"
         try {
@@ -224,7 +224,7 @@ try {
                 Write-InstallError "checksum mismatch for '$assetName'"
             }
         } catch {
-            [Console]::Error.WriteLine('warning: no checksum file published — skipping verification')
+            [Console]::Error.WriteLine('warning: no checksum file published - skipping verification')
         }
     }
 
@@ -233,7 +233,7 @@ try {
     Expand-Archive -LiteralPath $archive -DestinationPath $extractDir -Force
     $staged = Join-Path $extractDir 'jdx'
     if (-not (Test-Path -LiteralPath $staged -PathType Container)) {
-        Write-InstallError "unexpected archive layout — expected a top-level 'jdx/' directory"
+        Write-InstallError "unexpected archive layout - expected a top-level 'jdx/' directory"
     }
     $launcherBat = Join-Path $staged 'jdx.bat'
     if (-not (Test-Path -LiteralPath $launcherBat -PathType Leaf)) {
@@ -275,10 +275,10 @@ try {
             }
             $ours = $existingText -match [regex]::Escape($installedLauncher)
             if ((Test-Path -LiteralPath $existing -PathType Container)) {
-                Write-InstallError "'$existing' is a directory — refusing to replace it even with -Force"
+                Write-InstallError "'$existing' is a directory - refusing to replace it even with -Force"
             }
             if (-not $ours -and -not $Force) {
-                Write-InstallError "'$existing' already exists and is not this jdx install — rerun with -Force to replace it"
+                Write-InstallError "'$existing' already exists and is not this jdx install - rerun with -Force to replace it"
             }
             Remove-Item -LiteralPath $existing -Force
         }
@@ -308,7 +308,7 @@ try {
         Write-Output "installed: $probe -> $installedLauncher ($versionLine)"
     } else {
         Write-Output "installed: $probe -> $installedLauncher"
-        [Console]::Error.WriteLine('warning: could not run `jdx version` — check your JDK (jdx needs Java 21+)')
+        [Console]::Error.WriteLine('warning: could not run `jdx version` - check your JDK (jdx needs Java 21+)')
     }
 }
 finally {

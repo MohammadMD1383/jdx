@@ -66,7 +66,10 @@ Fat-jar assembly + the `jdx` launchers (POSIX + Windows) + AppCDS archive.
   `install-release.ps1` fetches `jdx-<version>-windows.zip`, unpacks into
   `%LOCALAPPDATA%\Programs\jdx`, writes `.jdx-release`, and adds the install
   dir to the user PATH (optional `-BinDir` shim); pinned by
-  `InstallReleasePs1Test` under `pwsh` (skips when `pwsh` is absent).
+  `InstallReleasePs1Test` under `pwsh` (skips when `pwsh` is absent). Both
+  `.ps1` installers stay **ASCII-only** (no UTF-8-without-BOM): Windows
+  PowerShell 5.1 is the `irm | iex` / `shell: powershell` host and mis-parses
+  em dashes as broken string literals.
 - Launcher behaviour is pinned by present/absent exec-args tests — flag order
   (`-Xshare:auto` before `-XX:SharedArchiveFile`) is what makes stale archives
   degrade instead of fail — and by present/absent option-banner tests (#88): the
