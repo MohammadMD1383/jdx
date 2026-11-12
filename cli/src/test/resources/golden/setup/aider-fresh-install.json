@@ -1,0 +1,10 @@
+{
+  "mcpServers": {
+    "jdx": {
+      "command": "jdx",
+      "args": [
+        "mcp"
+      ]
+    }
+  }
+}

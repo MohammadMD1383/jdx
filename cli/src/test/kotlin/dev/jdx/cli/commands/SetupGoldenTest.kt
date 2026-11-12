@@ -333,6 +333,40 @@ class SetupGoldenTest {
         ) as SetupService.SetupOutcome.Removed
         contents["windsurf-remove-keeps-others.json"] = Files.readString(windsurfRemoveOutcome.path)
 
+        val aiderProject = root.resolve("aider-project").also { Files.createDirectories(it) }
+        val aiderFresh = SetupService(home, aiderProject)
+        val aiderFreshOutcome = aiderFresh.run(
+            SetupService.SetupRequest(
+                agent = SetupService.Agent.AIDER,
+                scope = SetupService.Scope.PROJECT,
+            ),
+        ) as SetupService.SetupOutcome.Installed
+        contents["aider-fresh-install.json"] = Files.readString(aiderFreshOutcome.path)
+
+        val aiderMergeDir = root.resolve("aider-merge").also { Files.createDirectories(it) }
+        Files.createDirectories(aiderMergeDir.resolve(".aider-desk"))
+        Files.writeString(
+            aiderMergeDir.resolve(".aider-desk/mcp-servers.json"),
+            """{"mcpServers":{"other":{"command":"other","args":["x"]}}}""",
+        )
+        val aiderMerge = SetupService(home, aiderMergeDir)
+        val aiderMergeOutcome = aiderMerge.run(
+            SetupService.SetupRequest(
+                agent = SetupService.Agent.AIDER,
+                scope = SetupService.Scope.PROJECT,
+            ),
+        ) as SetupService.SetupOutcome.Installed
+        contents["aider-merge-preserves.json"] = Files.readString(aiderMergeOutcome.path)
+
+        val aiderRemoveOutcome = aiderMerge.run(
+            SetupService.SetupRequest(
+                agent = SetupService.Agent.AIDER,
+                scope = SetupService.Scope.PROJECT,
+                remove = true,
+            ),
+        ) as SetupService.SetupOutcome.Removed
+        contents["aider-remove-keeps-others.json"] = Files.readString(aiderRemoveOutcome.path)
+
         GoldenFiles.verifyAll(File("src/test/resources/golden/setup"), contents)
     }
 }

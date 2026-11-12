@@ -930,6 +930,68 @@ class DoctorServiceTest {
     }
 
     @Test
+    fun `the setup row covers aider wiring and presence`() {
+        val service = DoctorService(fakeEnvironment(tempDir("jdx-doctor-test-")))
+
+        val report = service.probe()
+
+        val setup = report.checks.first { it.name == "setup" }
+        setup.status shouldBe DoctorStatus.WARN
+        setup.detail shouldContain "aider project"
+        setup.detail shouldContain "aider system"
+        setup.detail shouldContain "aider not found on PATH"
+        setup.detail shouldContain "jdx setup --agent aider --scope project"
+    }
+
+    @Test
+    fun `the setup row names the detected aiderdesk binary`() {
+        val runner = ProcessRunner { executable, _ ->
+            if (executable.fileName.toString().substringBefore(".") == "aiderdesk") {
+                ProcessOutcome(0, "0.91.0", "")
+            } else if (executable.fileName.toString().startsWith("opencode")) {
+                throw IOException("no opencode here")
+            } else {
+                ProcessOutcome(0, "26.0.2.1", "")
+            }
+        }
+        val service = DoctorService(
+            fakeEnvironment(
+                tempDir("jdx-doctor-test-"),
+                runner = runner,
+                aiderBinaries = listOf("aiderdesk"),
+            ),
+        )
+
+        val report = service.probe()
+
+        val setup = report.checks.first { it.name == "setup" }
+        setup.status shouldBe DoctorStatus.WARN
+        setup.detail shouldContain "aider (0.91.0)"
+    }
+
+    @Test
+    fun `the setup row is OK when only aider is wired`() {
+        val root = tempDir("jdx-doctor-test-")
+        val environment = fakeEnvironment(root)
+        SetupService(
+            environment.userHome,
+            environment.workingDir,
+        ).run(
+            SetupService.SetupRequest(
+                agent = SetupService.Agent.AIDER,
+                scope = SetupService.Scope.PROJECT,
+            ),
+        )
+
+        val report = DoctorService(environment).probe()
+
+        val setup = report.checks.first { it.name == "setup" }
+        setup.status shouldBe DoctorStatus.OK
+        setup.detail shouldContain "aider project installed"
+        setup.detail shouldContain "aider system"
+    }
+
+    @Test
     fun `stale sockets are WARN naming the files, never claiming the daemon runs`() {        // Dummy `.sock` files answer nothing, so the real default probe reads them as stale.
         val service = DoctorService(fakeEnvironment(tempDir("jdx-doctor-test-"), socketCount = 2))
 

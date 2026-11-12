@@ -25,6 +25,7 @@ jdx members java.util.HashMap --limit 5
 # MCP (GitHub Copilot CLI): jdx setup --agent copilot --scope project   (then restart copilot)
 # MCP (Antigravity): jdx setup --agent antigravity --scope project   (then restart Antigravity)
 # MCP (Windsurf / Devin): jdx setup --agent windsurf --scope project   (then restart Windsurf)
+# MCP (Aider / AiderDesk): jdx setup --agent aider --scope project   (then restart AiderDesk; core Aider has no MCP)
 ```
 
 ---

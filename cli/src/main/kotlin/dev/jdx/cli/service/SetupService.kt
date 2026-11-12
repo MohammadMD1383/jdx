@@ -17,7 +17,7 @@ import java.nio.file.Paths
  * `jdx setup --agent <name> --scope <project|system>` (issue #33 family).
  *
  * Writes, checks, and removes the MCP server entry that launches `jdx mcp` in
- * third-party agent configs. Eight backends share this service behind the
+ * third-party agent configs. Ten backends share this service behind the
  * [Agent] seam: OpenCode (`opencode.json[c]`, v1+v2 entries), Claude Code
  * (`.mcp.json` / `~/.claude.json`, `mcpServers.jdx`), Cursor
  * (`.cursor/mcp.json` / `~/.cursor/mcp.json`, `mcpServers.jdx`), Kilo Code (a fork
@@ -27,9 +27,12 @@ import java.nio.file.Paths
  * Codex CLI (`config.toml`, `[mcp_servers.jdx]`), GitHub Copilot CLI
  * (`mcp-config.json` / `.mcp.json`, `mcpServers.jdx`), Antigravity
  * (`.agents/mcp_config.json` / `~/.gemini/config/mcp_config.json`,
- * `mcpServers.jdx`), and Windsurf / Devin Local
+ * `mcpServers.jdx`), Windsurf / Devin Local
  * (`.devin/mcp_config.json` / `~/.config/devin/mcp_config.json`,
- * `mcpServers.jdx`).
+ * `mcpServers.jdx`), and Aider / AiderDesk
+ * (`.aider-desk/mcp-servers.json` / `~/.aider-desk/mcp-servers.json`,
+ * `mcpServers.jdx` — core Aider has no MCP client; AiderDesk is the closest
+ * equivalent, see https://aiderdesk.dev/docs/agent-mode/mcp-servers).
  * All filesystem behaviour lives here; the Clikt command only parses flags,
  * renders, and maps exit codes (D-004).
  *
@@ -162,6 +165,25 @@ import java.nio.file.Paths
  * file is never a write target: `--scope project` owns the shared project
  * file, `--scope system` the user file.)
  *
+ * Aider / AiderDesk layout (verified against the published docs at
+ * https://aiderdesk.dev/docs/agent-mode/mcp-servers — core Aider has no MCP
+ * client as of Aider v0.86 / open Aider-AI/aider#2525; AiderDesk is the
+ * MCP-capable Aider UI and is the closest equivalent this service wires):
+ * project `<checkout>/.aider-desk/mcp-servers.json` (walked up; project
+ * servers take precedence over global ones with the same name); user-global
+ * `~/.aider-desk/mcp-servers.json` (`$AIDER_DESK_HOME_DIR/mcp-servers.json`
+ * when set — this service accepts an explicit [aiderDeskHome] override so
+ * fake homes stay hermetic). The entry is the stdio server:
+ *
+ * ```json
+ * {"mcpServers": {"jdx": {"command": "jdx", "args": ["mcp"]}}}
+ * ```
+ *
+ * (AiderDesk Settings → MCP Servers recognises this minimal shape and also
+ * accepts a bare top-level map without the `mcpServers` wrapper; installs
+ * always write the wrapped shape matching the documented example. Presence
+ * of `command`/`args` wiring `jdx mcp` is what counts.)
+ *
  * Merge discipline: the target file is parsed leniently (JSONC comments and
  * trailing commas are accepted), every unrelated key is preserved byte-free —
  * only the owned entries are added, replaced, or removed. A second
@@ -185,8 +207,15 @@ class SetupService(
      * real home even when the ambient variable is set.
      */
     private val copilotHome: Path? = null,
+    /**
+     * Override for `$AIDER_DESK_HOME_DIR` (the AiderDesk user config dir). Null
+     * means "read the ambient `$AIDER_DESK_HOME_DIR` at use time, else
+     * `~/.aider-desk`" — production; tests pass a fake-home-rooted dir so no
+     * test touches the real home even when the ambient variable is set.
+     */
+    private val aiderDeskHome: Path? = null,
 ) {
-    /** Agents with setup support: OpenCode, Claude Code, Cursor, Kilo Code, Cline, Codex CLI, GitHub Copilot CLI, Antigravity, and Windsurf (Devin Local). */
+    /** Agents with setup support: OpenCode, Claude Code, Cursor, Kilo Code, Cline, Codex CLI, GitHub Copilot CLI, Antigravity, Windsurf (Devin Local), and Aider (AiderDesk). */
     enum class Agent(val cliName: String) {
         OPENCODE("opencode"),
         CLAUDE_CODE("claude-code"),
@@ -197,6 +226,7 @@ class SetupService(
         COPILOT("copilot"),
         ANTIGRAVITY("antigravity"),
         WINDSURF("windsurf"),
+        AIDER("aider"),
     }
 
     /** Where the entry is written: the checkout or the user's global config. */
@@ -360,6 +390,29 @@ class SetupService(
         val binary: String? = null,
     )
 
+    /**
+     * Whether the `aiderdesk` binary (AiderDesk npm CLI / desktop companion)
+     * is installed for use. `PRESENT` means the binary answered `--version`.
+     * Core `aider` has no MCP client — this probe names the MCP-capable
+     * AiderDesk install that `--agent aider` actually wires.
+     */
+    enum class AiderVersion(val cliName: String) {
+        PRESENT("present"),
+        ABSENT("absent"),
+        UNKNOWN("unknown"),
+    }
+
+    /**
+     * Best-effort answer to "is AiderDesk installed". [raw] is the trimmed
+     * `--version` output (null when the binary never answered); [binary] names
+     * the probed executable (`aiderdesk`).
+     */
+    data class AiderVersionInfo(
+        val version: AiderVersion,
+        val raw: String? = null,
+        val binary: String? = null,
+    )
+
     /** What the caller asked for: install, report-only, or uninstall. */
     data class SetupRequest(
         val agent: Agent = Agent.OPENCODE,
@@ -440,6 +493,10 @@ class SetupService(
         Agent.WINDSURF -> when (scope) {
             Scope.PROJECT -> windsurfProjectConfigPath(projectDir)
             Scope.SYSTEM -> windsurfSystemConfigPath(userHome)
+        }
+        Agent.AIDER -> when (scope) {
+            Scope.PROJECT -> aiderProjectConfigPath(projectDir)
+            Scope.SYSTEM -> aiderSystemConfigPath(userHome, aiderDeskHome)
         }
     }
 
@@ -551,7 +608,9 @@ class SetupService(
          * `copilot`, `github-copilot`, `copilot-cli` match GitHub Copilot CLI;
          * `antigravity`, `agy`, `antigravity-cli` match Antigravity;
          * `windsurf`, `devin`, `devin-desktop`, `devin-cli`, `windsurf-ide`
-         * match Windsurf / Devin Local).
+         * match Windsurf / Devin Local;
+         * `aider`, `aider-desk`, `aiderdesk`, `aider-desk-cli` match Aider /
+         * AiderDesk).
          * Null when unsupported — the adapter exits 3 naming it.
          */
         fun parseAgent(raw: String?): Agent? {
@@ -566,6 +625,7 @@ class SetupService(
                 "copilot", "githubcopilot", "copilotcli", "githubcopilotcli" -> Agent.COPILOT
                 "antigravity", "agy", "antigravitycli" -> Agent.ANTIGRAVITY
                 "windsurf", "devin", "devindesktop", "devincli", "windsurfide" -> Agent.WINDSURF
+                "aider", "aiderdesk", "aiderdeskcli" -> Agent.AIDER
                 else -> null
             }
         }
@@ -951,6 +1011,50 @@ class SetupService(
         }
 
         /**
+         * Answers "is AiderDesk installed for use" from PATH. Probes the
+         * `aiderdesk` binary (verified: `@aiderdesk/aiderdesk` npm package
+         * places `aiderdesk` on PATH; `aiderdesk --version` / `-v` print the
+         * CLI version — see https://aiderdesk.dev/docs/advanced/npm-cli).
+         * Never throws: a missing binary reads as ABSENT, a failing or blank
+         * run as UNKNOWN. Pure IO seam ([ProcessRunner]) so tests inject fakes.
+         * Core `aider` is intentionally not probed — it has no MCP client.
+         */
+        fun probeAiderVersion(
+            pathDirs: List<Path>,
+            runner: ProcessRunner,
+            osName: String = System.getProperty("os.name", ""),
+        ): AiderVersionInfo {
+            val executable = pathDirs.firstNotNullOfOrNull { dir ->
+                toolFileNames("aiderdesk", osName)
+                    .map { dir.resolve(it) }
+                    .firstOrNull { Files.isRegularFile(it) && Files.isExecutable(it) }
+            } ?: return AiderVersionInfo(AiderVersion.ABSENT)
+            val raw = try {
+                val outcome = runner.run(executable, listOf("--version"))
+                (outcome.stdout + "\n" + outcome.stderr).trim().ifEmpty { null }
+            } catch (_: Exception) {
+                null
+            }
+            if (raw.isNullOrBlank()) return AiderVersionInfo(AiderVersion.UNKNOWN, raw, "aiderdesk")
+            return AiderVersionInfo(AiderVersion.PRESENT, raw, "aiderdesk")
+        }
+
+        /**
+         * One human line naming the detected AiderDesk install for `setup`
+         * and `doctor` output (`aider (0.91.0)`, `aider not found on PATH`).
+         * Pure — example-tested. The raw is sanitized to one line (issue #84);
+         * JSON keeps the full probe. Wording uses the `--agent aider` name
+         * even though the probed binary is `aiderdesk`.
+         */
+        fun describeAiderVersion(info: AiderVersionInfo): String = when (info.version) {
+            AiderVersion.PRESENT ->
+                "aider" + (rawDisplaySuffix(info.raw).ifEmpty { " installed" })
+            AiderVersion.ABSENT -> "aider not found on PATH"
+            AiderVersion.UNKNOWN ->
+                "aider version unknown" + rawDisplaySuffix(info.raw)
+        }
+
+        /**
          * Project target: the nearest `opencode.json`/`opencode.jsonc` walking up
          * from [projectDir] (opencode itself walks up to the worktree root), else
          * a fresh `opencode.json` in [projectDir].
@@ -1309,6 +1413,45 @@ class SetupService(
         /** The Windsurf entry: `jdx mcp` on PATH as a stdio MCP server under `mcpServers` (same shape as Claude Code / Antigravity — verified against Devin MCP docs). */
         fun desiredWindsurfEntry(): JsonObject = desiredAntigravityEntry()
 
+        /**
+         * Aider / AiderDesk project target: the nearest
+         * `.aider-desk/mcp-servers.json` walking up from [projectDir]
+         * (project servers take precedence over global ones with the same
+         * name per https://aiderdesk.dev/docs/agent-mode/mcp-servers), else
+         * a fresh `.aider-desk/mcp-servers.json` in [projectDir].
+         */
+        fun aiderProjectConfigPath(projectDir: Path): Path {
+            var dir: Path? = projectDir.toAbsolutePath().normalize()
+            while (dir != null) {
+                val candidate = dir.resolve(".aider-desk/mcp-servers.json")
+                if (Files.isRegularFile(candidate)) return candidate
+                dir = dir.parent
+            }
+            return projectDir.toAbsolutePath().normalize().resolve(".aider-desk/mcp-servers.json")
+        }
+
+        /**
+         * Aider / AiderDesk system target: `$AIDER_DESK_HOME_DIR/mcp-servers.json`
+         * when [aiderDeskHome] is given, else the default
+         * `~/.aider-desk/mcp-servers.json`. An explicit null [aiderDeskHome]
+         * falls back to the ambient `$AIDER_DESK_HOME_DIR` environment
+         * variable.
+         */
+        fun aiderSystemConfigPath(userHome: Path, aiderDeskHome: Path? = null): Path {
+            val base = aiderDeskHome ?: ambientAiderDeskHome() ?: userHome.resolve(".aider-desk")
+            return base.resolve("mcp-servers.json")
+        }
+
+        /** Reads the ambient `$AIDER_DESK_HOME_DIR` (blank means unset). Never throws. */
+        private fun ambientAiderDeskHome(): Path? = try {
+            System.getenv("AIDER_DESK_HOME_DIR")?.takeIf { it.isNotBlank() }?.let { Paths.get(it) }
+        } catch (_: Exception) {
+            null
+        }
+
+        /** The AiderDesk entry: `jdx mcp` on PATH as a stdio MCP server under `mcpServers` (same shape as Claude Code / Antigravity / Windsurf — verified against AiderDesk MCP docs). */
+        fun desiredAiderEntry(): JsonObject = desiredAntigravityEntry()
+
         /** Report-only probe shared by `--check` and the `doctor` setup row. */
         fun isInstalledAt(path: Path): Boolean = isInstalledAt(path, Agent.OPENCODE)
 
@@ -1341,9 +1484,9 @@ class SetupService(
          * True when an install is a no-op (every owned entry present): OpenCode
          * needs **both** the v1 and v2 entries — a v1-only file is completed
          * with the v2 entry — while Kilo, Claude Code, Cursor, Cline, Copilot,
-         * Antigravity, Windsurf, and Codex CLI need only their single entry.
-         * The report-only probe ([isInstalledRoot]) stays lenient (either
-         * OpenCode entry counts).
+         * Antigravity, Windsurf, Aider, and Codex CLI need only their single
+         * entry. The report-only probe ([isInstalledRoot]) stays lenient
+         * (either OpenCode entry counts).
          */
         private fun isCompleteFor(agent: Agent, root: JsonObject): Boolean = when (agent) {
             Agent.OPENCODE -> isV1Installed(root) && isV2Installed(root)
@@ -1354,10 +1497,11 @@ class SetupService(
             Agent.COPILOT -> isCopilotWrapped(root)
             Agent.ANTIGRAVITY -> isAntigravityInstalled(root)
             Agent.WINDSURF -> isWindsurfInstalled(root)
+            Agent.AIDER -> isAiderInstalled(root)
             Agent.CODEX -> error("Codex CLI installs merge TOML text, never JSON")
         }
 
-        /** Agent-aware probe: OpenCode checks v1/v2 entries, Claude Code/Cursor/Antigravity/Windsurf check `mcpServers.jdx`, Kilo checks `mcp.jdx`, Cline checks its `mcpServers.jdx` transport entry, Copilot checks `mcpServers.jdx` (or bare `jdx`), Codex CLI probes TOML text. */
+        /** Agent-aware probe: OpenCode checks v1/v2 entries, Claude Code/Cursor/Antigravity/Windsurf/Aider check `mcpServers.jdx`, Kilo checks `mcp.jdx`, Cline checks its `mcpServers.jdx` transport entry, Copilot checks `mcpServers.jdx` (or bare `jdx`), Codex CLI probes TOML text. */
         fun isInstalledRoot(root: JsonObject, agent: Agent): Boolean = when (agent) {
             Agent.OPENCODE -> isV1Installed(root) || isV2Installed(root)
             Agent.CLAUDE_CODE -> isClaudeInstalled(root)
@@ -1367,6 +1511,7 @@ class SetupService(
             Agent.COPILOT -> isCopilotInstalled(root)
             Agent.ANTIGRAVITY -> isAntigravityInstalled(root)
             Agent.WINDSURF -> isWindsurfInstalled(root)
+            Agent.AIDER -> isAiderInstalled(root)
             Agent.CODEX -> error("Codex CLI probes TOML text via isCodexInstalledText, never JSON")
         }
 
@@ -1580,6 +1725,23 @@ class SetupService(
         /** Removes Windsurf `mcpServers.jdx`; drops an emptied `mcpServers` object. */
         fun mergeWindsurfRemove(root: JsonObject): JsonObject = mergeAntigravityRemove(root)
 
+        /** True when the AiderDesk `mcpServers.jdx` entry is a server whose command runs `jdx mcp` (same shape as Claude Code / Antigravity / Windsurf). */
+        fun isAiderInstalled(root: JsonObject): Boolean = isAntigravityInstalled(root)
+
+        /**
+         * True when [entry] runs `jdx mcp` in the AiderDesk shape
+         * (`{"command": "jdx", "args": ["mcp"]}`). Same codec as Claude Code
+         * ([isClaudeJdxEntry]): absolute install paths and Windows `PATHEXT`
+         * shims accepted.
+         */
+        fun isAiderJdxEntry(entry: JsonObject): Boolean = isClaudeJdxEntry(entry)
+
+        /** Merges the desired AiderDesk entry into [root] (null = fresh file). */
+        fun mergeAiderInstall(root: JsonObject?): JsonObject = mergeAntigravityInstall(root)
+
+        /** Removes AiderDesk `mcpServers.jdx`; drops an emptied `mcpServers` object. */
+        fun mergeAiderRemove(root: JsonObject): JsonObject = mergeAntigravityRemove(root)
+
         /**
          * Removes `mcpServers.jdx` (dropping an emptied `mcpServers` object)
          * and a bare top-level `jdx` entry when it is ours, to stay tidy.
@@ -1660,6 +1822,7 @@ class SetupService(
             Agent.COPILOT -> mergeCopilotInstall(root)
             Agent.ANTIGRAVITY -> mergeAntigravityInstall(root)
             Agent.WINDSURF -> mergeWindsurfInstall(root)
+            Agent.AIDER -> mergeAiderInstall(root)
             Agent.CODEX -> error("Codex CLI installs merge TOML text via mergeCodexInstall, never JSON")
         }
 
@@ -1714,6 +1877,7 @@ class SetupService(
             Agent.COPILOT -> mergeCopilotRemove(root)
             Agent.ANTIGRAVITY -> mergeAntigravityRemove(root)
             Agent.WINDSURF -> mergeWindsurfRemove(root)
+            Agent.AIDER -> mergeAiderRemove(root)
             Agent.CODEX -> error("Codex CLI removals merge TOML text via mergeCodexRemove, never JSON")
         }
 
@@ -2234,7 +2398,7 @@ class SetupService(
         private fun hasEntry(root: JsonObject, agent: Agent): Boolean = hasEntryFor(agent, root)
 
         private fun hasEntryFor(agent: Agent, root: JsonObject): Boolean = when (agent) {
-            Agent.CLAUDE_CODE, Agent.CURSOR, Agent.ANTIGRAVITY, Agent.WINDSURF -> {
+            Agent.CLAUDE_CODE, Agent.CURSOR, Agent.ANTIGRAVITY, Agent.WINDSURF, Agent.AIDER -> {
                 val servers = root["mcpServers"]?.jsonObjectOrNull() ?: return false
                 servers.containsKey(SERVER_NAME)
             }

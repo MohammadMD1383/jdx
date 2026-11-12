@@ -22,7 +22,7 @@ is the CLI surface, pinned by help/parity goldens.)
   `.exe`/`.cmd`/`.bat` (`osName` seam); the `appcds` row is stat-only
   (size + mtime vs the fat jar, WARN-only, never FAIL). `service/UpgradeService` — pure-Java `tar.gz` extraction first
   (external `tar` is the fallback), `.exe`-aware launcher check.
-  `service/SetupService` — agent wiring (`jdx setup --agent opencode|claude-code|cursor|kilo|cline|codex|copilot|antigravity|windsurf
+  `service/SetupService` — agent wiring (`jdx setup --agent opencode|claude-code|cursor|kilo|cline|codex|copilot|antigravity|windsurf|aider
   --scope project|system`): JSONC-tolerant `mcp.jdx` (v1) + `mcp.servers.jdx`
   (v2, `enabled` → `disabled`) merge into `opencode.json[c]` (project walk-up,
   else `~/.config/opencode`); `mcpServers.jdx` (`{"command": "jdx", "args":
@@ -61,6 +61,11 @@ is the CLI surface, pinned by help/parity goldens.)
   https://docs.devin.ai/cli/extensibility/mcp/configuration) merges into
   `.devin/mcp_config.json` (project walk-up) or `~/.config/devin/mcp_config.json`
   (system; gitignored `.devin/mcp_config.local.json` is never a write target);
+  Aider / AiderDesk `mcpServers.jdx` (same shape — core Aider has no MCP client,
+  so this wires AiderDesk as the closest equivalent per
+  https://aiderdesk.dev/docs/agent-mode/mcp-servers) merges into
+  `.aider-desk/mcp-servers.json` (project walk-up) or
+  `$AIDER_DESK_HOME_DIR/mcp-servers.json` (else `~/.aider-desk/mcp-servers.json`);
   idempotent no-op re-runs, `--check`/`--remove`;
   `parseOpencodeVersion`/`probeOpencodeVersion` classify the installed OpenCode
   line (`opencode` then legacy `opencode2`; v1 = `1.x`, v2 =
@@ -74,7 +79,9 @@ is the CLI surface, pinned by help/parity goldens.)
   `probeAntigravityVersion`/`describeAntigravityVersion` report
   `agy --version` presence;
   `probeWindsurfVersion`/`describeWindsurfVersion` report
-  `devin --version` presence (`isJdxCommand` accepts Windows shims `jdx.exe`/`.cmd`/`.bat` and
+  `devin --version` presence;
+  `probeAiderVersion`/`describeAiderVersion` report
+  `aiderdesk --version` presence (`isJdxCommand` accepts Windows shims `jdx.exe`/`.cmd`/`.bat` and
   backslash paths on every host, so `--check`/`doctor` stay true on Windows);
   every `describe*Version` path runs the probe raw through
   `sanitizeVersionRawForDisplay` (issue #84: first non-blank line, ANSI/controls

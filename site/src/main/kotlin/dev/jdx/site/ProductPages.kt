@@ -478,6 +478,7 @@ class ProductPages(
             "copilot" to "GitHub Copilot CLI",
             "antigravity" to "Antigravity",
             "windsurf" to "Windsurf",
+            "aider" to "Aider (AiderDesk)",
         )
     }
 }

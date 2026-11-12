@@ -528,6 +528,11 @@ class DoctorService(
         val antigravitySystem = SetupService.antigravitySystemConfigPath(environment.userHome)
         val windsurfProject = SetupService.windsurfProjectConfigPath(environment.workingDir)
         val windsurfSystem = SetupService.windsurfSystemConfigPath(environment.userHome)
+        val aiderDeskHome = environment.envVars["AIDER_DESK_HOME_DIR"]
+            ?.takeIf { it.isNotBlank() }
+            ?.let { Paths.get(it) }
+        val aiderProject = SetupService.aiderProjectConfigPath(environment.workingDir)
+        val aiderSystem = SetupService.aiderSystemConfigPath(environment.userHome, aiderDeskHome)
         val opencodeDetected = try {
             SetupService.describeVersion(
                 SetupService.probeOpencodeVersion(
@@ -605,6 +610,17 @@ class DoctorService(
         } catch (e: Exception) {
             "windsurf version unknown (${e.message ?: e.javaClass.simpleName})"
         }
+        val aiderDetected = try {
+            SetupService.describeAiderVersion(
+                SetupService.probeAiderVersion(
+                    environment.pathDirs,
+                    environment.processRunner,
+                    environment.osName,
+                ),
+            )
+        } catch (e: Exception) {
+            "aider version unknown (${e.message ?: e.javaClass.simpleName})"
+        }
         fun stateOf(path: Path, agent: SetupService.Agent): String? = try {
             when {
                 !Files.exists(path) -> null
@@ -653,6 +669,10 @@ class DoctorService(
             ?: "no project config (${windsurfProject.fileName})"
         val windsurfSystemState = stateOf(windsurfSystem, SetupService.Agent.WINDSURF)
             ?: "no system config ($windsurfSystem)"
+        val aiderProjectState = stateOf(aiderProject, SetupService.Agent.AIDER)
+            ?: "no project config (${aiderProject.fileName})"
+        val aiderSystemState = stateOf(aiderSystem, SetupService.Agent.AIDER)
+            ?: "no system config ($aiderSystem)"
         val status = if (
             opencodeProjectState.startsWith("installed") || opencodeSystemState.startsWith("installed") ||
             claudeProjectState.startsWith("installed") || claudeSystemState.startsWith("installed") ||
@@ -662,7 +682,8 @@ class DoctorService(
             codexProjectState.startsWith("installed") || codexSystemState.startsWith("installed") ||
             copilotProjectState.startsWith("installed") || copilotSystemState.startsWith("installed") ||
             antigravityProjectState.startsWith("installed") || antigravitySystemState.startsWith("installed") ||
-            windsurfProjectState.startsWith("installed") || windsurfSystemState.startsWith("installed")
+            windsurfProjectState.startsWith("installed") || windsurfSystemState.startsWith("installed") ||
+            aiderProjectState.startsWith("installed") || aiderSystemState.startsWith("installed")
         ) {
             DoctorStatus.OK
         } else {
@@ -676,8 +697,9 @@ class DoctorService(
                 "`jdx setup --agent cline --scope system`, " +
                 "`jdx setup --agent codex --scope project`, " +
                 "`jdx setup --agent copilot --scope project`, " +
-                "`jdx setup --agent antigravity --scope project` or " +
-                "`jdx setup --agent windsurf --scope project`"
+                "`jdx setup --agent antigravity --scope project`, " +
+                "`jdx setup --agent windsurf --scope project` or " +
+                "`jdx setup --agent aider --scope project`"
         return check(
             "setup",
             status,
@@ -696,7 +718,9 @@ class DoctorService(
                 "antigravity project $antigravityProjectState ($antigravityDetected); " +
                 "antigravity system $antigravitySystemState; " +
                 "windsurf project $windsurfProjectState ($windsurfDetected); " +
-                "windsurf system $windsurfSystemState$hint",
+                "windsurf system $windsurfSystemState; " +
+                "aider project $aiderProjectState ($aiderDetected); " +
+                "aider system $aiderSystemState$hint",
         )
     }
 
