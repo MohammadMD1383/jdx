@@ -18,7 +18,8 @@ public enum class JdxOs {
  *
  * Pure path math, no IO: every function takes an explicit `home`, `os` and `env`
  * map, so tests pin Linux/macOS/Windows defaults with fakes and never touch the
- * real home. Production callers pass `Path.of(System.getProperty("user.home"))`,
+ * real home. Production callers resolve the home via [userHome] (preferring
+ * `$HOME` over the JVM's `user.home` — issue #85), then pass
  * `detectOs(System.getProperty("os.name", ""))` and `System.getenv()`.
  *
  * Precedence (first match wins): explicit CLI flag > `JDX_*` env > platform env
@@ -33,6 +34,13 @@ public object JdxPaths {
 
     /** Overrides the daemon socket directory (no CLI flag; env only). */
     public const val ENV_RUNTIME_DIR: String = "JDX_RUNTIME_DIR"
+
+    /**
+     * Overrides the user-home used for agent-config writes (`jdx setup` /
+     * `jdx doctor` setup row) and as the `home` base for OS-default
+     * cache/config paths when platform env is unset (issue #85).
+     */
+    public const val ENV_SETUP_HOME: String = "JDX_SETUP_HOME"
 
     /**
      * The single `os.name` branch. Matches `win` anywhere (covers `Windows 10`,
@@ -114,6 +122,31 @@ public object JdxPaths {
             JdxOs.WINDOWS -> env.nonBlank("LOCALAPPDATA")?.let { Path.of(it).resolve("jdx/run") }
                 ?: cacheRoot.resolve("run")
         }
+    }
+
+    /**
+     * Resolves the user-home used for agent-config writes (`jdx setup` /
+     * doctor setup row) and as the `home` base for OS-default cache/config
+     * paths when platform env is unset.
+     *
+     * Precedence (first match wins): explicit > `JDX_SETUP_HOME` > `$HOME` >
+     * `$USERPROFILE` > the JVM `user.home` property. Preferring `$HOME` over
+     * `user.home` matches shell tools and `install.sh` — OpenJDK on Linux
+     * resolves `user.home` from `getpwuid()` and ignores `$HOME` (issue #85).
+     * Blank values fall through. Production callers pass `System.getenv()` and
+     * `System.getProperty("user.home", "")`; tests pin fakes and never touch
+     * the real home.
+     */
+    public fun userHome(
+        env: Map<String, String>,
+        userHomeProperty: String,
+        explicit: Path? = null,
+    ): Path {
+        explicit?.let { return it }
+        env.nonBlank(ENV_SETUP_HOME)?.let { return Path.of(it) }
+        env.nonBlank("HOME")?.let { return Path.of(it) }
+        env.nonBlank("USERPROFILE")?.let { return Path.of(it) }
+        return Path.of(userHomeProperty)
     }
 
     /** The pre-D-044 cache location (`~/.cache/jdx` on every OS) — the migration source. */

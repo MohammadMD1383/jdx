@@ -27,6 +27,9 @@ via `JsonEscape` — reuse it, never a second escaper). `explicitApi()` is on.
 - `paths/JdxPaths` — per-OS cache/config/runtime dirs (D-044; table in
   `docs/PROPOSAL.md` §17.1). Pure path math over explicit `home`/`os`/`env`
   inputs — the single `os.name` branch; production callers pass `System` values.
+  `userHome(env, userHomeProperty)` resolves the agent-config / OS-default-home
+  base as `JDX_SETUP_HOME` > `$HOME` > `$USERPROFILE` > `user.home` (issue #85:
+  OpenJDK on Linux ignores `$HOME` for `user.home`).
 - Test generators live in `src/test/.../gen/` — reuse across families.
 - `src/test/.../fixtures/Fixtures.kt` is core's **own** copy of the corpus resolver
   (its test source set must not depend on a project) and must mirror

@@ -94,4 +94,51 @@ class JdxPathsTest {
             home.resolve(".cache/jdx"), home.resolve("Library/Caches/jdx"),
         ) shouldBe true
     }
+
+    @Test
+    fun `user home prefers HOME over the JVM user home property`() {
+        // OpenJDK on Linux ignores $HOME for user.home (issue #85); jdx must not.
+        JdxPaths.userHome(
+            mapOf("HOME" to "/tmp/sandbox"),
+            userHomeProperty = "/home/passwd",
+        ) shouldBe Path.of("/tmp/sandbox")
+        JdxPaths.userHome(emptyMap(), userHomeProperty = "/home/passwd") shouldBe
+            Path.of("/home/passwd")
+    }
+
+    @Test
+    fun `user home precedence is JDX_SETUP_HOME then HOME then USERPROFILE then property`() {
+        val passwd = "/home/passwd"
+        JdxPaths.userHome(
+            mapOf(
+                "JDX_SETUP_HOME" to "/tmp/jdx-home",
+                "HOME" to "/tmp/sandbox",
+                "USERPROFILE" to "C:\\Users\\alice",
+            ),
+            userHomeProperty = passwd,
+        ) shouldBe Path.of("/tmp/jdx-home")
+        JdxPaths.userHome(
+            mapOf("HOME" to "/tmp/sandbox", "USERPROFILE" to "C:\\Users\\alice"),
+            userHomeProperty = passwd,
+        ) shouldBe Path.of("/tmp/sandbox")
+        JdxPaths.userHome(
+            mapOf("USERPROFILE" to "C:\\Users\\alice"),
+            userHomeProperty = passwd,
+        ) shouldBe Path.of("C:\\Users\\alice")
+        JdxPaths.userHome(emptyMap(), userHomeProperty = passwd) shouldBe Path.of(passwd)
+    }
+
+    @Test
+    fun `user home blank env values fall through and explicit wins`() {
+        val explicit = Path.of("/tmp/explicit")
+        JdxPaths.userHome(
+            mapOf("JDX_SETUP_HOME" to "  ", "HOME" to "", "USERPROFILE" to "\t"),
+            userHomeProperty = "/home/passwd",
+            explicit = explicit,
+        ) shouldBe explicit
+        JdxPaths.userHome(
+            mapOf("JDX_SETUP_HOME" to "", "HOME" to "  ", "USERPROFILE" to ""),
+            userHomeProperty = "/home/passwd",
+        ) shouldBe Path.of("/home/passwd")
+    }
 }

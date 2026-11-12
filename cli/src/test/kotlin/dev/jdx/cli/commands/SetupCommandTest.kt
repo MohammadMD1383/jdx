@@ -1388,6 +1388,77 @@ WARNING: proceeding, even though we could not create PATH aliases: Refusing to c
         result.containsKey("codexRaw") shouldBe false
     }
 
+    @Test
+    fun `setup resolves agent-config home via HOME not the JVM user home`(
+        @TempDir root: Path,
+    ) {
+        // Issue #85: OpenJDK user.home ignores $HOME on Linux. The command must
+        // pass the resolved shell home into the service, so a sandboxed HOME
+        // isolates Cline (and every other backend) writes.
+        val sandbox = root.resolve("sandbox").also { Files.createDirectories(it) }
+        val project = root.resolve("project").also { Files.createDirectories(it) }
+        var capturedHome: Path? = null
+        val command = SetupCommand(
+            serviceFactory = { home, proj ->
+                capturedHome = home
+                SetupService(home, proj)
+            },
+            resolveUserHome = {
+                // Mimic ambient HOME=/sandbox with a disagreeing passwd home.
+                dev.jdx.core.paths.JdxPaths.userHome(
+                    mapOf("HOME" to sandbox.toString()),
+                    userHomeProperty = root.resolve("passwd-home").toString(),
+                )
+            },
+            terminate = { throw SetupExit(it) },
+            versionProbe = { throw AssertionError("cline setup must not probe opencode") },
+            claudeVersionProbe = { throw AssertionError("cline setup must not probe claude") },
+        )
+        captureStdout {
+            JdxCli().subcommands(command)
+                .parse(listOf("setup", "--agent", "cline", "--scope", "system"))
+        }
+
+        capturedHome shouldBe sandbox
+        SetupService.isInstalledAt(clinePath(sandbox), SetupService.Agent.CLINE) shouldBe true
+        Files.exists(clinePath(root.resolve("passwd-home"))) shouldBe false
+    }
+
+    @Test
+    fun `setup JDX_SETUP_HOME beats HOME for the agent-config root`(@TempDir root: Path) {
+        val override = root.resolve("jdx-home").also { Files.createDirectories(it) }
+        val sandbox = root.resolve("sandbox").also { Files.createDirectories(it) }
+        val project = root.resolve("project").also { Files.createDirectories(it) }
+        var capturedHome: Path? = null
+        val command = SetupCommand(
+            serviceFactory = { home, proj ->
+                capturedHome = home
+                SetupService(home, proj)
+            },
+            resolveUserHome = {
+                dev.jdx.core.paths.JdxPaths.userHome(
+                    mapOf(
+                        "JDX_SETUP_HOME" to override.toString(),
+                        "HOME" to sandbox.toString(),
+                    ),
+                    userHomeProperty = root.resolve("passwd-home").toString(),
+                )
+            },
+            terminate = { throw SetupExit(it) },
+            versionProbe = { throw AssertionError("cline setup must not probe opencode") },
+            claudeVersionProbe = { throw AssertionError("cline setup must not probe claude") },
+        )
+        val exit = shouldThrow<SetupExit> {
+            captureStdout {
+                JdxCli().subcommands(command)
+                    .parse(listOf("setup", "--agent", "cline", "--scope", "system", "--check"))
+            }
+        }
+
+        exit.code shouldBe 1 // absent under the override home
+        capturedHome shouldBe override
+    }
+
     private fun captureStdout(block: () -> Unit): String {
         val original = System.out
         val buffer = ByteArrayOutputStream()
