@@ -1,6 +1,7 @@
 # install.ps1 — shim the built Windows `jdx.bat` onto the user PATH (issue #92).
 #
-# Windows twin of install.sh. Per-user only: never requires Administrator.
+# Windows twin of install.sh. Per-user only: never requires Administrator (an
+# elevated shell still lands under USERPROFILE\.local\bin, with a note).
 # Refuses to overwrite an existing, unrelated `jdx.cmd` without -Force —
 # clobbering another tool silently is the one unforgivable sin of an installer.
 #
@@ -49,8 +50,11 @@ function Test-IsAdministrator {
     }
 }
 
+# Warn when elevated, but do not refuse — see install-release.ps1 (same rationale:
+# elevated shells are common on Windows, and the default target stays under the
+# interactive user's profile).
 if ($script:JdxIsWindows -and (Test-IsAdministrator)) {
-    Write-InstallError 'refusing to run elevated — jdx installs per-user into %USERPROFILE%\.local\bin'
+    [Console]::Error.WriteLine('note: running elevated — still installing per-user into the USERPROFILE\.local\bin target')
 }
 
 $repoRoot = Split-Path -Parent $MyInvocation.MyCommand.Path

@@ -52,8 +52,8 @@ Fat-jar assembly + the `jdx` launchers (POSIX + Windows) + AppCDS archive.
   automatically); a missing archive prints a note only, with `jdx doctor`
   (appcds row) as the source of truth. Windows twin: `install.ps1` (issue #92)
   writes a `jdx.cmd` forwarder into `%USERPROFILE%\.local\bin` (no symlink —
-  Developer Mode is not assumed), refuses elevated, refuses to clobber without
-  `-Force`; pinned by `InstallPs1Test` under `pwsh`.
+  Developer Mode is not assumed), warns (does not refuse) when elevated, refuses
+  to clobber without `-Force`; pinned by `InstallPs1Test` under `pwsh`.
 - Releases: pushing tag `vX.Y.Z` on `main` runs `.github/workflows/release.yml`
   as a three-OS matrix (Windows builds via `gradlew.bat`, each leg smokes its
   own launcher), publishing per-OS `jdx-<version>-<os>.{tar.gz,zip}` + `.sha256`

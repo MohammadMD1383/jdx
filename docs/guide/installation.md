@@ -42,8 +42,9 @@ irm https://raw.githubusercontent.com/MohammadMD1383/jdx/main/install-release.ps
 
 This downloads the `jdx-<version>-windows.zip` asset, installs it into
 `%LOCALAPPDATA%\Programs\jdx`, and adds that directory to the user `PATH` so
-`jdx` resolves via `jdx.bat`. No Administrator rights; the script refuses to run
-elevated. Offline / pinned installs:
+`jdx` resolves via `jdx.bat`. No Administrator rights are needed (an elevated
+shell still installs per-user into `LOCALAPPDATA`, never into Program Files).
+Offline / pinned installs:
 
 ```powershell
 ./install-release.ps1 -Version v1.2.0

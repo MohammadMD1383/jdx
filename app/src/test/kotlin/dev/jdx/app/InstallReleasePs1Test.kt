@@ -80,6 +80,17 @@ class InstallReleasePs1Test {
     private fun tempDir(prefix: String): File = Files.createTempDirectory(prefix).toFile()
 
     /**
+     * The quoted forwarder path inside a `jdx.cmd` shim, canonicalised so
+     * macOS `/var` vs `/private/var` (Java realpath vs PowerShell GetFullPath)
+     * cannot falsely fail the pin.
+     */
+    private fun shimTarget(shim: File): File {
+        val match = Regex("\"([^\"]+)\"").find(shim.readText().replace("\r\n", "\n"))
+            ?: error("no quoted path in shim:\n${shim.readText()}")
+        return File(match.groupValues[1]).canonicalFile
+    }
+
+    /**
      * Builds a minimal Windows release `.zip` (`jdx/jdx.bat` + fat jar) via
      * `java.util.zip` — no external zip binary needed.
      */
@@ -161,8 +172,7 @@ class InstallReleasePs1Test {
         result.exitCode shouldBe 0
         val shim = File(binDir, "jdx.cmd")
         shim.isFile shouldBe true
-        val launcher = File(localAppData, "Programs/jdx/jdx.bat").canonicalPath
-        shim.readText().replace("\r\n", "\n") shouldContain launcher
+        shimTarget(shim) shouldBe File(localAppData, "Programs/jdx/jdx.bat").canonicalFile
         // cmd shim stays CRLF (*.cmd mirrors *.bat eol=crlf).
         shim.readBytes().let { bytes ->
             val bareLf = bytes.indices.any { i ->

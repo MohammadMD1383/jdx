@@ -20,8 +20,9 @@
 # Writes a `.jdx-release` marker (repo + tag) into the install dir: that is
 # how `jdx upgrade` knows this is a release install and which repo it tracks.
 #
-# Per-user only: never requires Administrator. Refuses to overwrite an
-# existing, unrelated `jdx.cmd`/`jdx.bat` shim unless -Force is given.
+# Per-user only: never requires Administrator (an elevated shell still lands
+# under LOCALAPPDATA, with a note). Refuses to overwrite an existing, unrelated
+# `jdx.cmd`/`jdx.bat` shim unless -Force is given.
 
 [CmdletBinding()]
 param(
@@ -74,12 +75,15 @@ function Test-IsAdministrator {
     }
 }
 
-# Refuse elevated installs the way the POSIX script refuses root: a per-user
-# LOCALAPPDATA install run as Administrator lands in the wrong profile and is
-# the one unforgivable footgun. Offline -Tarball tests on non-Windows hosts
-# never hit this branch ($JdxIsWindows is false under Linux pwsh).
+# Warn when elevated, but do not refuse: Windows runners (and many user shells
+# launched via "Run as administrator") are elevated while LOCALAPPDATA still
+# resolves to the interactive user's profile, so a hard refuse would block the
+# documented per-user default and break CI. The install target stays under
+# %LOCALAPPDATA%\Programs\jdx (or an explicit -Dir); it never writes into
+# Program Files. Offline -Tarball tests on non-Windows hosts skip this branch
+# ($JdxIsWindows is false under Linux/macOS pwsh).
 if ($script:JdxIsWindows -and (Test-IsAdministrator)) {
-    Write-InstallError 'refusing to run elevated — jdx installs per-user into %LOCALAPPDATA%\Programs\jdx'
+    [Console]::Error.WriteLine('note: running elevated — still installing per-user into the LOCALAPPDATA target (not Program Files)')
 }
 
 function Get-LatestTag([string]$Repository) {

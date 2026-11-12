@@ -55,6 +55,17 @@ class InstallPs1Test {
     private fun tempDir(prefix: String): File = Files.createTempDirectory(prefix).toFile()
 
     /**
+     * The quoted forwarder path inside a `jdx.cmd` shim, canonicalised so
+     * macOS `/var` vs `/private/var` (Java realpath vs PowerShell GetFullPath)
+     * cannot falsely fail the pin.
+     */
+    private fun shimTarget(shim: File): File {
+        val match = Regex("\"([^\"]+)\"").find(shim.readText().replace("\r\n", "\n"))
+            ?: error("no quoted path in shim:\n${shim.readText()}")
+        return File(match.groupValues[1]).canonicalFile
+    }
+
+    /**
      * A mini repo root: copies install.ps1 and lays down `app/build/jdx.bat` +
      * a fat jar so the script's existence checks pass without a real build.
      */
@@ -114,7 +125,7 @@ class InstallPs1Test {
         result.exitCode shouldBe 0
         val shim = File(home, ".local/bin/jdx.cmd")
         shim.isFile shouldBe true
-        shim.readText() shouldContain File(repo, "app/build/jdx.bat").canonicalPath
+        shimTarget(shim) shouldBe File(repo, "app/build/jdx.bat").canonicalFile
         result.stdout shouldContain "installed:"
         // CDS present → no warning about the archive.
         result.stderr.contains("no AppCDS archive") shouldBe false
