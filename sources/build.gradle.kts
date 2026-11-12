@@ -1,5 +1,3 @@
-import org.gradle.api.tasks.testing.Test
-
 plugins {
     alias(libs.plugins.pitest)
 }
@@ -19,19 +17,9 @@ dependencies {
     testImplementation(testFixtures(project(":testfixtures")))
 }
 
-// Fixture `-sources.jar` reads (T-071 tier-2 suite). Depend on the jars so a clean
-// checkout cannot run against stale ones, and hand the directory in as a system
-// property so tests never hard-code an absolute path (same pattern as
-// `core/build.gradle.kts` and `index/build.gradle.kts`, T-006).
-listOf("test", "integrationTest").forEach { taskName ->
-    tasks.named<Test>(taskName) {
-        dependsOn(":testfixtures:jar", ":testfixtures:sourcesJar")
-        systemProperty(
-            "jdx.fixturesDir",
-            project(":testfixtures").layout.buildDirectory.dir("libs").get().asFile.absolutePath,
-        )
-    }
-}
+// Fixture-corpus wiring for `test`/`integrationTest`/`benchTest` lives in the root
+// `build.gradle.kts` projectsEvaluated hook (#82). Do not reintroduce a private copy
+// here — `verifyFixtureCorpusWiring` fails `check` if one reappears.
 
 // Mutation testing (T-060, D-021): measured and reported, not gated. This module is a
 // KDoc-only stub until M3 lands real code, so there are no mutants to kill yet —

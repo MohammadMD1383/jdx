@@ -305,7 +305,7 @@ class CacheCommandsTest {
 /** The binary fixture jar, resolved without hard-coded paths (cf. T-063). */
 private fun fixtureJar(): File {
     val dir = System.getProperty("jdx.fixturesDir")?.let { File(it) }
-        ?: throw AssertionError("jdx.fixturesDir not set (cli build wires it; see cli/build.gradle.kts)")
+        ?: throw AssertionError("jdx.fixturesDir not set (root build wires it; see build.gradle.kts (#82))")
     return dir.listFiles { file ->
         file.isFile && file.name.startsWith("testfixtures-") && !file.name.endsWith("-sources.jar")
     }?.singleOrNull() ?: throw AssertionError("expected exactly one binary fixture jar in $dir")

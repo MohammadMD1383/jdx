@@ -335,19 +335,34 @@ val pitWiringGaps = mutableListOf<String>()
 // fact that has to agree, which is the whole lesson of #66.
 val pitestModulesRun = listOf("core", "index", "sources", "decompile")
 
+// #82: modules whose `test` / `integrationTest` / `benchTest` tasks read the fixture
+// corpus. One list, read by the projectsEvaluated hook to wire them and by
+// `verifyFixtureCorpusWiring` to assert the set did not drift. `app` is absent on
+// purpose — it has no corpus-reading tests. `cli` is the only consumer of
+// `benchTest` today; the shared task-name list still wires it for every module so a
+// future bench suite cannot land without the corpus property.
+val fixtureCorpusModulesRun =
+    listOf("cli", "core", "decompile", "index", "mcp", "server", "sources")
+val fixtureCorpusTaskNames = listOf("test", "integrationTest", "benchTest")
+// Filled by the hook below; asserted by `verifyFixtureCorpusWiring`. Same plain-string
+// discipline as the PIT lists (T-067).
+val fixtureCorpusModules = mutableListOf<String>()
+val fixtureCorpusWiringGaps = mutableListOf<String>()
+
 // #66: the fixture-corpus wiring for mutation testing, shared by **every** module that
 // applies the PIT plugin (today core/index/sources/decompile) instead of living as a
 // private copy in `index`. Two facts make this mandatory rather than cosmetic, and both
 // only bite on a clean checkout — which is exactly why it went unnoticed locally:
 //
-//  1. A PIT minion is a *fresh JVM*. It does not inherit the `test`/`tier2Test` system
-//    properties, so a corpus test that reads `jdx.fixturesDir` falls back to walking up
-//    from `user.dir` — which finds a stale `testfixtures/build/libs` on a developer
-//    machine and nothing at all on a runner.
-//  2. `dependsOn(":testfixtures:jar", …)` lives on `test`/`tier2Test` only, and the
-//    `testFixtures(project(":testfixtures"))` test-classpath edge builds the *binary*
-//    jar alone. The `-sources.jar` is produced by `:testfixtures:build`, which
-//    `./gradlew mutationTest` never reaches — so a clean runner has no corpus at all.
+//  1. A PIT minion is a *fresh JVM*. It does not inherit the `test`/`integrationTest`
+//    system properties, so a corpus test that reads `jdx.fixturesDir` falls back to
+//    walking up from `user.dir` — which finds a stale `testfixtures/build/libs` on a
+//    developer machine and nothing at all on a runner.
+//  2. Before #82, `dependsOn(":testfixtures:jar", …)` lived as seven per-module copies
+//    on `test`/`integrationTest` only, and the `testFixtures(project(":testfixtures"))`
+//    test-classpath edge builds the *binary* jar alone. The `-sources.jar` is produced
+//    by `:testfixtures:build`, which `./gradlew mutationTest` never reaches — so a clean
+//    runner has no corpus at all.
 //
 // Together they abort PIT in the *pre-scan* (which runs the suite once unmutated to
 // compute line coverage) with "N tests did not pass without mutation … requires a green
@@ -421,6 +436,69 @@ gradle.projectsEvaluated {
             }
             if (gaps.isNotEmpty()) pitWiringGaps += "${module.path}: ${gaps.joinToString()}"
         }
+
+        // #82: the Test-task half of the same corpus wiring. Same properties, same four
+        // jar tasks, same absolute paths — one place instead of the seven module-build
+        // copies that used to drift independently (and that left `jdx.diffFixturesDir`
+        // on `index`/`cli` alone while every other module only got the main corpus).
+        if (module.name in fixtureCorpusModulesRun) {
+            var wiredAny = false
+            fixtureCorpusTaskNames.forEach { taskName ->
+                module.tasks.withType(Test::class.java).matching { it.name == taskName }
+                    .forEach { testTask ->
+                        wiredAny = true
+                        testTask.dependsOn(
+                            ":testfixtures:jar",
+                            ":testfixtures:sourcesJar",
+                            ":testfixtures:diffV1Jar",
+                            ":testfixtures:diffV2Jar",
+                        )
+                        testTask.systemProperty(
+                            fixtureJarsDirProperty,
+                            fixtureJarsDir.absolutePath,
+                        )
+                        testTask.systemProperty(
+                            diffFixtureJarsDirProperty,
+                            diffFixtureJarsDir.absolutePath,
+                        )
+                        val gaps = mutableListOf<String>()
+                        listOf(fixtureJarsDirProperty, diffFixtureJarsDirProperty)
+                            .forEach { property ->
+                                if (testTask.systemProperties[property] == null) {
+                                    gaps += "$taskName never receives -D$property"
+                                }
+                            }
+                        val declared = testTask.dependsOn.toList()
+                        listOf("jar", "sourcesJar", "diffV1Jar", "diffV2Jar").forEach { jar ->
+                            val path = ":testfixtures:$jar"
+                            if (declared.none { it.toString() == path }) {
+                                gaps +=
+                                    "$taskName has no task dependency on $path, so a clean " +
+                                        "checkout has no corpus"
+                            }
+                        }
+                        if (gaps.isNotEmpty()) {
+                            fixtureCorpusWiringGaps +=
+                                "${module.path}: ${gaps.joinToString()}"
+                        }
+                    }
+            }
+            if (wiredAny) {
+                fixtureCorpusModules += module.name
+            } else {
+                fixtureCorpusWiringGaps +=
+                    "${module.path}: listed in fixtureCorpusModulesRun but has no " +
+                        "test/integrationTest/benchTest task to wire"
+            }
+            // test + integrationTest are mandatory for every corpus module; benchTest is
+            // wired when present (every module gets one from the shared subprojects block).
+            listOf("test", "integrationTest").forEach { required ->
+                if (module.tasks.names.none { it == required }) {
+                    fixtureCorpusWiringGaps +=
+                        "${module.path}: missing required Test task '$required'"
+                }
+            }
+        }
     }
 }
 
@@ -473,6 +551,92 @@ tasks.register("verifyPitestWiring") {
             )
         }
         logger.lifecycle("verifyPitestWiring: PIT wired to the fixture corpus in ${found.joinToString()}.")
+    }
+}
+
+// #82: the Test-task half of the fixture-corpus wiring, asserted on every `check`.
+//
+// Why a second gate rather than folding into `verifyPitestWiring`: PIT modules and
+// corpus-reading modules are different sets (cli/mcp/server read the corpus but have
+// no PIT plugin; a combined gate would either over-require PIT or under-require Test
+// wiring). Same shape, same cheap invariants, same lesson as #66 — a gate that cannot
+// run is not a gate, and a wiring that lives in seven module build files is a wiring
+// that drifts.
+//
+// Four invariants:
+//  1. every module in `fixtureCorpusModulesRun` was visited by the hook;
+//  2. every wired Test task forwards both corpus properties and depends on all four
+//     fixture jars;
+//  3. no `*/build.gradle.kts` still carries a private copy of the property name — the
+//     root file is the only place the string may appear in a build script;
+//  4. the gate checked something at all (empty expected list would pass vacuously).
+tasks.register("verifyFixtureCorpusWiring") {
+    group = "verification"
+    description =
+        "Asserts every corpus-reading module's Test tasks are wired to the fixture " +
+            "corpus (#82) — the Test-task twin of verifyPitestWiring."
+    val gaps = provider { fixtureCorpusWiringGaps.toList() }
+    val modules = provider { fixtureCorpusModules.toSortedSet() }
+    val expected = provider { fixtureCorpusModulesRun.toSortedSet() }
+    // Declared so a future build-script edit that reintroduces a private copy is an
+    // input the configuration cache can track (T-067), not an ambient filesystem peek.
+    val moduleBuildScripts =
+        files(fixtureCorpusModulesRun.map { file("$it/build.gradle.kts") } + file("build.gradle.kts"))
+    inputs.files(moduleBuildScripts)
+        .withPropertyName("moduleBuildScripts")
+        .withPathSensitivity(org.gradle.api.tasks.PathSensitivity.RELATIVE)
+    val rootDirCapture: java.io.File = rootDir
+    val propertyNames = listOf(fixtureJarsDirProperty, diffFixtureJarsDirProperty)
+    doLast {
+        val found = modules.get()
+        if (expected.get().isEmpty()) {
+            throw GradleException(
+                "verifyFixtureCorpusWiring: fixtureCorpusModulesRun is empty, so this " +
+                    "gate checked nothing. Has the corpus-module list been deleted?",
+            )
+        }
+        val missing = gaps.get()
+        if (missing.isNotEmpty()) {
+            throw GradleException(
+                "verifyFixtureCorpusWiring: ${missing.size} module(s) cannot reach the " +
+                    "fixture corpus on a clean checkout (issue #82):\n" +
+                    missing.joinToString("\n"),
+            )
+        }
+        if (found != expected.get()) {
+            throw GradleException(
+                "verifyFixtureCorpusWiring: wired [${found.joinToString()}] but expected " +
+                    "[${expected.get().joinToString()}]. Add the module to " +
+                    "fixtureCorpusModulesRun, or remove the corpus-reading tests — a " +
+                    "module nobody wires is a module whose clean-checkout suite is red.",
+            )
+        }
+        // Private copies in module build files are the whole bug #82 exists to close.
+        // Scan every module's build.gradle.kts (and refuse any hit outside the root).
+        val privateCopies = mutableListOf<String>()
+        rootDirCapture.listFiles()
+            ?.filter { it.isDirectory && java.io.File(it, "build.gradle.kts").isFile }
+            ?.forEach { moduleDir ->
+                val buildFile = java.io.File(moduleDir, "build.gradle.kts")
+                val text = buildFile.readText()
+                propertyNames.forEach { property ->
+                    if (text.contains(property)) {
+                        privateCopies += "${moduleDir.name}/build.gradle.kts still sets $property"
+                    }
+                }
+            }
+        if (privateCopies.isNotEmpty()) {
+            throw GradleException(
+                "verifyFixtureCorpusWiring: fixture-corpus wiring leaked back into a " +
+                    "module build file (issue #82). Keep it in the root " +
+                    "projectsEvaluated hook only:\n" +
+                    privateCopies.sorted().joinToString("\n"),
+            )
+        }
+        logger.lifecycle(
+            "verifyFixtureCorpusWiring: Test tasks wired to the fixture corpus in " +
+                "${found.joinToString()}.",
+        )
     }
 }
 
@@ -751,6 +915,9 @@ subprojects {
         // `core` mutation gate to run at all. Cheap, and it is the only thing standing
         // between a clean checkout and a mutation tier that silently never executes.
         dependsOn(rootProject.tasks.named("verifyPitestWiring"))
+        // #82: same treatment for the Test-task half — seven per-module copies used to
+        // drift; the root hook + this gate are what keep them from coming back.
+        dependsOn(rootProject.tasks.named("verifyFixtureCorpusWiring"))
     }
 
     // Line-coverage gates (T-060, docs/TESTING.md §10, D-021). Only the modules with a gate

@@ -7,7 +7,7 @@ import java.util.zip.ZipFile
  * Resolves the `testfixtures` corpus jars (T-006) with no hard-coded absolute paths.
  *
  * The Gradle build wires the concrete directory in as the `jdx.fixturesDir` system property
- * (see `core/build.gradle.kts`); an IDE run without that property falls back to searching
+ * (see root `build.gradle.kts`, #82); an IDE run without that property falls back to searching
  * upward from the working directory. Either way the result is computed, never a literal.
  *
  * ## Relationship to the shared `FixtureJars` helper (T-063)

@@ -1,5 +1,3 @@
-import org.gradle.api.tasks.testing.Test
-
 plugins {
     alias(libs.plugins.pitest)
 }
@@ -26,26 +24,10 @@ dependencies {
     testImplementation(testFixtures(project(":testfixtures")))
 }
 
-// Artifact tests (T-007) read the `testfixtures` jars. Depend on them so a clean checkout
-// cannot run against stale jars, and hand the directory in as a system property so tests
-// never hard-code an absolute path (same pattern as `core/build.gradle.kts`, T-006).
-listOf("test", "integrationTest").forEach { taskName ->
-    tasks.named<Test>(taskName) {
-        dependsOn(":testfixtures:jar", ":testfixtures:sourcesJar")
-        systemProperty(
-            "jdx.fixturesDir",
-            project(":testfixtures").layout.buildDirectory.dir("libs").get().asFile.absolutePath,
-        )
-        // The `jdx diff` fixture pair (issue #23, TESTING.md §11.2): its own directory,
-        // its own jars, its own property — see `DiffFixtureJars` for why it cannot live
-        // beside the main corpus.
-        dependsOn(":testfixtures:diffV1Jar", ":testfixtures:diffV2Jar")
-        systemProperty(
-            "jdx.diffFixturesDir",
-            project(":testfixtures").layout.buildDirectory.dir("diff-fixtures").get().asFile.absolutePath,
-        )
-    }
-}
+// Fixture-corpus wiring for `test`/`integrationTest`/`benchTest` (including the
+// diff-fixture pair) lives in the root `build.gradle.kts` projectsEvaluated hook
+// (#82). Do not reintroduce a private copy — `verifyFixtureCorpusWiring` fails
+// `check` if one reappears.
 
 // Mutation testing (T-060, docs/TESTING.md §10, D-021). Measured and reported, NOT gated:
 // `index` carries an 85 % line gate (root build) but no mutation threshold. Runs via
@@ -73,10 +55,10 @@ pitest {
         ),
     )
     // The PIT minion is a fresh JVM: it does not inherit the `test` task's system
-    // properties, and it does not build the corpus itself. Both the corpus properties
-    // (`jdx.fixturesDir`, `jdx.diffFixturesDir`) and the four `:testfixtures` jar task
-    // dependencies are wired once for every PIT module in the root build (#66) — do not
-    // repeat them here; `verifyPitestWiring` fails the build if a module loses them.
+    // properties, and it does not build the corpus itself. Both corpus properties and
+    // the four `:testfixtures` jar task dependencies are wired once for every PIT
+    // module in the root build (#66) — do not repeat them here; `verifyPitestWiring`
+    // fails the build if a module loses them.
     // #57: same CI relaxation as :core — slow shared runners must not read as
     // killed mutants. Local runs keep the 10 s gate.
     val isCi: Boolean =

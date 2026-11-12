@@ -29,7 +29,7 @@ class MavenRootsTest {
 
     private fun fixtureJar(): Path {
         val dir = System.getProperty("jdx.fixturesDir")?.let { File(it) }
-            ?: error("jdx.fixturesDir not set (cli build wires it; see cli/build.gradle.kts)")
+            ?: error("jdx.fixturesDir not set (root build wires it; see build.gradle.kts (#82))")
         return dir.listFiles { file -> file.name.endsWith(".jar") && !file.name.contains("sources") }
             ?.sortedBy { it.name }?.firstOrNull()?.toPath()
             ?: error("no fixture binary jar in $dir")

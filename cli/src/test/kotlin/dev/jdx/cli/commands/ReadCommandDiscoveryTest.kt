@@ -139,7 +139,7 @@ class ReadCommandDiscoveryTest {
     /** Copies the first top-level fixture class into the project's classes dir. */
     private fun copyFirstFixtureClass(root: Path): String {
         val dir = System.getProperty("jdx.fixturesDir")?.let { File(it) }
-            ?: fail("jdx.fixturesDir not set (cli build wires it; see cli/build.gradle.kts)")
+            ?: fail("jdx.fixturesDir not set (root build wires it; see build.gradle.kts (#82))")
         val jar = dir.listFiles { file ->
             file.isFile && file.name.startsWith("testfixtures-") && !file.name.endsWith("-sources.jar")
         }?.singleOrNull() ?: fail("expected exactly one binary fixture jar in $dir")

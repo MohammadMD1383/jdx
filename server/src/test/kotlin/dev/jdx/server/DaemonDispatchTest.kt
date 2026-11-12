@@ -41,7 +41,7 @@ class DaemonDispatchTest {
 
     private fun fixtureJar(): File {
         val dir = System.getProperty("jdx.fixturesDir")?.let { File(it) }
-            ?: fail("jdx.fixturesDir not set (server build wires it; see server/build.gradle.kts)")
+            ?: fail("jdx.fixturesDir not set (root build wires it; see build.gradle.kts (#82))")
         return dir.listFiles { file ->
             file.isFile && file.name.startsWith("testfixtures-") && !file.name.endsWith("-sources.jar")
         }?.singleOrNull() ?: fail("expected exactly one binary fixture jar in $dir")
