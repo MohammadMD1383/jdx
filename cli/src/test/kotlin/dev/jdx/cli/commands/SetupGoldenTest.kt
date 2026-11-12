@@ -299,6 +299,40 @@ class SetupGoldenTest {
         ) as SetupService.SetupOutcome.Removed
         contents["antigravity-remove-keeps-others.json"] = Files.readString(antigravityRemoveOutcome.path)
 
+        val windsurfProject = root.resolve("windsurf-project").also { Files.createDirectories(it) }
+        val windsurfFresh = SetupService(home, windsurfProject)
+        val windsurfFreshOutcome = windsurfFresh.run(
+            SetupService.SetupRequest(
+                agent = SetupService.Agent.WINDSURF,
+                scope = SetupService.Scope.PROJECT,
+            ),
+        ) as SetupService.SetupOutcome.Installed
+        contents["windsurf-fresh-install.json"] = Files.readString(windsurfFreshOutcome.path)
+
+        val windsurfMergeDir = root.resolve("windsurf-merge").also { Files.createDirectories(it) }
+        Files.createDirectories(windsurfMergeDir.resolve(".devin"))
+        Files.writeString(
+            windsurfMergeDir.resolve(".devin/mcp_config.json"),
+            """{"mcpServers":{"other":{"command":"other","args":["x"]}}}""",
+        )
+        val windsurfMerge = SetupService(home, windsurfMergeDir)
+        val windsurfMergeOutcome = windsurfMerge.run(
+            SetupService.SetupRequest(
+                agent = SetupService.Agent.WINDSURF,
+                scope = SetupService.Scope.PROJECT,
+            ),
+        ) as SetupService.SetupOutcome.Installed
+        contents["windsurf-merge-preserves.json"] = Files.readString(windsurfMergeOutcome.path)
+
+        val windsurfRemoveOutcome = windsurfMerge.run(
+            SetupService.SetupRequest(
+                agent = SetupService.Agent.WINDSURF,
+                scope = SetupService.Scope.PROJECT,
+                remove = true,
+            ),
+        ) as SetupService.SetupOutcome.Removed
+        contents["windsurf-remove-keeps-others.json"] = Files.readString(windsurfRemoveOutcome.path)
+
         GoldenFiles.verifyAll(File("src/test/resources/golden/setup"), contents)
     }
 }

@@ -495,12 +495,13 @@ class DoctorService(
         // (`.codex/config.toml` / `~/.codex/config.toml`), GitHub Copilot
         // CLI (`.mcp.json` / `~/.copilot/mcp-config.json`), Antigravity
         // (`.agents/mcp_config.json` / `~/.gemini/config/mcp_config.json`,
-        // verified against the real `agy` install), and the single
-        // global Cline file (both Cline scopes name it — Cline keeps no
-        // project-level MCP file, verified against the real install), plus
-        // which lines are installed for use (OpenCode v1 vs v2 beta — the
-        // install covers both, but the operator must know which binary reads
-        // it). Read-only — the same lenient probe as
+        // verified against the real `agy` install), Windsurf / Devin Local
+        // (`.devin/mcp_config.json` / `~/.config/devin/mcp_config.json`),
+        // and the single global Cline file (both Cline scopes name it —
+        // Cline keeps no project-level MCP file, verified against the real
+        // install), plus which lines are installed for use (OpenCode v1 vs
+        // v2 beta — the install covers both, but the operator must know
+        // which binary reads it). Read-only — the same lenient probe as
         // `jdx setup --check`, plus best-effort `--version` classifications
         // that never throw. Missing on every scope is a WARN (setup is
         // optional), never a FAIL; an unreadable file names itself.
@@ -525,6 +526,8 @@ class DoctorService(
         val copilotSystem = SetupService.copilotSystemConfigPath(environment.userHome, copilotHome)
         val antigravityProject = SetupService.antigravityProjectConfigPath(environment.workingDir)
         val antigravitySystem = SetupService.antigravitySystemConfigPath(environment.userHome)
+        val windsurfProject = SetupService.windsurfProjectConfigPath(environment.workingDir)
+        val windsurfSystem = SetupService.windsurfSystemConfigPath(environment.userHome)
         val opencodeDetected = try {
             SetupService.describeVersion(
                 SetupService.probeOpencodeVersion(
@@ -591,6 +594,17 @@ class DoctorService(
         } catch (e: Exception) {
             "antigravity version unknown (${e.message ?: e.javaClass.simpleName})"
         }
+        val windsurfDetected = try {
+            SetupService.describeWindsurfVersion(
+                SetupService.probeWindsurfVersion(
+                    environment.pathDirs,
+                    environment.processRunner,
+                    environment.osName,
+                ),
+            )
+        } catch (e: Exception) {
+            "windsurf version unknown (${e.message ?: e.javaClass.simpleName})"
+        }
         fun stateOf(path: Path, agent: SetupService.Agent): String? = try {
             when {
                 !Files.exists(path) -> null
@@ -635,6 +649,10 @@ class DoctorService(
             ?: "no project config (${antigravityProject.fileName})"
         val antigravitySystemState = stateOf(antigravitySystem, SetupService.Agent.ANTIGRAVITY)
             ?: "no system config ($antigravitySystem)"
+        val windsurfProjectState = stateOf(windsurfProject, SetupService.Agent.WINDSURF)
+            ?: "no project config (${windsurfProject.fileName})"
+        val windsurfSystemState = stateOf(windsurfSystem, SetupService.Agent.WINDSURF)
+            ?: "no system config ($windsurfSystem)"
         val status = if (
             opencodeProjectState.startsWith("installed") || opencodeSystemState.startsWith("installed") ||
             claudeProjectState.startsWith("installed") || claudeSystemState.startsWith("installed") ||
@@ -643,7 +661,8 @@ class DoctorService(
             clineProjectState.startsWith("installed") || clineSystemState.startsWith("installed") ||
             codexProjectState.startsWith("installed") || codexSystemState.startsWith("installed") ||
             copilotProjectState.startsWith("installed") || copilotSystemState.startsWith("installed") ||
-            antigravityProjectState.startsWith("installed") || antigravitySystemState.startsWith("installed")
+            antigravityProjectState.startsWith("installed") || antigravitySystemState.startsWith("installed") ||
+            windsurfProjectState.startsWith("installed") || windsurfSystemState.startsWith("installed")
         ) {
             DoctorStatus.OK
         } else {
@@ -656,8 +675,9 @@ class DoctorService(
                 "`jdx setup --agent kilo --scope project`, " +
                 "`jdx setup --agent cline --scope system`, " +
                 "`jdx setup --agent codex --scope project`, " +
-                "`jdx setup --agent copilot --scope project` or " +
-                "`jdx setup --agent antigravity --scope project`"
+                "`jdx setup --agent copilot --scope project`, " +
+                "`jdx setup --agent antigravity --scope project` or " +
+                "`jdx setup --agent windsurf --scope project`"
         return check(
             "setup",
             status,
@@ -674,7 +694,9 @@ class DoctorService(
                 "copilot project $copilotProjectState ($copilotDetected); " +
                 "copilot system $copilotSystemState; " +
                 "antigravity project $antigravityProjectState ($antigravityDetected); " +
-                "antigravity system $antigravitySystemState$hint",
+                "antigravity system $antigravitySystemState; " +
+                "windsurf project $windsurfProjectState ($windsurfDetected); " +
+                "windsurf system $windsurfSystemState$hint",
         )
     }
 

@@ -477,6 +477,7 @@ class ProductPages(
             "codex" to "Codex CLI",
             "copilot" to "GitHub Copilot CLI",
             "antigravity" to "Antigravity",
+            "windsurf" to "Windsurf",
         )
     }
 }

@@ -25,8 +25,10 @@ import java.nio.file.Paths
  * Cline (`cline_mcp_settings.json`, `mcpServers.jdx` in the nested
  * `transport` shape the real CLI writes),
  * Codex CLI (`config.toml`, `[mcp_servers.jdx]`), GitHub Copilot CLI
- * (`mcp-config.json` / `.mcp.json`, `mcpServers.jdx`), and Antigravity
+ * (`mcp-config.json` / `.mcp.json`, `mcpServers.jdx`), Antigravity
  * (`.agents/mcp_config.json` / `~/.gemini/config/mcp_config.json`,
+ * `mcpServers.jdx`), and Windsurf / Devin Local
+ * (`.devin/mcp_config.json` / `~/.config/devin/mcp_config.json`,
  * `mcpServers.jdx`).
  * All filesystem behaviour lives here; the Clikt command only parses flags,
  * renders, and maps exit codes (D-004).
@@ -135,6 +137,31 @@ import java.nio.file.Paths
  * presence of `command`/`args` wiring `jdx mcp` is what counts, consistent
  * with the other backends.)
  *
+ * Windsurf / Devin Local layout (verified against the published docs at
+ * https://docs.devin.ai/cli/extensibility/mcp/configuration and
+ * https://docs.devin.ai/windsurf/plugins/cascade/mcp — Windsurf Desktop
+ * rebranded to Devin Desktop; Cascade's "Open MCP config" now opens the
+ * Cortex-managed Devin file, while the editor's legacy discovery still
+ * reads `~/.codeium/windsurf/mcp_config.json`):
+ * project `.devin/mcp_config.json` (walked up; the shared, version-controlled
+ * scope — `devin mcp add -s project jdx -- jdx mcp`); user-global
+ * `~/.config/devin/mcp_config.json` (`$XDG_CONFIG_HOME/devin` when set;
+ * `%APPDATA%\devin\mcp_config.json` on Windows per the docs — this service
+ * writes under the resolved agent-config home's `.config/devin/` so fake
+ * homes stay hermetic, matching OpenCode/Kilo). The entry is the stdio
+ * server:
+ *
+ * ```json
+ * {"mcpServers": {"jdx": {"command": "jdx", "args": ["mcp"]}}}
+ * ```
+ *
+ * (`devin mcp list` / Devin Desktop Customize → MCPs recognise this minimal
+ * shape; `devin mcp add` may also write `"disabled": false`, so the probe
+ * ignores `disabled` — presence of `command`/`args` wiring `jdx mcp` is
+ * what counts. The gitignored `.devin/mcp_config.local.json` local-override
+ * file is never a write target: `--scope project` owns the shared project
+ * file, `--scope system` the user file.)
+ *
  * Merge discipline: the target file is parsed leniently (JSONC comments and
  * trailing commas are accepted), every unrelated key is preserved byte-free —
  * only the owned entries are added, replaced, or removed. A second
@@ -159,7 +186,7 @@ class SetupService(
      */
     private val copilotHome: Path? = null,
 ) {
-    /** Agents with setup support: OpenCode, Claude Code, Cursor, Kilo Code, Cline, Codex CLI, GitHub Copilot CLI, and Antigravity. */
+    /** Agents with setup support: OpenCode, Claude Code, Cursor, Kilo Code, Cline, Codex CLI, GitHub Copilot CLI, Antigravity, and Windsurf (Devin Local). */
     enum class Agent(val cliName: String) {
         OPENCODE("opencode"),
         CLAUDE_CODE("claude-code"),
@@ -169,6 +196,7 @@ class SetupService(
         CODEX("codex"),
         COPILOT("copilot"),
         ANTIGRAVITY("antigravity"),
+        WINDSURF("windsurf"),
     }
 
     /** Where the entry is written: the checkout or the user's global config. */
@@ -311,6 +339,27 @@ class SetupService(
         val binary: String? = null,
     )
 
+    /**
+     * Whether the `devin` binary (Windsurf / Devin Desktop / Devin CLI) is
+     * installed for use. `PRESENT` means the binary answered `--version`.
+     */
+    enum class WindsurfVersion(val cliName: String) {
+        PRESENT("present"),
+        ABSENT("absent"),
+        UNKNOWN("unknown"),
+    }
+
+    /**
+     * Best-effort answer to "is windsurf/devin installed". [raw] is the trimmed
+     * `--version` output (null when the binary never answered); [binary] names
+     * the probed executable (`devin`).
+     */
+    data class WindsurfVersionInfo(
+        val version: WindsurfVersion,
+        val raw: String? = null,
+        val binary: String? = null,
+    )
+
     /** What the caller asked for: install, report-only, or uninstall. */
     data class SetupRequest(
         val agent: Agent = Agent.OPENCODE,
@@ -387,6 +436,10 @@ class SetupService(
         Agent.ANTIGRAVITY -> when (scope) {
             Scope.PROJECT -> antigravityProjectConfigPath(projectDir)
             Scope.SYSTEM -> antigravitySystemConfigPath(userHome)
+        }
+        Agent.WINDSURF -> when (scope) {
+            Scope.PROJECT -> windsurfProjectConfigPath(projectDir)
+            Scope.SYSTEM -> windsurfSystemConfigPath(userHome)
         }
     }
 
@@ -496,7 +549,9 @@ class SetupService(
          * match Kilo Code; `cline`, `cline-code`, `clinecode` match Cline;
          * `codex`, `codex-cli`, `codexcli` match Codex CLI;
          * `copilot`, `github-copilot`, `copilot-cli` match GitHub Copilot CLI;
-         * `antigravity`, `agy`, `antigravity-cli` match Antigravity).
+         * `antigravity`, `agy`, `antigravity-cli` match Antigravity;
+         * `windsurf`, `devin`, `devin-desktop`, `devin-cli`, `windsurf-ide`
+         * match Windsurf / Devin Local).
          * Null when unsupported — the adapter exits 3 naming it.
          */
         fun parseAgent(raw: String?): Agent? {
@@ -510,6 +565,7 @@ class SetupService(
                 "codex", "codexcli" -> Agent.CODEX
                 "copilot", "githubcopilot", "copilotcli", "githubcopilotcli" -> Agent.COPILOT
                 "antigravity", "agy", "antigravitycli" -> Agent.ANTIGRAVITY
+                "windsurf", "devin", "devindesktop", "devincli", "windsurfide" -> Agent.WINDSURF
                 else -> null
             }
         }
@@ -853,6 +909,48 @@ class SetupService(
         }
 
         /**
+         * Answers "is windsurf/devin installed for use" from PATH. Probes the
+         * `devin` binary (verified: Devin CLI / Devin Desktop install script
+         * places `devin` on PATH; `devin --version` / `devin version` print the
+         * CLI version — see https://docs.devin.ai/cli/reference/commands).
+         * Never throws: a missing binary reads as ABSENT, a failing or blank
+         * run as UNKNOWN. Pure IO seam ([ProcessRunner]) so tests inject fakes.
+         */
+        fun probeWindsurfVersion(
+            pathDirs: List<Path>,
+            runner: ProcessRunner,
+            osName: String = System.getProperty("os.name", ""),
+        ): WindsurfVersionInfo {
+            val executable = pathDirs.firstNotNullOfOrNull { dir ->
+                toolFileNames("devin", osName)
+                    .map { dir.resolve(it) }
+                    .firstOrNull { Files.isRegularFile(it) && Files.isExecutable(it) }
+            } ?: return WindsurfVersionInfo(WindsurfVersion.ABSENT)
+            val raw = try {
+                val outcome = runner.run(executable, listOf("--version"))
+                (outcome.stdout + "\n" + outcome.stderr).trim().ifEmpty { null }
+            } catch (_: Exception) {
+                null
+            }
+            if (raw.isNullOrBlank()) return WindsurfVersionInfo(WindsurfVersion.UNKNOWN, raw, "devin")
+            return WindsurfVersionInfo(WindsurfVersion.PRESENT, raw, "devin")
+        }
+
+        /**
+         * One human line naming the detected Windsurf / Devin install for
+         * `setup` and `doctor` output (`windsurf (1.2.3)`,
+         * `windsurf not found on PATH`). Pure — example-tested. The raw is
+         * sanitized to one line (issue #84); JSON keeps the full probe.
+         */
+        fun describeWindsurfVersion(info: WindsurfVersionInfo): String = when (info.version) {
+            WindsurfVersion.PRESENT ->
+                "windsurf" + (rawDisplaySuffix(info.raw).ifEmpty { " installed" })
+            WindsurfVersion.ABSENT -> "windsurf not found on PATH"
+            WindsurfVersion.UNKNOWN ->
+                "windsurf version unknown" + rawDisplaySuffix(info.raw)
+        }
+
+        /**
          * Project target: the nearest `opencode.json`/`opencode.jsonc` walking up
          * from [projectDir] (opencode itself walks up to the worktree root), else
          * a fresh `opencode.json` in [projectDir].
@@ -1177,6 +1275,40 @@ class SetupService(
             put("args", JsonArray(listOf(JsonPrimitive("mcp"))))
         }
 
+        /**
+         * Windsurf / Devin Local project target: the nearest
+         * `.devin/mcp_config.json` walking up from [projectDir] (mirrors the
+         * Antigravity walk-up, one level deeper — the file lives inside the
+         * `.devin/` dir), else a fresh `.devin/mcp_config.json` in
+         * [projectDir]. Documented at
+         * https://docs.devin.ai/cli/extensibility/mcp/configuration
+         * (`devin mcp add -s project`); the gitignored
+         * `.devin/mcp_config.local.json` local override is never a write
+         * target.
+         */
+        fun windsurfProjectConfigPath(projectDir: Path): Path {
+            var dir: Path? = projectDir.toAbsolutePath().normalize()
+            while (dir != null) {
+                val candidate = dir.resolve(".devin/mcp_config.json")
+                if (Files.isRegularFile(candidate)) return candidate
+                dir = dir.parent
+            }
+            return projectDir.toAbsolutePath().normalize().resolve(".devin/mcp_config.json")
+        }
+
+        /**
+         * Windsurf / Devin Local system target: the user-global
+         * `~/.config/devin/mcp_config.json` under the resolved agent-config
+         * home (fake homes stay hermetic; production `$HOME` matches the
+         * documented Linux/macOS path — `$XDG_CONFIG_HOME/devin` and Windows
+         * `%APPDATA%\devin` are noted in the class KDoc).
+         */
+        fun windsurfSystemConfigPath(userHome: Path): Path =
+            userHome.resolve(".config/devin/mcp_config.json")
+
+        /** The Windsurf entry: `jdx mcp` on PATH as a stdio MCP server under `mcpServers` (same shape as Claude Code / Antigravity — verified against Devin MCP docs). */
+        fun desiredWindsurfEntry(): JsonObject = desiredAntigravityEntry()
+
         /** Report-only probe shared by `--check` and the `doctor` setup row. */
         fun isInstalledAt(path: Path): Boolean = isInstalledAt(path, Agent.OPENCODE)
 
@@ -1208,9 +1340,10 @@ class SetupService(
         /**
          * True when an install is a no-op (every owned entry present): OpenCode
          * needs **both** the v1 and v2 entries — a v1-only file is completed
-         * with the v2 entry — while Kilo, Claude Code, Cursor, Cline, Copilot, Antigravity, and Codex CLI
-         * need only their single entry. The report-only probe
-         * ([isInstalledRoot]) stays lenient (either OpenCode entry counts).
+         * with the v2 entry — while Kilo, Claude Code, Cursor, Cline, Copilot,
+         * Antigravity, Windsurf, and Codex CLI need only their single entry.
+         * The report-only probe ([isInstalledRoot]) stays lenient (either
+         * OpenCode entry counts).
          */
         private fun isCompleteFor(agent: Agent, root: JsonObject): Boolean = when (agent) {
             Agent.OPENCODE -> isV1Installed(root) && isV2Installed(root)
@@ -1220,10 +1353,11 @@ class SetupService(
             Agent.CLINE -> isClineInstalled(root)
             Agent.COPILOT -> isCopilotWrapped(root)
             Agent.ANTIGRAVITY -> isAntigravityInstalled(root)
+            Agent.WINDSURF -> isWindsurfInstalled(root)
             Agent.CODEX -> error("Codex CLI installs merge TOML text, never JSON")
         }
 
-        /** Agent-aware probe: OpenCode checks v1/v2 entries, Claude Code/Cursor/Antigravity check `mcpServers.jdx`, Kilo checks `mcp.jdx`, Cline checks its `mcpServers.jdx` transport entry, Copilot checks `mcpServers.jdx` (or bare `jdx`), Codex CLI probes TOML text. */
+        /** Agent-aware probe: OpenCode checks v1/v2 entries, Claude Code/Cursor/Antigravity/Windsurf check `mcpServers.jdx`, Kilo checks `mcp.jdx`, Cline checks its `mcpServers.jdx` transport entry, Copilot checks `mcpServers.jdx` (or bare `jdx`), Codex CLI probes TOML text. */
         fun isInstalledRoot(root: JsonObject, agent: Agent): Boolean = when (agent) {
             Agent.OPENCODE -> isV1Installed(root) || isV2Installed(root)
             Agent.CLAUDE_CODE -> isClaudeInstalled(root)
@@ -1232,6 +1366,7 @@ class SetupService(
             Agent.CLINE -> isClineInstalled(root)
             Agent.COPILOT -> isCopilotInstalled(root)
             Agent.ANTIGRAVITY -> isAntigravityInstalled(root)
+            Agent.WINDSURF -> isWindsurfInstalled(root)
             Agent.CODEX -> error("Codex CLI probes TOML text via isCodexInstalledText, never JSON")
         }
 
@@ -1428,6 +1563,23 @@ class SetupService(
             return JsonObject(base)
         }
 
+        /** True when the Windsurf `mcpServers.jdx` entry is a server whose command runs `jdx mcp` (same shape as Claude Code / Antigravity). */
+        fun isWindsurfInstalled(root: JsonObject): Boolean = isAntigravityInstalled(root)
+
+        /**
+         * True when [entry] runs `jdx mcp` in the Windsurf / Devin Local shape
+         * (`{"command": "jdx", "args": ["mcp"]}`). Same codec as Claude Code
+         * ([isClaudeJdxEntry]): absolute install paths and Windows `PATHEXT`
+         * shims accepted; `disabled` is ignored for presence.
+         */
+        fun isWindsurfJdxEntry(entry: JsonObject): Boolean = isClaudeJdxEntry(entry)
+
+        /** Merges the desired Windsurf entry into [root] (null = fresh file). */
+        fun mergeWindsurfInstall(root: JsonObject?): JsonObject = mergeAntigravityInstall(root)
+
+        /** Removes Windsurf `mcpServers.jdx`; drops an emptied `mcpServers` object. */
+        fun mergeWindsurfRemove(root: JsonObject): JsonObject = mergeAntigravityRemove(root)
+
         /**
          * Removes `mcpServers.jdx` (dropping an emptied `mcpServers` object)
          * and a bare top-level `jdx` entry when it is ours, to stay tidy.
@@ -1507,6 +1659,7 @@ class SetupService(
             Agent.CLINE -> mergeInstallCline(root)
             Agent.COPILOT -> mergeCopilotInstall(root)
             Agent.ANTIGRAVITY -> mergeAntigravityInstall(root)
+            Agent.WINDSURF -> mergeWindsurfInstall(root)
             Agent.CODEX -> error("Codex CLI installs merge TOML text via mergeCodexInstall, never JSON")
         }
 
@@ -1560,6 +1713,7 @@ class SetupService(
             Agent.CLINE -> mergeRemoveCline(root)
             Agent.COPILOT -> mergeCopilotRemove(root)
             Agent.ANTIGRAVITY -> mergeAntigravityRemove(root)
+            Agent.WINDSURF -> mergeWindsurfRemove(root)
             Agent.CODEX -> error("Codex CLI removals merge TOML text via mergeCodexRemove, never JSON")
         }
 
@@ -2080,7 +2234,7 @@ class SetupService(
         private fun hasEntry(root: JsonObject, agent: Agent): Boolean = hasEntryFor(agent, root)
 
         private fun hasEntryFor(agent: Agent, root: JsonObject): Boolean = when (agent) {
-            Agent.CLAUDE_CODE, Agent.CURSOR, Agent.ANTIGRAVITY -> {
+            Agent.CLAUDE_CODE, Agent.CURSOR, Agent.ANTIGRAVITY, Agent.WINDSURF -> {
                 val servers = root["mcpServers"]?.jsonObjectOrNull() ?: return false
                 servers.containsKey(SERVER_NAME)
             }
