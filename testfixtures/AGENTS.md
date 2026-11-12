@@ -77,7 +77,9 @@ rules below before touching either.
   `sourcesJar`, `testFixturesJar` (redirected to `build/test-fixtures-libs`), and the
   diff pair in `build/diff-fixtures`. `./gradlew mutationTest` reaches **none** of them
   on its own — the root build wires all four onto every PIT task and
-  `verifyPitestWiring` fails `check` if that ever stops. That wiring is why the corpus
-  exists on a clean checkout at all (#66): PIT's pre-scan refuses to mutate anything
-  when the suite is red, so a missing `-sources.jar` is a mutation tier that silently
-  produces no score.
+  `verifyPitestWiring` fails `check` if that ever stops. The same hook wires all four
+  onto every corpus-reading module's `test`/`integrationTest`/`benchTest`
+  (`verifyFixtureCorpusWiring`, #82) — do not reintroduce a private copy in a module
+  `build.gradle.kts`. That wiring is why the corpus exists on a clean checkout at all
+  (#66/#82): PIT's pre-scan refuses to mutate anything when the suite is red, so a
+  missing `-sources.jar` is a mutation tier that silently produces no score.

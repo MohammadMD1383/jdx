@@ -1,5 +1,3 @@
-import org.gradle.api.tasks.testing.Test
-
 plugins {
     alias(libs.plugins.pitest)
 }
@@ -62,18 +60,7 @@ pitest {
     avoidCallsTo.set(setOf("kotlin.jvm.internal.Intrinsics"))
     mutationThreshold.set(80)
 }
-// The corpus tests (`src/test/.../fixtures/`) read the `testfixtures` jars. Depend on them so a
-// clean checkout cannot run tests against stale or missing jars, and hand the directory
-// in as a system property so `Fixtures` never hard-codes an absolute path (T-006). The
-// dependency is up-to-date-checked, so the incremental loop pays nothing after the first build.
-// Both tiers that touch jars (`test` for the fast `FixturesTest`, `tier2Test` for the heavy
-// `FixtureCorpusTest`) need the wiring; `soakTest` inherits nothing here — T-059 wires it.
-listOf("test", "integrationTest").forEach { taskName ->
-    tasks.named<Test>(taskName) {
-        dependsOn(":testfixtures:jar", ":testfixtures:sourcesJar")
-        systemProperty(
-            "jdx.fixturesDir",
-            project(":testfixtures").layout.buildDirectory.dir("libs").get().asFile.absolutePath,
-        )
-    }
-}
+// Fixture-corpus wiring for `test`/`integrationTest`/`benchTest` lives in the root
+// `build.gradle.kts` projectsEvaluated hook (#82), next to the PIT wiring (#66). Do not
+// reintroduce a private copy here — `verifyFixtureCorpusWiring` fails `check` if one
+// reappears.

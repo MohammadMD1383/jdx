@@ -23,8 +23,10 @@ import org.junit.jupiter.api.Test
  * copy in another. It is a text scan on purpose — the thing being forbidden is duplicated
  * *text*.
  *
- * The complementary check — that the build wiring really reaches a PIT minion — is the
- * `verifyPitestWiring` task in the root `build.gradle.kts`, which fails every `check`.
+ * The complementary checks — that the build wiring really reaches a PIT minion *and*
+ * every corpus-reading Test task — are `verifyPitestWiring` (#66) and
+ * `verifyFixtureCorpusWiring` (#82) in the root `build.gradle.kts`, which fail every
+ * `check`.
  */
 @Tag("tier2")
 class FixtureResolutionOwnershipTest {

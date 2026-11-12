@@ -1,5 +1,3 @@
-import org.gradle.api.tasks.testing.Test
-
 kotlin {
     // T-052: same contract as :core — every public declaration needs an explicit
     // visibility and return type. Thin adapters (D-004) still have public API.
@@ -30,13 +28,6 @@ dependencies {
     testImplementation(testFixtures(project(":testfixtures")))
 }
 
-// Dispatch tests (T-043) run the real `JdxService` over the `testfixtures` jars.
-listOf("test", "integrationTest").forEach { taskName ->
-    tasks.named<Test>(taskName) {
-        dependsOn(":testfixtures:jar", ":testfixtures:sourcesJar")
-        systemProperty(
-            "jdx.fixturesDir",
-            project(":testfixtures").layout.buildDirectory.dir("libs").get().asFile.absolutePath,
-        )
-    }
-}
+// Fixture-corpus wiring for `test`/`integrationTest`/`benchTest` lives in the root
+// `build.gradle.kts` projectsEvaluated hook (#82). Do not reintroduce a private copy
+// here — `verifyFixtureCorpusWiring` fails `check` if one reappears.

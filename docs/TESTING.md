@@ -396,6 +396,13 @@ every `check`, so a module added tomorrow inherits the wiring and a regression i
 a push rather than in a 20-minute weekly run. It also asserts the PIT modules are
 exactly the ones `mutationTest` runs, and that it checked something at all.
 
+The Test-task half is the same shape (issue #82). `test` / `integrationTest` /
+`benchTest` for every corpus-reading module (cli/core/decompile/index/mcp/server/sources)
+get both corpus properties and all four jar-task dependencies from the same
+`projectsEvaluated` hook — not from seven private copies in module `build.gradle.kts`
+files. `./gradlew verifyFixtureCorpusWiring` asserts the wiring, asserts no module build
+file still carries a private copy of either property name, and runs in every `check`.
+
 **A missing corpus is a machine fact, not a defect.** The shared resolvers expose
 `binaryCorpusAvailable()` / `sourcesCorpusAvailable()` (and `DiffFixtureJars.available()`),
 and the suites that need the corpus `assumeTrue` on them. Resolving optimistically and
@@ -546,6 +553,7 @@ Testing time is finite; spend it where bugs live.
 ./gradlew mutationTest -PconfirmTier4=true # tier 4 — mutation score
 ./gradlew testReport                 # aggregated HTML report
 ./gradlew verifyPitestWiring         # the PIT corpus wiring gate (also runs in every `check`)
+./gradlew verifyFixtureCorpusWiring  # the Test-task corpus wiring gate (#82; also in every `check`)
 ```
 
 **Definition of done for any task:** tier 1 and tier 2 green; tier 3 green if you touched

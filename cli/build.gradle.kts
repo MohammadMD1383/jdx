@@ -1,5 +1,3 @@
-import org.gradle.api.tasks.testing.Test
-
 plugins {
     alias(libs.plugins.kotlin.serialization)
 }
@@ -54,24 +52,10 @@ sourceSets {
 
 tasks.named("processResources") { dependsOn(generateBuildProperties) }
 
-// Read-command tests (T-011) run the real `JdxService` over the `testfixtures` jars:
-// hand the directory in as a system property so tests never hard-code paths
-// (same pattern as `index/build.gradle.kts`, T-006).
-listOf("test", "integrationTest", "benchTest").forEach { taskName ->
-    tasks.named<Test>(taskName) {
-        dependsOn(":testfixtures:jar", ":testfixtures:sourcesJar")
-        systemProperty(
-            "jdx.fixturesDir",
-            project(":testfixtures").layout.buildDirectory.dir("libs").get().asFile.absolutePath,
-        )
-        // The `jdx diff` fixture pair (issue #23, TESTING.md §11.2).
-        dependsOn(":testfixtures:diffV1Jar", ":testfixtures:diffV2Jar")
-        systemProperty(
-            "jdx.diffFixturesDir",
-            project(":testfixtures").layout.buildDirectory.dir("diff-fixtures").get().asFile.absolutePath,
-        )
-    }
-}
+// Fixture-corpus wiring for `test`/`integrationTest`/`benchTest` (including the
+// diff-fixture pair) lives in the root `build.gradle.kts` projectsEvaluated hook
+// (#82). Do not reintroduce a private copy — `verifyFixtureCorpusWiring` fails
+// `check` if one reappears.
 
 // (No golden wiring here: `-Pgolden.update` reaches every module's `tier2Test`
 // from the root build, T-054.)
