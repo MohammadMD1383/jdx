@@ -80,7 +80,8 @@ class UpgradeService(
         val root = installRoot
             ?: return UpgradeOutcome.NotReleaseInstall(
                 "this jdx is not a release install (no .jdx-release marker beside the launcher) — " +
-                    "install a release with install-release.sh first, or rebuild from source",
+                    "install a release with install-release.sh (or install-release.ps1 on Windows) first, " +
+                    "or rebuild from source",
             )
         val marker = readMarker(root)
             ?: return UpgradeOutcome.NotReleaseInstall(

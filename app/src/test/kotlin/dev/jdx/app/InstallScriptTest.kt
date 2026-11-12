@@ -19,7 +19,7 @@ import java.nio.file.Files
 @DisabledOnOs(
     OS.WINDOWS,
     disabledReason = "Drives install.sh through sh with POSIX ln/tar/readlink assumptions " +
-        "(C: paths, symlinks); Windows has no shell-installer equivalent to cover",
+        "(C: paths, symlinks); Windows source installs are covered by InstallPs1Test (issue #92)",
 )
 class InstallScriptTest {
 

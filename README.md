@@ -101,17 +101,21 @@ Requires **JDK 21+**. Every push of a `vX.Y.Z` tag publishes per-OS bundles as
 trained on that OS:
 
 ```bash
+# Linux / macOS
 curl -fsSL https://raw.githubusercontent.com/MohammadMD1383/jdx/main/install-release.sh | bash
+
+# Windows (PowerShell)
+irm https://raw.githubusercontent.com/MohammadMD1383/jdx/main/install-release.ps1 | iex
 ```
 
-Installs per-user into `~/.local/share/jdx` and links `~/.local/bin/jdx`.
-Prefer the `.zip` on Windows (Explorer/Defender are zip-first) — download the
-`-windows.zip` asset and install it with
-`sh install-release.sh --tarball jdx-<version>-windows.zip`.
-Verify with `jdx version` (`jdx doctor` reports JDK, cache, index, Kotlin
-sidecar, AppCDS archive, daemon, and workspace status). Release installs self-update with
-`jdx upgrade`. Building from source: `./gradlew :app:installDist && ./install.sh`
-(see [`CONTRIBUTING.md`](CONTRIBUTING.md)).
+Linux/macOS installs per-user into `~/.local/share/jdx` and links `~/.local/bin/jdx`.
+Windows installs into `%LOCALAPPDATA%\Programs\jdx` and adds that directory to
+the user PATH (`jdx.bat` is the entry point). Verify with `jdx version`
+(`jdx doctor` reports JDK, cache, index, Kotlin sidecar, AppCDS archive,
+daemon, and workspace status). Release installs self-update with `jdx upgrade`.
+Building from source: `./gradlew :app:installDist && ./install.sh` (POSIX) or
+`gradlew.bat :app:installDist` then `.\install.ps1` (Windows) — see
+[`CONTRIBUTING.md`](CONTRIBUTING.md).
 
 > Releases are **unsigned**: Windows SmartScreen and macOS Gatekeeper will warn
 > on first run. `Unblock-File jdx.bat` (PowerShell) or

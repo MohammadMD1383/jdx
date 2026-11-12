@@ -7,10 +7,11 @@ name: windows
 # scripts directly (CreateProcess error=193 on Win) and assume POSIX ln/tar
 # (tar treats C: as a remote host). This job runs the real thing on a real
 # Windows runner instead: the full `check` (product modules, not just `:app`,
-# with POSIX-only suites skipping by design), WindowsLauncherScriptTest
-# (static .bat/.ps1 pins + tier-2 jdx.bat smokes through the real cmd.exe
-# batch interpreter), a jdx.bat version + doctor smoke, and the gradlew.bat
-# entry point itself.
+# with POSIX-only suites skipping by design — and InstallReleasePs1Test /
+# InstallPs1Test exercising install-release.ps1 / install.ps1 under pwsh,
+# issue #92), WindowsLauncherScriptTest (static .bat/.ps1 pins + tier-2
+# jdx.bat smokes through the real cmd.exe batch interpreter), a jdx.bat
+# version + doctor smoke, and the gradlew.bat entry point itself.
 #
 # Mirrors `.github/workflows/macos.yml` (issue #47): macOS proves the BSD
 # userland path, Windows proves the batch/PowerShell path. Both run on every
@@ -95,3 +96,30 @@ jobs:
       - name: Doctor smoke (jdx.bat doctor)
         shell: cmd
         run: app\build\jdx.bat doctor
+
+      # install-release.ps1 smoke (issue #92): pack the just-built dist as a
+      # fake windows zip and install into a temp LOCALAPPDATA — proves the
+      # PowerShell installer on a real Windows runner (unit tests already
+      # cover the same script under Linux pwsh).
+      - name: Windows release-installer smoke (install-release.ps1)
+        shell: powershell
+        run: |
+          $stage = Join-Path $env:RUNNER_TEMP 'jdx-install-stage'
+          $zipDir = Join-Path $stage 'zip'
+          $payload = Join-Path $zipDir 'jdx'
+          New-Item -ItemType Directory -Path (Join-Path $payload 'libs') -Force | Out-Null
+          Copy-Item app\build\jdx.bat, app\build\jdx.ps1 $payload
+          Copy-Item app\build\libs\jdx-*-all.jar (Join-Path $payload 'libs')
+          if (Test-Path app\build\libs\jdx.jsa) { Copy-Item app\build\libs\jdx.jsa (Join-Path $payload 'libs') }
+          $zip = Join-Path $stage 'jdx-0.0.0-windows.zip'
+          Compress-Archive -Path $payload -DestinationPath $zip -Force
+          $localAppData = Join-Path $env:RUNNER_TEMP 'jdx-lapp'
+          $env:LOCALAPPDATA = $localAppData
+          $env:JDX_SKIP_USER_PATH = '1'
+          & .\install-release.ps1 -Tarball $zip
+          if ($LASTEXITCODE -ne 0) { Write-Error "install-release.ps1 failed with $LASTEXITCODE"; exit 1 }
+          $bat = Join-Path $localAppData 'Programs\jdx\jdx.bat'
+          if (-not (Test-Path $bat)) { Write-Error "missing installed launcher: $bat"; exit 1 }
+          $reported = & $bat version
+          if (-not ($reported -match 'jdx version')) { Write-Error "installed jdx.bat version failed: $reported"; exit 1 }
+          Write-Host "install-release.ps1 smoke ok: $reported"
