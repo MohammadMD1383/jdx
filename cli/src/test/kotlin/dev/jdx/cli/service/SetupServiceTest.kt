@@ -25,9 +25,9 @@ import java.nio.file.Path
 /**
  * `SetupService` over fake homes (issue #33 family): install/check/remove for
  * the OpenCode, Claude Code, Cursor, Kilo Code, Cline, Codex CLI, GitHub
- * Copilot CLI, and Antigravity backends, merge discipline, and the JSONC
- * stripper. Every home and project dir is a fresh temp dir — no test touches
- * the real home.
+ * Copilot CLI, Antigravity, and Windsurf backends, merge discipline, and the
+ * JSONC stripper. Every home and project dir is a fresh temp dir — no test
+ * touches the real home.
  *
  * Merged file bytes are pinned separately in `SetupGoldenTest` (tier 2,
  * `src/test/resources/golden/setup/`).
@@ -2803,6 +2803,338 @@ WARNING: proceeding, even though we could not create PATH aliases: Refusing to c
             }
             val installed = SetupService.mergeAntigravityInstall(foreign)
             SetupService.mergeAntigravityRemove(installed) shouldBe foreign
+        }
+    }
+
+    // -- Windsurf / Devin Local backend (.devin/mcp_config.json / ~/.config/devin/mcp_config.json) --
+    // Documented at https://docs.devin.ai/cli/extensibility/mcp/configuration
+    // (`devin mcp add -s project|user`); Windsurf Desktop rebranded to Devin.
+
+    private fun windsurfProjectRequest(
+        check: Boolean = false,
+        remove: Boolean = false,
+    ): SetupService.SetupRequest = SetupService.SetupRequest(
+        agent = SetupService.Agent.WINDSURF,
+        scope = SetupService.Scope.PROJECT,
+        check = check,
+        remove = remove,
+    )
+
+    private fun windsurfSystemRequest(
+        check: Boolean = false,
+        remove: Boolean = false,
+    ): SetupService.SetupRequest = SetupService.SetupRequest(
+        agent = SetupService.Agent.WINDSURF,
+        scope = SetupService.Scope.SYSTEM,
+        check = check,
+        remove = remove,
+    )
+
+    @Test
+    fun `parseAgent covers windsurf spellings`() {
+        SetupService.parseAgent("windsurf") shouldBe SetupService.Agent.WINDSURF
+        SetupService.parseAgent("Windsurf") shouldBe SetupService.Agent.WINDSURF
+        SetupService.parseAgent("devin") shouldBe SetupService.Agent.WINDSURF
+        SetupService.parseAgent("DEVIN") shouldBe SetupService.Agent.WINDSURF
+        SetupService.parseAgent("devin-cli") shouldBe SetupService.Agent.WINDSURF
+        SetupService.parseAgent("devin-desktop") shouldBe SetupService.Agent.WINDSURF
+        SetupService.parseAgent("windsurf-ide") shouldBe SetupService.Agent.WINDSURF
+    }
+
+    @Test
+    fun `a fresh windsurf project install creates dot-devin mcp config with the jdx entry`(@TempDir root: Path) {
+        val dirs = fakeDirs(root)
+        val service = SetupService(dirs.home, dirs.project)
+
+        val outcome = service.run(windsurfProjectRequest())
+
+        val installed = outcome as SetupService.SetupOutcome.Installed
+        installed.changed shouldBe true
+        installed.path shouldBe dirs.project.resolve(".devin/mcp_config.json")
+        setupExitCode(outcome) shouldBe 0
+        val stored = Json.parseToJsonElement(Files.readString(installed.path)).jsonObject
+        val entry = stored["mcpServers"]?.jsonObject?.get("jdx")?.jsonObject
+        entry?.get("command")?.jsonPrimitive?.content shouldBe "jdx"
+        entry?.get("args").toString() shouldBe """["mcp"]"""
+        SetupService.isInstalledRoot(stored, SetupService.Agent.WINDSURF) shouldBe true
+        SetupService.isInstalledAt(installed.path, SetupService.Agent.WINDSURF) shouldBe true
+    }
+
+    @Test
+    fun `windsurf install preserves other servers and never clobbers`(@TempDir root: Path) {
+        val dirs = fakeDirs(root)
+        Files.createDirectories(dirs.project.resolve(".devin"))
+        Files.writeString(
+            dirs.project.resolve(".devin/mcp_config.json"),
+            """{"mcpServers":{"other":{"command":"other","args":["x"]}}}""",
+        )
+        val service = SetupService(dirs.home, dirs.project)
+
+        val outcome = service.run(windsurfProjectRequest()) as SetupService.SetupOutcome.Installed
+
+        outcome.changed shouldBe true
+        val stored = Json.parseToJsonElement(Files.readString(outcome.path)).jsonObject
+        stored["mcpServers"]?.jsonObject?.get("other")?.jsonObject
+            ?.get("command")?.jsonPrimitive?.content shouldBe "other"
+        SetupService.isInstalledRoot(stored, SetupService.Agent.WINDSURF) shouldBe true
+    }
+
+    @Test
+    fun `a second windsurf install is a byte-identical no-op`(@TempDir root: Path) {
+        val dirs = fakeDirs(root)
+        val service = SetupService(dirs.home, dirs.project)
+
+        val first = service.run(windsurfProjectRequest()) as SetupService.SetupOutcome.Installed
+        val before = Files.readAllBytes(first.path)
+        val second = service.run(windsurfProjectRequest())
+
+        (second as SetupService.SetupOutcome.Installed).changed shouldBe false
+        Files.readAllBytes(first.path) shouldBe before
+    }
+
+    @Test
+    fun `windsurf check reports without writing`(@TempDir root: Path) {
+        val dirs = fakeDirs(root)
+        val service = SetupService(dirs.home, dirs.project)
+
+        val absent = service.run(windsurfProjectRequest(check = true))
+        absent as SetupService.SetupOutcome.Checked
+        absent.installed shouldBe false
+        setupExitCode(absent) shouldBe 1
+        Files.exists(dirs.project.resolve(".devin/mcp_config.json")) shouldBe false
+
+        service.run(windsurfProjectRequest())
+        val present = service.run(windsurfProjectRequest(check = true))
+        present as SetupService.SetupOutcome.Checked
+        present.installed shouldBe true
+        setupExitCode(present) shouldBe 0
+    }
+
+    @Test
+    fun `windsurf remove deletes only the jdx entry and drops the emptied namespace`(@TempDir root: Path) {
+        val dirs = fakeDirs(root)
+        val service = SetupService(dirs.home, dirs.project)
+        service.run(windsurfProjectRequest())
+
+        val outcome = service.run(windsurfProjectRequest(remove = true)) as SetupService.SetupOutcome.Removed
+
+        outcome.changed shouldBe true
+        val stored = Json.parseToJsonElement(Files.readString(dirs.project.resolve(".devin/mcp_config.json"))).jsonObject
+        stored.containsKey("mcpServers") shouldBe false
+        SetupService.isInstalledAt(dirs.project.resolve(".devin/mcp_config.json"), SetupService.Agent.WINDSURF) shouldBe false
+
+        val again = service.run(windsurfProjectRequest(remove = true))
+        (again as SetupService.SetupOutcome.Removed).changed shouldBe false
+        setupExitCode(again) shouldBe 0
+    }
+
+    @Test
+    fun `windsurf remove keeps other servers`(@TempDir root: Path) {
+        val dirs = fakeDirs(root)
+        Files.createDirectories(dirs.project.resolve(".devin"))
+        Files.writeString(
+            dirs.project.resolve(".devin/mcp_config.json"),
+            """{"mcpServers":{"other":{"command":"other","args":["x"]}}}""",
+        )
+        val service = SetupService(dirs.home, dirs.project)
+        service.run(windsurfProjectRequest())
+
+        val outcome = service.run(windsurfProjectRequest(remove = true)) as SetupService.SetupOutcome.Removed
+
+        outcome.changed shouldBe true
+        val stored = Json.parseToJsonElement(Files.readString(dirs.project.resolve(".devin/mcp_config.json"))).jsonObject
+        stored["mcpServers"]?.jsonObject?.containsKey("jdx") shouldBe false
+        stored["mcpServers"]?.jsonObject?.containsKey("other") shouldBe true
+    }
+
+    @Test
+    fun `windsurf system scope targets the devin config under the fake home`(@TempDir root: Path) {
+        val dirs = fakeDirs(root)
+        val service = SetupService(dirs.home, dirs.project)
+
+        val created = service.run(windsurfSystemRequest()) as SetupService.SetupOutcome.Installed
+
+        created.path shouldBe dirs.home.resolve(".config/devin/mcp_config.json")
+        SetupService.isInstalledAt(created.path, SetupService.Agent.WINDSURF) shouldBe true
+    }
+
+    @Test
+    fun `windsurf project scope walks up to the nearest dot-devin mcp config`(@TempDir root: Path) {
+        val dirs = fakeDirs(root)
+        Files.createDirectories(dirs.project.resolve(".devin"))
+        Files.writeString(dirs.project.resolve(".devin/mcp_config.json"), "{}")
+        val nested = dirs.project.resolve("a/b").also { Files.createDirectories(it) }
+        val service = SetupService(dirs.home, nested)
+
+        val outcome = service.run(windsurfProjectRequest())
+
+        val installed = outcome as SetupService.SetupOutcome.Installed
+        installed.path shouldBe dirs.project.resolve(".devin/mcp_config.json")
+        Files.exists(nested.resolve(".devin/mcp_config.json")) shouldBe false
+    }
+
+    @Test
+    fun `a windsurf corrupt config exits 5 and names the file`(@TempDir root: Path) {
+        val dirs = fakeDirs(root)
+        Files.createDirectories(dirs.project.resolve(".devin"))
+        Files.writeString(dirs.project.resolve(".devin/mcp_config.json"), "{ not json,")
+        val service = SetupService(dirs.home, dirs.project)
+
+        val outcome = service.run(windsurfProjectRequest())
+
+        outcome as SetupService.SetupOutcome.Corrupt
+        setupExitCode(outcome) shouldBe 5
+    }
+
+    @Test
+    fun `windsurf install over documented bytes is a byte-identical no-op`(@TempDir root: Path) {
+        val dirs = fakeDirs(root)
+        Files.createDirectories(dirs.project.resolve(".devin"))
+        val realBytes = "{\n  \"mcpServers\": {\n    \"jdx\": {\n      \"args\": [\n        \"mcp\"\n      ],\n      \"command\": \"jdx\",\n      \"disabled\": false\n    }\n  }\n}\n"
+        Files.writeString(dirs.project.resolve(".devin/mcp_config.json"), realBytes)
+        val service = SetupService(dirs.home, dirs.project)
+
+        SetupService.isInstalledAt(
+            dirs.project.resolve(".devin/mcp_config.json"),
+            SetupService.Agent.WINDSURF,
+        ) shouldBe true
+        val outcome = service.run(windsurfProjectRequest())
+
+        (outcome as SetupService.SetupOutcome.Installed).changed shouldBe false
+        Files.readString(dirs.project.resolve(".devin/mcp_config.json")) shouldBe realBytes
+    }
+
+    @Test
+    fun `windsurf entry probe accepts disabled flags absolute paths and windows shims`(@TempDir root: Path) {
+        val disabled = buildJsonObject {
+            put("command", "jdx")
+            put("args", JsonArray(listOf(JsonPrimitive("mcp"))))
+            put("disabled", false)
+        }
+        SetupService.isWindsurfJdxEntry(disabled) shouldBe true
+        val absolute = buildJsonObject {
+            put("command", "/home/dev/.local/bin/jdx")
+            put("args", JsonArray(listOf(JsonPrimitive("mcp"))))
+        }
+        SetupService.isWindsurfJdxEntry(absolute) shouldBe true
+        val shim = buildJsonObject {
+            put("command", "C:\\tools\\jdx.exe")
+            put("args", JsonArray(listOf(JsonPrimitive("mcp"))))
+        }
+        SetupService.isWindsurfJdxEntry(shim) shouldBe true
+    }
+
+    @Test
+    fun `windsurf entry probe rejects foreign commands`(@TempDir root: Path) {
+        val dirs = fakeDirs(root)
+        Files.createDirectories(dirs.project.resolve(".devin"))
+        Files.writeString(
+            dirs.project.resolve(".devin/mcp_config.json"),
+            """{"mcpServers":{"jdx":{"command":"other","args":["mcp"]}}}""",
+        )
+        SetupService.isInstalledAt(
+            dirs.project.resolve(".devin/mcp_config.json"),
+            SetupService.Agent.WINDSURF,
+        ) shouldBe false
+    }
+
+    @Test
+    fun `targetPath resolves the windsurf scope paths`(@TempDir root: Path) {
+        val dirs = fakeDirs(root)
+        val service = SetupService(dirs.home, dirs.project)
+
+        service.targetPath(SetupService.Agent.WINDSURF, SetupService.Scope.PROJECT) shouldBe
+            dirs.project.resolve(".devin/mcp_config.json")
+        service.targetPath(SetupService.Agent.WINDSURF, SetupService.Scope.SYSTEM) shouldBe
+            dirs.home.resolve(".config/devin/mcp_config.json")
+    }
+
+    @Test
+    fun `windsurf version probing names presence without guessing`(@TempDir root: Path) {
+        SetupService.probeWindsurfVersion(
+            emptyList(),
+            ProcessRunner { _, _ -> ProcessOutcome(0, "x", "") },
+        ).version shouldBe SetupService.WindsurfVersion.ABSENT
+    }
+
+    @Test
+    fun `windsurf version probe classifies answers`(@TempDir root: Path) {
+        val bin = root.resolve("bin").also { Files.createDirectories(it) }
+        Files.createFile(bin.resolve("devin")).toFile().setExecutable(true)
+
+        val present = SetupService.probeWindsurfVersion(
+            listOf(bin),
+            ProcessRunner { _, _ -> ProcessOutcome(0, "1.2.3", "") },
+        )
+        present.version shouldBe SetupService.WindsurfVersion.PRESENT
+        present.raw shouldBe "1.2.3"
+        present.binary shouldBe "devin"
+
+        val blank = SetupService.probeWindsurfVersion(
+            listOf(bin),
+            ProcessRunner { _, _ -> ProcessOutcome(0, "  ", "") },
+        )
+        blank.version shouldBe SetupService.WindsurfVersion.UNKNOWN
+
+        val failing = SetupService.probeWindsurfVersion(
+            listOf(bin),
+            throwingRunner("boom"),
+        )
+        failing.version shouldBe SetupService.WindsurfVersion.UNKNOWN
+    }
+
+    @Test
+    fun `windsurf probe resolves the exe shim on windows`(@TempDir root: Path) {
+        val bin = root.resolve("bin").also { Files.createDirectories(it) }
+        Files.createFile(bin.resolve("devin.exe")).toFile().setExecutable(true)
+        val runner = ProcessRunner { _, _ -> ProcessOutcome(0, "1.2.3", "") }
+
+        val info = SetupService.probeWindsurfVersion(listOf(bin), runner, osName = "Windows 11")
+
+        info.version shouldBe SetupService.WindsurfVersion.PRESENT
+        info.raw shouldBe "1.2.3"
+        info.binary shouldBe "devin"
+    }
+
+    @Test
+    fun `describeWindsurfVersion covers every variant`() {
+        SetupService.describeWindsurfVersion(
+            SetupService.WindsurfVersionInfo(SetupService.WindsurfVersion.PRESENT, "1.2.3", "devin"),
+        ) shouldBe "windsurf (1.2.3)"
+        SetupService.describeWindsurfVersion(
+            SetupService.WindsurfVersionInfo(SetupService.WindsurfVersion.ABSENT),
+        ) shouldBe "windsurf not found on PATH"
+        SetupService.describeWindsurfVersion(
+            SetupService.WindsurfVersionInfo(SetupService.WindsurfVersion.UNKNOWN, "banana", "devin"),
+        ) shouldBe "windsurf version unknown (banana)"
+        SetupService.describeWindsurfVersion(
+            SetupService.WindsurfVersionInfo(SetupService.WindsurfVersion.UNKNOWN),
+        ) shouldBe "windsurf version unknown"
+    }
+
+    @Test
+    fun `windsurf install is a fixed point over generated configs`() = runBlocking<Unit> {
+        checkAll(200, Arb.string(0..40)) { noise ->
+            val clean = noise.replace(Regex("[\\p{Cntrl}\"\\\\]"), " ").trim()
+            val foreign = buildJsonObject {
+                put("unrelated-$clean-x", "kept")
+            }
+            val once = SetupService.mergeWindsurfInstall(foreign)
+            SetupService.isWindsurfInstalled(once) shouldBe true
+            SetupService.mergeWindsurfInstall(once) shouldBe once
+            once["unrelated-$clean-x"]?.jsonPrimitive?.content shouldBe "kept"
+        }
+    }
+
+    @Test
+    fun `windsurf remove restores generated foreign content`() = runBlocking<Unit> {
+        checkAll(200, Arb.string(0..40)) { noise ->
+            val clean = noise.replace(Regex("[\\p{Cntrl}\"\\\\]"), " ").trim()
+            val foreign = buildJsonObject {
+                put("unrelated-$clean-x", "kept")
+            }
+            val installed = SetupService.mergeWindsurfInstall(foreign)
+            SetupService.mergeWindsurfRemove(installed) shouldBe foreign
         }
     }
 }

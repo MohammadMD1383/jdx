@@ -69,6 +69,8 @@ internal fun fakeEnvironment(
     copilotHome: Path? = null,
     /** Antigravity binaries to place on the fake PATH (`agy`); empty means absent. */
     antigravityBinaries: List<String> = emptyList(),
+    /** Windsurf / Devin binaries to place on the fake PATH (`devin`); empty means absent. */
+    windsurfBinaries: List<String> = emptyList(),
     /** OS name for `.exe` tool probing; tests inject `"Windows 11"`. */
     osName: String = System.getProperty("os.name", ""),
     /**
@@ -118,6 +120,11 @@ internal fun fakeEnvironment(
         }
     }
     for (binary in antigravityBinaries) {
+        for (name in toolFileNames(binary, osName)) {
+            emptyExecutable(pathBin, name)
+        }
+    }
+    for (binary in windsurfBinaries) {
         for (name in toolFileNames(binary, osName)) {
             emptyExecutable(pathBin, name)
         }

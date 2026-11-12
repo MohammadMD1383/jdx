@@ -45,7 +45,10 @@ import kotlin.system.exitProcess
  * (`{"command": "jdx", "args": ["mcp"]}`, the `agy mcp add jdx -- jdx mcp`
  * equivalent, verified against `agy` 1.3.0) entry in
  * `.agents/mcp_config.json` (project) or
- * `~/.gemini/config/mcp_config.json` (system). The detected line is reported, never assumed.
+ * `~/.gemini/config/mcp_config.json` (system); Windsurf / Devin Local gets
+ * the same `mcpServers.jdx` shape (the `devin mcp add -s project jdx -- jdx mcp`
+ * equivalent) in `.devin/mcp_config.json` (project) or
+ * `~/.config/devin/mcp_config.json` (system). The detected line is reported, never assumed.
  * A thin adapter (D-004): flag parsing, rendering, and exit
  * codes only — [SetupService] owns the merge and the version classification.
  */
@@ -59,6 +62,7 @@ class SetupCommand(
     private val codexVersionProbe: () -> SetupService.CodexVersionInfo = ::systemCodexVersion,
     private val copilotVersionProbe: () -> SetupService.CopilotVersionInfo = ::systemCopilotVersion,
     private val antigravityVersionProbe: () -> SetupService.AntigravityVersionInfo = ::systemAntigravityVersion,
+    private val windsurfVersionProbe: () -> SetupService.WindsurfVersionInfo = ::systemWindsurfVersion,
     /**
      * Resolves the agent-config home. Defaults to [JdxPaths.userHome] over the
      * ambient env so `$HOME` / `JDX_SETUP_HOME` win over the JVM `user.home`
@@ -71,7 +75,7 @@ class SetupCommand(
     override fun help(context: Context): String =
         "Wire jdx into an AI agent: write the MCP server entries that launch `jdx mcp` " +
             "into the agent config (project checkout or user-global). " +
-            "--agent opencode|claude-code|cursor|kilo|cline|codex|copilot|antigravity --scope project|system. " +
+            "--agent opencode|claude-code|cursor|kilo|cline|codex|copilot|antigravity|windsurf --scope project|system. " +
             "OpenCode writes both the v1 (mcp.jdx) and v2 (mcp.servers.jdx) entries so either " +
             "OpenCode line picks it up (v1 support is deprecated, slated for removal); " +
             "Claude Code writes the mcpServers.jdx entry into .mcp.json (project) or " +
@@ -86,7 +90,9 @@ class SetupCommand(
             "GitHub Copilot CLI gets the mcpServers.jdx entry in .mcp.json (project) or " +
             "~/.copilot/mcp-config.json (system, \$COPILOT_HOME honoured); " +
             "Antigravity gets the mcpServers.jdx entry in .agents/mcp_config.json (project) or " +
-            "~/.gemini/config/mcp_config.json (system). " +
+            "~/.gemini/config/mcp_config.json (system); " +
+            "Windsurf (Devin Local) gets the mcpServers.jdx entry in .devin/mcp_config.json (project) or " +
+            "~/.config/devin/mcp_config.json (system). " +
             "Agent-config home prefers \$JDX_SETUP_HOME, then \$HOME / \$USERPROFILE, then the JVM " +
             "user.home (so a sandboxed HOME=… isolates writes). " +
             "--check reports without writing; --remove uninstalls cleanly. " +
@@ -95,7 +101,7 @@ class SetupCommand(
 
     private val agent by option(
         "--agent",
-        help = "Agent to wire: opencode, claude-code (claude is accepted as an alias), cursor, kilo (Kilo Code, an OpenCode fork), cline (Cline), codex (Codex CLI), copilot (GitHub Copilot CLI), or antigravity (agy is accepted as an alias).",
+        help = "Agent to wire: opencode, claude-code (claude is accepted as an alias), cursor, kilo (Kilo Code, an OpenCode fork), cline (Cline), codex (Codex CLI), copilot (GitHub Copilot CLI), antigravity (agy is accepted as an alias), or windsurf (devin is accepted as an alias).",
     )
 
     private val scope by option(
@@ -108,7 +114,8 @@ class SetupCommand(
             "Cline targets ~/.cline/data/settings/cline_mcp_settings.json for both scopes (single global file). " +
             "Codex CLI targets .codex/config.toml (project) or ~/.codex/config.toml (system, \$CODEX_HOME honoured); " +
             "GitHub Copilot CLI targets .mcp.json (project) or ~/.copilot/mcp-config.json (system, \$COPILOT_HOME honoured); " +
-            "Antigravity targets .agents/mcp_config.json (project) or ~/.gemini/config/mcp_config.json (system).",
+            "Antigravity targets .agents/mcp_config.json (project) or ~/.gemini/config/mcp_config.json (system); " +
+            "Windsurf targets .devin/mcp_config.json (project) or ~/.config/devin/mcp_config.json (system).",
     )
 
     private val checkOnly by option(
@@ -130,7 +137,7 @@ class SetupCommand(
         val parsedAgent = SetupService.parseAgent(agent)
         if (parsedAgent == null) {
             finish(
-                "usage error: unsupported --agent '${agent}' (only --agent opencode|claude-code|cursor|kilo|cline|codex|copilot|antigravity)",
+                "usage error: unsupported --agent '${agent}' (only --agent opencode|claude-code|cursor|kilo|cline|codex|copilot|antigravity|windsurf)",
                 SetupPayload(agent = agent, message = "unsupported agent '${agent}'"),
                 exitCode = 3,
             )
@@ -180,6 +187,8 @@ class SetupCommand(
         val copilotVersion = if (parsedAgent == SetupService.Agent.COPILOT) copilotVersionProbe() else null
         val antigravityVersion =
             if (parsedAgent == SetupService.Agent.ANTIGRAVITY) antigravityVersionProbe() else null
+        val windsurfVersion =
+            if (parsedAgent == SetupService.Agent.WINDSURF) windsurfVersionProbe() else null
         val detected = when (parsedAgent) {
             SetupService.Agent.OPENCODE ->
                 SetupService.describeVersion(requireNotNull(opencodeVersion))
@@ -193,6 +202,8 @@ class SetupCommand(
                 SetupService.describeCopilotVersion(requireNotNull(copilotVersion))
             SetupService.Agent.ANTIGRAVITY ->
                 SetupService.describeAntigravityVersion(requireNotNull(antigravityVersion))
+            SetupService.Agent.WINDSURF ->
+                SetupService.describeWindsurfVersion(requireNotNull(windsurfVersion))
             SetupService.Agent.KILO -> ""
             SetupService.Agent.CLINE -> ""
         }
@@ -224,6 +235,8 @@ class SetupCommand(
             copilotRaw = copilotVersion?.raw,
             antigravityVersion = antigravityVersion?.version?.cliName,
             antigravityRaw = antigravityVersion?.raw,
+            windsurfVersion = windsurfVersion?.version?.cliName,
+            windsurfRaw = windsurfVersion?.raw,
             message = setupMessage(outcome, parsedAgent),
         )
         finish(setupText(outcome, parsedAgent, parsedScope, detected), payload, setupExitCode(outcome))
@@ -270,6 +283,10 @@ private data class SetupPayload(
     val antigravityVersion: String? = null,
     /** Trimmed `agy --version` output (null when the binary never answered). */
     val antigravityRaw: String? = null,
+    /** Detected Windsurf / Devin presence (`present`, `absent`, `unknown`). */
+    val windsurfVersion: String? = null,
+    /** Trimmed `devin --version` output (null when the binary never answered). */
+    val windsurfRaw: String? = null,
     val message: String,
 )
 
@@ -323,6 +340,16 @@ private fun systemAntigravityVersion(): SetupService.AntigravityVersionInfo {
     return SetupService.probeAntigravityVersion(pathDirs, RealProcessRunner)
 }
 
+/** Best-effort host probe for display only: PATH `devin` presence, never throws. */
+private fun systemWindsurfVersion(): SetupService.WindsurfVersionInfo {
+    val pathDirs = System.getenv("PATH")
+        ?.split(File.pathSeparator)
+        ?.filter { it.isNotEmpty() }
+        ?.map { Paths.get(it) }
+        ?: emptyList()
+    return SetupService.probeWindsurfVersion(pathDirs, RealProcessRunner)
+}
+
 /** Best-effort host probe for display only: PATH `copilot` presence, never throws. */
 private fun systemCopilotVersion(): SetupService.CopilotVersionInfo {
     val pathDirs = System.getenv("PATH")
@@ -370,6 +397,9 @@ private fun setupMessage(outcome: SetupService.SetupOutcome, agent: SetupService
             SetupService.Agent.ANTIGRAVITY ->
                 if (outcome.changed) "installed (mcpServers jdx mcp entry written to ${outcome.path.fileName})"
                 else "already installed (${outcome.path.fileName}, mcpServers entry)"
+            SetupService.Agent.WINDSURF ->
+                if (outcome.changed) "installed (mcpServers jdx mcp entry written to ${outcome.path.fileName})"
+                else "already installed (${outcome.path.fileName}, mcpServers entry)"
         }
     is SetupService.SetupOutcome.Checked ->
         if (outcome.installed) "installed (${outcome.path.fileName})" else "not installed (${outcome.path.fileName})"
@@ -398,8 +428,8 @@ private fun setupText(
     val where = if (scope == SetupService.Scope.PROJECT) "project" else "system"
     val detected = "detected: $detectedVersion"
     // OpenCode keeps its exact historical wording (pinned by tests); Claude
-    // Code, Cursor, Codex CLI, Copilot, and Antigravity mirror it with their
-    // entry shape and restart hint.
+    // Code, Cursor, Codex CLI, Copilot, Antigravity, and Windsurf mirror it
+    // with their entry shape and restart hint.
     val installedChanged = when (agent) {
         SetupService.Agent.OPENCODE -> "$name $where setup installed (v1+v2 entries)"
         SetupService.Agent.CLAUDE_CODE -> "$name $where setup installed (mcpServers entry)"
@@ -407,6 +437,7 @@ private fun setupText(
         SetupService.Agent.CODEX -> "$name $where setup installed (mcp_servers entry)"
         SetupService.Agent.COPILOT -> "$name $where setup installed (mcpServers entry)"
         SetupService.Agent.ANTIGRAVITY -> "$name $where setup installed (mcpServers entry)"
+        SetupService.Agent.WINDSURF -> "$name $where setup installed (mcpServers entry)"
         SetupService.Agent.KILO -> "$name $where setup installed"
         SetupService.Agent.CLINE -> "$name $where setup installed (mcpServers transport entry)"
     }

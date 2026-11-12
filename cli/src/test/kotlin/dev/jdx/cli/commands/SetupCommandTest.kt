@@ -54,6 +54,9 @@ class SetupCommandTest {
         antigravityVersion: SetupService.AntigravityVersionInfo = SetupService.AntigravityVersionInfo(
             SetupService.AntigravityVersion.ABSENT,
         ),
+        windsurfVersion: SetupService.WindsurfVersionInfo = SetupService.WindsurfVersionInfo(
+            SetupService.WindsurfVersion.ABSENT,
+        ),
     ): SetupCommand = SetupCommand(
         // The Codex and Copilot system dirs are pinned under the fake home
         // so no test can leak into the real `~/.codex` / `~/.copilot` via
@@ -68,6 +71,7 @@ class SetupCommandTest {
         codexVersionProbe = { codexVersion },
         copilotVersionProbe = { copilotVersion },
         antigravityVersionProbe = { antigravityVersion },
+        windsurfVersionProbe = { windsurfVersion },
     )
 
     private fun kiloCommandFor(home: Path, project: Path): SetupCommand = SetupCommand(
@@ -210,7 +214,7 @@ class SetupCommandTest {
         }
 
         code shouldBe 3
-        output.trim() shouldContain "opencode|claude-code|cursor|kilo|cline|codex|copilot|antigravity"
+        output.trim() shouldContain "opencode|claude-code|cursor|kilo|cline|codex|copilot|antigravity|windsurf"
     }
 
     @Test
@@ -1386,6 +1390,177 @@ WARNING: proceeding, even though we could not create PATH aliases: Refusing to c
         result.containsKey("claudeRaw") shouldBe false
         result.containsKey("codexVersion") shouldBe false
         result.containsKey("codexRaw") shouldBe false
+    }
+
+    // -- Windsurf / Devin Local wiring (`--agent windsurf`) --
+    // Documented at https://docs.devin.ai/cli/extensibility/mcp/configuration:
+    // project `.devin/mcp_config.json`, user `~/.config/devin/mcp_config.json`,
+    // `devin mcp add -s project jdx -- jdx mcp`.
+
+    @Test
+    fun `windsurf install writes dot-devin mcp config and says what to do next`(@TempDir root: Path) {
+        val (home, project) = fakeDirs(root)
+        val output = captureStdout {
+            JdxCli().subcommands(commandFor(home, project))
+                .parse(listOf("setup", "--agent", "windsurf", "--scope", "project"))
+        }
+
+        output.trim() shouldContain "windsurf project setup installed"
+        output.trim() shouldContain "mcpServers entry"
+        output.trim() shouldContain "restart windsurf"
+        output.trim() shouldContain "windsurf not found on PATH"
+        SetupService.isInstalledAt(
+            project.resolve(".devin/mcp_config.json"),
+            SetupService.Agent.WINDSURF,
+        ) shouldBe true
+    }
+
+    @Test
+    fun `windsurf accepts every documented spelling`(@TempDir root: Path) {
+        listOf("windsurf", "Windsurf", "devin", "DEVIN", "devin-cli", "devin-desktop").forEachIndexed { index, spelling ->
+            val project = root.resolve("p$index").also { Files.createDirectories(it) }
+            val home = root.resolve("h$index").also { Files.createDirectories(it) }
+            captureStdout {
+                JdxCli().subcommands(commandFor(home, project))
+                    .parse(listOf("setup", "--agent", spelling, "--scope", "project"))
+            }
+            SetupService.isInstalledAt(
+                project.resolve(".devin/mcp_config.json"),
+                SetupService.Agent.WINDSURF,
+            ) shouldBe true
+        }
+    }
+
+    @Test
+    fun `windsurf install names the detected binary`(@TempDir root: Path) {
+        val (home, project) = fakeDirs(root)
+        val present = SetupService.WindsurfVersionInfo(
+            SetupService.WindsurfVersion.PRESENT,
+            "1.2.3",
+            "devin",
+        )
+        val output = captureStdout {
+            JdxCli().subcommands(commandFor(home, project, windsurfVersion = present))
+                .parse(listOf("setup", "--agent", "windsurf", "--scope", "project"))
+        }
+
+        output.trim() shouldContain "detected: windsurf (1.2.3)"
+    }
+
+    @Test
+    fun `a second windsurf install is a no-op reporting already installed`(@TempDir root: Path) {
+        val (home, project) = fakeDirs(root)
+        val args = listOf("setup", "--agent", "windsurf", "--scope", "project")
+        captureStdout { JdxCli().subcommands(commandFor(home, project)).parse(args) }
+        val output = captureStdout {
+            JdxCli().subcommands(commandFor(home, project)).parse(args)
+        }
+
+        output.trim() shouldContain "already installed"
+        output.trim() shouldContain "no changes"
+    }
+
+    @Test
+    fun `windsurf system scope writes under the fake home`(@TempDir root: Path) {
+        val (home, project) = fakeDirs(root)
+        captureStdout {
+            JdxCli().subcommands(commandFor(home, project))
+                .parse(listOf("setup", "--agent", "windsurf", "--scope", "system"))
+        }
+
+        SetupService.isInstalledAt(
+            home.resolve(".config/devin/mcp_config.json"),
+            SetupService.Agent.WINDSURF,
+        ) shouldBe true
+    }
+
+    @Test
+    fun `windsurf check exits 1 when absent and 0 once installed without writing`(@TempDir root: Path) {
+        val (home, project) = fakeDirs(root)
+        val check = listOf("setup", "--agent", "windsurf", "--scope", "project", "--check")
+        var code = -1
+        captureStdout {
+            try {
+                JdxCli().subcommands(commandFor(home, project)).parse(check)
+            } catch (e: SetupExit) {
+                code = e.code
+            }
+        }
+        code shouldBe 1
+        Files.exists(project.resolve(".devin/mcp_config.json")) shouldBe false
+
+        val installed = captureStdout {
+            JdxCli().subcommands(commandFor(home, project))
+                .parse(listOf("setup", "--agent", "windsurf", "--scope", "project"))
+        }
+        installed.trim() shouldContain "windsurf project setup installed"
+
+        captureStdout {
+            JdxCli().subcommands(commandFor(home, project)).parse(check)
+        }
+    }
+
+    @Test
+    fun `windsurf check hint names the windsurf install command`(@TempDir root: Path) {
+        val (home, project) = fakeDirs(root)
+
+        var code = -1
+        val output = captureStdout {
+            try {
+                JdxCli().subcommands(commandFor(home, project))
+                    .parse(listOf("setup", "--agent", "windsurf", "--scope", "system", "--check"))
+            } catch (e: SetupExit) {
+                code = e.code
+            }
+        }
+
+        code shouldBe 1
+        output.trim() shouldContain "jdx setup --agent windsurf --scope system"
+    }
+
+    @Test
+    fun `windsurf remove uninstalls cleanly`(@TempDir root: Path) {
+        val (home, project) = fakeDirs(root)
+        captureStdout {
+            JdxCli().subcommands(commandFor(home, project))
+                .parse(listOf("setup", "--agent", "windsurf", "--scope", "project"))
+        }
+        val output = captureStdout {
+            JdxCli().subcommands(commandFor(home, project))
+                .parse(listOf("setup", "--agent", "windsurf", "--scope", "project", "--remove"))
+        }
+
+        output.trim() shouldContain "windsurf project setup removed"
+        SetupService.isInstalledAt(
+            project.resolve(".devin/mcp_config.json"),
+            SetupService.Agent.WINDSURF,
+        ) shouldBe false
+    }
+
+    @Test
+    fun `windsurf json carries the setup payload without other agent lines`(@TempDir root: Path) {
+        val (home, project) = fakeDirs(root)
+        val present = SetupService.WindsurfVersionInfo(
+            SetupService.WindsurfVersion.PRESENT,
+            "1.2.3",
+            "devin",
+        )
+        val output = captureStdout {
+            JdxCli().subcommands(commandFor(home, project, windsurfVersion = present))
+                .parse(listOf("setup", "--agent", "windsurf", "--scope", "project", "--json"))
+        }
+
+        val parsed = Json.parseToJsonElement(output.trim()).jsonObject
+        parsed["command"]?.jsonPrimitive?.content shouldBe "setup"
+        parsed["ok"]?.jsonPrimitive?.content shouldBe "true"
+        val result = parsed["result"]!!.jsonObject
+        result["agent"]?.jsonPrimitive?.content shouldBe "windsurf"
+        result["scope"]?.jsonPrimitive?.content shouldBe "project"
+        result["installed"]?.jsonPrimitive?.content shouldBe "true"
+        result["windsurfVersion"]?.jsonPrimitive?.content shouldBe "present"
+        result["windsurfRaw"]?.jsonPrimitive?.content shouldBe "1.2.3"
+        result.containsKey("opencodeVersion") shouldBe false
+        result.containsKey("antigravityVersion") shouldBe false
     }
 
     @Test
