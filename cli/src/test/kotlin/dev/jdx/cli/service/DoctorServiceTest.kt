@@ -1120,4 +1120,33 @@ class DoctorServiceTest {
         // The javap detail leads with the executable path; the folded version follows it.
         report.checks.first { it.name == "javap" }.detail shouldContain "line1 line2 line3"
     }
+
+    @Test
+    fun `system environment prefers HOME over the JVM user home property`() {
+        // Issue #85: doctor must probe agent configs under $HOME when it differs
+        // from user.home (OpenJDK getpwuid), same root setup writes into.
+        val sandbox = tempDir("jdx-doctor-home-")
+        val env = DoctorEnvironment.system(
+            env = mapOf("HOME" to sandbox.toString(), "PATH" to ""),
+            userHomeProperty = "/home/passwd-must-not-win",
+        )
+
+        env.userHome shouldBe sandbox
+    }
+
+    @Test
+    fun `system environment prefers JDX_SETUP_HOME over HOME`() {
+        val override = tempDir("jdx-doctor-setup-home-")
+        val sandbox = tempDir("jdx-doctor-sandbox-")
+        val env = DoctorEnvironment.system(
+            env = mapOf(
+                "JDX_SETUP_HOME" to override.toString(),
+                "HOME" to sandbox.toString(),
+                "PATH" to "",
+            ),
+            userHomeProperty = "/home/passwd-must-not-win",
+        )
+
+        env.userHome shouldBe override
+    }
 }

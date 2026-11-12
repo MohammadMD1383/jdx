@@ -131,12 +131,20 @@ data class DoctorEnvironment(
         /**
          * The real environment. Cache/config roots resolve per OS (D-044,
          * `docs/PROPOSAL.md` §17.1) — honouring `JDX_*` / `XDG_*` /
-         * `LOCALAPPDATA` / `APPDATA`.
+         * `LOCALAPPDATA` / `APPDATA`. The user-home base prefers
+         * `$JDX_SETUP_HOME` / `$HOME` / `$USERPROFILE` over the JVM
+         * `user.home` (issue #85). [env] / [userHomeProperty] are injectable
+         * so tests pin a sandboxed home without environment surgery.
          */
-        fun system(): DoctorEnvironment {
-            val userHome = Paths.get(System.getProperty("user.home"))
+        fun system(
+            env: Map<String, String> = System.getenv(),
+            userHomeProperty: String = System.getProperty("user.home", ""),
+        ): DoctorEnvironment {
+            // Prefer $HOME / JDX_SETUP_HOME over the JVM user.home (issue #85):
+            // OpenJDK on Linux resolves user.home from getpwuid and ignores $HOME.
+            val userHome = JdxPaths.userHome(env, userHomeProperty)
             val javaHome = Paths.get(System.getProperty("java.home"))
-            val pathDirs = System.getenv("PATH")
+            val pathDirs = env["PATH"]
                 ?.split(File.pathSeparator)
                 ?.filter { it.isNotEmpty() }
                 ?.map { Paths.get(it) }
@@ -147,14 +155,14 @@ data class DoctorEnvironment(
             return DoctorEnvironment(
                 userHome = userHome,
                 javaHome = javaHome,
-                javaHomeEnv = JdkLayout.envJavaHome(),
+                javaHomeEnv = JdkLayout.envJavaHome { env[it] },
                 pathDirs = pathDirs,
                 runtimeDir = runtimeDir,
                 workingDir = workingDir,
                 runtime = RuntimeInfo.current(),
                 processRunner = RealProcessRunner,
-                workspaceEnv = System.getenv("JDX_WORKSPACE"),
-                envVars = System.getenv(),
+                workspaceEnv = env["JDX_WORKSPACE"],
+                envVars = env,
                 cdsArchive = cdsArchive,
                 cdsFatJar = cdsFatJar,
             )

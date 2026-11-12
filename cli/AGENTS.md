@@ -74,6 +74,10 @@ is the CLI surface, pinned by help/parity goldens.)
   stripped, whitespace collapsed, capped at `VERSION_RAW_DISPLAY_MAX`) so the
   text `detected:` line stays one line — JSON `*Raw` fields keep the full probe;
   `doctor` reuses all probes for the setup row.
+  Agent-config home (and doctor's `userHome` base) resolves via
+  `JdxPaths.userHome`: `$JDX_SETUP_HOME` > `$HOME` > `$USERPROFILE` > JVM
+  `user.home` (issue #85 — OpenJDK on Linux ignores `$HOME` for `user.home`,
+  so a sandboxed `HOME=… jdx setup` must not write into the passwd home).
   Tests pin userHome/projectDir to temp dirs, never the real home
   (Codex tests additionally pin `$CODEX_HOME` via the `codexHome` ctor arg,
   Copilot tests pin `$COPILOT_HOME` via the `copilotHome` ctor arg).

@@ -10,9 +10,11 @@ import dev.jdx.cli.render.envelopeJson
 import dev.jdx.cli.service.RealProcessRunner
 import dev.jdx.cli.service.SetupService
 import dev.jdx.cli.service.setupExitCode
+import dev.jdx.core.paths.JdxPaths
 import kotlinx.serialization.Serializable
 import kotlinx.serialization.json.encodeToJsonElement
 import java.io.File
+import java.nio.file.Path
 import java.nio.file.Paths
 import kotlin.system.exitProcess
 
@@ -48,7 +50,7 @@ import kotlin.system.exitProcess
  * codes only — [SetupService] owns the merge and the version classification.
  */
 class SetupCommand(
-    private val serviceFactory: (userHome: java.nio.file.Path, projectDir: java.nio.file.Path) -> SetupService =
+    private val serviceFactory: (userHome: Path, projectDir: Path) -> SetupService =
         ::SetupService,
     private val terminate: (Int) -> Nothing = ::exitProcess,
     private val versionProbe: () -> SetupService.OpencodeVersionInfo = ::systemOpencodeVersion,
@@ -57,6 +59,14 @@ class SetupCommand(
     private val codexVersionProbe: () -> SetupService.CodexVersionInfo = ::systemCodexVersion,
     private val copilotVersionProbe: () -> SetupService.CopilotVersionInfo = ::systemCopilotVersion,
     private val antigravityVersionProbe: () -> SetupService.AntigravityVersionInfo = ::systemAntigravityVersion,
+    /**
+     * Resolves the agent-config home. Defaults to [JdxPaths.userHome] over the
+     * ambient env so `$HOME` / `JDX_SETUP_HOME` win over the JVM `user.home`
+     * (issue #85). Injectable so tests pin a fake home without environment surgery.
+     */
+    private val resolveUserHome: () -> Path = {
+        JdxPaths.userHome(System.getenv(), System.getProperty("user.home", ""))
+    },
 ) : CoreCliktCommand(name = "setup") {
     override fun help(context: Context): String =
         "Wire jdx into an AI agent: write the MCP server entries that launch `jdx mcp` " +
@@ -77,6 +87,8 @@ class SetupCommand(
             "~/.copilot/mcp-config.json (system, \$COPILOT_HOME honoured); " +
             "Antigravity gets the mcpServers.jdx entry in .agents/mcp_config.json (project) or " +
             "~/.gemini/config/mcp_config.json (system). " +
+            "Agent-config home prefers \$JDX_SETUP_HOME, then \$HOME / \$USERPROFILE, then the JVM " +
+            "user.home (so a sandboxed HOME=… isolates writes). " +
             "--check reports without writing; --remove uninstalls cleanly. " +
             "Merges (never clobbers unrelated entries); re-runs are no-ops. " +
             "Exits 0 installed/removed/present, 1 checked-absent, 3 bad usage, 5 unreadable config."
@@ -146,7 +158,7 @@ class SetupCommand(
             return
         }
         val service = serviceFactory(
-            Paths.get(System.getProperty("user.home")),
+            resolveUserHome(),
             Paths.get("").toAbsolutePath(),
         )
         val outcome = service.run(

@@ -1065,9 +1065,15 @@ name (`<runtime-dir>/jdx/<workspace-hash>-v1.sock`).
 
 1. Explicit CLI flags (`--cache-dir` for the cache root, which covers the index DB,
    `m2/`, the Kotlin sidecar, and `auto/` workspaces).
-2. `JDX_*` env (`JDX_CACHE_DIR`, `JDX_CONFIG_DIR`, `JDX_RUNTIME_DIR`).
+2. `JDX_*` env (`JDX_CACHE_DIR`, `JDX_CONFIG_DIR`, `JDX_RUNTIME_DIR`,
+   `JDX_SETUP_HOME` for the agent-config / OS-default-home base — issue #85).
 3. Platform env: `XDG_CACHE_HOME` / `XDG_CONFIG_HOME` / `XDG_RUNTIME_DIR` on Linux,
-   `TMPDIR` for the macOS socket dir, `LOCALAPPDATA` / `APPDATA` on Windows.
+   `TMPDIR` for the macOS socket dir, `LOCALAPPDATA` / `APPDATA` on Windows;
+   for the user-home base itself: `$HOME`, then `$USERPROFILE`, then the JVM
+   `user.home` property. Preferring `$HOME` over `user.home` matches shell tools
+   and `install.sh` — OpenJDK on Linux resolves `user.home` from `getpwuid()` and
+   ignores `$HOME`, so a sandboxed `HOME=… jdx setup` must not write into the
+   passwd home (issue #85).
 4. OS default from the table above (with the socket-dir `else` fallbacks).
 
 **Migration:** on first run under the new defaults, if the OS-default location is
@@ -1374,5 +1380,6 @@ batch     --json
 bench     [--jars …] [-w …] [--no-jdk] [--iterations N] [--json]
 upgrade   [--version <tag>] [--check] [--repo OWNER/NAME] [--json]
 setup     --agent opencode|claude-code|cursor|kilo|cline|codex|copilot|antigravity --scope project|system [--check] [--remove] [--json]
+          (agent-config home: $JDX_SETUP_HOME > $HOME > $USERPROFILE > user.home — issue #85)
 help      [--agent] [--json]
 ```
