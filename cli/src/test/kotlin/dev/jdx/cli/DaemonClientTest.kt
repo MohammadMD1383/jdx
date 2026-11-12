@@ -173,6 +173,8 @@ class DaemonClientTest {
         DaemonClient.implementorsRequest("Foo").command shouldBe RpcCommand.IMPLEMENTORS
         DaemonClient.callsRequest("Foo#bar", externalOnly = true).params["externalOnly"] shouldBe "true"
         DaemonClient.samplesRequest("Foo#bar").params["limit"] shouldBe "3"
+        DaemonClient.samplesRequest("Foo#bar").params["maxLines"] shouldBe "15"
+        DaemonClient.samplesRequest("Foo#bar", maxLines = 40).params["maxLines"] shouldBe "40"
     }
 
     @Test

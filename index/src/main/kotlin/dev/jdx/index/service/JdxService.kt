@@ -61,6 +61,7 @@ import dev.jdx.core.render.buildSourceBlock
 import dev.jdx.core.render.renderJavadoc
 import dev.jdx.core.render.DEFAULT_MEMBER_LIMIT
 import dev.jdx.core.render.DEFAULT_SAMPLES_LIMIT
+import dev.jdx.core.render.MAX_SAMPLE_SNIPPET_LINES
 import dev.jdx.core.render.DEFAULT_SEARCH_LIMIT
 import dev.jdx.core.render.DEFAULT_TREE_DEPTH
 import dev.jdx.core.render.DEFAULT_USAGES_LIMIT
@@ -3858,13 +3859,16 @@ public object JdxService {
     /**
      * Options for `samples`: how many ranked examples to show and how much of
      * the workspace to cover. [limit] defaults to 3 (PROPOSAL.md §7.3);
-     * [preferSources] ranks callers from sources-paired artifacts first.
+     * [preferSources] ranks callers from sources-paired artifacts first;
+     * [maxLines] caps each snippet's shown code lines (default
+     * [MAX_SAMPLE_SNIPPET_LINES], issue #9).
      */
     public data class SampleOptions(
         public val limit: Int = DEFAULT_SAMPLES_LIMIT,
         public val inArtifact: String? = null,
         public val exclude: String? = null,
         public val preferSources: Boolean = false,
+        public val maxLines: Int = MAX_SAMPLE_SNIPPET_LINES,
     )
 
     /**
@@ -3888,6 +3892,9 @@ public object JdxService {
     ): ServiceOutcome {
         if (options.limit < 0) {
             return failure(3, rawRef, "usage error: --limit must be >= 0, got ${options.limit}")
+        }
+        if (options.maxLines < 0) {
+            return failure(3, rawRef, "usage error: --max-lines must be >= 0, got ${options.maxLines}")
         }
         val parsed = SymbolRefParser.parse(rawRef)
         if (parsed is SymbolRefParseResult.Failure) {
@@ -4154,6 +4161,7 @@ public object JdxService {
                     limit = options.limit,
                     warnings = warnings.sortedBy { it.code },
                     provenance = provenance,
+                    maxSnippetLines = options.maxLines,
                 ),
             )
         } finally {

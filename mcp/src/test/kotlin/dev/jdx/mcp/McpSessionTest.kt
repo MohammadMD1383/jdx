@@ -246,6 +246,15 @@ class McpSessionTest {
         )
     }
 
+    @Test
+    fun `samples forwards maxLines`() {
+        checkParity(
+            "jdx_samples", args("dev.jdx.fixtures.Generics#identity", "maxLines" to 40),
+            RpcRequest(RpcCommand.SAMPLES, "dev.jdx.fixtures.Generics#identity", mapOf("maxLines" to "40")),
+            roots(),
+        )
+    }
+
     // -- transport commands ------------------------------------------------------------------
 
     @Test

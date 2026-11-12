@@ -12,6 +12,7 @@ import dev.jdx.core.render.DEFAULT_DOC_MAX_LINES
 import dev.jdx.core.render.DEFAULT_HIERARCHY_LIMIT
 import dev.jdx.core.render.DEFAULT_MEMBER_LIMIT
 import dev.jdx.core.render.DEFAULT_SAMPLES_LIMIT
+import dev.jdx.core.render.MAX_SAMPLE_SNIPPET_LINES
 import dev.jdx.core.render.DEFAULT_SEARCH_LIMIT
 import dev.jdx.core.render.DEFAULT_SIGNATURE_LIMIT
 import dev.jdx.core.render.DEFAULT_SOURCE_MAX_LINES
@@ -89,7 +90,7 @@ import dev.jdx.index.workspace.WorkspaceStore
  * - `implementors`: `direct`, `depth`, `in`, `exclude`, `limit`.
  * - `callers`: `depth`, `in`, `exclude`, `limit`.
  * - `calls`: `depth`, `in`, `exclude`, `externalOnly`, `limit`.
- * - `samples`: `limit`, `in`, `exclude`, `preferSources`.
+ * - `samples`: `limit`, `in`, `exclude`, `preferSources`, `maxLines`.
  * - `diff`: the query is the *old* artifact and the required `new` param the new
  *   one (a diff has two subjects; the wire has one `query` field, T-040), plus
  *   `fetch`, `repo` (comma-separated `--repo` mirrors), `visibility`
@@ -248,6 +249,7 @@ public fun JdxService.dispatch(request: RpcRequest, roots: RootsSpec): ServiceOu
                 inArtifact = scope.params["in"],
                 exclude = scope.params["exclude"],
                 preferSources = scope.bool("preferSources"),
+                maxLines = scope.int("maxLines", MAX_SAMPLE_SNIPPET_LINES) ?: return scope.failure(),
             ),
         )
         RpcCommand.DIFF -> diff(

@@ -43,7 +43,7 @@ paired; `--engine javap` shows raw bytecode. Decompiled output is always labelle
 | `jdx implementors <type>` | Who implements this? | Alias for `hierarchy --down`: `--direct`, `--depth N`, `--in` / `--exclude`, `--limit` (50) |
 | `jdx callers <member>` | Call hierarchy in (`Ctrl+Alt+H`) | `--depth N` (default 1), `--in` / `--exclude`, `--limit` (50). Methods + constructors only; type/field refs exit 3. Cycle-safe (`…(cycle)`). Exact name+descriptor matching — not override-aware (see limitations). |
 | `jdx calls <member>` | Call hierarchy out | Same as `callers`, plus `--external-only` (hide callees in the method's own artifact — dependency view) |
-| `jdx samples <symbol>` | *(no IDE equivalent)* | `--limit` (default 3), `--in` / `--exclude`, `--prefer-sources` (rank snippet-capable callers first). Ranked by exemplariness: non-test before test, non-generated before generated, fuller overloads first. Snippets capped at 15 lines. Type refs match calls to any member; field refs exit 3. |
+| `jdx samples <symbol>` | *(no IDE equivalent)* | `--limit` (default 3), `--max-lines` (default 15; per-snippet code-line cap), `--in` / `--exclude`, `--prefer-sources` (rank snippet-capable callers first). Ranked by exemplariness: non-test before test, non-generated before generated, fuller overloads first. Type refs match calls to any member; field refs exit 3. |
 
 ## Upgrades: API diff
 

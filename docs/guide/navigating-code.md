@@ -55,7 +55,8 @@ its dependency footprint.
 
 The fastest way to learn an API is to read code that already uses it. `samples` ranks real call
 sites by how exemplary they are — non-test before test, non-generated before generated, fuller
-overloads first — and shows the enclosing method when sources are available:
+overloads first — and shows the enclosing method when sources are available. Each snippet is
+capped at 15 lines by default (`--max-lines N` to raise it; the truncation marker names the total):
 
 ```console exec max-lines=24
 $ jdx samples 'com.google.gson.JsonParser#parseString(String)' --coord com.google.code.gson:gson:2.14.0

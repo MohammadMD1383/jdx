@@ -432,7 +432,8 @@ class along the way.
 #### `jdx samples <symbol>`
 Real call sites as usage examples, source-rendered when sources are available, ranked by
 "exemplariness" (prefers non-test, non-generated, short enclosing methods, and call sites
-that use more of the API's parameters). `--limit N` *(default 3)*.
+that use more of the API's parameters). `--limit N` *(default 3)*; `--max-lines N`
+*(default 15)* caps each snippet's shown code lines with an explicit continuation marker.
 
 #### `jdx overrides <method>` / `jdx implementors <type>`
 Convenience aliases over `hierarchy`/`usages` because they are so frequently wanted.
@@ -1363,7 +1364,7 @@ callers   --depth N --in --exclude --limit
           [-w …] [--jars …] [--no-jdk] [--json] [--no-color]
 calls     --depth N --in --exclude --external-only --limit
           [-w …] [--jars …] [--no-jdk] [--json] [--no-color]
-samples   --limit N --prefer-sources
+samples   --limit N --max-lines N --prefer-sources
           [-w …] [--jars …] [--no-jdk] [--json] [--no-color]
 diff      <old> <new> [--visibility public|all] [--include-synthetic]
           [--severity all|suspicious|breaking] [--fail-on none|breaking|any]

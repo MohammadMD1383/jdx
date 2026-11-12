@@ -73,7 +73,40 @@ class SamplesTest {
         text shouldContain "    s/App.java:10-39"
         text shouldContain "    line 15"
         text shouldNotContain "    line 16"
-        text shouldContain "      … (15 of 30 lines shown)"
+        text shouldContain "      … (15 of 30 lines shown (--max-lines 30 to see more))"
+    }
+
+    @Test
+    fun `max-lines overrides the default snippet cap`() {
+        val long = (1..30).map { "line $it" }
+        val listing = buildSampleListing(
+            query = "q",
+            targetRef = "t",
+            hits = listOf(hit("s.App#run()", snippet = snippet(lines = long))),
+            maxSnippetLines = 5,
+        )
+        val text = listing.renderText()
+        text shouldContain "    line 5"
+        text shouldNotContain "    line 6"
+        text shouldContain "      … (5 of 30 lines shown (--max-lines 30 to see more))"
+        val json = listing.toJson("samples")
+        json shouldContain "\"truncated\":true"
+        json shouldContain "\"totalLines\":30"
+        json shouldContain "line 5"
+        json shouldNotContain "line 6"
+    }
+
+    @Test
+    fun `max-lines covering the body drops the marker`() {
+        val lines = (1..10).map { "line $it" }
+        val listing = buildSampleListing(
+            query = "q",
+            targetRef = "t",
+            hits = listOf(hit("s.App#run()", snippet = snippet(lines = lines))),
+            maxSnippetLines = 10,
+        )
+        listing.renderText() shouldNotContain "lines shown"
+        listing.toJson("samples") shouldNotContain "\"truncated\""
     }
 
     @Test
