@@ -522,6 +522,7 @@ public object DaemonClient {
         inArtifact: String? = null,
         exclude: String? = null,
         preferSources: Boolean = false,
+        maxLines: Int = 15,
     ): RpcRequest = RpcRequest(
         command = RpcCommand.SAMPLES,
         query = ref,
@@ -530,6 +531,7 @@ public object DaemonClient {
             if (inArtifact != null) put("in", inArtifact)
             if (exclude != null) put("exclude", exclude)
             put("preferSources", preferSources.toText())
+            put("maxLines", maxLines.toString())
         },
     )
 

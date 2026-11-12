@@ -88,6 +88,7 @@ class SamplesCommandTest {
             listOf(
                 "com.example.Lib#greet",
                 "--limit", "10",
+                "--max-lines", "40",
                 "--in", "app*",
                 "--exclude", "jdk*",
                 "--prefer-sources",
@@ -95,16 +96,18 @@ class SamplesCommandTest {
         )
         run.exit shouldBe 0
         run.options?.limit shouldBe 10
+        run.options?.maxLines shouldBe 40
         run.options?.inArtifact shouldBe "app*"
         run.options?.exclude shouldBe "jdk*"
         run.options?.preferSources shouldBe true
     }
 
     @Test
-    fun `default options carry limit three without prefer-sources`() {
+    fun `default options carry limit three and max-lines fifteen`() {
         val run = run(listOf("com.example.Lib#greet"))
         run.exit shouldBe 0
         run.options?.limit shouldBe 3
+        run.options?.maxLines shouldBe 15
         run.options?.preferSources shouldBe false
     }
 
@@ -131,5 +134,32 @@ class SamplesCommandTest {
             System.setOut(original)
         }
         queried shouldBe false
+    }
+
+    @Test
+    fun `negative max-lines exits 3 without querying`() {
+        var queried = false
+        val query: SamplesQuery = { ref, _, _ ->
+            queried = true
+            sampleOutcome(ref)
+        }
+        val original = System.out
+        val buffer = ByteArrayOutputStream()
+        System.setOut(PrintStream(buffer))
+        try {
+            SamplesCommand(
+                query = query,
+                terminate = noExit,
+                store = InMemoryWorkspaceStore(),
+                getenv = noEnv,
+                discover = noDiscovery,
+            ).parse(listOf("--jars", "app.jar", "com.example.Lib#greet", "--max-lines", "-1"))
+        } catch (e: TestExit) {
+            e.code shouldBe 3
+        } finally {
+            System.setOut(original)
+        }
+        queried shouldBe false
+        buffer.toString(Charsets.UTF_8) shouldContain "--max-lines must be >= 0"
     }
 }

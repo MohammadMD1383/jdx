@@ -3,7 +3,6 @@ package dev.jdx.index.soak
 import dev.jdx.core.model.WarningCode
 import dev.jdx.core.model.typeNameFromBinaryName
 import dev.jdx.core.render.JsonEscape
-import dev.jdx.core.render.MAX_SAMPLE_SNIPPET_LINES
 import dev.jdx.index.artifact.ArtifactLoader
 import dev.jdx.index.index.ArtifactIndexer
 import dev.jdx.index.service.JdxService
@@ -533,9 +532,9 @@ private fun entitiesOf(outcome: ServiceOutcome): List<String> = when (outcome) {
             add(row.targetRef)
             row.snippet?.let { snippet ->
                 add(snippet.file)
-                // Text caps snippets (MAX_SAMPLE_SNIPPET_LINES): only the
-                // shown prefix is a text entity.
-                for (line in snippet.lines.take(MAX_SAMPLE_SNIPPET_LINES)) add(line)
+                // Text caps snippets (--max-lines / MAX_SAMPLE_SNIPPET_LINES):
+                // only the shown prefix is a text entity.
+                for (line in snippet.lines.take(outcome.listing.maxSnippetLines)) add(line)
             }
         }
         for (warning in outcome.listing.warnings) add(warning.code.name)

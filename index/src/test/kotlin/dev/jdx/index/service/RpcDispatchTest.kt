@@ -236,6 +236,16 @@ class RpcDispatchTest {
         direct.exitCode shouldBe 0
     }
 
+    @Test
+    fun `samples dispatches with maxLines`() {
+        val query = "s.Lib#greet"
+        val request = req(RpcCommand.SAMPLES, query, "maxLines" to "2")
+        val direct = JdxService.samples(query, fixtureRoots(), SampleOptions(maxLines = 2))
+        viaWire(request) shouldBe direct.toJson("samples")
+        direct.exitCode shouldBe 0
+        viaWire(req(RpcCommand.SAMPLES, query, "maxLines" to "-1")) shouldContain "--max-lines must be >= 0"
+    }
+
     // -- param errors: exit 3 naming the param -----------------------------------------
 
     @Test

@@ -50,6 +50,7 @@ class SamplesCommand(
             "(non-test before test, non-generated before generated, fuller overloads first): " +
             "one row per calling method with its enclosing-method source when paired sources " +
             "exist, snippet-less otherwise. --limit caps the ranked rows (default 3); " +
+            "--max-lines caps each snippet's shown code lines (default 15); " +
             "--prefer-sources ranks callers from sources-paired artifacts first; " +
             "--in/--exclude filter rows by artifact label (jar file, JDK module " +
             "or class-dir name). Type refs match calls to any member; field refs exit 3 " +
@@ -62,6 +63,12 @@ class SamplesCommand(
         "--limit",
         help = "Maximum examples shown (default 3); the rest become a truncation footer.",
     ).int().default(3)
+
+    private val maxLines by option(
+        "--max-lines",
+        help = "Maximum code lines shown per snippet (default 15); the rest become a " +
+            "truncation marker naming --max-lines <total> to see more.",
+    ).int().default(15)
 
     private val inArtifact by option(
         "--in",
@@ -141,6 +148,13 @@ class SamplesCommand(
             ReadCommandSupport.finish(failure, "samples", json, noColor, terminate)
             return
         }
+        if (maxLines < 0) {
+            val failure = JdxService.ServiceOutcome.Failure(
+                ErrorResult.generic(ref, exitCode = 3, message = "usage error: --max-lines must be >= 0, got $maxLines"),
+            )
+            ReadCommandSupport.finish(failure, "samples", json, noColor, terminate)
+            return
+        }
         if (DaemonClient.serveWarmIfReady(
                 request = DaemonClient.samplesRequest(
                     ref = ref,
@@ -148,6 +162,7 @@ class SamplesCommand(
                     inArtifact = inArtifact,
                     exclude = exclude,
                     preferSources = preferSources,
+                    maxLines = maxLines,
                 ),
                 flagWorkspace = effectiveWorkspace(workspace),
                 roots = WarmRoots(jars = jars, coords = coord, repos = repo, fetch = fetch, noJdk = noJdk),
@@ -180,6 +195,7 @@ class SamplesCommand(
                         inArtifact = inArtifact,
                         exclude = exclude,
                         preferSources = preferSources,
+                        maxLines = maxLines,
                     ),
                 )
                 ReadCommandSupport.finish(outcome, "samples", json, noColor, terminate)

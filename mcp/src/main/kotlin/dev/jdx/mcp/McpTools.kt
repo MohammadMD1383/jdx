@@ -322,6 +322,7 @@ public val ALL_MCP_TOOLS: List<McpToolDefinition> = listOf(
         params = listOf(
             queryParam(), workspaceParam(), limitParam(3), inParam(), excludeParam(),
             McpParam(name = "preferSources", kind = McpParamKind.BOOLEAN, description = "Rank callers from sources-paired artifacts first."),
+            McpParam(name = "maxLines", kind = McpParamKind.INTEGER, description = "Cap each snippet's shown code lines (default 15)."),
         ),
     ),
     McpToolDefinition(

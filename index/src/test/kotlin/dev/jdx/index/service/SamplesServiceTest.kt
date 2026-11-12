@@ -145,6 +145,23 @@ class SamplesServiceTest {
         pkg.exitCode shouldBe 3
         textOf(pkg) shouldContain "takes a type or member reference"
         JdxService.samples("s.Lib#greet", caseRoots(), SampleOptions(limit = -1)).exitCode shouldBe 3
+        JdxService.samples("s.Lib#greet", caseRoots(), SampleOptions(maxLines = -1)).exitCode shouldBe 3
+        textOf(JdxService.samples("s.Lib#greet", caseRoots(), SampleOptions(maxLines = -1))) shouldContain
+            "--max-lines must be >= 0"
+    }
+
+    @Test
+    fun `max-lines reaches the listing and caps snippets`() {
+        val capped = sampleListOf(
+            samples("s.Lib#greet(java.lang.String)", SampleOptions(limit = 100, maxLines = 2)),
+        )
+        capped.maxSnippetLines shouldBe 2
+        val text = capped.renderText()
+        // The sourced App#run body is four lines; --max-lines 2 cuts it with a hint.
+        text shouldContain "… (2 of 4 lines shown (--max-lines 4 to see more))"
+        val json = capped.toJson("samples")
+        json shouldContain "\"truncated\":true"
+        json shouldContain "\"totalLines\":4"
     }
 
     @Test

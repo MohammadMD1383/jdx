@@ -121,4 +121,65 @@ class SamplesPropertyTest {
             assert(plain < test) { "plain caller must rank before test" }
         }
     }
+
+    @Test
+    fun `snippet max-lines law holds on generated bodies`(): Unit = runBlocking {
+        checkAll(
+            JDX_PROPERTY_ITERATIONS,
+            Arb.list(Arb.string(1, 40), 1..40),
+            Arb.int(0..40),
+        ) { body, maxLines ->
+            val snippet = SampleSnippet(
+                file = "s/App.java",
+                startLine = 1,
+                endLine = body.size,
+                lines = body,
+                truncated = false,
+            )
+            val listing = buildSampleListing(
+                query = "q",
+                targetRef = "t",
+                hits = listOf(
+                    SampleHit(
+                        fromRef = "s.App#run()",
+                        artifact = "a.jar",
+                        targetRef = "s.Lib#m()",
+                        snippet = snippet,
+                    ),
+                ),
+                maxSnippetLines = maxLines,
+            )
+            val text = listing.renderText()
+            val json = listing.toJson("samples")
+            val cap = maxLines.coerceAtLeast(0)
+            val shown = body.take(cap)
+            // Text shows the capped prefix as indented rows.
+            for (line in shown) {
+                assert(text.contains("    $line")) { "shown line missing from text: $line" }
+            }
+            // JSON carries the same shown text via JsonEscape (D-007) — compare
+            // the quoted blob, never raw substrings (hostile chars escape).
+            val quotedText = JsonEscape.quote(shown.joinToString("\n"))
+            assert(json.contains(quotedText)) { "shown text missing from json" }
+            assert(json.contains("\"totalLines\":${body.size}")) { "json must carry totalLines" }
+            if (body.size > cap) {
+                assert(text.contains("--max-lines ${body.size}")) {
+                    "truncation marker must name --max-lines total"
+                }
+                assert(json.contains("\"truncated\":true")) { "json must mark truncated" }
+                // Hidden lines must not appear as their own indented code rows
+                // (substring collisions with shown lines are allowed).
+                for (line in body.drop(cap)) {
+                    if (shown.none { it.contains(line) || line.contains(it) }) {
+                        assert(!text.contains("    $line\n") && !text.endsWith("    $line")) {
+                            "hidden line leaked into text: $line"
+                        }
+                    }
+                }
+            } else {
+                assert(!text.contains("lines shown")) { "exact fit must not mark truncated" }
+                assert(!json.contains("\"truncated\"")) { "exact fit must omit truncated" }
+            }
+        }
+    }
 }
