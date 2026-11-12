@@ -2,7 +2,6 @@ package dev.jdx.app
 
 import io.kotest.matchers.shouldBe
 import io.kotest.matchers.string.shouldContain
-import io.kotest.matchers.string.shouldStartWith
 import org.junit.jupiter.api.Assumptions.assumeTrue
 import org.junit.jupiter.api.Test
 import java.io.File
@@ -156,7 +155,9 @@ class InstallPs1Test {
         val result = runInstall(repo, home)
 
         result.exitCode shouldBe 1
-        result.stderr shouldStartWith "install.ps1: "
+        // `shouldContain` (not shouldStartWith): an elevated Windows shell may
+        // print the per-user note on stderr before the refusal line.
+        result.stderr shouldContain "install.ps1: "
         result.stderr shouldContain "-Force"
         existing.readText() shouldContain "other"
     }
