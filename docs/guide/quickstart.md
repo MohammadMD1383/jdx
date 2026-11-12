@@ -71,7 +71,7 @@ sources and dependency jars from the working directory. See
 ## 6. Hand it to your agent
 
 ```bash
-jdx setup --agent claude-code --scope project   # or cursor, codex, opencode, copilot, antigravity, windsurf, …
+jdx setup --agent claude-code --scope project   # or cursor, codex, opencode, copilot, antigravity, windsurf, aider, …
 ```
 
 That is the whole integration — see [Use with AI agents](ai-agents.md).

@@ -71,6 +71,10 @@ internal fun fakeEnvironment(
     antigravityBinaries: List<String> = emptyList(),
     /** Windsurf / Devin binaries to place on the fake PATH (`devin`); empty means absent. */
     windsurfBinaries: List<String> = emptyList(),
+    /** AiderDesk binaries to place on the fake PATH (`aiderdesk`); empty means absent. */
+    aiderBinaries: List<String> = emptyList(),
+    /** `$AIDER_DESK_HOME_DIR` stand-in for the AiderDesk system config dir; null means unset. */
+    aiderDeskHome: Path? = null,
     /** OS name for `.exe` tool probing; tests inject `"Windows 11"`. */
     osName: String = System.getProperty("os.name", ""),
     /**
@@ -125,6 +129,11 @@ internal fun fakeEnvironment(
         }
     }
     for (binary in windsurfBinaries) {
+        for (name in toolFileNames(binary, osName)) {
+            emptyExecutable(pathBin, name)
+        }
+    }
+    for (binary in aiderBinaries) {
         for (name in toolFileNames(binary, osName)) {
             emptyExecutable(pathBin, name)
         }
@@ -224,7 +233,8 @@ internal fun fakeEnvironment(
             JdxPaths.ENV_CACHE_DIR to cacheRoot.toString(),
             JdxPaths.ENV_CONFIG_DIR to home.resolve(".config/jdx").toString(),
         ) + (codexHome?.let { mapOf("CODEX_HOME" to it.toString()) } ?: emptyMap()) +
-            (copilotHome?.let { mapOf("COPILOT_HOME" to it.toString()) } ?: emptyMap()),
+            (copilotHome?.let { mapOf("COPILOT_HOME" to it.toString()) } ?: emptyMap()) +
+            (aiderDeskHome?.let { mapOf("AIDER_DESK_HOME_DIR" to it.toString()) } ?: emptyMap()),
         runtime = RuntimeInfo(
             version = "26.0.2.1-test",
             jrtReachable = jrtReachable,

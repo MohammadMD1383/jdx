@@ -1380,7 +1380,7 @@ mcp       [-w …] (stdio; per-call workspace override)
 batch     --json
 bench     [--jars …] [-w …] [--no-jdk] [--iterations N] [--json]
 upgrade   [--version <tag>] [--check] [--repo OWNER/NAME] [--json]
-setup     --agent opencode|claude-code|cursor|kilo|cline|codex|copilot|antigravity|windsurf --scope project|system [--check] [--remove] [--json]
+setup     --agent opencode|claude-code|cursor|kilo|cline|codex|copilot|antigravity|windsurf|aider --scope project|system [--check] [--remove] [--json]
           (agent-config home: $JDX_SETUP_HOME > $HOME > $USERPROFILE > user.home — issue #85)
 help      [--agent] [--json]
 ```

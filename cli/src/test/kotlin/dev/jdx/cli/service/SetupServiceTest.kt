@@ -3137,4 +3137,342 @@ WARNING: proceeding, even though we could not create PATH aliases: Refusing to c
             SetupService.mergeWindsurfRemove(installed) shouldBe foreign
         }
     }
+
+    // -- Aider / AiderDesk backend (.aider-desk/mcp-servers.json / ~/.aider-desk/mcp-servers.json) --
+    // Documented at https://aiderdesk.dev/docs/agent-mode/mcp-servers — core Aider
+    // has no MCP client; AiderDesk is the closest equivalent.
+
+    private fun aiderProjectRequest(
+        check: Boolean = false,
+        remove: Boolean = false,
+    ): SetupService.SetupRequest = SetupService.SetupRequest(
+        agent = SetupService.Agent.AIDER,
+        scope = SetupService.Scope.PROJECT,
+        check = check,
+        remove = remove,
+    )
+
+    private fun aiderSystemRequest(
+        check: Boolean = false,
+        remove: Boolean = false,
+    ): SetupService.SetupRequest = SetupService.SetupRequest(
+        agent = SetupService.Agent.AIDER,
+        scope = SetupService.Scope.SYSTEM,
+        check = check,
+        remove = remove,
+    )
+
+    @Test
+    fun `parseAgent covers aider spellings`() {
+        SetupService.parseAgent("aider") shouldBe SetupService.Agent.AIDER
+        SetupService.parseAgent("Aider") shouldBe SetupService.Agent.AIDER
+        SetupService.parseAgent("aider-desk") shouldBe SetupService.Agent.AIDER
+        SetupService.parseAgent("aiderdesk") shouldBe SetupService.Agent.AIDER
+        SetupService.parseAgent("AIDER_DESK") shouldBe SetupService.Agent.AIDER
+        SetupService.parseAgent("aider-desk-cli") shouldBe SetupService.Agent.AIDER
+    }
+
+    @Test
+    fun `a fresh aider project install creates dot-aider-desk mcp servers with the jdx entry`(@TempDir root: Path) {
+        val dirs = fakeDirs(root)
+        val service = SetupService(dirs.home, dirs.project)
+
+        val outcome = service.run(aiderProjectRequest())
+
+        val installed = outcome as SetupService.SetupOutcome.Installed
+        installed.changed shouldBe true
+        installed.path shouldBe dirs.project.resolve(".aider-desk/mcp-servers.json")
+        setupExitCode(outcome) shouldBe 0
+        val stored = Json.parseToJsonElement(Files.readString(installed.path)).jsonObject
+        val entry = stored["mcpServers"]?.jsonObject?.get("jdx")?.jsonObject
+        entry?.get("command")?.jsonPrimitive?.content shouldBe "jdx"
+        entry?.get("args").toString() shouldBe """["mcp"]"""
+        SetupService.isInstalledRoot(stored, SetupService.Agent.AIDER) shouldBe true
+        SetupService.isInstalledAt(installed.path, SetupService.Agent.AIDER) shouldBe true
+    }
+
+    @Test
+    fun `aider install preserves other servers and never clobbers`(@TempDir root: Path) {
+        val dirs = fakeDirs(root)
+        Files.createDirectories(dirs.project.resolve(".aider-desk"))
+        Files.writeString(
+            dirs.project.resolve(".aider-desk/mcp-servers.json"),
+            """{"mcpServers":{"other":{"command":"other","args":["x"]}}}""",
+        )
+        val service = SetupService(dirs.home, dirs.project)
+
+        val outcome = service.run(aiderProjectRequest()) as SetupService.SetupOutcome.Installed
+
+        outcome.changed shouldBe true
+        val stored = Json.parseToJsonElement(Files.readString(outcome.path)).jsonObject
+        stored["mcpServers"]?.jsonObject?.get("other")?.jsonObject
+            ?.get("command")?.jsonPrimitive?.content shouldBe "other"
+        SetupService.isInstalledRoot(stored, SetupService.Agent.AIDER) shouldBe true
+    }
+
+    @Test
+    fun `a second aider install is a byte-identical no-op`(@TempDir root: Path) {
+        val dirs = fakeDirs(root)
+        val service = SetupService(dirs.home, dirs.project)
+
+        val first = service.run(aiderProjectRequest()) as SetupService.SetupOutcome.Installed
+        val before = Files.readAllBytes(first.path)
+        val second = service.run(aiderProjectRequest())
+
+        (second as SetupService.SetupOutcome.Installed).changed shouldBe false
+        Files.readAllBytes(first.path) shouldBe before
+    }
+
+    @Test
+    fun `aider check reports without writing`(@TempDir root: Path) {
+        val dirs = fakeDirs(root)
+        val service = SetupService(dirs.home, dirs.project)
+
+        val absent = service.run(aiderProjectRequest(check = true))
+        absent as SetupService.SetupOutcome.Checked
+        absent.installed shouldBe false
+        setupExitCode(absent) shouldBe 1
+        Files.exists(dirs.project.resolve(".aider-desk/mcp-servers.json")) shouldBe false
+
+        service.run(aiderProjectRequest())
+        val present = service.run(aiderProjectRequest(check = true))
+        present as SetupService.SetupOutcome.Checked
+        present.installed shouldBe true
+        setupExitCode(present) shouldBe 0
+    }
+
+    @Test
+    fun `aider remove deletes only the jdx entry and drops the emptied namespace`(@TempDir root: Path) {
+        val dirs = fakeDirs(root)
+        val service = SetupService(dirs.home, dirs.project)
+        service.run(aiderProjectRequest())
+
+        val outcome = service.run(aiderProjectRequest(remove = true)) as SetupService.SetupOutcome.Removed
+
+        outcome.changed shouldBe true
+        val stored = Json.parseToJsonElement(Files.readString(dirs.project.resolve(".aider-desk/mcp-servers.json"))).jsonObject
+        stored.containsKey("mcpServers") shouldBe false
+        SetupService.isInstalledAt(dirs.project.resolve(".aider-desk/mcp-servers.json"), SetupService.Agent.AIDER) shouldBe false
+
+        val again = service.run(aiderProjectRequest(remove = true))
+        (again as SetupService.SetupOutcome.Removed).changed shouldBe false
+        setupExitCode(again) shouldBe 0
+    }
+
+    @Test
+    fun `aider remove keeps other servers`(@TempDir root: Path) {
+        val dirs = fakeDirs(root)
+        Files.createDirectories(dirs.project.resolve(".aider-desk"))
+        Files.writeString(
+            dirs.project.resolve(".aider-desk/mcp-servers.json"),
+            """{"mcpServers":{"other":{"command":"other","args":["x"]}}}""",
+        )
+        val service = SetupService(dirs.home, dirs.project)
+        service.run(aiderProjectRequest())
+
+        val outcome = service.run(aiderProjectRequest(remove = true)) as SetupService.SetupOutcome.Removed
+
+        outcome.changed shouldBe true
+        val stored = Json.parseToJsonElement(Files.readString(dirs.project.resolve(".aider-desk/mcp-servers.json"))).jsonObject
+        stored["mcpServers"]?.jsonObject?.containsKey("jdx") shouldBe false
+        stored["mcpServers"]?.jsonObject?.containsKey("other") shouldBe true
+    }
+
+    @Test
+    fun `aider system scope targets the aider-desk config under the fake home`(@TempDir root: Path) {
+        val dirs = fakeDirs(root)
+        val service = SetupService(dirs.home, dirs.project)
+
+        val created = service.run(aiderSystemRequest()) as SetupService.SetupOutcome.Installed
+
+        created.path shouldBe dirs.home.resolve(".aider-desk/mcp-servers.json")
+        SetupService.isInstalledAt(created.path, SetupService.Agent.AIDER) shouldBe true
+    }
+
+    @Test
+    fun `aider system scope honours an explicit aiderDeskHome override`(@TempDir root: Path) {
+        val dirs = fakeDirs(root)
+        val custom = dirs.home.resolve("custom-aider-desk").also { Files.createDirectories(it) }
+        val service = SetupService(dirs.home, dirs.project, aiderDeskHome = custom)
+
+        val created = service.run(aiderSystemRequest()) as SetupService.SetupOutcome.Installed
+
+        created.path shouldBe custom.resolve("mcp-servers.json")
+        Files.exists(dirs.home.resolve(".aider-desk/mcp-servers.json")) shouldBe false
+        SetupService.isInstalledAt(created.path, SetupService.Agent.AIDER) shouldBe true
+    }
+
+    @Test
+    fun `aider project scope walks up to the nearest dot-aider-desk mcp servers`(@TempDir root: Path) {
+        val dirs = fakeDirs(root)
+        Files.createDirectories(dirs.project.resolve(".aider-desk"))
+        Files.writeString(dirs.project.resolve(".aider-desk/mcp-servers.json"), "{}")
+        val nested = dirs.project.resolve("a/b").also { Files.createDirectories(it) }
+        val service = SetupService(dirs.home, nested)
+
+        val outcome = service.run(aiderProjectRequest())
+
+        val installed = outcome as SetupService.SetupOutcome.Installed
+        installed.path shouldBe dirs.project.resolve(".aider-desk/mcp-servers.json")
+        Files.exists(nested.resolve(".aider-desk/mcp-servers.json")) shouldBe false
+    }
+
+    @Test
+    fun `an aider corrupt config exits 5 and names the file`(@TempDir root: Path) {
+        val dirs = fakeDirs(root)
+        Files.createDirectories(dirs.project.resolve(".aider-desk"))
+        Files.writeString(dirs.project.resolve(".aider-desk/mcp-servers.json"), "{ not json,")
+        val service = SetupService(dirs.home, dirs.project)
+
+        val outcome = service.run(aiderProjectRequest())
+
+        outcome as SetupService.SetupOutcome.Corrupt
+        setupExitCode(outcome) shouldBe 5
+    }
+
+    @Test
+    fun `aider install over documented bytes is a byte-identical no-op`(@TempDir root: Path) {
+        val dirs = fakeDirs(root)
+        Files.createDirectories(dirs.project.resolve(".aider-desk"))
+        val realBytes = "{\n  \"mcpServers\": {\n    \"jdx\": {\n      \"command\": \"jdx\",\n      \"args\": [\n        \"mcp\"\n      ]\n    }\n  }\n}\n"
+        Files.writeString(dirs.project.resolve(".aider-desk/mcp-servers.json"), realBytes)
+        val service = SetupService(dirs.home, dirs.project)
+
+        SetupService.isInstalledAt(
+            dirs.project.resolve(".aider-desk/mcp-servers.json"),
+            SetupService.Agent.AIDER,
+        ) shouldBe true
+        val outcome = service.run(aiderProjectRequest())
+
+        (outcome as SetupService.SetupOutcome.Installed).changed shouldBe false
+        Files.readString(dirs.project.resolve(".aider-desk/mcp-servers.json")) shouldBe realBytes
+    }
+
+    @Test
+    fun `aider entry probe accepts absolute paths and windows shims`(@TempDir root: Path) {
+        val absolute = buildJsonObject {
+            put("command", "/home/dev/.local/bin/jdx")
+            put("args", JsonArray(listOf(JsonPrimitive("mcp"))))
+        }
+        SetupService.isAiderJdxEntry(absolute) shouldBe true
+        val shim = buildJsonObject {
+            put("command", "C:\\tools\\jdx.exe")
+            put("args", JsonArray(listOf(JsonPrimitive("mcp"))))
+        }
+        SetupService.isAiderJdxEntry(shim) shouldBe true
+    }
+
+    @Test
+    fun `aider entry probe rejects foreign commands`(@TempDir root: Path) {
+        val dirs = fakeDirs(root)
+        Files.createDirectories(dirs.project.resolve(".aider-desk"))
+        Files.writeString(
+            dirs.project.resolve(".aider-desk/mcp-servers.json"),
+            """{"mcpServers":{"jdx":{"command":"other","args":["mcp"]}}}""",
+        )
+        SetupService.isInstalledAt(
+            dirs.project.resolve(".aider-desk/mcp-servers.json"),
+            SetupService.Agent.AIDER,
+        ) shouldBe false
+    }
+
+    @Test
+    fun `targetPath resolves the aider scope paths`(@TempDir root: Path) {
+        val dirs = fakeDirs(root)
+        val service = SetupService(dirs.home, dirs.project)
+
+        service.targetPath(SetupService.Agent.AIDER, SetupService.Scope.PROJECT) shouldBe
+            dirs.project.resolve(".aider-desk/mcp-servers.json")
+        service.targetPath(SetupService.Agent.AIDER, SetupService.Scope.SYSTEM) shouldBe
+            dirs.home.resolve(".aider-desk/mcp-servers.json")
+    }
+
+    @Test
+    fun `aider version probing names presence without guessing`(@TempDir root: Path) {
+        SetupService.probeAiderVersion(
+            emptyList(),
+            ProcessRunner { _, _ -> ProcessOutcome(0, "x", "") },
+        ).version shouldBe SetupService.AiderVersion.ABSENT
+    }
+
+    @Test
+    fun `aider version probe classifies answers`(@TempDir root: Path) {
+        val bin = root.resolve("bin").also { Files.createDirectories(it) }
+        Files.createFile(bin.resolve("aiderdesk")).toFile().setExecutable(true)
+
+        val present = SetupService.probeAiderVersion(
+            listOf(bin),
+            ProcessRunner { _, _ -> ProcessOutcome(0, "0.91.0", "") },
+        )
+        present.version shouldBe SetupService.AiderVersion.PRESENT
+        present.raw shouldBe "0.91.0"
+        present.binary shouldBe "aiderdesk"
+
+        val blank = SetupService.probeAiderVersion(
+            listOf(bin),
+            ProcessRunner { _, _ -> ProcessOutcome(0, "  ", "") },
+        )
+        blank.version shouldBe SetupService.AiderVersion.UNKNOWN
+
+        val failing = SetupService.probeAiderVersion(
+            listOf(bin),
+            throwingRunner("boom"),
+        )
+        failing.version shouldBe SetupService.AiderVersion.UNKNOWN
+    }
+
+    @Test
+    fun `aider probe resolves the exe shim on windows`(@TempDir root: Path) {
+        val bin = root.resolve("bin").also { Files.createDirectories(it) }
+        Files.createFile(bin.resolve("aiderdesk.exe")).toFile().setExecutable(true)
+        val runner = ProcessRunner { _, _ -> ProcessOutcome(0, "0.91.0", "") }
+
+        val info = SetupService.probeAiderVersion(listOf(bin), runner, osName = "Windows 11")
+
+        info.version shouldBe SetupService.AiderVersion.PRESENT
+        info.raw shouldBe "0.91.0"
+        info.binary shouldBe "aiderdesk"
+    }
+
+    @Test
+    fun `describeAiderVersion covers every variant`() {
+        SetupService.describeAiderVersion(
+            SetupService.AiderVersionInfo(SetupService.AiderVersion.PRESENT, "0.91.0", "aiderdesk"),
+        ) shouldBe "aider (0.91.0)"
+        SetupService.describeAiderVersion(
+            SetupService.AiderVersionInfo(SetupService.AiderVersion.ABSENT),
+        ) shouldBe "aider not found on PATH"
+        SetupService.describeAiderVersion(
+            SetupService.AiderVersionInfo(SetupService.AiderVersion.UNKNOWN, "banana", "aiderdesk"),
+        ) shouldBe "aider version unknown (banana)"
+        SetupService.describeAiderVersion(
+            SetupService.AiderVersionInfo(SetupService.AiderVersion.UNKNOWN),
+        ) shouldBe "aider version unknown"
+    }
+
+    @Test
+    fun `aider install is a fixed point over generated configs`() = runBlocking<Unit> {
+        checkAll(200, Arb.string(0..40)) { noise ->
+            val clean = noise.replace(Regex("[\\p{Cntrl}\"\\\\]"), " ").trim()
+            val foreign = buildJsonObject {
+                put("unrelated-$clean-x", "kept")
+            }
+            val once = SetupService.mergeAiderInstall(foreign)
+            SetupService.isAiderInstalled(once) shouldBe true
+            SetupService.mergeAiderInstall(once) shouldBe once
+            once["unrelated-$clean-x"]?.jsonPrimitive?.content shouldBe "kept"
+        }
+    }
+
+    @Test
+    fun `aider remove restores generated foreign content`() = runBlocking<Unit> {
+        checkAll(200, Arb.string(0..40)) { noise ->
+            val clean = noise.replace(Regex("[\\p{Cntrl}\"\\\\]"), " ").trim()
+            val foreign = buildJsonObject {
+                put("unrelated-$clean-x", "kept")
+            }
+            val installed = SetupService.mergeAiderInstall(foreign)
+            SetupService.mergeAiderRemove(installed) shouldBe foreign
+        }
+    }
 }

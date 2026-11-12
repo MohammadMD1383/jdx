@@ -57,12 +57,22 @@ class SetupCommandTest {
         windsurfVersion: SetupService.WindsurfVersionInfo = SetupService.WindsurfVersionInfo(
             SetupService.WindsurfVersion.ABSENT,
         ),
+        aiderVersion: SetupService.AiderVersionInfo = SetupService.AiderVersionInfo(
+            SetupService.AiderVersion.ABSENT,
+        ),
     ): SetupCommand = SetupCommand(
-        // The Codex and Copilot system dirs are pinned under the fake home
-        // so no test can leak into the real `~/.codex` / `~/.copilot` via
-        // the ambient `$CODEX_HOME` / `$COPILOT_HOME`.
+        // The Codex, Copilot, and AiderDesk system dirs are pinned under the
+        // fake home so no test can leak into the real `~/.codex` /
+        // `~/.copilot` / `~/.aider-desk` via the ambient `$CODEX_HOME` /
+        // `$COPILOT_HOME` / `$AIDER_DESK_HOME_DIR`.
         serviceFactory = { _, _ ->
-            SetupService(home, project, home.resolve(".codex"), home.resolve(".copilot"))
+            SetupService(
+                home,
+                project,
+                home.resolve(".codex"),
+                home.resolve(".copilot"),
+                home.resolve(".aider-desk"),
+            )
         },
         terminate = { throw SetupExit(it) },
         versionProbe = { version },
@@ -72,6 +82,7 @@ class SetupCommandTest {
         copilotVersionProbe = { copilotVersion },
         antigravityVersionProbe = { antigravityVersion },
         windsurfVersionProbe = { windsurfVersion },
+        aiderVersionProbe = { aiderVersion },
     )
 
     private fun kiloCommandFor(home: Path, project: Path): SetupCommand = SetupCommand(
@@ -214,7 +225,7 @@ class SetupCommandTest {
         }
 
         code shouldBe 3
-        output.trim() shouldContain "opencode|claude-code|cursor|kilo|cline|codex|copilot|antigravity|windsurf"
+        output.trim() shouldContain "opencode|claude-code|cursor|kilo|cline|codex|copilot|antigravity|windsurf|aider"
     }
 
     @Test
@@ -1561,6 +1572,176 @@ WARNING: proceeding, even though we could not create PATH aliases: Refusing to c
         result["windsurfRaw"]?.jsonPrimitive?.content shouldBe "1.2.3"
         result.containsKey("opencodeVersion") shouldBe false
         result.containsKey("antigravityVersion") shouldBe false
+    }
+
+    // -- Aider / AiderDesk wiring (`--agent aider`) --
+    // Documented at https://aiderdesk.dev/docs/agent-mode/mcp-servers:
+    // project `.aider-desk/mcp-servers.json`, user `~/.aider-desk/mcp-servers.json`.
+
+    @Test
+    fun `aider install writes dot-aider-desk mcp servers and says what to do next`(@TempDir root: Path) {
+        val (home, project) = fakeDirs(root)
+        val output = captureStdout {
+            JdxCli().subcommands(commandFor(home, project))
+                .parse(listOf("setup", "--agent", "aider", "--scope", "project"))
+        }
+
+        output.trim() shouldContain "aider project setup installed"
+        output.trim() shouldContain "mcpServers entry"
+        output.trim() shouldContain "restart aider"
+        output.trim() shouldContain "aider not found on PATH"
+        SetupService.isInstalledAt(
+            project.resolve(".aider-desk/mcp-servers.json"),
+            SetupService.Agent.AIDER,
+        ) shouldBe true
+    }
+
+    @Test
+    fun `aider accepts every documented spelling`(@TempDir root: Path) {
+        listOf("aider", "Aider", "aider-desk", "aiderdesk", "aider-desk-cli").forEachIndexed { index, spelling ->
+            val project = root.resolve("p$index").also { Files.createDirectories(it) }
+            val home = root.resolve("h$index").also { Files.createDirectories(it) }
+            captureStdout {
+                JdxCli().subcommands(commandFor(home, project))
+                    .parse(listOf("setup", "--agent", spelling, "--scope", "project"))
+            }
+            SetupService.isInstalledAt(
+                project.resolve(".aider-desk/mcp-servers.json"),
+                SetupService.Agent.AIDER,
+            ) shouldBe true
+        }
+    }
+
+    @Test
+    fun `aider install names the detected binary`(@TempDir root: Path) {
+        val (home, project) = fakeDirs(root)
+        val present = SetupService.AiderVersionInfo(
+            SetupService.AiderVersion.PRESENT,
+            "0.91.0",
+            "aiderdesk",
+        )
+        val output = captureStdout {
+            JdxCli().subcommands(commandFor(home, project, aiderVersion = present))
+                .parse(listOf("setup", "--agent", "aider", "--scope", "project"))
+        }
+
+        output.trim() shouldContain "detected: aider (0.91.0)"
+    }
+
+    @Test
+    fun `a second aider install is a no-op reporting already installed`(@TempDir root: Path) {
+        val (home, project) = fakeDirs(root)
+        val args = listOf("setup", "--agent", "aider", "--scope", "project")
+        captureStdout { JdxCli().subcommands(commandFor(home, project)).parse(args) }
+        val output = captureStdout {
+            JdxCli().subcommands(commandFor(home, project)).parse(args)
+        }
+
+        output.trim() shouldContain "already installed"
+        output.trim() shouldContain "no changes"
+    }
+
+    @Test
+    fun `aider system scope writes under the fake home`(@TempDir root: Path) {
+        val (home, project) = fakeDirs(root)
+        captureStdout {
+            JdxCli().subcommands(commandFor(home, project))
+                .parse(listOf("setup", "--agent", "aider", "--scope", "system"))
+        }
+
+        SetupService.isInstalledAt(
+            home.resolve(".aider-desk/mcp-servers.json"),
+            SetupService.Agent.AIDER,
+        ) shouldBe true
+    }
+
+    @Test
+    fun `aider check exits 1 when absent and 0 once installed without writing`(@TempDir root: Path) {
+        val (home, project) = fakeDirs(root)
+        val check = listOf("setup", "--agent", "aider", "--scope", "project", "--check")
+        var code = -1
+        captureStdout {
+            try {
+                JdxCli().subcommands(commandFor(home, project)).parse(check)
+            } catch (e: SetupExit) {
+                code = e.code
+            }
+        }
+        code shouldBe 1
+        Files.exists(project.resolve(".aider-desk/mcp-servers.json")) shouldBe false
+
+        val installed = captureStdout {
+            JdxCli().subcommands(commandFor(home, project))
+                .parse(listOf("setup", "--agent", "aider", "--scope", "project"))
+        }
+        installed.trim() shouldContain "aider project setup installed"
+
+        captureStdout {
+            JdxCli().subcommands(commandFor(home, project)).parse(check)
+        }
+    }
+
+    @Test
+    fun `aider check hint names the aider install command`(@TempDir root: Path) {
+        val (home, project) = fakeDirs(root)
+
+        var code = -1
+        val output = captureStdout {
+            try {
+                JdxCli().subcommands(commandFor(home, project))
+                    .parse(listOf("setup", "--agent", "aider", "--scope", "system", "--check"))
+            } catch (e: SetupExit) {
+                code = e.code
+            }
+        }
+
+        code shouldBe 1
+        output.trim() shouldContain "jdx setup --agent aider --scope system"
+    }
+
+    @Test
+    fun `aider remove uninstalls cleanly`(@TempDir root: Path) {
+        val (home, project) = fakeDirs(root)
+        captureStdout {
+            JdxCli().subcommands(commandFor(home, project))
+                .parse(listOf("setup", "--agent", "aider", "--scope", "project"))
+        }
+        val output = captureStdout {
+            JdxCli().subcommands(commandFor(home, project))
+                .parse(listOf("setup", "--agent", "aider", "--scope", "project", "--remove"))
+        }
+
+        output.trim() shouldContain "aider project setup removed"
+        SetupService.isInstalledAt(
+            project.resolve(".aider-desk/mcp-servers.json"),
+            SetupService.Agent.AIDER,
+        ) shouldBe false
+    }
+
+    @Test
+    fun `aider json carries the setup payload without other agent lines`(@TempDir root: Path) {
+        val (home, project) = fakeDirs(root)
+        val present = SetupService.AiderVersionInfo(
+            SetupService.AiderVersion.PRESENT,
+            "0.91.0",
+            "aiderdesk",
+        )
+        val output = captureStdout {
+            JdxCli().subcommands(commandFor(home, project, aiderVersion = present))
+                .parse(listOf("setup", "--agent", "aider", "--scope", "project", "--json"))
+        }
+
+        val parsed = Json.parseToJsonElement(output.trim()).jsonObject
+        parsed["command"]?.jsonPrimitive?.content shouldBe "setup"
+        parsed["ok"]?.jsonPrimitive?.content shouldBe "true"
+        val result = parsed["result"]!!.jsonObject
+        result["agent"]?.jsonPrimitive?.content shouldBe "aider"
+        result["scope"]?.jsonPrimitive?.content shouldBe "project"
+        result["installed"]?.jsonPrimitive?.content shouldBe "true"
+        result["aiderVersion"]?.jsonPrimitive?.content shouldBe "present"
+        result["aiderRaw"]?.jsonPrimitive?.content shouldBe "0.91.0"
+        result.containsKey("opencodeVersion") shouldBe false
+        result.containsKey("windsurfVersion") shouldBe false
     }
 
     @Test
