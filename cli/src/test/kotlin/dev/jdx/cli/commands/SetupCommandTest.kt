@@ -8,6 +8,7 @@ import dev.jdx.cli.service.setupExitCode
 import io.kotest.assertions.throwables.shouldThrow
 import io.kotest.matchers.shouldBe
 import io.kotest.matchers.string.shouldContain
+import io.kotest.matchers.string.shouldNotContain
 import io.kotest.property.Arb
 import io.kotest.property.arbitrary.of
 import io.kotest.property.checkAll
@@ -804,6 +805,39 @@ class SetupCommandTest {
         }
 
         output.trim() shouldContain "detected: codex (codex-cli 0.157.1)"
+    }
+
+    @Test
+    fun `codex detected text collapses multi-line raw while json keeps it`(
+        @TempDir root: Path,
+    ) {
+        // Issue #84: a chatty `--version` probe must not spill the text
+        // `detected:` line; JSON still carries the full unsanitized raw.
+        val (home, project) = fakeDirs(root)
+        val raw = """codex-cli 0.157.1
+
+WARNING: proceeding, even though we could not create PATH aliases: Refusing to create helper binaries under temporary dir "/tmp" (codex_home: AbsolutePathBuf("/tmp/sandbox/.codex"))"""
+        val present = SetupService.CodexVersionInfo(
+            SetupService.CodexVersion.PRESENT,
+            raw,
+            "codex",
+        )
+        val args = listOf("setup", "--agent", "codex", "--scope", "project")
+
+        val text = captureStdout {
+            JdxCli().subcommands(commandFor(home, project, codexVersion = present))
+                .parse(args)
+        }
+        val detectedLine = text.lineSequence().single { it.contains("detected:") }
+        detectedLine.trim() shouldBe "detected: codex (codex-cli 0.157.1)"
+        text shouldNotContain "WARNING:"
+
+        val jsonOut = captureStdout {
+            JdxCli().subcommands(commandFor(home, project, codexVersion = present))
+                .parse(args + "--json")
+        }
+        val result = Json.parseToJsonElement(jsonOut.trim()).jsonObject["result"]!!.jsonObject
+        result["codexRaw"]?.jsonPrimitive?.content shouldBe raw
     }
 
     @Test
