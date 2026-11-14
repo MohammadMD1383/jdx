@@ -5,6 +5,7 @@ import io.kotest.matchers.shouldBe
 import io.kotest.property.Arb
 import io.kotest.property.arbitrary.bind
 import io.kotest.property.arbitrary.element
+import io.kotest.property.arbitrary.int
 import io.kotest.property.arbitrary.list
 import io.kotest.property.arbitrary.map
 import io.kotest.property.arbitrary.orNull
@@ -17,8 +18,8 @@ import org.junit.jupiter.api.Test
  * Generative invariants for reference edges (T-029, TESTING.md §4).
  *
  * Hand-written orderings plateau at what the author imagined; these keep
- * inventing edges — hostile names, null members, every kind — and demand the
- * canonical order hold for all of them.
+ * inventing edges — hostile names, null members, every kind, optional
+ * LineNumberTable lines — and demand the canonical order hold for all of them.
  */
 class ReferencePropertyTest {
 
@@ -27,13 +28,18 @@ class ReferencePropertyTest {
             .map { it.ifEmpty { "a" } }
         val member = Arb.element(listOf("run", "get", "<init>", "<clinit>", "m\$1", "ünïcode"))
         val descriptor = Arb.element(listOf("()V", "(I)V", "(Ljava/lang/String;)I", "()Ljava/lang/Object;"))
-        return Arb.bind(binary, member, descriptor, binary, member.orNull(), descriptor.orNull(), Arb.element(ReferenceKind.entries)) {
-                fromClass, fromMember, fromDescriptor, toOwner, toMember, toDescriptor, kind ->
+        val line = Arb.int(1..500).orNull(0.3)
+        val sourceFile = Arb.element(listOf("A.java", "B.kt", "Outer.java")).orNull(0.3)
+        return Arb.bind(
+            binary, member, descriptor, binary, member.orNull(), descriptor.orNull(),
+            Arb.element(ReferenceKind.entries), line, sourceFile,
+        ) {
+                fromClass, fromMember, fromDescriptor, toOwner, toMember, toDescriptor, kind, lineNumber, file ->
             // A pure type edge carries no member by construction (see ReferenceEdge KDoc).
             if (kind == ReferenceKind.TYPE_REFERENCE) {
-                ReferenceEdge(fromClass, fromMember, fromDescriptor, toOwner, null, null, kind)
+                ReferenceEdge(fromClass, fromMember, fromDescriptor, toOwner, null, null, kind, lineNumber, file)
             } else {
-                ReferenceEdge(fromClass, fromMember, fromDescriptor, toOwner, toMember, toDescriptor, kind)
+                ReferenceEdge(fromClass, fromMember, fromDescriptor, toOwner, toMember, toDescriptor, kind, lineNumber, file)
             }
         }
     }

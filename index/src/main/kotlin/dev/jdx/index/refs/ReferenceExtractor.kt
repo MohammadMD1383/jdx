@@ -11,6 +11,7 @@ import org.objectweb.asm.tree.ClassNode
 import org.objectweb.asm.tree.FieldInsnNode
 import org.objectweb.asm.tree.InvokeDynamicInsnNode
 import org.objectweb.asm.tree.LdcInsnNode
+import org.objectweb.asm.tree.LineNumberNode
 import org.objectweb.asm.tree.MethodInsnNode
 import org.objectweb.asm.tree.TypeInsnNode
 
@@ -28,7 +29,11 @@ import org.objectweb.asm.tree.TypeInsnNode
  *
  * Edges are deduplicated (one row per distinct edge per method — a loop calling
  * `foo()` ten times is one edge) and returned in [sortedEdges] order, so
- * indexing the same bytes twice yields identical rows (D-007).
+ * indexing the same bytes twice yields identical rows (D-007). Dedup identity
+ * excludes [ReferenceEdge.line]/[ReferenceEdge.sourceFile]: the kept line is
+ * the first `LineNumberTable` entry that covers the edge in bytecode order
+ * (issue #8). Classes compiled with `-g:none` yield `line == null` — degrade,
+ * don't fail (AGENTS.md §2.8).
  *
  * `ATHROW` is intentionally not extracted: attributing the thrown type needs
  * data-flow the extractor deliberately skips, so `usages --kind throw` is a
@@ -51,45 +56,93 @@ public object ReferenceExtractor {
         }
         val node = try {
             val parsed = ClassNode()
-            // Frames are control flow we never read; debug info is irrelevant
-            // to edges, so skipping both is safe here (unlike AsmClassReader,
-            // which needs debug info for parameter names).
-            ClassReader(classBytes).accept(parsed, ClassReader.SKIP_FRAMES or ClassReader.SKIP_DEBUG)
+            // Frames are control flow we never read. Debug info *is* read:
+            // LineNumberTable feeds [ReferenceEdge.line] (issue #8). Parameter
+            // names are AsmClassReader's concern — we only need line labels.
+            ClassReader(classBytes).accept(parsed, ClassReader.SKIP_FRAMES)
             parsed
         } catch (_: Exception) {
             return emptyList()
         }
-        val edges = LinkedHashSet<ReferenceEdge>()
+        val sourceFile = node.sourceFile
+        // First-wins on logical identity (no line/sourceFile): later repeats
+        // of the same call/read/ref in one method keep the earliest line.
+        val edges = LinkedHashMap<EdgeIdentity, ReferenceEdge>()
         for (method in node.methods ?: emptyList()) {
             val fromMember = method.name ?: continue
             val fromDescriptor = method.desc ?: continue
             val instructions = method.instructions ?: continue
+            var currentLine: Int? = null
             val cursor = instructions.iterator()
             while (cursor.hasNext()) {
                 when (val instruction = cursor.next()) {
-                    is MethodInsnNode -> addCallEdge(edges, fromClass, fromMember, fromDescriptor, instruction)
-                    is FieldInsnNode -> addFieldEdge(edges, fromClass, fromMember, fromDescriptor, instruction)
-                    is TypeInsnNode -> addTypeEdge(edges, fromClass, fromMember, fromDescriptor, instruction.desc)
-                    is LdcInsnNode -> addLdcEdge(edges, fromClass, fromMember, fromDescriptor, instruction.cst)
-                    is InvokeDynamicInsnNode -> addDynamicEdges(edges, fromClass, fromMember, fromDescriptor, instruction)
+                    is LineNumberNode -> currentLine = instruction.line
+                    is MethodInsnNode -> addCallEdge(
+                        edges, fromClass, fromMember, fromDescriptor, instruction, currentLine, sourceFile,
+                    )
+                    is FieldInsnNode -> addFieldEdge(
+                        edges, fromClass, fromMember, fromDescriptor, instruction, currentLine, sourceFile,
+                    )
+                    is TypeInsnNode -> addTypeEdge(
+                        edges, fromClass, fromMember, fromDescriptor, instruction.desc, currentLine, sourceFile,
+                    )
+                    is LdcInsnNode -> addLdcEdge(
+                        edges, fromClass, fromMember, fromDescriptor, instruction.cst, currentLine, sourceFile,
+                    )
+                    is InvokeDynamicInsnNode -> addDynamicEdges(
+                        edges, fromClass, fromMember, fromDescriptor, instruction, currentLine, sourceFile,
+                    )
                     else -> Unit
                 }
             }
         }
-        return edges.toList().sortedEdges()
+        return edges.values.toList().sortedEdges()
+    }
+
+    /**
+     * Logical edge identity for first-wins dedup: everything the store keys
+     * an edge on, excluding the optional line/file payload.
+     */
+    private data class EdgeIdentity(
+        val fromClass: String,
+        val fromMember: String,
+        val fromDescriptor: String,
+        val toOwner: String,
+        val toMember: String?,
+        val toDescriptor: String?,
+        val kind: ReferenceKind,
+    )
+
+    private fun putFirst(
+        edges: MutableMap<EdgeIdentity, ReferenceEdge>,
+        edge: ReferenceEdge,
+    ) {
+        val key = EdgeIdentity(
+            fromClass = edge.fromClass,
+            fromMember = edge.fromMember,
+            fromDescriptor = edge.fromDescriptor,
+            toOwner = edge.toOwner,
+            toMember = edge.toMember,
+            toDescriptor = edge.toDescriptor,
+            kind = edge.kind,
+        )
+        if (key !in edges) edges[key] = edge
     }
 
     private fun addCallEdge(
-        edges: MutableSet<ReferenceEdge>,
+        edges: MutableMap<EdgeIdentity, ReferenceEdge>,
         fromClass: String,
         fromMember: String,
         fromDescriptor: String,
         instruction: MethodInsnNode,
+        line: Int?,
+        sourceFile: String?,
     ) {
         val owner = internalToBinary(instruction.owner) ?: return
         val descriptor = instruction.desc ?: return
         val name = instruction.name ?: return
-        edges.add(
+        putFirst(
+            edges,
             ReferenceEdge(
                 fromClass = fromClass,
                 fromMember = fromMember,
@@ -98,16 +151,20 @@ public object ReferenceExtractor {
                 toMember = name,
                 toDescriptor = descriptor,
                 kind = ReferenceKind.METHOD_CALL,
+                line = line,
+                sourceFile = sourceFile,
             ),
         )
     }
 
     private fun addFieldEdge(
-        edges: MutableSet<ReferenceEdge>,
+        edges: MutableMap<EdgeIdentity, ReferenceEdge>,
         fromClass: String,
         fromMember: String,
         fromDescriptor: String,
         instruction: FieldInsnNode,
+        line: Int?,
+        sourceFile: String?,
     ) {
         val owner = internalToBinary(instruction.owner) ?: return
         val name = instruction.name ?: return
@@ -117,7 +174,8 @@ public object ReferenceExtractor {
             Opcodes.PUTFIELD, Opcodes.PUTSTATIC -> ReferenceKind.FIELD_WRITE
             else -> return
         }
-        edges.add(
+        putFirst(
+            edges,
             ReferenceEdge(
                 fromClass = fromClass,
                 fromMember = fromMember,
@@ -126,19 +184,24 @@ public object ReferenceExtractor {
                 toMember = name,
                 toDescriptor = descriptor,
                 kind = kind,
+                line = line,
+                sourceFile = sourceFile,
             ),
         )
     }
 
     private fun addTypeEdge(
-        edges: MutableSet<ReferenceEdge>,
+        edges: MutableMap<EdgeIdentity, ReferenceEdge>,
         fromClass: String,
         fromMember: String,
         fromDescriptor: String,
         rawDesc: String?,
+        line: Int?,
+        sourceFile: String?,
     ) {
         val owner = descriptorToBinary(rawDesc) ?: return
-        edges.add(
+        putFirst(
+            edges,
             ReferenceEdge(
                 fromClass = fromClass,
                 fromMember = fromMember,
@@ -147,16 +210,20 @@ public object ReferenceExtractor {
                 toMember = null,
                 toDescriptor = null,
                 kind = ReferenceKind.TYPE_REFERENCE,
+                line = line,
+                sourceFile = sourceFile,
             ),
         )
     }
 
     private fun addLdcEdge(
-        edges: MutableSet<ReferenceEdge>,
+        edges: MutableMap<EdgeIdentity, ReferenceEdge>,
         fromClass: String,
         fromMember: String,
         fromDescriptor: String,
         constant: Any?,
+        line: Int?,
+        sourceFile: String?,
     ) {
         if (constant !is Type) return
         // Only class constants are type references; method-handle constants
@@ -167,7 +234,8 @@ public object ReferenceExtractor {
         } catch (_: Exception) {
             return
         } ?: return
-        edges.add(
+        putFirst(
+            edges,
             ReferenceEdge(
                 fromClass = fromClass,
                 fromMember = fromMember,
@@ -176,6 +244,8 @@ public object ReferenceExtractor {
                 toMember = null,
                 toDescriptor = null,
                 kind = ReferenceKind.TYPE_REFERENCE,
+                line = line,
+                sourceFile = sourceFile,
             ),
         )
     }
@@ -188,23 +258,29 @@ public object ReferenceExtractor {
      * would be invisible to `callers` (T-033).
      */
     private fun addDynamicEdges(
-        edges: MutableSet<ReferenceEdge>,
+        edges: MutableMap<EdgeIdentity, ReferenceEdge>,
         fromClass: String,
         fromMember: String,
         fromDescriptor: String,
         instruction: InvokeDynamicInsnNode,
+        line: Int?,
+        sourceFile: String?,
     ) {
         val bootstrap = instruction.bsm
         if (bootstrap != null) {
-            addHandleTarget(edges, fromClass, fromMember, fromDescriptor, bootstrap)
+            addHandleTarget(edges, fromClass, fromMember, fromDescriptor, bootstrap, line, sourceFile)
         }
         for (argument in instruction.bsmArgs ?: emptyArray()) {
             when (argument) {
-                is Handle -> addHandleTarget(edges, fromClass, fromMember, fromDescriptor, argument)
+                is Handle -> addHandleTarget(
+                    edges, fromClass, fromMember, fromDescriptor, argument, line, sourceFile,
+                )
                 // Only class constants are type references; MethodTypes and
                 // MethodHandles name no class (see addLdcEdge).
                 is Type -> if (argument.sort == Type.OBJECT || argument.sort == Type.ARRAY) {
-                    addTypeEdge(edges, fromClass, fromMember, fromDescriptor, argument.descriptor)
+                    addTypeEdge(
+                        edges, fromClass, fromMember, fromDescriptor, argument.descriptor, line, sourceFile,
+                    )
                 }
                 else -> Unit
             }
@@ -212,11 +288,13 @@ public object ReferenceExtractor {
     }
 
     private fun addHandleTarget(
-        edges: MutableSet<ReferenceEdge>,
+        edges: MutableMap<EdgeIdentity, ReferenceEdge>,
         fromClass: String,
         fromMember: String,
         fromDescriptor: String,
         handle: Handle,
+        line: Int?,
+        sourceFile: String?,
     ) {
         val owner = internalToBinary(handle.owner) ?: return
         val name = handle.name ?: return
@@ -226,7 +304,8 @@ public object ReferenceExtractor {
             Opcodes.H_PUTFIELD, Opcodes.H_PUTSTATIC -> ReferenceKind.FIELD_WRITE
             else -> ReferenceKind.METHOD_CALL
         }
-        edges.add(
+        putFirst(
+            edges,
             ReferenceEdge(
                 fromClass = fromClass,
                 fromMember = fromMember,
@@ -235,6 +314,8 @@ public object ReferenceExtractor {
                 toMember = name,
                 toDescriptor = descriptor,
                 kind = kind,
+                line = line,
+                sourceFile = sourceFile,
             ),
         )
     }

@@ -115,6 +115,9 @@ public data class ClassHit(
  * One stored reference edge plus the artifact that provides it (T-029) — the
  * unit the M4 graph queries render. `from*` names the enclosing method,
  * `to*` the referenced type/member, [kind] the edge flavour.
+ * [line] is the 1-based `LineNumberTable` entry when the class retained debug
+ * info (issue #8); [sourceFile] is the declaring class's `SourceFile`
+ * attribute (joined from `class.source_file`), or `null` when absent.
  */
 public data class ReferenceHit(
     public val artifact: StoredArtifact,
@@ -125,6 +128,8 @@ public data class ReferenceHit(
     public val toMember: String?,
     public val toDescriptor: String?,
     public val kind: ReferenceKind,
+    public val line: Int? = null,
+    public val sourceFile: String? = null,
 )
 
 /**

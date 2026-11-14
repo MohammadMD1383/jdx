@@ -18,11 +18,14 @@ class UsagesPropertyTest {
     private val kinds: List<String> = listOf("call", "read", "write", "ref", "new", "throw", "annotation")
 
     private fun arbHit(): Arb<UsageHit> = Arb.of(kinds).map { kind ->
+        val withLocation = (0..1).random() == 0
         UsageHit(
             fromRef = "com.example.App#m${(0..9999).random()}()",
             artifact = "artifact-${(0..9).random()}.jar",
             kind = kind,
             targetRef = "com.example.Lib#greet",
+            file = if (withLocation) "App.java" else null,
+            line = if (withLocation) (1..200).random() else null,
         )
     }
 
@@ -70,6 +73,11 @@ class UsagesPropertyTest {
                 assert(json.contains(hit.fromRef)) { "${hit.fromRef} missing from json" }
                 assert(json.contains(hit.artifact)) { "${hit.artifact} missing from json" }
                 assert(json.contains(hit.kind)) { "${hit.kind} missing from json" }
+                hit.location()?.let { location ->
+                    assert(json.contains("\"file\":\"${hit.file}\"")) { "$location file missing from json" }
+                    assert(json.contains("\"line\":${hit.line}")) { "$location line missing from json" }
+                    assert(listing.renderText().contains(location)) { "$location missing from text" }
+                }
             }
         }
     }

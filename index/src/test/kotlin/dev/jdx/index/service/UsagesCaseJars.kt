@@ -6,6 +6,44 @@ import java.nio.file.Path
 import org.objectweb.asm.Opcodes
 
 /**
+ * Lined usages corpus (issue #8): same shape as [buildUsagesCaseJar] but with
+ * `SourceFile` + `LineNumberTable` so `usages` can assert `file:line` on
+ * bytecode rows. Kept separate so the unlined case jar's hit counts stay
+ * stable for the rest of [UsagesServiceTest].
+ */
+internal fun buildLinedUsagesJar(dir: Path): Path {
+    return ArtifactTestJars.craftJar(
+        dir.resolve("usages-lined.jar"),
+        mapOf(
+            "lined/Lib.class" to buildClass(
+                "lined/Lib",
+                access = Opcodes.ACC_PUBLIC or Opcodes.ACC_ABSTRACT or Opcodes.ACC_SUPER,
+            ) {
+                method(
+                    Opcodes.ACC_PUBLIC or Opcodes.ACC_ABSTRACT,
+                    "greet",
+                    "(Ljava/lang/String;)Ljava/lang/String;",
+                    null,
+                    null,
+                )
+            },
+            "lined/App.class" to buildClass("lined/App") {
+                source("App.java")
+                method(Opcodes.ACC_PUBLIC, "run", "()V", null, null) {
+                    line(14)
+                    invoke(
+                        Opcodes.INVOKEVIRTUAL,
+                        "lined/Lib",
+                        "greet",
+                        "(Ljava/lang/String;)Ljava/lang/String;",
+                    )
+                }
+            },
+        ),
+    )
+}
+
+/**
  * Crafted usages corpus (T-030, tier 2): ASM-built classes with fully
  * controlled reference edges — every call, field access and type mention is
  * placed by hand, so the expected hit sets are exact, not sampled.

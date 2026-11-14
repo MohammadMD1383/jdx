@@ -98,6 +98,8 @@ internal class FakeIndexStore : IndexStore {
                     toMember = edge.toMember,
                     toDescriptor = edge.toDescriptor,
                     kind = edge.kind,
+                    line = edge.line,
+                    sourceFile = edge.sourceFile,
                 )
             }
     }
