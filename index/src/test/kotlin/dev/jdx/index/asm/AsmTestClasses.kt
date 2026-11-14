@@ -109,7 +109,9 @@ internal class MethodBuilder(private val node: MethodNode) {
      * (T-025 doc corpus builds a valid `<init>` with it).
      */
     fun invoke(opcode: Int, owner: String, name: String, descriptor: String): Unit {
-        node.instructions.add(MethodInsnNode(opcode, owner, name, descriptor, false))
+        // INVOKEINTERFACE requires itf=true; other invoke opcodes leave it false.
+        val itf = opcode == Opcodes.INVOKEINTERFACE
+        node.instructions.add(MethodInsnNode(opcode, owner, name, descriptor, itf))
     }
 
     /**

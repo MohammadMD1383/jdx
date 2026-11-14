@@ -429,7 +429,9 @@ Find Usages across **all workspace jars plus the project's own source dirs**.
 #### `jdx callers <method>` / `jdx calls <method>`
 Incoming / outgoing call edges. `--depth N` walks the tree (cycle-safe, with `…(cycle)`
 markers). This lets an agent trace an execution path across jars without decompiling every
-class along the way.
+class along the way. `callers` is override-aware by default (issue #6: subtypes and
+declaring supertypes; `--exact` restores invoke-owner matching). `calls` stays
+bytecode-exact — an invoke names one owner.
 
 #### `jdx samples <symbol>`
 Real call sites as usage examples, source-rendered when sources are available, ranked by
@@ -1382,7 +1384,7 @@ hierarchy --up --down --direct --depth N --in --exclude --limit
           [-w …] [--jars …] [--no-jdk] [--json] [--no-color]
 implementors [--direct --depth N --in --exclude --limit]
           [-w …] [--jars …] [--no-jdk] [--json] [--no-color]
-callers   --depth N --in --exclude --limit
+callers   --depth N --exact --in --exclude --limit
           [-w …] [--jars …] [--no-jdk] [--json] [--no-color]
 calls     --depth N --in --exclude --external-only --limit
           [-w …] [--jars …] [--no-jdk] [--json] [--no-color]

@@ -129,6 +129,14 @@ class CallCommandsTest {
         run.options?.limit shouldBe 10
         run.options?.inArtifact shouldBe "app*"
         run.options?.exclude shouldBe "jdk*"
+        run.options?.exact shouldBe false
+    }
+
+    @Test
+    fun `exact reaches the service for callers`() {
+        val run = runCallers(listOf("com.example.Lib#greet", "--exact"))
+        run.exit shouldBe 0
+        run.options?.exact shouldBe true
     }
 
     @Test

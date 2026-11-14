@@ -529,6 +529,7 @@ public object DaemonClient {
         inArtifact: String? = null,
         exclude: String? = null,
         limit: Int = 50,
+        exact: Boolean = false,
     ): RpcRequest = RpcRequest(
         command = RpcCommand.CALLERS,
         query = ref,
@@ -537,6 +538,7 @@ public object DaemonClient {
             if (inArtifact != null) put("in", inArtifact)
             if (exclude != null) put("exclude", exclude)
             put("limit", limit.toString())
+            if (exact) put("exact", "true")
         },
     )
 

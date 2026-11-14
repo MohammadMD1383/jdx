@@ -191,7 +191,8 @@ command; `jdx help --agent` prints the compact agent block.
 ## Known limitations (by design)
 
 Graph queries re-scan live bytecode roots per query (no persistent-index acceleration
-yet); call hierarchy is exact name+descriptor matching, not override-aware. Full list in
+yet). `callers` is override-aware by default (`--exact` for invoke-owner matching);
+`calls` stays bytecode-exact. Full list in
 [GitHub Issues](https://github.com/MohammadMD1383/jdx/issues). Out-of-scope for v1
 (mappings/remap, resources inspection, …) is the phase-2 backlog, also tracked there.
 
