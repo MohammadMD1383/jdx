@@ -247,6 +247,16 @@ class SymbolRefParserTest {
     }
 
     @Test
+    fun `trailing Kotlin nullability markers are stripped from params and returns`() {
+        // Issue #13: agents paste signature atoms that carry `?`; refs are erased.
+        parseOk("Gson#m(java.lang.String?)") shouldBe parseOk("Gson#m(java.lang.String)")
+        parseOk("Gson#m():java.lang.String?") shouldBe parseOk("Gson#m():java.lang.String")
+        parseOk("Gson#m(String?):Integer?") shouldBe parseOk("Gson#m(String):Integer")
+        parseOk("Gson#m(int[]?)") shouldBe parseOk("Gson#m(int[])")
+        parseOk("Gson#m(String?[])") shouldBe parseOk("Gson#m(String[])")
+    }
+
+    @Test
     fun `spaces inside a parameter list are forgiven`() {
         parseOk("Gson#m( Object , int )") shouldBe parseOk("Gson#m(Object,int)")
     }

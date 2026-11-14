@@ -118,11 +118,101 @@ class KotlinMembersTest {
     }
 
     @Test
-    fun `an unchanged function maps to nothing`() {
+    fun `an unchanged non-nullable function maps to nothing`() {
         val views = KotlinMembers.viewsFor(
-            kmClass(kmFunction("nullable", "nullable", "(Ljava/lang/String;)Ljava/lang/Integer;")),
+            kmClass(
+                kmFunction(
+                    "plain",
+                    "plain",
+                    "(Ljava/lang/String;)Ljava/lang/String;",
+                    returnType = kmType("kotlin/String"),
+                ).also { function ->
+                    function.valueParameters.add(
+                        kotlin.metadata.KmValueParameter("input").apply {
+                            type = kmType("kotlin/String")
+                        },
+                    )
+                },
+            ),
         )
         views shouldBe emptyMap()
+    }
+
+    @Test
+    fun `a nullable param and return produce a view with display types`() {
+        val views = KotlinMembers.viewsFor(
+            kmClass(
+                kmFunction(
+                    "nullable",
+                    "nullable",
+                    "(Ljava/lang/String;)Ljava/lang/Integer;",
+                    returnType = kmType("kotlin/Int", nullable = true),
+                ).also { function ->
+                    function.valueParameters.add(
+                        kotlin.metadata.KmValueParameter("input").apply {
+                            type = kmType("kotlin/String", nullable = true)
+                        },
+                    )
+                },
+            ),
+        )
+        val view = views[kotlinViewKey("nullable", "(Ljava/lang/String;)Ljava/lang/Integer;")]!!
+        view.displayName shouldBe "nullable"
+        view.displayReturn shouldBe "java.lang.Integer?"
+        view.displayParameters shouldBe listOf("java.lang.String?")
+        view.markSuspend shouldBe false
+    }
+
+    @Test
+    fun `value-class arity mismatch drops display parameters`() {
+        // JVM prepends the unboxed receiver; metadata lists only the Kotlin params.
+        // Applying displayParameters by index would paint Object? onto the receiver.
+        val views = KotlinMembers.viewsFor(
+            kmClass(
+                kmFunction(
+                    "equals",
+                    "equals-impl",
+                    "(Ljava/lang/String;Ljava/lang/Object;)Z",
+                    returnType = kmType("kotlin/Boolean"),
+                ).also { function ->
+                    function.valueParameters.add(
+                        kotlin.metadata.KmValueParameter("other").apply {
+                            type = kmType("kotlin/Any", nullable = true)
+                        },
+                    )
+                },
+            ),
+        )
+        val view = views[kotlinViewKey("equals-impl", "(Ljava/lang/String;Ljava/lang/Object;)Z")]!!
+        view.displayName shouldBe "equals"
+        view.displayParameters shouldBe emptyList()
+    }
+
+    @Test
+    fun `nested nullability alone produces a param display`() {
+        val listOfNullable = kmType(
+            "kotlin/collections/List",
+            arguments = listOf(KmTypeProjection(KmVariance.INVARIANT, kmType("kotlin/String", nullable = true))),
+        )
+        val views = KotlinMembers.viewsFor(
+            kmClass(
+                kmFunction(
+                    "items",
+                    "items",
+                    "(Ljava/util/List;)V",
+                    returnType = kmType("kotlin/Unit"),
+                ).also { function ->
+                    function.valueParameters.add(
+                        kotlin.metadata.KmValueParameter("xs").apply {
+                            type = listOfNullable
+                        },
+                    )
+                },
+            ),
+        )
+        val view = views[kotlinViewKey("items", "(Ljava/util/List;)V")]!!
+        view.displayParameters shouldBe listOf("java.util.List<java.lang.String?>")
+        view.displayReturn shouldBe null
     }
 
     @Test
@@ -160,10 +250,28 @@ class KotlinMembersTest {
         KotlinMembers.renderType(kmType("kotlin/Int")) shouldBe "int"
         KotlinMembers.renderType(kmType("kotlin/String")) shouldBe "java.lang.String"
         KotlinMembers.renderType(kmType("kotlin/String", nullable = true)) shouldBe "java.lang.String?"
+        KotlinMembers.renderType(kmType("kotlin/Int", nullable = true)) shouldBe "java.lang.Integer?"
         KotlinMembers.renderType(kmType("kotlin/Unit")) shouldBe "void"
         KotlinMembers.renderType(kmType("java/lang/String")) shouldBe "java.lang.String"
         KotlinMembers.renderType(kmType("dev/jdx/fixtures/KotlinMembers.Companion")) shouldBe
             "dev.jdx.fixtures.KotlinMembers\$Companion"
+    }
+
+    @Test
+    fun `carriesNullability walks nested arguments`() {
+        KotlinMembers.carriesNullability(kmType("kotlin/String")) shouldBe false
+        KotlinMembers.carriesNullability(kmType("kotlin/String", nullable = true)) shouldBe true
+        val nested = kmType(
+            "kotlin/collections/List",
+            arguments = listOf(KmTypeProjection(KmVariance.INVARIANT, kmType("kotlin/String", nullable = true))),
+        )
+        KotlinMembers.carriesNullability(nested) shouldBe true
+        KotlinMembers.carriesNullability(
+            kmType(
+                "kotlin/collections/List",
+                arguments = listOf(KmTypeProjection(KmVariance.INVARIANT, kmType("kotlin/String"))),
+            ),
+        ) shouldBe false
     }
 
     @Test

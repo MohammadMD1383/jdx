@@ -62,11 +62,13 @@ public object KotlinMembers {
      *
      * Only methods whose Kotlin view differs from the JVM projection are
      * present: renames (`@JvmName`, mangled `internal`), `suspend`
-     * functions (stripped `Continuation`, `suspend` keyword, metadata return)
-     * and functions with default args (T-078 `= ...` markers).
-     * Same-name non-suspend functions without defaults, constructors (which live on
-     * [KmClass.constructors], never [KmClass.functions]) and `$default` stubs
-     * (synthetic, no metadata entry) map to nothing.
+     * functions (stripped `Continuation`, `suspend` keyword, metadata return),
+     * functions with default args (T-078 `= ...` markers), and functions whose
+     * metadata types carry nullability the JVM erasure cannot see (issue #13 —
+     * `String?`, `List<String?>`, nullable returns/params).
+     * Same-name non-suspend non-nullable functions without defaults, constructors
+     * (which live on [KmClass.constructors], never [KmClass.functions]) and
+     * `$default` stubs (synthetic, no metadata entry) map to nothing.
      */
     public fun viewsFor(kmClass: KmClass): Map<String, KotlinMethodView> {
         val views = linkedMapOf<String, KotlinMethodView>()
@@ -74,10 +76,40 @@ public object KotlinMembers {
             val jvm = function.signature ?: continue
             val suspend = function.isSuspend
             val strip = suspend && isContinuationTail(jvm.descriptor)
-            val displayReturn = if (suspend) renderType(function.returnType) else null
             val renamed = function.name != jvm.name
             val defaults = defaultArgIndices(function)
-            if (!renamed && !strip && displayReturn == null && !suspend && defaults.isEmpty()) continue
+            val returnNullable = carriesNullability(function.returnType)
+            // Suspend always prefers the metadata return (erasure is often Object);
+            // non-suspend only overrides when nullability (incl. nested) is present.
+            val displayReturn = when {
+                suspend -> renderType(function.returnType)
+                returnNullable -> renderType(function.returnType)
+                else -> null
+            }
+            // Display params are indexed in Kotlin order against the *visible* JVM
+            // list (post-Continuation-strip). Value-class members prepend an
+            // unboxed receiver on the JVM that metadata does not list — when the
+            // arities disagree, keep every JVM type rather than shift-misalign
+            // (issue #13).
+            val visibleJvmArity = parameterArity(jvm.descriptor).let { arity ->
+                if (strip && arity > 0) arity - 1 else arity
+            }
+            val kotlinArity = try {
+                function.valueParameters.size
+            } catch (_: Exception) {
+                -1
+            }
+            val displayParameters = if (kotlinArity == visibleJvmArity) {
+                displayParametersFor(function)
+            } else {
+                emptyList()
+            }
+            val hasParamDisplay = displayParameters.any { it != null }
+            if (!renamed && !strip && displayReturn == null && !suspend &&
+                defaults.isEmpty() && !hasParamDisplay
+            ) {
+                continue
+            }
             // A `suspend` whose return survives erasure unchanged still marks.
             views[kotlinViewKey(jvm.name, jvm.descriptor)] = KotlinMethodView(
                 displayName = function.name,
@@ -85,9 +117,46 @@ public object KotlinMembers {
                 displayReturn = displayReturn,
                 markSuspend = suspend,
                 defaultArgIndices = defaults,
+                displayParameters = if (hasParamDisplay) displayParameters else emptyList(),
             )
         }
         return views
+    }
+
+    /**
+     * Per-value-parameter metadata type text for [viewsFor] (issue #13). A slot
+     * is filled only when the `KmType` carries nullability the JVM cannot see;
+     * otherwise `null` keeps the JVM projection. Never throws.
+     */
+    public fun displayParametersFor(function: KmFunction): List<String?> {
+        return try {
+            function.valueParameters.map { parameter ->
+                try {
+                    val type = parameter.type
+                    if (!carriesNullability(type)) null else renderType(type)
+                } catch (_: Exception) {
+                    null
+                }
+            }
+        } catch (_: Exception) {
+            emptyList()
+        }
+    }
+
+    /**
+     * Whether a metadata type (or any type argument) is nullable. Hostile /
+     * incomplete containers read as `false`, never a throw.
+     */
+    public fun carriesNullability(type: KmType): Boolean {
+        return try {
+            if (type.isNullable) return true
+            type.arguments.any { projection ->
+                val projected = projection.type ?: return@any false
+                carriesNullability(projected)
+            }
+        } catch (_: Exception) {
+            false
+        }
     }
 
     /**
@@ -165,6 +234,50 @@ public object KotlinMembers {
     }
 
     /**
+     * Counts the erased parameters in a JVM method descriptor. Malformed
+     * descriptors read as `0`, never a throw — callers treat a mismatch as
+     * "keep the JVM types".
+     */
+    public fun parameterArity(descriptor: String): Int {
+        if (!descriptor.startsWith("(")) return 0
+        val depth = descriptor.indexOf(')')
+        if (depth < 0) return 0
+        val parameters = descriptor.substring(1, depth)
+        var count = 0
+        var i = 0
+        while (i < parameters.length) {
+            when (val c = parameters[i]) {
+                'B', 'C', 'D', 'F', 'I', 'J', 'S', 'Z' -> {
+                    count++
+                    i++
+                }
+                '[' -> {
+                    // Array: skip every leading `[`, then one element type.
+                    i++
+                    while (i < parameters.length && parameters[i] == '[') i++
+                    if (i >= parameters.length) return count
+                    if (parameters[i] == 'L') {
+                        val end = parameters.indexOf(';', i)
+                        if (end < 0) return count
+                        i = end + 1
+                    } else {
+                        i++
+                    }
+                    count++
+                }
+                'L' -> {
+                    val end = parameters.indexOf(';', i)
+                    if (end < 0) return count
+                    i = end + 1
+                    count++
+                }
+                else -> return count // hostile — stop rather than invent
+            }
+        }
+        return count
+    }
+
+    /**
      * Whether a JVM descriptor ends in the erased `Continuation` parameter.
      * Checked textually (the parameter list is the text between the outer
      * parentheses; ASM's `Type` accessors throw `AssertionError` — not
@@ -188,10 +301,12 @@ public object KotlinMembers {
 
     /**
      * Renders a metadata type as Java-style text (`java.lang.String`,
-     * `java.util.List<...>`, trailing `?` for nullable). Returns `null` when
-     * the classifier has no Java spelling (an unmapped `kotlin.*` name, a
-     * nested shape the converter cannot spell) — the caller keeps the JVM
-     * type. Never throws.
+     * `java.util.List<...>`, trailing `?` for nullable). Nullable primitives
+     * box to their wrapper (`int` → `java.lang.Integer?`) so the spelling
+     * matches the JVM erasure agents already see. Returns `null` when the
+     * classifier has no Java spelling (an unmapped `kotlin.*` name, a nested
+     * shape the converter cannot spell) — the caller keeps the JVM type.
+     * Never throws.
      */
     public fun renderType(type: KmType): String? {
         // `classifier` is a lateinit property: real metadata always sets it,
@@ -212,7 +327,20 @@ public object KotlinMembers {
         }
         val arguments = type.arguments.map { renderProjection(it) ?: return null }
         val applied = if (arguments.isEmpty()) base else "$base<${arguments.joinToString(", ")}>"
-        return if (type.isNullable) "$applied?" else applied
+        return if (type.isNullable) "${boxPrimitive(applied)}?" else applied
+    }
+
+    /** Boxes a Java primitive keyword so a nullable spelling matches JVM erasure. */
+    private fun boxPrimitive(applied: String): String = when (applied) {
+        "boolean" -> "java.lang.Boolean"
+        "byte" -> "java.lang.Byte"
+        "char" -> "java.lang.Character"
+        "short" -> "java.lang.Short"
+        "int" -> "java.lang.Integer"
+        "long" -> "java.lang.Long"
+        "float" -> "java.lang.Float"
+        "double" -> "java.lang.Double"
+        else -> applied
     }
 
     private fun renderProjection(projection: KmTypeProjection): String? {

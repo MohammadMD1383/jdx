@@ -370,8 +370,21 @@ public fun methodRefString(
         ),
     )
     if (!disambiguateReturn || member.name == "<init>") return base
-    return base + ":" + (view?.displayReturn ?: SignatureLines.renderTypeName(member.descriptor.returnType))
+    // Canonical refs never carry Kotlin nullability markers (`?`); strip them so
+    // parse(print(ref)) == ref stays pinned (issue #13, AGENTS.md §5). Wildcards
+    // (`? extends` / `? super` / lone `?`) are not produced by displayReturn.
+    val returnText = view?.displayReturn?.let { stripKotlinNullabilityMarkers(it) }
+        ?: SignatureLines.renderTypeName(member.descriptor.returnType)
+    return base + ":" + returnText
 }
+
+/**
+ * Strips Kotlin nullability markers (`T?`, `List<T?>?`) from rendered type text
+ * for canonical symbol refs. Leaves Java wildcards alone (`? extends`, `? super`,
+ * and a lone `?` projection) — those always have `?` at the *start* of a token.
+ */
+internal fun stripKotlinNullabilityMarkers(typeText: String): String =
+    typeText.replace(Regex("""([A-Za-z0-9_$>\]])(\?)"""), "$1")
 
 private fun toMethodRow(resolved: ResolvedMethod, target: ClassInfo, disambiguateReturn: Boolean): MemberRow {
     val kind = if (resolved.member.name == "<init>") MemberKind.CONSTRUCTOR else MemberKind.METHOD

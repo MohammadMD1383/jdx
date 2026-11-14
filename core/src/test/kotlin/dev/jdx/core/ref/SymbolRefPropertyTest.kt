@@ -46,6 +46,37 @@ class SymbolRefPropertyTest {
     }
 
     @Test
+    fun `nullable markers on member refs strip to the canonical form`() = runBlocking<Unit> {
+        // Issue #13: paste `String?` / `:Integer?` from a signature line; parse
+        // drops the markers and print never re-introduces them.
+        checkAll(500, arbRoundTripRef()) { ref ->
+            if (ref !is dev.jdx.core.model.MemberSymbolRef) return@checkAll
+            if (ref.parameterTypes == null) return@checkAll
+            val canonical = SymbolRefPrinter.print(ref)
+            val withMarkers = buildString {
+                append(canonical.substringBefore('('))
+                append('(')
+                append(
+                    canonical.substringAfter('(').substringBefore(')')
+                        .split(',')
+                        .joinToString(",") { piece ->
+                            val trimmed = piece.trim()
+                            if (trimmed.isEmpty() || trimmed == "...") trimmed else "$trimmed?"
+                        },
+                )
+                append(')')
+                val after = canonical.substringAfter(')', missingDelimiterValue = "")
+                if (after.startsWith(":")) append(':').append(after.drop(1)).append('?')
+                else append(after)
+            }
+            SymbolRefParser.parse(withMarkers) shouldBeOk ref
+            SymbolRefPrinter.print(
+                (SymbolRefParser.parse(withMarkers) as SymbolRefParseResult.Ok).ref,
+            ) shouldBeEqual canonical
+        }
+    }
+
+    @Test
     fun `print of parse is stable for arbitrary input`() = runBlocking<Unit> {
         // Idempotent normalisation (TESTING.md §4): when arbitrary text parses, printing
         // the result and parsing again must yield the identical ref — never a Failure,

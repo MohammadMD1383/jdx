@@ -282,13 +282,28 @@ public object SymbolRefParser {
     private fun parseParamOrReturnType(text: String, base: Int, allowVoid: Boolean): TypeName {
         var dims = 0
         var name = text
-        if (name.endsWith("...")) {
-            dims++
-            name = name.dropLast(3).trim()
-        }
-        while (name.endsWith("[]")) {
-            dims++
-            name = name.dropLast(2).trim()
+        // Peel array / varargs / Kotlin nullability markers in any order so
+        // pastes like `String?`, `int[]?`, and `String?[]` all normalise to the
+        // erased form (issue #13). Canonical print never re-emits `?`.
+        var progressed = true
+        while (progressed) {
+            progressed = false
+            if (name.endsWith("...")) {
+                dims++
+                name = name.dropLast(3).trim()
+                progressed = true
+                continue
+            }
+            if (name.endsWith("[]")) {
+                dims++
+                name = name.dropLast(2).trim()
+                progressed = true
+                continue
+            }
+            if (name.endsWith("?")) {
+                name = name.dropLast(1).trim()
+                progressed = true
+            }
         }
         if (name.isEmpty()) fail("missing type", base)
 

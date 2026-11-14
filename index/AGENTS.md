@@ -43,8 +43,10 @@ behaviour lives here** (adapters call in, never the reverse). `explicitApi()` is
   degrade-don't-fail: an unparseable or too-new class is skipped with its warning and
   the rest of the jar still diffs. Warnings come back code-then-subject sorted.
 - `kotlin/` — `KotlinMetadata` (never-throws `@Metadata` decode), `KotlinMembers`
-  (suspend/`@JvmName`/`internal` repair, property folding, default-arg `= ...`),
-  `KotlinSidecarFetch` (7-artifact table, SHA-1, skip-present/resume).
+  (suspend/`@JvmName`/`internal` repair, property folding, default-arg `= ...`,
+  nullability on params/returns via `KmType.isNullable` — issue #13; sparse views,
+  boxed nullable primitives), `KotlinSidecarFetch` (7-artifact table, SHA-1,
+  skip-present/resume).
 - `usages/SourceUsages` — textual whole-word mentions (`ref` kind, file:line).
 - `cache/CacheService` — `info`/`gc`/`clear`; JDK rows kept while any workspace
   includes the JDK; orphan daemon `.log`s swept when no daemon answers.

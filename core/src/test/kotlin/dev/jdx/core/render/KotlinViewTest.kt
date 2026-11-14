@@ -132,6 +132,51 @@ class KotlinViewTest {
     }
 
     @Test
+    fun `nullable display types render on return and parameters`() {
+        val member = publicMethod(
+            "nullable",
+            "(Ljava/lang/String;)Ljava/lang/Integer;",
+        ).copy(parameterNames = listOf("input"))
+        val view = KotlinMethodView(
+            displayName = "nullable",
+            displayReturn = "java.lang.Integer?",
+            displayParameters = listOf("java.lang.String?"),
+        )
+        SignatureLines.methodLine(member, kotlinView = view) shouldBe
+            "public java.lang.Integer? nullable(java.lang.String? input)"
+    }
+
+    @Test
+    fun `a null displayParameters entry keeps the JVM param type`() {
+        val member = publicMethod(
+            "mix",
+            "(Ljava/lang/String;I)V",
+        ).copy(parameterNames = listOf("a", "b"))
+        val view = KotlinMethodView(
+            displayName = "mix",
+            displayParameters = listOf("java.lang.String?", null),
+        )
+        SignatureLines.methodLine(member, kotlinView = view) shouldBe
+            "public void mix(java.lang.String? a, int b)"
+    }
+
+    @Test
+    fun `disambiguated refs strip nullability markers`() {
+        val member = publicMethod("nullable", "(Ljava/lang/String;)Ljava/lang/Integer;")
+        val view = KotlinMethodView(
+            displayName = "nullable",
+            displayReturn = "java.lang.Integer?",
+            displayParameters = listOf("java.lang.String?"),
+        )
+        methodRefString(declaring, member, view, disambiguateReturn = true) shouldBe
+            "dev.jdx.fixtures.KotlinMembers#nullable(java.lang.String):java.lang.Integer"
+        stripKotlinNullabilityMarkers("java.util.List<java.lang.String?>?") shouldBe
+            "java.util.List<java.lang.String>"
+        stripKotlinNullabilityMarkers("java.util.List<? extends java.lang.String>") shouldBe
+            "java.util.List<? extends java.lang.String>"
+    }
+
+    @Test
     fun `out-of-range default indices never throw and never mark`() {
         val member = publicMethod("withDefault", "(I)Ljava/lang/String;")
             .copy(parameterNames = listOf("first"))

@@ -12,7 +12,7 @@ package dev.jdx.diffapi
  *
  * <p>Against the v2 version this fires: `KOTLIN_NAME_CHANGED` ({@link #renamed}),
  * `KOTLIN_SUSPEND_CHANGED` ({@link #fetch}), `KOTLIN_NULLABILITY_CHANGED`
- * ({@link #label}), `KOTLIN_DEFAULT_ARG_REMOVED` ({@link #repeat}),
+ * ({@link #label} and {@link #nullable}), `KOTLIN_DEFAULT_ARG_REMOVED` ({@link #repeat}),
  * `KOTLIN_PARAMETER_NAME_CHANGED` ({@link #measure}) and
  * `KOTLIN_DEFAULT_ARG_ADDED` ({@link #describe}).
  *
@@ -46,10 +46,9 @@ class Kotlinish {
     /**
      * `suspend` on **both** sides, so the JVM signature is identical apart from the
      * return type's nullability marker. A `suspend` function always carries a Kotlin view
-     * (the hidden `Continuation` guarantees one), which is what lets the differ compare
-     * the *Kotlin* return type under one erasure — the case `KOTLIN_NULLABILITY_CHANGED`
-     * exists for. A plain function has no view here, so its nullability change surfaces
-     * as a `@NotNull`/`@Nullable` annotation difference instead.
+     * (the hidden `Continuation` guarantees one). Plain nullable functions also carry a
+     * view now (issue #13), so {@link #label} fires `KOTLIN_NULLABILITY_CHANGED` as well
+     * as the `@NotNull`/`@Nullable` annotation difference.
      */
     suspend fun nullable(): String = "nullable"
 

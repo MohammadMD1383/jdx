@@ -909,6 +909,34 @@ class ApiDifferTest {
     }
 
     @Test
+    fun `a one-sided nullable view under one erasure is KOTLIN_NULLABILITY_CHANGED`() {
+        // Issue #13: sparse views — the non-null side often has no KotlinMethodView
+        // at all, so the differ synthesises the prior text by stripping `?`.
+        val nullable = type(
+            "com.example.Foo",
+            isKotlin = true,
+            members = listOf(
+                method(
+                    "label",
+                    returnType = STRING,
+                    kotlin = KotlinMethodView(displayName = "label", displayReturn = "java.lang.String?"),
+                ),
+            ),
+        )
+        val nonNull = type(
+            "com.example.Foo",
+            isKotlin = true,
+            members = listOf(method("label", returnType = STRING)),
+        )
+        val added = onlyFindingBetween(snapshotOf("a.jar", nonNull), snapshotOf("b.jar", nullable))
+        added.rule shouldBe CompatRule.KOTLIN_NULLABILITY_CHANGED
+        added.detail shouldBe "java.lang.String -> java.lang.String?"
+        val removed = onlyFindingBetween(snapshotOf("a.jar", nullable), snapshotOf("b.jar", nonNull))
+        removed.rule shouldBe CompatRule.KOTLIN_NULLABILITY_CHANGED
+        removed.detail shouldBe "java.lang.String? -> java.lang.String"
+    }
+
+    @Test
     fun `a Kotlin default value appearing and disappearing are two rules, not one`() {
         val withDefault = type(
             "com.example.Foo",

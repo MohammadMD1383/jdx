@@ -3,5 +3,5 @@ constructors declared on dev.jdx.fixtures.KotlinMembers:
   constructor public KotlinMembers()
 methods declared on dev.jdx.fixtures.KotlinMembers:
   method public final int originalName(int value)
-  method public final java.lang.Integer nullable(java.lang.String input)
+  method public final java.lang.Integer? nullable(java.lang.String? input)
 … 9 more lines (--max-lines 15 to see more)

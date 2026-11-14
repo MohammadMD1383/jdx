@@ -484,8 +484,16 @@ public object ApiDiffer {
         val newView = new.kotlin
         val oldReturn = oldView?.displayReturn
         val newReturn = newView?.displayReturn
+        // Both sides carry a metadata return (suspend, or either side nullable —
+        // issue #13): compare the rendered text directly.
         if (oldReturn != null && newReturn != null && oldReturn != newReturn) {
             emit(KOTLIN_NULLABILITY_CHANGED, "$oldReturn -> $newReturn")
+        } else if (oldReturn == null && newReturn != null && newReturn.endsWith("?")) {
+            // Plain non-null → nullable under one erasure: the non-null side has no
+            // view (views are sparse), so synthesise the prior text by stripping `?`.
+            emit(KOTLIN_NULLABILITY_CHANGED, "${newReturn.dropLast(1)} -> $newReturn")
+        } else if (newReturn == null && oldReturn != null && oldReturn.endsWith("?")) {
+            emit(KOTLIN_NULLABILITY_CHANGED, "$oldReturn -> ${oldReturn.dropLast(1)}")
         }
         val oldDefaults = oldView?.defaultArgIndices ?: emptySet()
         val newDefaults = newView?.defaultArgIndices ?: emptySet()

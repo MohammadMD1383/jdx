@@ -50,6 +50,9 @@ via `JsonEscape` — reuse it, never a second escaper). `explicitApi()` is on.
   `#` or `::`. `MemberSymbolRef.parameterTypes`: `null` = all overloads, `[]` = zero
   params (`Gson#toString()` ≠ `Gson#toString`).
 - `(...)` means parameters unspecified. Any `*` in a member-less ref is a package glob.
+- Kotlin nullability markers (`String?`, `int[]?`) are accepted on paste and stripped
+  (issue #13); canonical print never emits `?`. Signature *display* text may still
+  show `?` via `KotlinMethodView.displayReturn` / `displayParameters`.
 
 ## Gotchas (distilled)
 
