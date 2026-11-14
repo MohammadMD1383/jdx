@@ -1511,6 +1511,15 @@ public object JdxService {
     }
 
     /**
+     * Detail line on a default-kind search miss (issue #86): members are opt-in
+     * under `--kind all` so a method-name miss must name the next flag rather
+     * than look like a true "not found". Kept out of [ErrorResult.candidates] —
+     * it is a flag tip, not a copy-pasteable symbol ref.
+     */
+    public const val SEARCH_MEMBERS_OPT_IN_HINT: String =
+        "default search skips members — retry with --kind method (or --kind field)"
+
+    /**
      * Options for `search`: which symbols match and how much to show. `inArtifact`
      * is the `--in` glob over artifact labels (jar file names, class-dir names,
      * JDK module names); `inPackage` is `--package` over dotted package names.
@@ -1725,7 +1734,15 @@ public object JdxService {
                     rawPattern.substringAfterLast('.').substringAfterLast('$'),
                     scope.map { it.binary }.toSet(),
                 )
-                return ServiceOutcome.Failure(ErrorResult.notFound(rawPattern, suggestions))
+                // Default --kind all searches types/packages/modules only (members are
+                // the slow path). A silent miss for a method name is the #1 dogfood
+                // burn (issue #86) — say the next flag instead of guessing a symbol.
+                val detail = if (options.kind == SearchKindFilter.ALL) {
+                    SEARCH_MEMBERS_OPT_IN_HINT
+                } else {
+                    null
+                }
+                return ServiceOutcome.Failure(ErrorResult.notFound(rawPattern, suggestions, detail = detail))
             }
             val sorted = hits.sortedWith(compareBy({ it.ref }, { it.artifact }))
             val warnings = search.warnings.sortedBy { it.code }

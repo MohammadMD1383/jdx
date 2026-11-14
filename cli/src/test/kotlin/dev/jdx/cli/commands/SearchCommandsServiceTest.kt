@@ -1,12 +1,13 @@
 package dev.jdx.cli.commands
 
 import com.github.ajalt.clikt.core.parse
+import dev.jdx.index.service.JdxService
+import dev.jdx.index.workspace.InMemoryWorkspaceStore
 import io.kotest.matchers.shouldBe
 import io.kotest.matchers.string.shouldContain
 import java.io.ByteArrayOutputStream
 import java.io.File
 import java.io.PrintStream
-import dev.jdx.index.workspace.InMemoryWorkspaceStore
 import kotlinx.serialization.json.Json
 import kotlinx.serialization.json.contentOrNull
 import kotlinx.serialization.json.jsonArray
@@ -159,6 +160,19 @@ class SearchCommandsServiceTest {
         val run = run(listOf("search") + fixtureArgs("ZzzQqxNope"))
         run.exit shouldBe 1
         run.output shouldContain "not found: ZzzQqxNope"
+        run.output shouldContain JdxService.SEARCH_MEMBERS_OPT_IN_HINT
+    }
+
+    @Test
+    fun `default kind miss for a method name hints at --kind method`() {
+        val missed = run(listOf("search") + fixtureArgs("identity"))
+        missed.exit shouldBe 1
+        missed.output shouldContain "not found: identity"
+        missed.output shouldContain JdxService.SEARCH_MEMBERS_OPT_IN_HINT
+
+        val found = run(listOf("search") + fixtureArgs("identity", "--kind", "method"))
+        found.exit shouldBe 0
+        found.output shouldContain "dev.jdx.fixtures.Generics#identity("
     }
 
     @Test

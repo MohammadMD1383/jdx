@@ -29,7 +29,7 @@ paired; `--engine javap` shows raw bytecode. Decompiled output is always labelle
 
 | Command | IDE equivalent | Key flags |
 |---|---|---|
-| `jdx search <pattern>` | Search everywhere (`Shift Shift`) | `--kind all\|type\|class\|interface\|enum\|record\|annotation\|object\|companion\|method\|field\|package\|module`, `--regex`, `--fuzzy` (Levenshtein retry on miss), `--in <artifact-glob>`, `--package <glob>`, `--limit` (50). Bare words match case-insensitively or as camel humps (`HMap` finds `HashMap`). |
+| `jdx search <pattern>` | Search everywhere (`Shift Shift`) | `--kind all\|type\|class\|interface\|enum\|record\|annotation\|object\|companion\|method\|field\|package\|module`, `--regex`, `--fuzzy` (Levenshtein retry on miss), `--in <artifact-glob>`, `--package <glob>`, `--limit` (50). Bare words match case-insensitively or as camel humps (`HMap` finds `HashMap`). Default `--kind all` searches types, packages and modules only — pass `--kind method\|field` to scan members; a miss under the default names that flag. |
 | `jdx resolve <name>` | "What is this symbol?" | `--limit` (50). Several candidates are success (exit 0); none is exit 1 with did-you-mean. |
 | `jdx ls [package-glob]` | External library browser (packages/types) | `--limit` (50). A glob lists packages with type counts; an exact package lists its types. |
 | `jdx tree [artifact-glob]` | External library browser (artifacts) | `--depth` (8; 0 = top segments), `--counts`, `--limit` (50) |
