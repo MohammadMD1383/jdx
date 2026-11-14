@@ -71,10 +71,14 @@ public fun kotlinViewKey(jvmName: String, jvmDescriptor: String): String =
  * [access] is the getter's JVM access (modifiers for the row); defaults to
  * public-final when the getter is unavailable (e.g. inherited rows whose
  * declaring `ClassInfo` is not retained).
+ * [constructorDeclared] (issue #14) is true when the property is a primary-
+ * constructor parameter (`val name` in the header): those pair through
+ * `<init>` in the sources-mismatch detector, never as a body-declared field.
  */
 public data class KotlinPropertyView(
     public val propertyName: String,
     public val isVar: Boolean,
     public val displayType: String? = null,
     public val access: Access = Access(0x0001 or 0x0010),
+    public val constructorDeclared: Boolean = false,
 )

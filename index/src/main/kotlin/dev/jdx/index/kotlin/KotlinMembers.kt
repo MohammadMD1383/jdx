@@ -14,6 +14,7 @@ import kotlin.metadata.KmValueParameter
 import kotlin.metadata.KmVariance
 import kotlin.metadata.declaresDefaultValue
 import kotlin.metadata.isNullable
+import kotlin.metadata.isSecondary
 import kotlin.metadata.isSuspend
 import kotlin.metadata.isVar
 import kotlin.metadata.jvm.JvmFieldSignature
@@ -173,6 +174,10 @@ public object KotlinMembers {
         val properties = linkedMapOf<String, KotlinPropertyView>()
         val hiddenMethods = linkedSetOf<String>()
         val hiddenFields = linkedSetOf<String>()
+        // Primary-constructor parameter names (issue #14): body-declared
+        // properties pair as fields in the sources-mismatch detector;
+        // constructor properties pair through `<init>` instead.
+        val constructorPropertyNames = primaryConstructorPropertyNames(kmClass)
         for (property in kmClass.properties) {
             try {
                 val getter = property.getterSignature
@@ -206,12 +211,42 @@ public object KotlinMembers {
                     propertyName = property.name,
                     isVar = isVar,
                     displayType = displayType,
+                    constructorDeclared = property.name in constructorPropertyNames,
                 )
             } catch (_: Exception) {
                 continue
             }
         }
         return KotlinProperties(properties, hiddenMethods, hiddenFields)
+    }
+
+    /**
+     * Names of value parameters on the primary constructor of [kmClass]
+     * (issue #14). Empty on hostile / missing metadata — degrade, don't fail.
+     */
+    internal fun primaryConstructorPropertyNames(kmClass: KmClass): Set<String> {
+        return try {
+            kmClass.constructors.asSequence()
+                .filter { constructor ->
+                    try {
+                        !constructor.isSecondary
+                    } catch (_: Exception) {
+                        true
+                    }
+                }
+                .flatMap { constructor ->
+                    try {
+                        constructor.valueParameters.asSequence().mapNotNull { parameter ->
+                            parameter.name.takeIf { it.isNotEmpty() }
+                        }
+                    } catch (_: Exception) {
+                        emptySequence()
+                    }
+                }
+                .toSet()
+        } catch (_: Exception) {
+            emptySet()
+        }
     }
 
     /**

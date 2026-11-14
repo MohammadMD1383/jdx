@@ -494,12 +494,126 @@ class SourcesMismatchTest {
             ),
             fields = listOf(field("name")),
             properties = mapOf(
-                "name" to KotlinPropertyView(propertyName = "name", isVar = false, displayType = "java.lang.String"),
+                "name" to KotlinPropertyView(
+                    propertyName = "name",
+                    isVar = false,
+                    displayType = "java.lang.String",
+                    constructorDeclared = true,
+                ),
             ),
             hiddenMethods = setOf(getter),
             hiddenFields = setOf("name"),
         )
         detectKotlinSourcesMismatch(info, listOf(sourceCtor("String", "Int")), "w-sources.jar").shouldBeNull()
+    }
+
+    @Test
+    fun `kotlin body-declared property removal warns`() {
+        // Issue #14: removing a body-declared property from sources must
+        // warn even though its hidden accessors were dropped from pairing.
+        val getter = kotlinViewKey("getNickname", "()Ljava/lang/String;")
+        val setter = kotlinViewKey("setNickname", "(Ljava/lang/String;)V")
+        val info = kotlinTarget(
+            methods = listOf(
+                rawMethod("<init>", "()V", publicAccess),
+                rawMethod("getNickname", "()Ljava/lang/String;", publicFinalAccess),
+                rawMethod("setNickname", "(Ljava/lang/String;)V", publicFinalAccess),
+            ),
+            fields = listOf(field("nickname")),
+            properties = mapOf(
+                "nickname" to KotlinPropertyView(
+                    propertyName = "nickname",
+                    isVar = true,
+                    displayType = "java.lang.String?",
+                ),
+            ),
+            hiddenMethods = setOf(getter, setter),
+            hiddenFields = setOf("nickname"),
+        )
+        val warning = detectKotlinSourcesMismatch(info, listOf(sourceCtor()), "w-sources.jar")
+        warning.shouldNotBeNull()
+        warning.code shouldBe WarningCode.SOURCES_VERSION_MISMATCH
+        warning.message shouldContain "omits com.example.Widget#nickname"
+    }
+
+    @Test
+    fun `kotlin body-declared property add and rename warn`() {
+        val getter = kotlinViewKey("getNickname", "()Ljava/lang/String;")
+        val info = kotlinTarget(
+            methods = listOf(
+                rawMethod("<init>", "()V", publicAccess),
+                rawMethod("getNickname", "()Ljava/lang/String;", publicFinalAccess),
+            ),
+            fields = listOf(field("nickname")),
+            properties = mapOf(
+                "nickname" to KotlinPropertyView(
+                    propertyName = "nickname",
+                    isVar = false,
+                    displayType = "java.lang.String?",
+                ),
+            ),
+            hiddenMethods = setOf(getter),
+            hiddenFields = setOf("nickname"),
+        )
+        val warning = detectKotlinSourcesMismatch(
+            info,
+            listOf(sourceCtor(), sourceField("displayName")),
+            "w-sources.jar",
+        )
+        warning.shouldNotBeNull()
+        warning.message shouldContain "declares com.example.Widget#displayName"
+        warning.message shouldContain "omits com.example.Widget#nickname"
+    }
+
+    @Test
+    fun `kotlin companion const pairs through outer statics`() {
+        // Issue #14: `const val VERSION` is declared in the companion object
+        // sources but lives only as an outer static — pass the outer so a
+        // direct `$Companion` query does not false-warn.
+        val companion = ClassInfo(
+            name = classType("com.example.Widget\$Companion"),
+            kind = TypeKind.COMPANION,
+            methods = listOf(
+                rawMethod("<init>", "()V", privateAccess),
+                rawMethod("create", "()Lcom/example/Widget;", publicFinalAccess),
+            ),
+            outerClass = classType(binary),
+            isKotlin = true,
+        )
+        val outer = kotlinTarget(
+            methods = listOf(
+                rawMethod("<init>", "()V", publicAccess),
+                rawMethod("create", "()Lcom/example/Widget;", publicStaticFinalAccess),
+            ),
+            fields = listOf(
+                FieldInfo(
+                    name = "Companion",
+                    type = classType("com.example.Widget\$Companion"),
+                    access = publicStaticFinalAccess,
+                ),
+                FieldInfo(name = "VERSION", type = fieldType("int"), access = publicStaticFinalAccess),
+            ),
+        )
+        val sources = listOf(sourceCtor(), sourceMethod("create"), sourceField("VERSION"))
+        detectKotlinSourcesMismatch(companion, sources, "w-sources.jar", outer = outer).shouldBeNull()
+    }
+
+    @Test
+    fun `kotlin companion const without outer hints at the outer query`() {
+        val companion = ClassInfo(
+            name = classType("com.example.Widget\$Companion"),
+            kind = TypeKind.COMPANION,
+            methods = listOf(rawMethod("<init>", "()V", privateAccess)),
+            outerClass = classType(binary),
+            isKotlin = true,
+        )
+        val warning = detectKotlinSourcesMismatch(
+            companion,
+            listOf(sourceCtor(), sourceField("VERSION")),
+            "w-sources.jar",
+        )
+        warning.shouldNotBeNull()
+        warning.message shouldContain "query `com.example.Widget` instead of `com.example.Widget\$Companion`"
     }
 
     @Test

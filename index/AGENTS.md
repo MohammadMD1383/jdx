@@ -63,7 +63,9 @@ behaviour lives here** (adapters call in, never the reverse). `explicitApi()` is
   widen `ALL` to include members without revisiting that tip and the perf story.
 - Kotlin views ride `ClassInfo` with defaults (no `ktmeta` blob writes); file facades
   stay JVM-projected; `core` carriers must not leak mutable `KmClass` equality into
-  pinned shapes (compare contents, never carriers).
+  pinned shapes (compare contents, never carriers). `KotlinPropertyView.constructorDeclared`
+  marks primary-constructor properties so sources-mismatch pairs them through `<init>`
+  and still warns on body-declared property removal (issue #14).
 - `doctor` is refused over the daemon wire (exit 6); the daemon never fetches.
 - `diff` is the one command with **no classpath**: it names its own two artifacts, so
   it takes no `RootsSpec`, never consults the JDK, and `JdxService.daemonRoots(…,

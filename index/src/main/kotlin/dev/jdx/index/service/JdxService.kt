@@ -4848,7 +4848,12 @@ public object JdxService {
                 val replacement = if (directDoc.rawComment.contains("{@inheritDoc")) inherited?.paragraph else null
                 val lines = docLines(directDoc, options.raw, replacement)
                 if (lines.isNotEmpty()) {
-                    val allWarnings = warnings + listOfNotNull(mismatchWarning(target, sources, binary, ktParser))
+                    val allWarnings = warnings + listOfNotNull(
+                        mismatchWarning(
+                            target, sources, binary, ktParser,
+                            outer = companionOuterOf(target, workspace),
+                        ),
+                    )
                     return docOutcome(
                         directDoc, sources.displayName, binary, canonicalRef,
                         docSubjectOf(directDoc.kind), allWarnings, options, lines, inheritedFrom = null,
@@ -4856,7 +4861,12 @@ public object JdxService {
                 }
             }
             if (inherited != null) {
-                val allWarnings = warnings + listOfNotNull(mismatchWarning(target, sources, binary, ktParser))
+                val allWarnings = warnings + listOfNotNull(
+                    mismatchWarning(
+                        target, sources, binary, ktParser,
+                        outer = companionOuterOf(target, workspace),
+                    ),
+                )
                 return docOutcome(
                     inherited.doc, inherited.displayName, binary, canonicalRef,
                     docSubjectOf(inherited.doc.kind), allWarnings, options, inherited.lines,
@@ -4926,7 +4936,15 @@ public object JdxService {
                             ),
                         )
                     } else {
-                        val allWarnings = warnings + listOfNotNull(mismatchWarning(target, sources, binary, ktParser))
+                        val allWarnings = warnings + listOfNotNull(
+                            mismatchWarning(
+                                target, sources, binary, ktParser,
+                                outer = companionOuterOf(
+                                    target,
+                                    Workspace(opened, providers, mutableListOf()),
+                                ),
+                            ),
+                        )
                         docOutcome(
                             doc, sources.displayName, binary, binary,
                             docSubjectOf(doc.kind), allWarnings, options, lines, inheritedFrom = null,
@@ -5138,6 +5156,9 @@ public object JdxService {
         kotlinHome: Path? = null,
         kotlinOs: JdxOs? = null,
         kotlinEnv: Map<String, String>? = null,
+        // Outer ClassInfo for companion `const` pairing (issue #14); null
+        // keeps the detector's copy-pasteable "query Outer instead" hint.
+        outer: ClassInfo? = null,
     ): Warning? {
         when (val listed = dev.jdx.sources.listJavaMembers(sources, binary)) {
             is dev.jdx.sources.JavaMemberList.Listed ->
@@ -5147,10 +5168,10 @@ public object JdxService {
         if (!target.isKotlin) return null
         return runCatching {
             if (ktParser != null) {
-                kotlinMismatchWarning(target, sources, binary, ktParser)
+                kotlinMismatchWarning(target, sources, binary, ktParser, outer)
             } else {
                 openKotlinParserFor(kotlinHome, kotlinOs, kotlinEnv)
-                    .use { kotlinMismatchWarning(target, sources, binary, it) }
+                    .use { kotlinMismatchWarning(target, sources, binary, it, outer) }
             }
         }.getOrNull()
     }
@@ -5161,10 +5182,20 @@ public object JdxService {
         sources: dev.jdx.sources.SourceRoot,
         binary: String,
         ktParser: dev.jdx.sources.KotlinSourceParser,
+        outer: ClassInfo? = null,
     ): Warning? {
         val listed = dev.jdx.sources.listKotlinMembers(sources, binary, ktParser)
         val members = (listed as? dev.jdx.sources.JavaMemberList.Listed)?.members ?: return null
-        return dev.jdx.sources.detectKotlinSourcesMismatch(target, members, sources.displayName)
+        return dev.jdx.sources.detectKotlinSourcesMismatch(target, members, sources.displayName, outer = outer)
+    }
+
+    /** Outer ClassInfo for a companion target (issue #14), or null when unknown. */
+    private fun companionOuterOf(target: ClassInfo, workspace: Workspace): ClassInfo? {
+        val outerName = target.outerClass?.binaryName ?: return null
+        if (target.kind != TypeKind.COMPANION && !target.name.binaryName.endsWith("\$Companion")) {
+            return null
+        }
+        return workspace.load(outerName)
     }
 
     /** Rendered (`--raw` verbatim) lines of one doc, before `--max-lines` truncation. */
@@ -5616,7 +5647,10 @@ public object JdxService {
                         }
                         val body = found.bodies.singleOrNull()
                             ?: return ServiceOutcome.Failure(ErrorResult.ambiguous(rawRef, matchRefs))
-                        mismatchWarning(target, sources, binary, ktParser)?.let(warnings::add)
+                        mismatchWarning(
+                            target, sources, binary, ktParser,
+                            outer = companionOuterOf(target, workspace),
+                        )?.let(warnings::add)
                         return bodyOutcome(
                             body = body,
                             sources = sources,

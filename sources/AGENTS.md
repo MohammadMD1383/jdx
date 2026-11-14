@@ -15,7 +15,10 @@ dependency, never in the fat jar. `explicitApi()` is on.
 - `SourceSiblings` — same-file top-level siblings (`Matrix`/`Tag` in one `.java`).
 - `SourcesMismatch` — `SOURCES_VERSION_MISMATCH` detection; Kotlin pairs in
   declaration space (display + property names, data/value synthetics and
-  `@JvmOverloads` shorts excused).
+  `@JvmOverloads` shorts excused). Body-declared property add/rename/remove
+  warns; primary-constructor properties pair through `<init>`. Companion
+  `const` vals pair via an optional outer `ClassInfo` (issue #14); without it
+  the warning names the outer type to query.
 - `KotlinToolchain` — versioned sidecar path probe (`Installed`/`Missing`, never
   throws); `KotlinParser` — isolated-`URLClassLoader` seam (presence-vs-usability
   split); `KotlinBodies` — real PSI ranges, property-aware (getter/setter →
