@@ -74,8 +74,18 @@ public object AsmClassReader {
      * bytes are fine, so [ClassReadResult.Corrupt] carries [WarningCode.UNNAMEABLE_CLASS]
      * (message `unnameable class name ...`) while every other unparseable shape
      * carries [WarningCode.CORRUPT_CLASS].
+     *
+     * [partResolver] (issue #12) maps a multi-file part's JVM internal name
+     * (`dev/jdx/fixtures/Foo__BarKt`) to that part's class-file bytes so a
+     * `MULTI_FILE_FACADE` umbrella can merge each part's `KmPackage` into its
+     * Kotlin views. Absent or failing resolutions degrade to the JVM projection
+     * for that part — never a throw. Pass `null` when no jar is open.
      */
-    public fun read(bytes: ByteArray, sourceHint: String = "class"): ClassReadResult {
+    public fun read(
+        bytes: ByteArray,
+        sourceHint: String = "class",
+        partResolver: ((String) -> ByteArray?)? = null,
+    ): ClassReadResult {
         if (bytes.size < 8) {
             return corrupt(sourceHint, null, "only ${bytes.size} bytes, shorter than the class header")
         }
@@ -100,7 +110,7 @@ public object AsmClassReader {
             // SKIP_FRAMES drops StackMapTable frames (indexing needs no control flow),
             // but keeps debug info — parameter names live there, so never SKIP_DEBUG.
             ClassReader(bytes).accept(node, ClassReader.SKIP_FRAMES)
-            ClassReadResult.Ok(mapClass(node))
+            ClassReadResult.Ok(mapClass(node, partResolver))
         } catch (unsupported: IllegalArgumentException) {
             // ASM lags the running JDK: it rejects majors it has no Opcodes for even when
             // the pre-check above passed. Same graceful path, never a throw.
@@ -121,8 +131,11 @@ public object AsmClassReader {
     }
 
     /** Reads one class from an open stream. The caller owns (and closes) the stream. */
-    public fun read(stream: InputStream, sourceHint: String = "class"): ClassReadResult =
-        read(stream.readAllBytes(), sourceHint)
+    public fun read(
+        stream: InputStream,
+        sourceHint: String = "class",
+        partResolver: ((String) -> ByteArray?)? = null,
+    ): ClassReadResult = read(stream.readAllBytes(), sourceHint, partResolver)
 
     /** The class-file major version the running JDK understands: `feature + 44`. */
     public fun runtimeMajorVersion(): Int = Runtime.version().feature() + 44
@@ -155,7 +168,10 @@ public object AsmClassReader {
 
     // -- class mapping ---------------------------------------------------------
 
-    private fun mapClass(node: ClassNode): ClassInfo {
+    private fun mapClass(
+        node: ClassNode,
+        partResolver: ((String) -> ByteArray?)?,
+    ): ClassInfo {
         val internalName = node.name ?: throw IllegalArgumentException("class file has no name")
         val access = node.access
         val annotations = readAnnotations(node.visibleAnnotations, node.invisibleAnnotations)
@@ -167,7 +183,8 @@ public object AsmClassReader {
         val kind = refineKind(mapKind(access), kotlinMetadata)
         val superclass = mapSuperclass(kind, internalName, node.superName)
         val methods = (node.methods ?: emptyList()).map { mapMethod(it) }
-        val foldedProperties = kotlinPropertiesOf(kotlinMetadata, methods)
+        val packages = declarationPackages(kotlinMetadata, partResolver)
+        val foldedProperties = kotlinPropertiesOf(packages, methods)
         return ClassInfo(
             name = mapInternalName(internalName),
             kind = kind,
@@ -186,7 +203,7 @@ public object AsmClassReader {
             sourceFileName = node.sourceFile,
             deprecated = deprecated,
             isKotlin = kotlinMetadata != null,
-            kotlinMethodViews = kotlinViewsOf(kotlinMetadata),
+            kotlinMethodViews = kotlinViewsOf(packages),
             kotlinProperties = foldedProperties.properties,
             kotlinHiddenMethods = foldedProperties.hiddenMethods,
             kotlinHiddenFields = foldedProperties.hiddenFields,
@@ -194,35 +211,85 @@ public object AsmClassReader {
     }
 
     /**
-     * Builds the T-077 Kotlin member views from the decoded carrier. Never
-     * throws: a hostile-yet-parseable metadata shape degrades to the JVM
-     * projection (no views) rather than corrupting the class — the reader's
-     * contract is values, never exceptions.
+     * Declaration containers that feed Kotlin views (issue #12): a lone
+     * [KmClass]/[KmPackage] for CLASS / FILE_FACADE / MULTI_FILE_PART, or every
+     * resolvable part package for a MULTI_FILE_FACADE umbrella. Missing parts
+     * are skipped — degrade, don't fail.
+     */
+    private fun declarationPackages(
+        metadata: dev.jdx.index.kotlin.KotlinMetadata?,
+        partResolver: ((String) -> ByteArray?)?,
+    ): List<kotlin.metadata.KmDeclarationContainer> {
+        if (metadata == null) return emptyList()
+        metadata.declarationContainer()?.let { return listOf(it) }
+        if (metadata.metadataKind != KotlinMetadataKind.MULTI_FILE_FACADE) return emptyList()
+        if (partResolver == null || metadata.partClassNames.isEmpty()) return emptyList()
+        val packages = mutableListOf<kotlin.metadata.KmDeclarationContainer>()
+        for (partName in metadata.partClassNames) {
+            try {
+                val partBytes = partResolver(partName) ?: continue
+                val partNode = ClassNode()
+                ClassReader(partBytes).accept(partNode, ClassReader.SKIP_FRAMES)
+                val partMeta = KotlinMetadataReader.read(
+                    partNode.visibleAnnotations,
+                    partNode.invisibleAnnotations,
+                )
+                val container = partMeta?.declarationContainer() ?: continue
+                packages.add(container)
+            } catch (_: Exception) {
+                continue
+            }
+        }
+        return packages
+    }
+
+    /**
+     * Builds the T-077 Kotlin member views from one or more declaration
+     * containers. Never throws: a hostile-yet-parseable metadata shape degrades
+     * to the JVM projection (no views) rather than corrupting the class — the
+     * reader's contract is values, never exceptions.
      */
     private fun kotlinViewsOf(
-        metadata: dev.jdx.index.kotlin.KotlinMetadata?,
+        packages: List<kotlin.metadata.KmDeclarationContainer>,
     ): Map<String, dev.jdx.core.model.KotlinMethodView> {
-        val kmClass = metadata?.kmClass ?: return emptyMap()
+        if (packages.isEmpty()) return emptyMap()
         return try {
-            KotlinMembers.viewsFor(kmClass)
+            val views = linkedMapOf<String, dev.jdx.core.model.KotlinMethodView>()
+            for (container in packages) {
+                views.putAll(KotlinMembers.viewsFor(container))
+            }
+            views
         } catch (_: Exception) {
             emptyMap()
         }
     }
 
     /**
-     * Builds the T-078 folded properties from the decoded carrier (getter/setter
-     * hiding + `val`/`var` views). Never throws: hostile metadata degrades to
-     * no properties. The getter's JVM access is attached per property so rows
-     * render real modifiers without a second lookup.
+     * Builds the T-078 folded properties from one or more declaration
+     * containers (getter/setter hiding + `val`/`var` views). Never throws:
+     * hostile metadata degrades to no properties. The getter's JVM access is
+     * attached per property so rows render real modifiers without a second
+     * lookup. File facades, multi-file parts, and merged multi-file facades
+     * fold top-level properties the same way (issue #12).
      */
     private fun kotlinPropertiesOf(
-        metadata: dev.jdx.index.kotlin.KotlinMetadata?,
+        packages: List<kotlin.metadata.KmDeclarationContainer>,
         methods: List<MethodInfo>,
     ): KotlinMembers.KotlinProperties {
-        val kmClass = metadata?.kmClass ?: return KotlinMembers.KotlinProperties(emptyMap(), emptySet(), emptySet())
+        if (packages.isEmpty()) {
+            return KotlinMembers.KotlinProperties(emptyMap(), emptySet(), emptySet())
+        }
         return try {
-            val folded = KotlinMembers.propertiesFor(kmClass)
+            val properties = linkedMapOf<String, dev.jdx.core.model.KotlinPropertyView>()
+            val hiddenMethods = linkedSetOf<String>()
+            val hiddenFields = linkedSetOf<String>()
+            for (container in packages) {
+                val folded = KotlinMembers.propertiesFor(container)
+                properties.putAll(folded.properties)
+                hiddenMethods.addAll(folded.hiddenMethods)
+                hiddenFields.addAll(folded.hiddenFields)
+            }
+            val folded = KotlinMembers.KotlinProperties(properties, hiddenMethods, hiddenFields)
             if (folded.properties.isEmpty()) return folded
             // Attach each property's getter access (fall back to public-final).
             val byKey = methods.associateBy { dev.jdx.core.model.kotlinViewKey(it.name, it.descriptor.descriptor) }
@@ -274,8 +341,10 @@ public object AsmClassReader {
      * Refines the JVM kind with the Kotlin class kind (T-035): `object` (incl. `data
      * object`) and `companion object` become [TypeKind.OBJECT]/[TypeKind.COMPANION],
      * the kinds `ClassInfo` reserves for them. Every other Kotlin kind keeps its JVM
-     * kind — a Kotlin interface is still an interface — and file facades (which carry
-     * `FILE_FACADE`, not `CLASS`, metadata) stay `CLASS`, so Java output is untouched.
+     * kind — a Kotlin interface is still an interface — and file facades / multi-file
+     * parts (which carry `FILE_FACADE` / `MULTI_FILE_PART`, not `CLASS`, metadata)
+     * stay `CLASS`, so Java output is untouched. Their Kotlin *member* views still
+     * come from `KmPackage` (issue #12); only the type kind stays JVM.
      */
     private fun refineKind(
         jvmKind: TypeKind,

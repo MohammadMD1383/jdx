@@ -64,7 +64,15 @@ class RendererGoldenTest {
     /** Raw bytes, never a class load (D-017). */
     private fun readFixtureClass(jar: File, binaryName: String): ClassInfo {
         val bytes = FixtureJars.classBytes(jar, binaryName)
-        return when (val result = AsmClassReader.read(bytes)) {
+        // Multi-file facades need sibling part bytes (issue #12), matching live loads.
+        val partResolver: (String) -> ByteArray? = { partInternal ->
+            try {
+                FixtureJars.classBytes(jar, partInternal.replace('/', '.'))
+            } catch (_: Exception) {
+                null
+            }
+        }
+        return when (val result = AsmClassReader.read(bytes, binaryName, partResolver)) {
             is ClassReadResult.Ok -> result.info
             is ClassReadResult.UnsupportedVersion ->
                 fail("$binaryName: unsupported version (${result.warning.message})")

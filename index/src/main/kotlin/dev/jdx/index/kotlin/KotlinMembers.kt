@@ -6,6 +6,7 @@ import dev.jdx.core.model.KotlinPropertyView
 import dev.jdx.core.model.kotlinViewKey
 import kotlin.metadata.KmClass
 import kotlin.metadata.KmClassifier
+import kotlin.metadata.KmDeclarationContainer
 import kotlin.metadata.KmFunction
 import kotlin.metadata.KmProperty
 import kotlin.metadata.KmType
@@ -25,13 +26,15 @@ import kotlin.metadata.jvm.signature
 
 /**
  * Maps collected JVM members back onto Kotlin declarations (T-077, PROPOSAL.md
- * §9.3 step 7, §12.1).
+ * §9.3 step 7, §12.1; issue #12 for file-facade / multi-file-part packages).
  *
  * Pure functions over the T-076 carrier: one [KmFunction] ↔ one JVM method,
  * keyed by the metadata `jvmSignature` (name + descriptor), which the compiler
  * writes to match the class file exactly — `@JvmName` renames, `internal`
  * mangling (`name$module`) and the `suspend` `Continuation` parameter are all
  * visible as the difference between [KmFunction.name] and the JVM signature.
+ * [KmClass] and [KmPackage] share [KmDeclarationContainer], so class members
+ * and top-level facade members ride the same mapping.
  *
  * Everything here degrades: a function without a JVM signature cannot be
  * keyed, an unrenderable type keeps the JVM text, a malformed descriptor never
@@ -58,8 +61,9 @@ public object KotlinMembers {
     )
 
     /**
-     * Builds the per-method Kotlin views for a `CLASS` [KmClass], keyed by
-     * [kotlinViewKey] (JVM name + descriptor) for lookup from `ClassInfo`.
+     * Builds the per-method Kotlin views for a [KmDeclarationContainer]
+     * (`CLASS` [KmClass], or file-facade / multi-file-part [KmPackage]), keyed
+     * by [kotlinViewKey] (JVM name + descriptor) for lookup from `ClassInfo`.
      *
      * Only methods whose Kotlin view differs from the JVM projection are
      * present: renames (`@JvmName`, mangled `internal`), `suspend`
@@ -71,9 +75,9 @@ public object KotlinMembers {
      * (which live on [KmClass.constructors], never [KmClass.functions]) and
      * `$default` stubs (synthetic, no metadata entry) map to nothing.
      */
-    public fun viewsFor(kmClass: KmClass): Map<String, KotlinMethodView> {
+    public fun viewsFor(container: KmDeclarationContainer): Map<String, KotlinMethodView> {
         val views = linkedMapOf<String, KotlinMethodView>()
-        for (function in kmClass.functions) {
+        for (function in container.functions) {
             val jvm = function.signature ?: continue
             val suspend = function.isSuspend
             val strip = suspend && isContinuationTail(jvm.descriptor)
@@ -161,24 +165,38 @@ public object KotlinMembers {
     }
 
     /**
-     * Builds the folded properties for a `CLASS` [KmClass] (T-078).
+     * Builds the folded properties for a [KmDeclarationContainer] (T-078;
+     * issue #12 for file-facade / multi-file-part [KmPackage]).
      *
      * Each [KmProperty] contributes its getter/setter JVM keys (via
      * `getterSignature`/`setterSignature`) to [KotlinProperties.hiddenMethods]
      * and its backing-field name (via `fieldSignature`) to `hiddenFields`;
      * the property itself lands in `properties` with its `val`/`var` shape and
      * metadata type. A property with no JVM signatures maps to nothing (it has
-     * no projection to fold). Never throws: hostile metadata degrades to empty.
+     * no projection to fold). [constructorDeclared] is only meaningful for a
+     * [KmClass] (file packages have no constructors — always `false`).
+     * Never throws: hostile metadata degrades to empty.
      */
-    public fun propertiesFor(kmClass: KmClass): KotlinProperties {
+    public fun propertiesFor(container: KmDeclarationContainer): KotlinProperties {
+        val constructorPropertyNames = when (container) {
+            is KmClass -> primaryConstructorPropertyNames(container)
+            else -> emptySet()
+        }
+        return propertiesFor(container, constructorPropertyNames)
+    }
+
+    /**
+     * Like [propertiesFor] with an explicit constructor-property name set —
+     * used by tests that build synthetic containers without a real primary ctor.
+     */
+    public fun propertiesFor(
+        container: KmDeclarationContainer,
+        constructorPropertyNames: Set<String>,
+    ): KotlinProperties {
         val properties = linkedMapOf<String, KotlinPropertyView>()
         val hiddenMethods = linkedSetOf<String>()
         val hiddenFields = linkedSetOf<String>()
-        // Primary-constructor parameter names (issue #14): body-declared
-        // properties pair as fields in the sources-mismatch detector;
-        // constructor properties pair through `<init>` instead.
-        val constructorPropertyNames = primaryConstructorPropertyNames(kmClass)
-        for (property in kmClass.properties) {
+        for (property in container.properties) {
             try {
                 val getter = property.getterSignature
                 val setter = property.setterSignature

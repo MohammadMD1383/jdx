@@ -344,6 +344,6 @@ class ReadCommandsServiceTest {
         ZipFile(fixtureJar()).use { zip ->
             zip.entries().asSequence().map { it.name }
                 .filter { it.endsWith(".class") && it != "module-info.class" }.toList()
-        }.size shouldBe 35
+        }.size shouldBe 38 // +3 multifile umbrella/parts (issue #12)
     }
 }

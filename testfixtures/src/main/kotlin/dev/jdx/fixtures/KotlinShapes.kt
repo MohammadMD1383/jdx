@@ -7,9 +7,11 @@ package dev.jdx.fixtures
  * (annotations, not descriptors), `object`/`companion` (static bridges), `value` classes
  * (erasure), `inline`/`reified` (call-site specialisation).
  *
- * File-facade members (`KotlinShapesKt`: [extensionGreeting], [isInstanceOf]) carry no
- * annotation — `@ExpectedMembers` targets classes. Their expectations live in
- * `FixtureCorpusTest` instead.
+ * File-facade members (`KotlinShapesKt`: [extensionGreeting], [isInstanceOf],
+ * plus `@JvmName` / `suspend` / property / `internal` shapes for issue #12)
+ * carry no annotation — `@ExpectedMembers` targets classes. Their expectations
+ * live in `FixtureCorpusTest` instead. Multi-file parts live in
+ * `KotlinMultifileA.kt` / `KotlinMultifileB.kt`.
  */
 typealias UserId = String
 
@@ -82,6 +84,22 @@ class KotlinMembers {
 
 /** Extension function: a static method on the file facade with the receiver first. */
 fun KotlinMembers.extensionGreeting(): String = "hello"
+
+/** Facade `@JvmName`: JVM sees `facadeRenamed`, Kotlin view restores `facadeOriginal`. */
+@JvmName("facadeRenamed")
+fun facadeOriginal(value: Int): Int = value * 2
+
+/** Facade `suspend`: Continuation-stripped Kotlin view on the file facade. */
+suspend fun facadeFetch(id: String): String = "facade:$id"
+
+/** Facade top-level properties: fold getters/setters like class properties. */
+val facadeGreeting: String = "hi"
+
+var facadeNickname: String? = null
+
+/** Facade `internal`: demangle `facadeInternal$testfixtures` back to `facadeInternal`. */
+internal fun facadeInternal() {
+}
 
 /** Sealed hierarchy with a `data object` leaf. */
 @ExpectedMembers(

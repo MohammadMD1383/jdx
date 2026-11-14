@@ -38,6 +38,11 @@ class FixtureCorpusTest {
     // review blocker; a new fixture with an anonymous class must extend this set consciously.
     private val expectedMembersExempt: Set<String> = setOf(
         "dev.jdx.fixtures.KotlinShapesKt",
+        // Multi-file facade + parts (issue #12): compiler-generated, no TYPE target for
+        // `@ExpectedMembers`. Truth pinned below / left to KotlinClassesTest for views.
+        "dev.jdx.fixtures.KotlinMultifile",
+        "dev.jdx.fixtures.KotlinMultifile__KotlinMultifileAKt",
+        "dev.jdx.fixtures.KotlinMultifile__KotlinMultifileBKt",
         "dev.jdx.fixtures.Nesting\$1",
         "dev.jdx.fixtures.Nesting\$1Local",
         "dev.jdx.fixtures.TrafficLight\$1",
@@ -48,7 +53,15 @@ class FixtureCorpusTest {
     // `KotlinShapesKt` cannot carry the annotation (see above), so its truth is pinned here,
     // in declaration order, exactly as `javap -p` prints it. Same comparison, different home.
     private val fileFacadeExpected: List<String> = listOf(
+        "private static final java.lang.String facadeGreeting",
+        "private static java.lang.String facadeNickname",
         "public static final java.lang.String extensionGreeting(dev.jdx.fixtures.KotlinMembers)",
+        "public static final int facadeRenamed(int)",
+        "public static final java.lang.Object facadeFetch(java.lang.String, kotlin.coroutines.Continuation<? super java.lang.String>)",
+        "public static final java.lang.String getFacadeGreeting()",
+        "public static final java.lang.String getFacadeNickname()",
+        "public static final void setFacadeNickname(java.lang.String)",
+        "public static final void facadeInternal()",
         "public static final <T> boolean isInstanceOf(java.lang.Object)",
     )
 
@@ -73,6 +86,8 @@ class FixtureCorpusTest {
             "dev/jdx/fixtures/CovariantOverrides.java",
             "dev/jdx/fixtures/ExpectedMembers.java",
             "dev/jdx/fixtures/Generics.java",
+            "dev/jdx/fixtures/KotlinMultifileA.kt",
+            "dev/jdx/fixtures/KotlinMultifileB.kt",
             "dev/jdx/fixtures/KotlinShapes.kt",
             "dev/jdx/fixtures/Nesting.java",
             "dev/jdx/fixtures/NoDebug.java",

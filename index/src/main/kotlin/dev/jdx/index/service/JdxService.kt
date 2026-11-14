@@ -1225,7 +1225,15 @@ public object JdxService {
                 return null
             }
             val hint = "$binary in ${open.root.displayName}"
-            return when (val read = AsmClassReader.read(bytes, hint)) {
+            // Multi-file facade umbrellas need each part's KmPackage (issue #12).
+            val partResolver: (String) -> ByteArray? = { partInternal ->
+                try {
+                    open.root.openClass("$partInternal.class").use { it.readBytes() }
+                } catch (_: Exception) {
+                    null
+                }
+            }
+            return when (val read = AsmClassReader.read(bytes, hint, partResolver)) {
                 is ClassReadResult.Ok -> read.info
                 is ClassReadResult.UnsupportedVersion -> {
                     if (reported.add(binary)) warnings.add(read.warning.copy(subject = binary))

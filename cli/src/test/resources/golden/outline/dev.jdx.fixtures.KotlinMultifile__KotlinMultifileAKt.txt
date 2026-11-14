@@ -1,0 +1,5 @@
+members of dev.jdx.fixtures.KotlinMultifile__KotlinMultifileAKt
+methods declared on dev.jdx.fixtures.KotlinMultifile__KotlinMultifileAKt:
+  method public static final int multiOriginal(int value)
+  method public static final java.lang.String multiPartA()
+source: fixture-corpus.jar (bytecode)

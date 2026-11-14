@@ -63,9 +63,12 @@ behaviour lives here** (adapters call in, never the reverse). `explicitApi()` is
   `field` are opt-in (slow path parses every in-scope class). A default-kind miss
   carries `SEARCH_MEMBERS_OPT_IN_HINT` as `ErrorResult.detail` (issue #86) — do not
   widen `ALL` to include members without revisiting that tip and the perf story.
-- Kotlin views ride `ClassInfo` with defaults (no `ktmeta` blob writes); file facades
-  stay JVM-projected; `core` carriers must not leak mutable `KmClass` equality into
-  pinned shapes (compare contents, never carriers). `KotlinPropertyView.constructorDeclared`
+- Kotlin views ride `ClassInfo` with defaults (no `ktmeta` blob writes). `CLASS` uses
+  `KmClass`; file facades and multi-file parts use `KmPackage`; multi-file facade
+  umbrellas merge each part's `KmPackage` when a part-byte resolver is open (issue #12).
+  Corrupt/missing package metadata still degrades to the JVM projection. `core`
+  carriers must not leak mutable `KmClass`/`KmPackage` equality into pinned shapes
+  (compare contents, never carriers). `KotlinPropertyView.constructorDeclared`
   marks primary-constructor properties so sources-mismatch pairs them through `<init>`
   and still warns on body-declared property removal (issue #14).
 - `doctor` is refused over the daemon wire (exit 6); the daemon never fetches

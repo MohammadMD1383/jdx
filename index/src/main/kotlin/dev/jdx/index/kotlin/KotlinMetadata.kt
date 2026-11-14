@@ -2,6 +2,8 @@ package dev.jdx.index.kotlin
 
 import kotlin.metadata.ClassKind
 import kotlin.metadata.KmClass
+import kotlin.metadata.KmDeclarationContainer
+import kotlin.metadata.KmPackage
 import kotlin.metadata.jvm.KotlinClassMetadata
 import kotlin.metadata.jvm.Metadata as buildMetadataAnnotation
 import kotlin.metadata.kind
@@ -30,18 +32,33 @@ public enum class KotlinMetadataKind {
  * `AsmClassReader` (the `isKotlin` flag and the `OBJECT`/`COMPANION` kind
  * refinement) and, from T-076, by the Kotlin member mapping (T-036): [kmClass]
  * carries the full declaration container for `CLASS` metadata so callers can
- * match JVM members against Kotlin functions and properties.
+ * match JVM members against Kotlin functions and properties. [kmPackage] does
+ * the same for [KotlinMetadataKind.FILE_FACADE] / [KotlinMetadataKind.MULTI_FILE_PART]
+ * (issue #12) — both are [KmDeclarationContainer]s with functions + properties.
  *
  * [kmClass] is present only when [metadataKind] is [KotlinMetadataKind.CLASS];
- * file facades, multi-file parts, synthetic classes and corrupt/absent metadata
- * all carry `null`. `KmClass` is a mutable model type without value equality —
- * compare its contents (names, flags), never two carriers with `==`.
+ * [kmPackage] only for file facades and multi-file parts. Multi-file *facades*
+ * (the `@JvmName` umbrella) carry [partClassNames] (internal names of the parts
+ * whose `KmPackage`s hold the declarations) and neither container — callers with
+ * a jar open merge the parts' packages into the umbrella's views (issue #12).
+ * Synthetic/corrupt/absent metadata carry none. `KmClass`/`KmPackage` are
+ * mutable model types without value equality — compare contents (names, flags),
+ * never two carriers with `==`.
  */
 public data class KotlinMetadata(
     public val metadataKind: KotlinMetadataKind,
     public val classKind: ClassKind?,
     public val kmClass: KmClass? = null,
-)
+    public val kmPackage: KmPackage? = null,
+    public val partClassNames: List<String> = emptyList(),
+) {
+    /**
+     * The declaration container that drives Kotlin member views, or `null` when
+     * this family has none on its own bytes (multi-file facade umbrella —
+     * merge [partClassNames] instead — synthetic, unknown).
+     */
+    public fun declarationContainer(): KmDeclarationContainer? = kmClass ?: kmPackage
+}
 
 /**
  * Reads Kotlin `@Metadata` from ASM annotation nodes with `kotlin-metadata-jvm`
@@ -92,7 +109,13 @@ public object KotlinMetadataReader {
         val kind = values["k"] as? Int ?: return null
         val metadataVersion = intArray(values["mv"]) ?: return null
         val data1 = stringArray(values["d1"]) ?: return null
-        val data2 = stringArray(values["d2"]) ?: return null
+        // `d2` defaults to `{}` on the annotation; MultiFileClassFacade often
+        // omits it entirely (part names live in `d1`) — absent is empty, a
+        // mistyped value is still corrupt (issue #12).
+        val data2 = when {
+            !values.containsKey("d2") || values["d2"] == null -> emptyArray()
+            else -> stringArray(values["d2"]) ?: return null
+        }
         // `xs`/`pn`/`xi` have annotation defaults; absent means default.
         val annotation = buildMetadataAnnotation(
             kind = kind,
@@ -105,12 +128,20 @@ public object KotlinMetadataReader {
         )
         return when (val metadata = KotlinClassMetadata.readLenient(annotation)) {
             is KotlinClassMetadata.Class ->
-                KotlinMetadata(KotlinMetadataKind.CLASS, metadata.kmClass.kind, metadata.kmClass)
-            is KotlinClassMetadata.FileFacade -> KotlinMetadata(KotlinMetadataKind.FILE_FACADE, null)
+                KotlinMetadata(KotlinMetadataKind.CLASS, metadata.kmClass.kind, kmClass = metadata.kmClass)
+            is KotlinClassMetadata.FileFacade ->
+                KotlinMetadata(KotlinMetadataKind.FILE_FACADE, null, kmPackage = metadata.kmPackage)
             is KotlinClassMetadata.MultiFileClassFacade ->
-                KotlinMetadata(KotlinMetadataKind.MULTI_FILE_FACADE, null)
+                // Umbrella only lists part class names — member bodies + KmPackage
+                // live on each MULTI_FILE_PART; AsmClassReader merges them when a
+                // part-byte resolver is supplied (issue #12).
+                KotlinMetadata(
+                    KotlinMetadataKind.MULTI_FILE_FACADE,
+                    null,
+                    partClassNames = metadata.partClassNames.toList(),
+                )
             is KotlinClassMetadata.MultiFileClassPart ->
-                KotlinMetadata(KotlinMetadataKind.MULTI_FILE_PART, null)
+                KotlinMetadata(KotlinMetadataKind.MULTI_FILE_PART, null, kmPackage = metadata.kmPackage)
             is KotlinClassMetadata.SyntheticClass -> KotlinMetadata(KotlinMetadataKind.SYNTHETIC, null)
             is KotlinClassMetadata.Unknown -> KotlinMetadata(KotlinMetadataKind.UNKNOWN, null)
         }

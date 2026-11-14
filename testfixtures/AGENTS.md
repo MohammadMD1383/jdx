@@ -11,7 +11,8 @@ annotations (`Annos` incl. same-file siblings `Matrix`/`Tag` and annotation
 elements) · `VarargsAndModifiers` (`synchronized`/`native`/`strictfp`) ·
 `-g:none` class · `StaticInitMarker` · every Kotlin shape whose JVM projection
 misleads (`KotlinShapes`: suspend, properties, default args, `@JvmName`, objects,
-companions, facades, data/value classes).
+companions, file facades with the same shapes, data/value classes) · multi-file
+facade pair (`KotlinMultifileA`/`B` → `KotlinMultifile` umbrella, issue #12).
 
 **The diff pair** (`src/diffV1/`, `src/diffV2/`, `src/diffAbsent/`) is a *second*,
 separate corpus for `jdx diff` (issue #23, `docs/TESTING.md` §11.2): two versions of
