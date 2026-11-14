@@ -109,3 +109,7 @@ behaviour lives here** (adapters call in, never the reverse). `explicitApi()` is
   an 8 s wall-clock budget (`-Djdx.javap.oracleTimeoutMs`), and `TimedOut` must become a
   test failure — never a soft skip. PIT threads for this module are capped at 4 by the
   root build (`-PpitestThreads` to override); do not reintroduce a private `threads.set`.
+- Uppercase package segments (JNA `…win32.COM.…`, issue #1 soak): `$`-form refs parse as
+  binary names in `core`; dot-only top-level refs still mis-nest under the D-025
+  heuristic, and `matchCandidates` recovers by moving leading nested segments back into
+  the package against the workspace. Several recovered binaries stay ambiguous (exit 2).

@@ -17,13 +17,19 @@ import dev.jdx.core.model.arrayTypeName
  * list) is a legal parse; deciding what it *means* is resolution's job (D-016).
  *
  * Disambiguation rules, since the grammar is deliberately generous (D-025):
- *  - `$` in a type name always separates nesting; `.` separates nesting **or** the
- *    package from the class. The split uses the Java naming convention: a run of
- *    leading dot-separated segments whose first character is lowercase is the
- *    package, except that the final segment is always the class. So
- *    `java.util.Map.Entry`, `java.util.Map$Entry` and `Map.Entry`/`Map$Entry`
- *    normalise as the acceptance table requires; a package with an uppercase first
- *    segment cannot be expressed (round-trip limitation, see D-025).
+ *  - `$` in a type name always separates nesting. When `$` is present the input is
+ *    treated as a JVMS binary name: the last `.` before the first `$` splits the
+ *    package from the top-level class (same rule as [dev.jdx.core.model.typeNameFromBinaryName]
+ *    and [SymbolRefPrinter]). That keeps `parse(print(ref))` the identity even when
+ *    a package segment starts uppercase (`com.sun.jna.platform.win32.COM.DispatchVTable$AddRefCallback`).
+ *  - Without `$`, `.` separates nesting **or** the package from the class. The split
+ *    uses the Java naming convention: a run of leading dot-separated segments whose
+ *    first character is lowercase is the package, except that the final segment is
+ *    always the class. So `java.util.Map.Entry` and `Map.Entry` normalise as the
+ *    acceptance table requires. A *top-level* type whose package has an uppercase
+ *    segment (no `$` in the input) still cannot be expressed by the heuristic alone —
+ *    resolution recovers it against the workspace (`matchCandidates` in `index`); see
+ *    D-025 / issue #1 soak fallout.
  *  - `.` acts as the member separator only when a parameter list follows, or when
  *    the segment is `<init>`/`<clinit>`; a bare `Type.name` is a nested type
  *    (indistinguishable from a field without resolution).
@@ -221,8 +227,12 @@ public object SymbolRefParser {
     // ---------------------------------------------------------------- type names
 
     /**
-     * Parses a class type name (dotted and/or dollar form, D-025 heuristic) or a
-     * primitive keyword. Arrays are handled by [parseParamOrReturnType].
+     * Parses a class type name (dotted and/or dollar form, D-025) or a primitive
+     * keyword. Arrays are handled by [parseParamOrReturnType].
+     *
+     * `$`-bearing input follows JVMS binary-name rules (last `.` before the first
+     * `$` splits package from top-level class). Dot-only input keeps the lowercase-
+     * initial package heuristic so `Map.Entry` still normalises to `Map$Entry`.
      */
     private fun parseTypeName(text: String, base: Int): TypeName {
         val t = text.trim()
@@ -250,15 +260,25 @@ public object SymbolRefParser {
             cursor += segment.length + 1
         }
 
-        // D-025: leading lowercase-initial segments are the package; the final
-        // dot-segment is always the class. Single-segment names have no package.
+        // Binary form (`Outer$Inner`): last '.' before '$' ends the package — same
+        // as typeNameFromBinaryName / SymbolRefPrinter. Required so printed refs
+        // with uppercase package segments round-trip (D-025, issue #1).
+        if (firstDollar != -1) {
+            val lastDot = head.lastIndexOf('.')
+            val packageName = if (lastDot == -1) "" else head.substring(0, lastDot)
+            val topLevel = if (lastDot == -1) head else head.substring(lastDot + 1)
+            return TypeName.ClassType(packageName, listOf(topLevel) + nested)
+        }
+
+        // Dot-only form: leading lowercase-initial segments are the package; the
+        // final dot-segment is always the class. Single-segment names have no package.
         val maxPackageSegments = dotSegments.size - 1
         var packageCount = 0
         while (packageCount < maxPackageSegments && dotSegments[packageCount][0].isLowerCase()) {
             packageCount++
         }
         val packageName = dotSegments.subList(0, packageCount).joinToString(".")
-        val classSegments = dotSegments.subList(packageCount, dotSegments.size) + nested
+        val classSegments = dotSegments.subList(packageCount, dotSegments.size)
         return TypeName.ClassType(packageName, classSegments)
     }
 

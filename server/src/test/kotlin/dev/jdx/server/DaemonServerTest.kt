@@ -240,12 +240,16 @@ class DaemonServerTest {
 
     @Test
     fun `requests keep resetting the idle clock`() {
-        val server = testServer(idle = Duration.ofMillis(400))
+        // Idle window must stay well above (sleep + round-trip) on slow CI
+        // runners — Windows GitHub Actions has been observed to miss a 400 ms
+        // idle with a 150 ms sleep when HEALTH itself is delayed, leaving
+        // roundTrip null mid-loop (PR #114 flake, unrelated to product code).
+        val server = testServer(idle = Duration.ofMillis(1500))
         server.start()
         try {
             val socket = control().socket
             repeat(5) {
-                Thread.sleep(150)
+                Thread.sleep(200)
                 DaemonProbe.roundTrip(socket, RpcRequest(RpcCommand.HEALTH)) shouldNotBe null
             }
             server.isAlive() shouldBe true

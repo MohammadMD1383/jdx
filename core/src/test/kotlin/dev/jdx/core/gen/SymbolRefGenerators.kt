@@ -21,9 +21,10 @@ import io.kotest.property.arbitrary.orNull
  * package that T-055 grows into the project-wide generator library).
  *
  * **Round-trip safety (D-025):** generated refs print to text that parses back to the
- * identical value. This constrains package names — every segment must start with a
- * lowercase letter — and excludes module refs (no input syntax, print-only). The
- * excluded shapes are documented in D-025; the parser's KDoc carries the same caveat.
+ * identical value. Generators still constrain package names to lowercase-initial
+ * segments so the *dot-only* heuristic path stays covered; `$`-joined nesting now
+ * round-trips uppercase package segments too (parser binary-name rules — see
+ * `SymbolRefParserTest`). Module refs stay excluded (no input syntax, print-only).
  */
 
 /** Packages whose segments all start lowercase, so `print` → `parse` is the identity. */

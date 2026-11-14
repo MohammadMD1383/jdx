@@ -314,6 +314,12 @@ Notes:
   how we learn which real-world shapes matter. Record it in the progress log.
 - Point it at a directory via `-Pcorpus=<dir>` so contributors without the owner's cache can
   run it against their own `~/.m2` or `~/.gradle`.
+- **Issue #1 (javap differential soak):** the previously observed reds on JDK-internal
+  synthetic `access$` members do not reproduce against current `ServiceDifferential` (those
+  members agree under `--include-synthetic`). A related soak failure on uppercase package
+  segments (e.g. JNA `…win32.COM.DispatchVTable$AddRefCallback` exiting 1 while suggesting
+  the same FQN) is fixed by binary-name `$` parsing + `matchCandidates` recovery — see
+  `SymbolRefParser` / `UppercasePackageResolveTest`.
 
 ---
 

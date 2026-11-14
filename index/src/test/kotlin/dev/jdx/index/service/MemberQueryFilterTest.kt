@@ -199,6 +199,48 @@ class MemberQueryFilterTest {
     }
 
     @Test
+    fun `uppercase package segments misparsed as nested still resolve`() {
+        // D-025 heuristic parse of `…win32.COM.DispatchVTable$AddRefCallback`
+        // (or the dot-only top-level) eats `COM` into nestedNames. Recovery
+        // moves that prefix back into the package against the workspace.
+        val binaries = setOf(
+            "com.sun.jna.platform.win32.COM.DispatchVTable",
+            "com.sun.jna.platform.win32.COM.DispatchVTable\$AddRefCallback",
+            "com.sun.jna.platform.win32.COM.UnknownVTable\$AddRefCallback",
+        )
+        val misparsedNested = TypeName.ClassType(
+            "com.sun.jna.platform.win32",
+            listOf("COM", "DispatchVTable", "AddRefCallback"),
+        )
+        JdxService.matchCandidates(misparsedNested, binaries) shouldBe
+            listOf("com.sun.jna.platform.win32.COM.DispatchVTable\$AddRefCallback")
+        val misparsedTop = TypeName.ClassType(
+            "com.sun.jna.platform.win32",
+            listOf("COM", "DispatchVTable"),
+        )
+        JdxService.matchCandidates(misparsedTop, binaries) shouldBe
+            listOf("com.sun.jna.platform.win32.COM.DispatchVTable")
+    }
+
+    @Test
+    fun `uppercase package recovery stays ambiguous when two readings exist`() {
+        val binaries = setOf(
+            "com.example.win32.COM\$DispatchVTable",
+            "com.example.win32.COM.DispatchVTable",
+        )
+        val misparsed = TypeName.ClassType(
+            "com.example.win32",
+            listOf("COM", "DispatchVTable"),
+        )
+        // Exact heuristic binary + recovered package reading — never guess.
+        JdxService.matchCandidates(misparsed, binaries) shouldBe
+            listOf(
+                "com.example.win32.COM\$DispatchVTable",
+                "com.example.win32.COM.DispatchVTable",
+            )
+    }
+
+    @Test
     fun `suggestions prefer same simple names then near misses`() {
         val binaries = setOf(
             "com.b.Gson",
