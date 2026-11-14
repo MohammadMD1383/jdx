@@ -229,6 +229,71 @@ class KotlinBodiesTest {
     }
 
     @Test
+    fun `narrowKotlinBySignature keys generic extension receivers as their raw type`() {
+        // Issue #15: `fun <T> List<T>.ext()` must match a `(java.util.List)` query —
+        // kotlinTypeKey strips `<T>` / nullability so arity+name narrowing works.
+        val candidate = fn("kotlinFirstOrNull", receiver = "List<T>", returns = "T?")
+        narrowKotlinBySignature(
+            listOf(candidate),
+            ref("com.example.FooKt", "kotlinFirstOrNull", listOf("java.util.List")),
+        ) shouldBe listOf(candidate)
+        narrowKotlinBySignature(
+            listOf(candidate),
+            ref("com.example.FooKt", "kotlinFirstOrNull", listOf("java.util.Map")),
+        ) shouldBe emptyList()
+        kotlinTypeKey("List<T>?") shouldBe "List"
+        kotlinTypeKey("MutableList<out T>") shouldBe "MutableList"
+    }
+
+    @Test
+    fun `navigateKotlin reaches enum entry class bodies through dollar nesting`() {
+        // Issue #15: `Outer$RED` is an ENUM_ENTRY with children, not a CLASS.
+        val overrideFn = fn("isStop", returns = "Boolean")
+        val red = KotlinDecl(
+            kind = KotlinDeclKind.ENUM_ENTRY, name = "RED",
+            startOffset = 0, endOffset = 20,
+            docText = " stop ",
+            docStartOffset = 0, docEndOffset = 5,
+            children = listOf(overrideFn),
+        )
+        val outer = KotlinDecl(
+            kind = KotlinDeclKind.CLASS, name = "Traffic",
+            startOffset = 0, endOffset = 40,
+            docText = null, docStartOffset = null, docEndOffset = null,
+            children = listOf(red),
+        )
+        val file = KotlinFile("com.example", listOf(outer))
+        navigateKotlin(file, "com.example.Traffic\$RED")!!.declarations.map { it.name } shouldBe
+            listOf("isStop")
+        navigateKotlinTarget(file, "com.example.Traffic\$RED")!!.kind shouldBe
+            KotlinDeclKind.ENUM_ENTRY
+    }
+
+    @Test
+    fun `findKotlinTypeDoc serves file-level KDoc for facades`() {
+        // Issue #15: facades have no class declaration — file KDoc is the type doc.
+        val text = "/** Facade docs. */\npackage demo\n\nfun greet() = 1\n"
+        val file = KotlinFile(
+            "demo",
+            listOf(fn("greet")),
+            fileDocText = " Facade docs. ",
+            fileDocStartOffset = text.indexOf("/**"),
+            fileDocEndOffset = text.indexOf("*/") + 2,
+        )
+        val root = MemorySourceRoot(mapOf("demo/Widgets.kt" to text))
+        val parser = fakeParser { _, _ -> KotlinParse.Parsed(file) }
+        val found = findKotlinTypeDoc(root, "demo.WidgetsKt", parser)
+            .shouldBeInstanceOf<JavaDocResult.Found>()
+        found.docs.single().rawComment shouldContain "Facade docs"
+        found.docs.single().name shouldBe "WidgetsKt"
+        // No file doc → TypeUndocumented (not TypeNotFound) for a facade.
+        val bare = KotlinFile("demo", listOf(fn("greet")))
+        val bareParser = fakeParser { _, _ -> KotlinParse.Parsed(bare) }
+        findKotlinTypeDoc(root, "demo.WidgetsKt", bareParser)
+            .shouldBeInstanceOf<JavaDocResult.TypeUndocumented>()
+    }
+
+    @Test
     fun `narrowKotlinBySignature allows omitted trailing defaults`() {
         val candidate = fn(
             "withDefault",

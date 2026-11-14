@@ -67,10 +67,17 @@ public data class KotlinDecl(
  * order. Produced by [KotlinSourceParser.parseKotlin] (real PSI ranges when
  * the sidecar is installed); every query below is pure over this model, so
  * tier 1 owns the matching laws without a compiler.
+ *
+ * [fileDocText] is the file-level KDoc that precedes the `package` directive
+ * (issue #15): facades have no class declaration, so that comment is the
+ * facade type's documentation. `null` when absent or blank.
  */
 public data class KotlinFile(
     public val packageName: String,
     public val declarations: List<KotlinDecl>,
+    public val fileDocText: String? = null,
+    public val fileDocStartOffset: Int? = null,
+    public val fileDocEndOffset: Int? = null,
 )
 
 /**
@@ -187,7 +194,9 @@ public fun findKotlinMemberDocs(
 
 /**
  * A Kotlin type's own KDoc, or [JavaDocResult.TypeUndocumented] when absent.
- * File facades have no file-doc in v1 (their members carry the docs).
+ * File facades (`FooKt`) carry no class declaration — their type doc is the
+ * file-level KDoc that precedes `package` (issue #15); when that comment is
+ * missing the facade is [JavaDocResult.TypeUndocumented], never a miss.
  */
 public fun findKotlinTypeDoc(
     root: SourceRoot,
@@ -209,10 +218,18 @@ public fun findKotlinTypeDoc(
                 "source read error: $path does not parse: ${parsed.message}",
             )
         }
-        val target = navigateKotlinTarget(parsed, binaryName) ?: return JavaDocResult.TypeNotFound
-        val doc = sliceKotlinTypeDoc(path, splitKotlinLines(text), text, target)
+        val target = navigateKotlinTarget(parsed, binaryName)
+        if (target != null) {
+            val doc = sliceKotlinTypeDoc(path, splitKotlinLines(text), text, target)
+                ?: return JavaDocResult.TypeUndocumented
+            return JavaDocResult.Found(listOf(doc))
+        }
+        // Facade: no class declaration — serve the file-level KDoc, or
+        // TypeUndocumented when the file has none (members still carry theirs).
+        if (!isKotlinFileFacade(binaryName)) return JavaDocResult.TypeNotFound
+        val facadeDoc = sliceKotlinFileDoc(path, splitKotlinLines(text), text, parsed, binaryName)
             ?: return JavaDocResult.TypeUndocumented
-        JavaDocResult.Found(listOf(doc))
+        JavaDocResult.Found(listOf(facadeDoc))
     } catch (e: Exception) {
         JavaDocResult.ParseError(
             "source read error: Kotlin sources for $binaryName unreadable: " +
@@ -399,19 +416,37 @@ internal fun navigateKotlin(file: KotlinFile, binaryName: String): KtScope? {
     return null
 }
 
-/** Navigates to the target class/object declaration itself, or null. */
+/** Navigates to the target class/object/enum-entry declaration itself, or null. */
 internal fun navigateKotlinTarget(file: KotlinFile, binaryName: String): KotlinDecl? {
     val segments = binaryName.substringAfterLast('.', binaryName).split('$')
     if (segments.any { it.isEmpty() }) return null
     var current = file.declarations.firstOrNull {
-        (it.kind == KotlinDeclKind.CLASS || it.kind == KotlinDeclKind.OBJECT) && it.name == segments.first()
+        isKotlinTypeScope(it.kind) && it.name == segments.first()
     } ?: return null
     for (nested in segments.drop(1)) {
+        // Enum entries with class bodies compile to `Outer$ENTRY` nested
+        // classes (issue #15): walk into ENUM_ENTRY the same way as CLASS.
         current = current.children.firstOrNull {
-            (it.kind == KotlinDeclKind.CLASS || it.kind == KotlinDeclKind.OBJECT) && it.name == nested
+            isKotlinTypeScope(it.kind) && it.name == nested
         } ?: return null
     }
     return current
+}
+
+/** Class, object, or enum-entry scopes that `$`-nesting can land on. */
+internal fun isKotlinTypeScope(kind: KotlinDeclKind): Boolean =
+    kind == KotlinDeclKind.CLASS ||
+        kind == KotlinDeclKind.OBJECT ||
+        kind == KotlinDeclKind.ENUM_ENTRY
+
+/**
+ * Whether [binaryName] names a Kotlin file facade (`FooKt`, no `$` nest):
+ * those have no class declaration, so type-doc falls through to file KDoc.
+ */
+internal fun isKotlinFileFacade(binaryName: String): Boolean {
+    if ('$' in binaryName) return false
+    val simple = binaryName.substringAfterLast('.', binaryName)
+    return simple.endsWith("Kt") && simple.length > 2
 }
 
 /**
@@ -612,8 +647,18 @@ internal fun sliceKotlinBody(
             endLine,
             bodyText,
         )
-        KotlinDeclKind.PROPERTY, KotlinDeclKind.ENUM_ENTRY -> SourceBody(
+        KotlinDeclKind.PROPERTY -> SourceBody(
             SourceBodyKind.FIELD,
+            decl.name,
+            emptyList(),
+            null,
+            path,
+            startLine,
+            endLine,
+            bodyText,
+        )
+        KotlinDeclKind.ENUM_ENTRY -> SourceBody(
+            SourceBodyKind.ENUM_ENTRY,
             decl.name,
             emptyList(),
             null,
@@ -684,7 +729,8 @@ internal fun sliceKotlinDoc(
     val kind = when (decl.kind) {
         KotlinDeclKind.FUNCTION -> SourceDocKind.METHOD
         KotlinDeclKind.CONSTRUCTOR -> SourceDocKind.CONSTRUCTOR
-        KotlinDeclKind.PROPERTY, KotlinDeclKind.ENUM_ENTRY -> SourceDocKind.FIELD
+        KotlinDeclKind.PROPERTY -> SourceDocKind.FIELD
+        KotlinDeclKind.ENUM_ENTRY -> SourceDocKind.ENUM_ENTRY
         KotlinDeclKind.CLASS, KotlinDeclKind.OBJECT -> return null
     }
     val name = if (kind == SourceDocKind.CONSTRUCTOR) "<init>" else decl.name
@@ -708,6 +754,31 @@ internal fun sliceKotlinTypeDoc(
     val endLine = lineOfOffset(text, maxOf(docEnd - 1, docStart))
     if (startLine < 1 || endLine < startLine || endLine > lines.size) return null
     return SourceDoc(SourceDocKind.TYPE, target.name, path, startLine, endLine, comment)
+}
+
+/**
+ * Slices a file facade's type KDoc from [KotlinFile.fileDocText] (issue #15).
+ * The subject name is the facade simple name (`FooKt`), matching how class
+ * type docs name their declaration.
+ */
+internal fun sliceKotlinFileDoc(
+    path: String,
+    lines: List<String>,
+    text: String,
+    file: KotlinFile,
+    binaryName: String,
+): SourceDoc? {
+    val comment = file.fileDocText ?: return null
+    if (comment.isBlank()) return null
+    val docEnd = file.fileDocEndOffset
+    val docStart = file.fileDocStartOffset
+    if (docEnd == null || docStart == null) return null
+    if (docStart < 0 || docEnd < docStart || docEnd > text.length) return null
+    val startLine = lineOfOffset(text, docStart)
+    val endLine = lineOfOffset(text, maxOf(docEnd - 1, docStart))
+    if (startLine < 1 || endLine < startLine || endLine > lines.size) return null
+    val name = binaryName.substringAfterLast('.', binaryName)
+    return SourceDoc(SourceDocKind.TYPE, name, path, startLine, endLine, comment)
 }
 
 /**

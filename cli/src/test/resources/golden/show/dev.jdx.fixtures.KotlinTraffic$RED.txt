@@ -1,0 +1,7 @@
+class dev.jdx.fixtures.KotlinTraffic$RED
+  final class RED
+  extends dev.jdx.fixtures.KotlinTraffic
+  kotlin
+  members: 1 constructor, 1 method, 0 fields
+source: fixture-corpus.jar (bytecode)
+next: jdx members dev.jdx.fixtures.KotlinTraffic$RED --inherited

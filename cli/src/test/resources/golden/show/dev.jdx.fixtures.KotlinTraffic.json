@@ -1,0 +1,1 @@
+{"jdx":1,"ok":true,"command":"show","query":"dev.jdx.fixtures.KotlinTraffic","result":{"kind":"enum","declaration":"public abstract enum KotlinTraffic","modifiers":["public","abstract"],"superclass":"java.lang.Enum","interfaces":[],"counts":{"constructors":2,"methods":5,"fields":4},"kotlin":true},"warnings":[],"provenance":[{"artifact":"fixture-corpus.jar","origin":"bytecode"}]}

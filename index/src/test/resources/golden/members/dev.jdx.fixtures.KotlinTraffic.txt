@@ -1,0 +1,13 @@
+members of dev.jdx.fixtures.KotlinTraffic
+constructors declared on dev.jdx.fixtures.KotlinTraffic:
+  constructor private KotlinTraffic(java.lang.String $enum$name, int $enum$ordinal)
+methods declared on dev.jdx.fixtures.KotlinTraffic:
+  method public abstract boolean isStop()
+  method public static dev.jdx.fixtures.KotlinTraffic valueOf(java.lang.String value)
+  method public static dev.jdx.fixtures.KotlinTraffic[] values()
+  method public static kotlin.enums.EnumEntries<dev.jdx.fixtures.KotlinTraffic> getEntries()
+fields declared on dev.jdx.fixtures.KotlinTraffic:
+  field public static final dev.jdx.fixtures.KotlinTraffic GREEN
+  field public static final dev.jdx.fixtures.KotlinTraffic RED
+warning UNRESOLVED_SUPERTYPE: supertype java.lang.Enum is not in the workspace — members inherited from it are missing
+source: fixture-corpus.jar (bytecode)
