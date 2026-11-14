@@ -142,5 +142,6 @@ Kotlin member bodies and KDoc come from `.kt` sources through a side-loaded
 Without the sidecar, `body`/`source`/`doc` over `.kt`-only roots degrade to
 decompile/`javap` — they emit *something* and say what it is, never an error.
 Run `jdx kotlin install` to fetch the sidecar set (SHA-1 checked) from Maven Central;
-`jdx doctor` reports its status. File facades stay JVM-projected and nullability is not
-rendered (see limitations).
+`jdx doctor` reports its status. File facades stay JVM-projected (see limitations).
+Nullability from `@Metadata` (`String?`, `List<String?>`, boxed `Integer?`) renders on
+method params/returns and properties; canonical symbol refs strip the `?` marker.

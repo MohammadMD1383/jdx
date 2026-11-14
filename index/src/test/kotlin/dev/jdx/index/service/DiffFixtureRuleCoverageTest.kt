@@ -73,7 +73,8 @@ class DiffFixtureRuleCoverageTest {
         //    rather than a hand-built `KotlinMethodView`
         CompatRule.KOTLIN_NAME_CHANGED to "Kotlinish#greet loses @JvmName",
         CompatRule.KOTLIN_SUSPEND_CHANGED to "Kotlinish#fetch becomes suspend",
-        CompatRule.KOTLIN_NULLABILITY_CHANGED to "Kotlinish#nullable(): String -> String?",
+        CompatRule.KOTLIN_NULLABILITY_CHANGED to
+            "Kotlinish#nullable(): String -> String?, Kotlinish#label(): String -> String?",
         CompatRule.KOTLIN_DEFAULT_ARG_REMOVED to "Kotlinish#repeat loses its default",
         CompatRule.KOTLIN_DEFAULT_ARG_ADDED to "Kotlinish#describe gains a default",
         CompatRule.KOTLIN_PARAMETER_NAME_CHANGED to "Kotlinish#measure: count -> total",

@@ -16,8 +16,15 @@ package dev.jdx.core.model
  * parameter list (ignored unless the tail parameter really is
  * `kotlin.coroutines.Continuation` — degrade, don't fail). [displayReturn]
  * is the metadata return type as rendered text (`java.lang.String` for a
- * `suspend` function whose JVM erasure is `Object`); `null` keeps the JVM
- * return type. [markSuspend] prints the `suspend` keyword.
+ * `suspend` function whose JVM erasure is `Object`, `java.lang.String?` when
+ * `KmType.isNullable`); `null` keeps the JVM return type. [markSuspend] prints
+ * the `suspend` keyword.
+ *
+ * [displayParameters] (issue #13) is the per-Kotlin-parameter metadata type text
+ * (`java.lang.String?` for a nullable `String` param). Indexed in Kotlin order
+ * (pre-`Continuation`-strip); a `null` entry or a short list keeps the JVM type
+ * for that slot. Empty (the default) keeps every JVM parameter type. Nullability
+ * markers (`?`) are display-only — canonical refs strip them (AGENTS.md §5).
  *
  * [defaultArgIndices] (T-078) marks the zero-based Kotlin parameter positions
  * that declare a default value (`KmValueParameter.declaresDefaultValue`).
@@ -31,6 +38,7 @@ public data class KotlinMethodView(
     public val displayReturn: String? = null,
     public val markSuspend: Boolean = false,
     public val defaultArgIndices: Set<Int> = emptySet(),
+    public val displayParameters: List<String?> = emptyList(),
 ) {
     /**
      * Whether the Continuation strip applies to [parameters]: the flag must be

@@ -193,10 +193,22 @@ public object SignatureLines {
                 val erased = member.descriptor.parameters[index]
                 val generic = signature?.parameters?.getOrNull(index)
                 val name = member.parameterNames.getOrNull(index) ?: "arg$index"
-                val base = if (varargs && index == count - 1) {
-                    appendVarargsElement(generic, erased) + "... " + name
+                // Issue #13: Kotlin nullability / metadata type text overrides the
+                // JVM projection per parameter when present; a null entry keeps JVM.
+                val display = kotlinView?.displayParameters?.getOrNull(index)
+                val typeText = display ?: if (generic != null) {
+                    renderTypeSignature(generic)
                 } else {
-                    (if (generic != null) renderTypeSignature(generic) else renderTypeName(erased)) + " " + name
+                    renderTypeName(erased)
+                }
+                val base = if (varargs && index == count - 1) {
+                    // Varargs still drop one array dimension from the JVM type when
+                    // there is no metadata override (metadata already spells the
+                    // element type, never the synthetic array).
+                    val element = display ?: appendVarargsElement(generic, erased)
+                    "$element... $name"
+                } else {
+                    "$typeText $name"
                 }
                 // T-078 default args: Kotlin positions (post-strip) carrying a
                 // metadata default render `= ...` (the value lives in bytecode,

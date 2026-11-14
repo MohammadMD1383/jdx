@@ -23,6 +23,7 @@ suspicious  GENERIC_SIGNATURE_CHANGED  dev.jdx.diffapi.Api#echoed(java.util.List
 suspicious  CHECKED_EXCEPTION_ADDED  dev.jdx.diffapi.Api#checked(): java.io.IOException
 suspicious  KOTLIN_NAME_CHANGED  dev.jdx.diffapi.Kotlinish#greet(java.lang.String): JVM name renamedForJvm -> greet
 suspicious  KOTLIN_SUSPEND_CHANGED  dev.jdx.diffapi.Kotlinish#fetch(java.lang.String): suspend added
+suspicious  KOTLIN_NULLABILITY_CHANGED  dev.jdx.diffapi.Kotlinish#label(): java.lang.String -> java.lang.String?
 suspicious  KOTLIN_NULLABILITY_CHANGED  dev.jdx.diffapi.Kotlinish#nullable(): java.lang.String -> java.lang.String?
 suspicious  KOTLIN_DEFAULT_ARG_REMOVED  dev.jdx.diffapi.Kotlinish#repeat(int): parameter 1
 suspicious  KOTLIN_PARAMETER_NAME_CHANGED  dev.jdx.diffapi.Kotlinish#measure(int): count -> total
@@ -50,7 +51,7 @@ info  DEPRECATED_REMOVED  dev.jdx.diffapi.Api#stale()
 info  SYNCHRONIZED_ADDED  dev.jdx.diffapi.Tuned#guarded()
 info  TRANSIENT_CHANGED  dev.jdx.diffapi.Tuned#scratch: transient removed
 info  FIELD_CONSTANT_VALUE_CHANGED  dev.jdx.diffapi.Api#LIMIT: 10 -> 20
-19 breaking · 8 suspicious · 24 informational · 1 type added · 1 type removed
+19 breaking · 9 suspicious · 24 informational · 1 type added · 1 type removed
 fail-on breaking: 19 breaking changes (exit 1)
 source: diff-fixtures-v1.jar (bytecode)
 source: diff-fixtures-v2.jar (bytecode)

@@ -10,6 +10,7 @@ import io.kotest.property.checkAll
 import kotlin.metadata.KmClass
 import kotlin.metadata.KmFunction
 import kotlin.metadata.KmType
+import kotlin.metadata.isNullable
 import kotlin.metadata.isSuspend
 import kotlin.metadata.jvm.JvmMethodSignature
 import kotlin.metadata.jvm.getterSignature
@@ -64,6 +65,20 @@ class KotlinMembersPropertyTest {
                 classifier = kotlin.metadata.KmClassifier.Class(name)
             }
             KotlinMembers.renderType(type)?.length
+        }
+    }
+
+    @Test
+    fun `nullability helpers never throw on arbitrary types`() = runBlocking<Unit> {
+        val classifierArb = Arb.string(0..48)
+        checkAll(1_000, classifierArb) { name ->
+            val type = KmType().apply {
+                classifier = kotlin.metadata.KmClassifier.Class(name)
+                isNullable = name.length % 2 == 0
+            }
+            KotlinMembers.carriesNullability(type)
+            KotlinMembers.parameterArity("(${name})")
+            KotlinMembers.parameterArity("(Ljava/lang/String;I)V")
         }
     }
 

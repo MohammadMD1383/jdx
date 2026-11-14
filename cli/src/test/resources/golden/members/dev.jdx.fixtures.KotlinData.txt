@@ -2,7 +2,7 @@ members of dev.jdx.fixtures.KotlinData
 constructors declared on dev.jdx.fixtures.KotlinData:
   constructor public KotlinData(java.lang.String name, int count)
 methods declared on dev.jdx.fixtures.KotlinData:
-  method public boolean equals(java.lang.Object other)
+  method public boolean equals(java.lang.Object? other)
   method public final dev.jdx.fixtures.KotlinData copy(java.lang.String name = ..., int count = ...)
   method public final int component2()
   method public final java.lang.String component1()
