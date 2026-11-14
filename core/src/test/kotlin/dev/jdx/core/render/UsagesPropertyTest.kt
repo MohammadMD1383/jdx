@@ -19,13 +19,27 @@ class UsagesPropertyTest {
 
     private fun arbHit(): Arb<UsageHit> = Arb.of(kinds).map { kind ->
         val withLocation = (0..1).random() == 0
+        val line = if (withLocation) (1..200).random() else null
+        val withSnippet = withLocation && (0..1).random() == 0
         UsageHit(
             fromRef = "com.example.App#m${(0..9999).random()}()",
             artifact = "artifact-${(0..9).random()}.jar",
             kind = kind,
             targetRef = "com.example.Lib#greet",
             file = if (withLocation) "App.java" else null,
-            line = if (withLocation) (1..200).random() else null,
+            line = line,
+            snippet = if (withSnippet) {
+                val start = (line!! - 1).coerceAtLeast(1)
+                SampleSnippet(
+                    file = "com/example/App.java",
+                    startLine = start,
+                    endLine = line + 1,
+                    lines = listOf("// ctx-${(0..99).random()}", "callSite();", "// after"),
+                    truncated = false,
+                )
+            } else {
+                null
+            },
         )
     }
 
@@ -69,6 +83,7 @@ class UsagesPropertyTest {
             val ordered = sorted(hits).distinct()
             val listing = buildUsageListing("q", "t", ordered)
             val json = listing.toJson("usages")
+            val text = listing.renderText()
             for (hit in listing.hits) {
                 assert(json.contains(hit.fromRef)) { "${hit.fromRef} missing from json" }
                 assert(json.contains(hit.artifact)) { "${hit.artifact} missing from json" }
@@ -76,7 +91,21 @@ class UsagesPropertyTest {
                 hit.location()?.let { location ->
                     assert(json.contains("\"file\":\"${hit.file}\"")) { "$location file missing from json" }
                     assert(json.contains("\"line\":${hit.line}")) { "$location line missing from json" }
-                    assert(listing.renderText().contains(location)) { "$location missing from text" }
+                    assert(text.contains(location)) { "$location missing from text" }
+                }
+                hit.snippet?.let { snippet ->
+                    assert(json.contains("\"snippet\":")) { "snippet missing from json for ${hit.fromRef}" }
+                    assert(json.contains(snippet.file)) { "${snippet.file} missing from json" }
+                    assert(text.contains("${snippet.file}:${snippet.startLine}-${snippet.endLine}")) {
+                        "snippet range missing from text"
+                    }
+                    val shown = snippet.lines.take(MAX_SAMPLE_SNIPPET_LINES)
+                    for (line in shown) {
+                        assert(text.contains(line)) { "snippet line missing from text: $line" }
+                    }
+                    assert(json.contains(JsonEscape.quote(shown.joinToString("\n")))) {
+                        "snippet text missing from json for ${hit.fromRef}"
+                    }
                 }
             }
         }

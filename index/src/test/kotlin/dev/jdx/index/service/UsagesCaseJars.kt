@@ -6,13 +6,15 @@ import java.nio.file.Path
 import org.objectweb.asm.Opcodes
 
 /**
- * Lined usages corpus (issue #8): same shape as [buildUsagesCaseJar] but with
- * `SourceFile` + `LineNumberTable` so `usages` can assert `file:line` on
- * bytecode rows. Kept separate so the unlined case jar's hit counts stay
- * stable for the rest of [UsagesServiceTest].
+ * Lined usages corpus (issue #8 / #10): same shape as [buildUsagesCaseJar] but
+ * with `SourceFile` + `LineNumberTable` so `usages` can assert `file:line` on
+ * bytecode rows. The sibling `usages-lined-sources.jar` holds `lined/App.java`
+ * with the greet call on line 5 — matching the [LineNumberTable] — so
+ * `--context N` can assert an inline snippet. Kept separate so the unlined
+ * case jar's hit counts stay stable for the rest of [UsagesServiceTest].
  */
 internal fun buildLinedUsagesJar(dir: Path): Path {
-    return ArtifactTestJars.craftJar(
+    val jar = ArtifactTestJars.craftJar(
         dir.resolve("usages-lined.jar"),
         mapOf(
             "lined/Lib.class" to buildClass(
@@ -30,7 +32,8 @@ internal fun buildLinedUsagesJar(dir: Path): Path {
             "lined/App.class" to buildClass("lined/App") {
                 source("App.java")
                 method(Opcodes.ACC_PUBLIC, "run", "()V", null, null) {
-                    line(14)
+                    // Line 5 matches `lib.greet("hi");` in the sibling sources jar.
+                    line(5)
                     invoke(
                         Opcodes.INVOKEVIRTUAL,
                         "lined/Lib",
@@ -41,6 +44,22 @@ internal fun buildLinedUsagesJar(dir: Path): Path {
             },
         ),
     )
+    ArtifactTestJars.craftJar(
+        dir.resolve("usages-lined-sources.jar"),
+        mapOf(
+            "lined/App.java" to
+                """
+                package lined;
+                public class App {
+                    public void run() {
+                        Lib lib = null;
+                        lib.greet("hi");
+                    }
+                }
+                """.trimIndent().toByteArray(Charsets.UTF_8),
+        ),
+    )
+    return jar
 }
 
 /**

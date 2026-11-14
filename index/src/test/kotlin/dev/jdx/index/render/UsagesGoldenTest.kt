@@ -3,6 +3,7 @@ package dev.jdx.index.render
 import dev.jdx.index.service.JdxService
 import dev.jdx.index.service.JdxService.RootsSpec
 import dev.jdx.index.service.JdxService.UsageOptions
+import dev.jdx.index.service.buildLinedUsagesJar
 import dev.jdx.index.service.buildUsagesCaseJar
 import dev.jdx.testsupport.golden.GoldenFiles
 import java.io.File
@@ -63,6 +64,20 @@ class UsagesGoldenTest {
                 ?: fail("u.Lib limited: expected UsageList, got $outcome")
             put("u_Lib_limit2.txt", listing.renderText())
             put("u_Lib_limit2.json", listing.toJson(command = "usages"))
+            // `--context` over the lined jar + paired sources (issue #10).
+            val linedRoots = RootsSpec(
+                jarSpecs = listOf(buildLinedUsagesJar(dir).toString()),
+                includeJdk = false,
+            )
+            val ctx = JdxService.usages(
+                "lined.Lib#greet",
+                linedRoots,
+                UsageOptions(contextLines = 1),
+            )
+            val ctxListing = (ctx as? JdxService.ServiceOutcome.UsageList)?.listing
+                ?: fail("lined.Lib#greet context: expected UsageList, got $ctx")
+            put("lined_Lib_greet_context1.txt", ctxListing.renderText())
+            put("lined_Lib_greet_context1.json", ctxListing.toJson(command = "usages"))
         }
         GoldenFiles.verifyAll(goldenDir, contents)
     }

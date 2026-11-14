@@ -1,0 +1,7 @@
+usages of 'lined.Lib#greet'
+usages-lined.jar (1)
+  call lined.App#run()  App.java:5
+    lined/App.java:4-6
+            Lib lib = null;
+            lib.greet("hi");
+        }

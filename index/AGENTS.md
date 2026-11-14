@@ -24,7 +24,9 @@ behaviour lives here** (adapters call in, never the reverse). `explicitApi()` is
   `ref`/`new`/`throw`/`annotation`); reads `LineNumberTable` + `SourceFile`
   (issue #8) and keeps the first line per logical edge (dedup identity excludes
   line/file). Stripped classes (`-g:none`) yield `line == null` — degrade, don't
-  fail. `usages --context` still redirects to `samples` (issue #10).
+  fail. `usages --context N` (issue #10) slices paired sources / `--src` files
+  around that line (cap [MAX_SAMPLE_SNIPPET_LINES]); missing sources stay
+  location-only.
 - `store/` — `IndexStore` interface + `sqlite/SqliteIndexStore` (WAL, single global
   `<cache-dir>/index/v1.db`, artifact-scoped rows). No SQL outside the impl package.
 - `workspace/` — TOML workspaces, classpath-order shadowing, `DUPLICATE_FQN`,

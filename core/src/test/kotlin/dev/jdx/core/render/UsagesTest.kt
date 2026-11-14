@@ -108,4 +108,42 @@ class UsagesTest {
         hit("com.example.App#run()", "lib.jar", "call", "com.example.Lib#greet").toJson() shouldBe
             "{\"from\":\"com.example.App#run()\",\"artifact\":\"lib.jar\",\"kind\":\"call\",\"target\":\"com.example.Lib#greet\"}"
     }
+
+    @Test
+    fun `context snippet rides text rows and the json envelope`() {
+        val snippet = SampleSnippet(
+            file = "com/example/App.java",
+            startLine = 40,
+            endLine = 44,
+            lines = listOf("    // before", "    lib.greet();", "    // after"),
+            truncated = false,
+        )
+        val withSnippet = UsageHit(
+            fromRef = "com.example.App#run()",
+            artifact = "lib.jar",
+            kind = "call",
+            targetRef = "com.example.Lib#greet",
+            file = "App.java",
+            line = 42,
+            snippet = snippet,
+        )
+        val listing = buildUsageListing(
+            query = "com.example.Lib#greet",
+            targetRef = "com.example.Lib#greet",
+            hits = listOf(withSnippet),
+        )
+        listing.renderText() shouldBe (
+            "usages of 'com.example.Lib#greet'\n" +
+                "lib.jar (1)\n" +
+                "  call com.example.App#run()  App.java:42\n" +
+                "    com/example/App.java:40-44\n" +
+                "        // before\n" +
+                "        lib.greet();\n" +
+                "        // after"
+            )
+        val json = listing.toJson("usages")
+        json shouldContain "\"snippet\":"
+        json shouldContain "\"file\":\"com/example/App.java\""
+        json shouldContain "lib.greet();"
+    }
 }

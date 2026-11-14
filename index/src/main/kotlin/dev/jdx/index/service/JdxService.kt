@@ -59,6 +59,7 @@ import dev.jdx.core.render.buildDocBlock
 import dev.jdx.core.render.buildSignatureBlock
 import dev.jdx.core.render.buildSourceBlock
 import dev.jdx.core.render.renderJavadoc
+import dev.jdx.core.render.sliceSourceLines
 import dev.jdx.core.render.DEFAULT_MEMBER_LIMIT
 import dev.jdx.core.render.DEFAULT_SAMPLES_LIMIT
 import dev.jdx.core.render.MAX_SAMPLE_SNIPPET_LINES
@@ -2504,10 +2505,11 @@ public object JdxService {
         public val exclude: String? = null,
         public val limit: Int = DEFAULT_USAGES_LIMIT,
         /**
-         * Source lines around each call site (`--context N`). Parsed here so
-         * the flag exists, but still rejected: bytecode edges now carry
-         * `file:line` (issue #8), yet inline snippets are not rendered yet
-         * (issue #10 — source-rendered call sites stay in `jdx samples`).
+         * Source lines around each call site (`--context N`, issue #10).
+         * Zero (default) is location-only (`file:line` from issue #8); a
+         * positive N slices paired sources / `--src` files around the line.
+         * Cap at render time is [MAX_SAMPLE_SNIPPET_LINES]. Missing sources
+         * or stripped classes degrade to a snippet-less row.
          */
         public val contextLines: Int = 0,
     )
@@ -2531,13 +2533,8 @@ public object JdxService {
         if (options.limit < 0) {
             return failure(3, rawRef, "usage error: --limit must be >= 0, got ${options.limit}")
         }
-        if (options.contextLines != 0) {
-            return failure(
-                3,
-                rawRef,
-                "usage error: --context is not supported for usages yet " +
-                    "(source-rendered call sites: jdx samples '$rawRef')",
-            )
+        if (options.contextLines < 0) {
+            return failure(3, rawRef, "usage error: --context must be >= 0, got ${options.contextLines}")
         }
         when (options.kind) {
             UsageKindFilter.IMPL, UsageKindFilter.OVERRIDE ->
@@ -2548,8 +2545,8 @@ public object JdxService {
                         "(type hierarchy: jdx hierarchy, implementors: jdx implementors)",
                 )
             // T-075: NEW/THROW/ANNOTATION are live (graph enrichment over the
-            // T-029 vocabulary + ClassInfo metadata); --context stays a
-            // `samples` redirect (D-053).
+            // T-029 vocabulary + ClassInfo metadata). `--context N` (issue #10)
+            // slices paired sources around LineNumberTable sites.
             else -> Unit
         }
         val parsed = SymbolRefParser.parse(rawRef)
@@ -2756,9 +2753,12 @@ public object JdxService {
                 else -> return failure(3, rawRef, "usage error: --kind ${options.kind.flag} is not supported yet")
             }
 
-            val hits = mutableListOf<UsageHit>()
+            // Pending rows keep just enough provenance to attach `--context`
+            // snippets after `--limit` truncation (only the shown prefix is
+            // sourced — same pattern as samples).
+            val pending = mutableListOf<PendingUsage>()
             val reported = mutableSetOf<String>()
-            for (open in opened) {
+            opened.forEachIndexed { rootIndex, open ->
                 for (entry in open.root.classEntryPaths()) {
                     val fromBinary = entryToBinary(entry)
                     // T-012 reports the JDK module as the artifact (e.g.
@@ -2800,20 +2800,29 @@ public object JdxService {
                                     continue
                                 }
                             }
-                            hits.add(
-                                UsageHit(
-                                    fromRef = canonicalFromRef(edge.fromClass, edge.fromMember, edge.fromDescriptor),
-                                    artifact = label,
-                                    kind = if (newOnly) "new" else usageKindWord(edge.kind),
-                                    targetRef = edgeTargetRef(edge),
-                                    file = edge.sourceFile,
-                                    line = edge.line,
+                            pending.add(
+                                PendingUsage(
+                                    hit = UsageHit(
+                                        fromRef = canonicalFromRef(edge.fromClass, edge.fromMember, edge.fromDescriptor),
+                                        artifact = label,
+                                        kind = if (newOnly) "new" else usageKindWord(edge.kind),
+                                        targetRef = edgeTargetRef(edge),
+                                        file = edge.sourceFile,
+                                        line = edge.line,
+                                    ),
+                                    fromClass = edge.fromClass,
+                                    rootIndex = rootIndex,
                                 ),
                             )
                         }
                     }
                     if (wantThrows || wantAnnotations) {
-                        collectMetadataUsages(bytes, fromBinary, label, binary, wantThrows, wantAnnotations, reported, warnings, hits)
+                        val metaHits = mutableListOf<UsageHit>()
+                        collectMetadataUsages(
+                            bytes, fromBinary, label, binary, wantThrows, wantAnnotations,
+                            reported, warnings, metaHits,
+                        )
+                        for (hit in metaHits) pending.add(PendingUsage(hit = hit))
                     }
                 }
             }
@@ -2841,19 +2850,22 @@ public object JdxService {
                         continue
                     }
                     for (mention in dev.jdx.index.usages.SourceUsages.scanSourceDir(dir, wanted)) {
-                        hits.add(
-                            UsageHit(
-                                fromRef = "${mention.relativePath}:${mention.line}",
-                                artifact = label,
-                                kind = "ref",
-                                targetRef = canonicalTarget,
+                        pending.add(
+                            PendingUsage(
+                                hit = UsageHit(
+                                    fromRef = "${mention.relativePath}:${mention.line}",
+                                    artifact = label,
+                                    kind = "ref",
+                                    targetRef = canonicalTarget,
+                                ),
+                                srcDir = dir,
                             ),
                         )
                     }
                 }
             }
 
-            if (hits.isEmpty()) {
+            if (pending.isEmpty()) {
                 return ServiceOutcome.Failure(
                     ErrorResult.notFound(
                         rawRef,
@@ -2862,18 +2874,45 @@ public object JdxService {
                     ),
                 )
             }
-            val sorted = hits.sortedWith(
-                compareBy({ it.artifact }, { it.fromRef }, { it.kind }, { it.targetRef }),
+            val sorted = pending.sortedWith(
+                compareBy(
+                    { it.hit.artifact },
+                    { it.hit.fromRef },
+                    { it.hit.kind },
+                    { it.hit.targetRef },
+                ),
             )
+            val plainHits = sorted.map { it.hit }
             val listing = buildUsageListing(
                 query = rawRef,
                 targetRef = canonicalTarget,
-                hits = sorted,
+                hits = plainHits,
                 limit = options.limit,
                 warnings = warnings.sortedBy { it.code },
                 showTargets = ref is TypeSymbolRef,
             )
-            return ServiceOutcome.UsageList(listing)
+            if (options.contextLines == 0) {
+                return ServiceOutcome.UsageList(listing)
+            }
+            val sourceCache = mutableMapOf<Int, dev.jdx.sources.SourceRoot?>()
+            try {
+                val withSnippets = listing.hits.mapIndexed { index, hit ->
+                    val pendingHit = sorted[index]
+                    val snippet = usageContextSnippet(
+                        hit = hit,
+                        fromClass = pendingHit.fromClass,
+                        rootIndex = pendingHit.rootIndex,
+                        srcDir = pendingHit.srcDir,
+                        contextLines = options.contextLines,
+                        opened = opened,
+                        sourceCache = sourceCache,
+                    )
+                    if (snippet == null) hit else hit.copy(snippet = snippet)
+                }
+                return ServiceOutcome.UsageList(listing.copy(hits = withSnippets))
+            } finally {
+                sourceCache.values.forEach { root -> runCatching { root?.close() } }
+            }
         } finally {
             opened.forEach { it.root.close() }
         }
@@ -4284,6 +4323,98 @@ public object JdxService {
         return runCatching {
             sourceCache.getOrPut(rootIndex) { openSourcesFor(opened[rootIndex]) } != null
         }.getOrDefault(false)
+    }
+
+    /**
+     * One usages row plus the provenance needed to attach a `--context`
+     * snippet after `--limit` truncation (issue #10).
+     */
+    private data class PendingUsage(
+        val hit: UsageHit,
+        val fromClass: String? = null,
+        val rootIndex: Int? = null,
+        val srcDir: java.nio.file.Path? = null,
+    )
+
+    /**
+     * Inline `--context N` window for one usages row (issue #10): around the
+     * bytecode [UsageHit.line] via paired sources, or around a `--src`
+     * `path:line` mention from that directory. Any miss yields `null` and the
+     * row stays location-only (degrade, don't fail). Never throws. Cap is
+     * applied at render time ([MAX_SAMPLE_SNIPPET_LINES]).
+     */
+    private fun usageContextSnippet(
+        hit: UsageHit,
+        fromClass: String?,
+        rootIndex: Int?,
+        srcDir: java.nio.file.Path?,
+        contextLines: Int,
+        opened: List<OpenRoot>,
+        sourceCache: MutableMap<Int, dev.jdx.sources.SourceRoot?>,
+    ): SampleSnippet? {
+        if (contextLines <= 0) return null
+        return runCatching {
+            when {
+                fromClass != null && rootIndex != null -> {
+                    val line = hit.line ?: return@runCatching null
+                    val sources = sourceCache.getOrPut(rootIndex) { openSourcesFor(opened[rootIndex]) }
+                        ?: return@runCatching null
+                    val path = dev.jdx.sources.findJavaSourcePath(sources, fromClass)
+                        ?: return@runCatching null
+                    val fileLines = readSourceLines(sources, path) ?: return@runCatching null
+                    sliceUsageContext(path, fileLines, line, contextLines)
+                }
+                srcDir != null -> {
+                    val (relPath, line) = parseSourceMentionRef(hit.fromRef) ?: return@runCatching null
+                    val file = srcDir.resolve(relPath)
+                    if (!java.nio.file.Files.isRegularFile(file)) return@runCatching null
+                    val text = java.nio.file.Files.readString(file)
+                    val fileLines = splitTextLines(text)
+                    sliceUsageContext(relPath, fileLines, line, contextLines)
+                }
+                else -> null
+            }
+        }.getOrNull()
+    }
+
+    /** `rel/path.java:42` → path + 1-based line; hostile shapes yield `null`. */
+    private fun parseSourceMentionRef(fromRef: String): Pair<String, Int>? {
+        val colon = fromRef.lastIndexOf(':')
+        if (colon <= 0 || colon == fromRef.lastIndex) return null
+        val line = fromRef.substring(colon + 1).toIntOrNull() ?: return null
+        if (line < 1) return null
+        val path = fromRef.substring(0, colon)
+        if (path.isEmpty()) return null
+        return path to line
+    }
+
+    /**
+     * Pure window around [line] over [fileLines]: expands by [contextLines]
+     * each side (clamped to the file). Empty / out-of-range lines yield null.
+     */
+    private fun sliceUsageContext(
+        file: String,
+        fileLines: List<String>,
+        line: Int,
+        contextLines: Int,
+    ): SampleSnippet? {
+        if (fileLines.isEmpty() || line < 1 || line > fileLines.size) return null
+        val (displayStart, shown, _) = sliceSourceLines(
+            fileLines,
+            line,
+            line,
+            contextLines,
+            maxLines = Int.MAX_VALUE,
+        )
+        if (shown.isEmpty()) return null
+        val windowEnd = (line + contextLines.coerceAtLeast(0)).coerceAtMost(fileLines.size)
+        return SampleSnippet(
+            file = file,
+            startLine = displayStart,
+            endLine = windowEnd.coerceAtLeast(displayStart),
+            lines = shown,
+            truncated = false,
+        )
     }
 
     /**

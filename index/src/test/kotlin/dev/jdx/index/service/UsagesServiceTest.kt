@@ -5,6 +5,7 @@ import dev.jdx.index.service.JdxService.ServiceOutcome
 import dev.jdx.index.service.JdxService.UsageKindFilter
 import dev.jdx.index.service.JdxService.UsageOptions
 import io.kotest.matchers.shouldBe
+import io.kotest.matchers.shouldNotBe
 import io.kotest.matchers.string.shouldContain
 import io.kotest.matchers.string.shouldNotContain
 import java.nio.file.Files
@@ -167,10 +168,10 @@ class UsagesServiceTest {
     }
 
     @Test
-    fun `context is rejected naming samples`() {
-        val outcome = JdxService.usages("u.Lib", caseRoots(), UsageOptions(contextLines = 2))
+    fun `negative context is rejected`() {
+        val outcome = JdxService.usages("u.Lib", caseRoots(), UsageOptions(contextLines = -1))
         outcome.exitCode shouldBe 3
-        textOf(outcome) shouldContain "jdx samples"
+        textOf(outcome) shouldContain "--context must be >= 0"
     }
 
     @Test
@@ -184,11 +185,66 @@ class UsagesServiceTest {
         val hit = listing.hits.single()
         hit.fromRef shouldBe "lined.App#run()"
         hit.file shouldBe "App.java"
-        hit.line shouldBe 14
-        textOf(outcome) shouldContain "  call lined.App#run()  App.java:14"
+        hit.line shouldBe 5
+        textOf(outcome) shouldContain "  call lined.App#run()  App.java:5"
         val json = outcome.toJson("usages")
         json shouldContain "\"file\":\"App.java\""
-        json shouldContain "\"line\":14"
+        json shouldContain "\"line\":5"
+    }
+
+    @Test
+    fun `context slices paired sources around the call site line`() {
+        val jar = buildLinedUsagesJar(tempDir)
+        val roots = RootsSpec(jarSpecs = listOf(jar.toString()), includeJdk = false)
+        val outcome = JdxService.usages("lined.Lib#greet", roots, UsageOptions(contextLines = 1))
+        outcome.exitCode shouldBe 0
+        val hit = usageListOf(outcome).hits.single()
+        hit.snippet shouldNotBe null
+        val snippet = hit.snippet!!
+        snippet.file shouldBe "lined/App.java"
+        snippet.startLine shouldBe 4
+        snippet.endLine shouldBe 6
+        snippet.lines shouldBe listOf(
+            "        Lib lib = null;",
+            "        lib.greet(\"hi\");",
+            "    }",
+        )
+        val text = textOf(outcome)
+        text shouldContain "  call lined.App#run()  App.java:5"
+        text shouldContain "    lined/App.java:4-6"
+        text shouldContain "        lib.greet(\"hi\");"
+        val json = outcome.toJson("usages")
+        json shouldContain "\"snippet\":"
+        json shouldContain "lib.greet(\\\"hi\\\");"
+    }
+
+    @Test
+    fun `context without paired sources degrades to location only`() {
+        // Unlined case jar has no sibling -sources.jar and no LineNumberTable.
+        val outcome = JdxService.usages("u.Lib#greet", caseRoots(), UsageOptions(contextLines = 2))
+        outcome.exitCode shouldBe 0
+        usageListOf(outcome).hits.forEach { it.snippet shouldBe null }
+        outcome.toJson("usages") shouldNotContain "\"snippet\":"
+    }
+
+    @Test
+    fun `context window always covers the call site line when sourced`() {
+        val jar = buildLinedUsagesJar(tempDir)
+        val roots = RootsSpec(jarSpecs = listOf(jar.toString()), includeJdk = false)
+        for (n in listOf(0, 1, 2, 5)) {
+            val listing = usageListOf(
+                JdxService.usages("lined.Lib#greet", roots, UsageOptions(contextLines = n)),
+            )
+            val hit = listing.hits.single()
+            if (n == 0) {
+                hit.snippet shouldBe null
+            } else {
+                val snippet = hit.snippet!!
+                val line = hit.line!!
+                (snippet.startLine..snippet.endLine).contains(line) shouldBe true
+                snippet.lines.size shouldBe (snippet.endLine - snippet.startLine + 1)
+            }
+        }
     }
 
     // -- artifact filters and truncation ----------------------------------------

@@ -22,6 +22,11 @@ public const val DEFAULT_USAGES_LIMIT: Int = 50
  * (those already encode `path:line` in [fromRef]). Text appends
  * `  File.java:42` when both are present; JSON always includes them when set
  * so the envelope stays complete (AGENTS.md — no text-only information).
+ *
+ * [snippet] is the optional `--context N` source window around the call site
+ * (issue #10). Absent when context is off, the class was stripped, or paired
+ * sources are missing — degrade, don't fail (same as [SampleHit]). Cap is
+ * [MAX_SAMPLE_SNIPPET_LINES] at render time.
  */
 public data class UsageHit(
     public val fromRef: String,
@@ -30,6 +35,7 @@ public data class UsageHit(
     public val targetRef: String,
     public val file: String? = null,
     public val line: Int? = null,
+    public val snippet: SampleSnippet? = null,
 ) {
     /** `File.java:42` when both [file] and [line] are known; otherwise `null`. */
     public fun location(): String? =
@@ -55,14 +61,30 @@ public data class UsageHit(
         }
     }
 
+    /**
+     * The text rows for one hit: the kind-led line, then the `--context`
+     * snippet rows when present (same indent shape as [SampleHit]).
+     */
+    public fun textLines(
+        showTargets: Boolean = false,
+        queryOwner: String = "",
+        maxSnippetLines: Int = MAX_SAMPLE_SNIPPET_LINES,
+    ): List<String> {
+        val header = if (showTargets) textLineWithTarget(queryOwner) else textLine()
+        val rows = mutableListOf(header)
+        snippet?.let { rows.addAll(it.textLines(maxSnippetLines)) }
+        return rows
+    }
+
     /** The structural row: every text fact appears here (D-007). */
-    public fun toJson(): String = buildString {
+    public fun toJson(maxSnippetLines: Int = MAX_SAMPLE_SNIPPET_LINES): String = buildString {
         append("{\"from\":").append(JsonEscape.quote(fromRef))
         append(",\"artifact\":").append(JsonEscape.quote(artifact))
         append(",\"kind\":").append(JsonEscape.quote(kind))
         append(",\"target\":").append(JsonEscape.quote(targetRef))
         if (file != null) append(",\"file\":").append(JsonEscape.quote(file))
         if (line != null) append(",\"line\":").append(line)
+        snippet?.let { append(",\"snippet\":").append(it.toJson(maxSnippetLines)) }
         append("}")
     }
 }
@@ -101,7 +123,7 @@ public data class UsageListing(
                 currentArtifact = hit.artifact
                 lines.add("${hit.artifact} (${counts.getValue(hit.artifact)})")
             }
-            lines.add(if (showTargets) hit.textLineWithTarget(targetRef) else hit.textLine())
+            lines.addAll(hit.textLines(showTargets = showTargets, queryOwner = targetRef))
         }
         truncation?.let { lines.add("${it.shown} of ${it.total} usages shown (${it.hint} to see more)") }
         for (warning in warnings) lines.add("warning ${warning.code}: ${warning.message}")
