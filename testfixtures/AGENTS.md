@@ -12,7 +12,9 @@ elements) · `VarargsAndModifiers` (`synchronized`/`native`/`strictfp`) ·
 `-g:none` class · `StaticInitMarker` · every Kotlin shape whose JVM projection
 misleads (`KotlinShapes`: suspend, properties, default args, `@JvmName`, objects,
 companions, file facades with the same shapes, data/value classes) · multi-file
-facade pair (`KotlinMultifileA`/`B` → `KotlinMultifile` umbrella, issue #12).
+facade pair (`KotlinMultifileA`/`B` → `KotlinMultifile` umbrella, issue #12) ·
+file-level facade KDoc, generic extensions, and enum-entry class bodies
+(`KotlinTraffic$RED`/`$GREEN`, issue #15).
 
 **The diff pair** (`src/diffV1/`, `src/diffV2/`, `src/diffAbsent/`) is a *second*,
 separate corpus for `jdx diff` (issue #23, `docs/TESTING.md` §11.2): two versions of

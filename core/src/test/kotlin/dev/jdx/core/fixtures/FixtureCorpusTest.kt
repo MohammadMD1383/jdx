@@ -48,6 +48,9 @@ class FixtureCorpusTest {
         "dev.jdx.fixtures.TrafficLight\$1",
         "dev.jdx.fixtures.TrafficLight\$2",
         "dev.jdx.fixtures.TrafficLight\$3",
+        // Enum-entry class bodies (issue #15): compiler-named nested classes.
+        "dev.jdx.fixtures.KotlinTraffic\$RED",
+        "dev.jdx.fixtures.KotlinTraffic\$GREEN",
     )
 
     // `KotlinShapesKt` cannot carry the annotation (see above), so its truth is pinned here,
@@ -56,6 +59,7 @@ class FixtureCorpusTest {
         "private static final java.lang.String facadeGreeting",
         "private static java.lang.String facadeNickname",
         "public static final java.lang.String extensionGreeting(dev.jdx.fixtures.KotlinMembers)",
+        "public static final <T> T kotlinFirstOrNull(java.util.List<? extends T>)",
         "public static final int facadeRenamed(int)",
         "public static final java.lang.Object facadeFetch(java.lang.String, kotlin.coroutines.Continuation<? super java.lang.String>)",
         "public static final java.lang.String getFacadeGreeting()",

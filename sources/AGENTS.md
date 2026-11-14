@@ -23,14 +23,18 @@ dependency, never in the fat jar. `explicitApi()` is on.
   throws); `KotlinParser` — isolated-`URLClassLoader` seam (presence-vs-usability
   split); `KotlinBodies` — real PSI ranges, property-aware (getter/setter →
   property name). Without the sidecar, degrade to decompile/javap — emit
-  *something* and say what it is.
+  *something* and say what it is. Issue #15: file-level KDoc (preceding
+  `package`) is the facade type doc; enum entries with class bodies capture
+  children so `Outer$ENTRY` navigates; generic extension receivers (`List<T>`)
+  key as their raw type in signature narrowing.
 
 ## Rules
 
 - Structure stays bytecode-authoritative: ambiguity is decided before sources load;
   the per-command parser instance is shared, never throws.
 - KDoc attaches to the *following* declaration — pin type docs only on classes whose
-  comment directly precedes them.
+  comment directly precedes them. File-level KDoc (preceding `package`) is the
+  exception: it documents the file facade (`FooKt`), not a declaration.
 
 ## Gotchas (distilled)
 
