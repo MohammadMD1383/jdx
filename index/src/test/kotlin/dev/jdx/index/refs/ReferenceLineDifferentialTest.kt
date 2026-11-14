@@ -52,8 +52,16 @@ class ReferenceLineDifferentialTest {
         edges.mapNotNull { it.line }.toSet() shouldBe setOf(10, 20, 30)
         edges.forEach { it.sourceFile shouldBe "Lined.java" }
 
-        val output = runJavapLines(javap!!, jar.toString(), "com.example.Lined")
-        check(output != null) { "javap -l failed for com.example.Lined" }
+        val output = when (val outcome = Javap.tryRunLines(javap!!, jar.toString(), "com.example.Lined")) {
+            is Javap.RunOutcome.Ok -> outcome.lines
+            is Javap.RunOutcome.Unreadable ->
+                error("javap -l failed for com.example.Lined: ${outcome.detail}")
+            is Javap.RunOutcome.TimedOut ->
+                error(
+                    "javap -l timed out after ${outcome.timeoutMs}ms for com.example.Lined " +
+                        "(issue #81)",
+                )
+        }
         val table = parseLineNumberTable(output)
         table.keys shouldContain "run"
         val known = table.getValue("run")
@@ -92,7 +100,14 @@ class ReferenceLineDifferentialTest {
         )) {
             val bytes = ArtifactTestJars.fixtureClassBytes(binaryJar, entry)
             val binary = entry.removeSuffix(".class").replace('/', '.')
-            val output = runJavapLines(javap!!, binaryJar.absolutePath, binary) ?: continue
+            val output = when (val outcome = Javap.tryRunLines(javap!!, binaryJar.absolutePath, binary)) {
+                is Javap.RunOutcome.Ok -> outcome.lines
+                is Javap.RunOutcome.Unreadable -> continue
+                is Javap.RunOutcome.TimedOut ->
+                    error(
+                        "javap -l timed out after ${outcome.timeoutMs}ms for $binary (issue #81)",
+                    )
+            }
             val table = parseLineNumberTable(output)
             for (edge in ReferenceExtractor.extract(bytes)) {
                 val line = edge.line ?: continue
@@ -106,19 +121,6 @@ class ReferenceLineDifferentialTest {
             }
         }
         failures shouldBe emptyList()
-    }
-
-    private fun runJavapLines(javap: String, classpath: String, binaryName: String): List<String>? {
-        return try {
-            val process = ProcessBuilder(javap, "-l", "-classpath", classpath, binaryName)
-                .redirectErrorStream(true)
-                .start()
-            val output = process.inputStream.readBytes().toString(Charsets.UTF_8)
-            val exit = process.waitFor()
-            if (exit == 0) output.lines() else null
-        } catch (_: Exception) {
-            null
-        }
     }
 
     /**

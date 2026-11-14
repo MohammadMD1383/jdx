@@ -335,6 +335,24 @@ val pitWiringGaps = mutableListOf<String>()
 // fact that has to agree, which is the whole lesson of #66.
 val pitestModulesRun = listOf("core", "index", "sources", "decompile")
 
+// #81: modules whose PIT suites shell out to `javap`/`javac` children. Their
+// minion count is capped (see `pitestThreadCount`) so parallel subprocess farms
+// cannot turn wall-clock load into bogus TIMED_OUT "survivors".
+val pitestSubprocessHeavyModules = setOf("index")
+
+/**
+ * PIT minion thread count (issue #81). Override with `-PpitestThreads=<n>`.
+ *
+ * Subprocess-heavy modules (`index`) default to `min(4, cores - 1)` — each
+ * minion farms `javap`, so `cores - 1` concurrent farms saturates the box and
+ * scores mutant timeouts as survivors. Other modules keep `cores - 1`.
+ */
+fun pitestThreadCount(subprocessHeavy: Boolean): Int {
+    (findProperty("pitestThreads") as String?)?.toIntOrNull()?.takeIf { it > 0 }?.let { return it }
+    val uncapped = maxOf(2, Runtime.getRuntime().availableProcessors() - 1)
+    return if (subprocessHeavy) minOf(4, uncapped) else uncapped
+}
+
 // #82: modules whose `test` / `integrationTest` / `benchTest` tasks read the fixture
 // corpus. One list, read by the projectsEvaluated hook to wire them and by
 // `verifyFixtureCorpusWiring` to assert the set did not drift. `app` is absent on
@@ -413,15 +431,32 @@ gradle.projectsEvaluated {
             pitestTask.dependsOn(enforceTier4Permission)
             pitestTask.mustRunAfter(enforceTier4Permission)
 
+            // #81: subprocess-aware thread count. Set here (after every module
+            // `pitest {}` block) so `-PpitestThreads` and the index cap cannot
+            // drift across four private `threads.set` copies.
+            val moduleName = module.path.removePrefix(":")
+            val heavy = moduleName in pitestSubprocessHeavyModules
+            extension.threads.set(pitestThreadCount(heavy))
+
             // Recorded, not asserted, here: the assertion lives in `verifyPitestWiring`,
             // which every `check` runs, so a future edit that drops one of the facts above
             // fails on a push instead of in a 20-minute weekly run.
-            pitestModules += module.path.removePrefix(":")
+            pitestModules += moduleName
             val gaps = mutableListOf<String>()
             val forwarded = extension.jvmArgs.getOrElse(emptyList())
             listOf(fixtureJarsDirProperty, diffFixtureJarsDirProperty).forEach { property ->
                 if (forwarded.none { it.startsWith("-D$property=") }) {
                     gaps += "the PIT minion never receives -D$property"
+                }
+            }
+            // #81: index must stay on the subprocess-aware cap unless the user
+            // overrode `-PpitestThreads`. A silent return to `cores - 1` is how
+            // the TIMED_OUT feedback loop came back.
+            if (heavy && findProperty("pitestThreads") == null) {
+                val configured = extension.threads.getOrElse(0)
+                val expected = pitestThreadCount(subprocessHeavy = true)
+                if (configured != expected) {
+                    gaps += "threads=$configured but subprocess-heavy default is $expected (issue #81)"
                 }
             }
             // The *declared* dependencies, not resolved ones: resolving a task graph is not

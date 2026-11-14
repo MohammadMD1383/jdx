@@ -68,7 +68,10 @@ pitest {
     timeoutConstInMillis.set(if (isCi) 60_000 else 10_000)
     outputFormats.set(setOf("XML", "HTML"))
     timestampedReports.set(false)
-    threads.set(maxOf(2, Runtime.getRuntime().availableProcessors() - 1))
+    // #81: `threads` is owned by the root `projectsEvaluated` hook
+    // (`pitestThreadCount`) — index is subprocess-heavy (`javap` per class), so
+    // it caps at 4 unless `-PpitestThreads=<n>` overrides. Do not set threads
+    // here; a private copy would drift from the gate.
     // Same Intrinsics rationale as :core (equivalent mutants, not hidden logic).
     avoidCallsTo.set(setOf("kotlin.jvm.internal.Intrinsics"))
 }

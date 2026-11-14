@@ -281,10 +281,17 @@ class JavapDiffDifferentialTest {
         name: String,
         skipReasons: MutableMap<String, Int>,
     ): Set<Javap.MemberKey>? {
-        val output = Javap.tryRun(javap, jar.absolutePath, name)
-        if (output == null) {
-            count(skipReasons, "javap cannot read the class")
-            return null
+        val output = when (val outcome = Javap.tryRun(javap, jar.absolutePath, name)) {
+            is Javap.RunOutcome.Ok -> outcome.lines
+            is Javap.RunOutcome.Unreadable -> {
+                count(skipReasons, "javap cannot read the class")
+                return null
+            }
+            is Javap.RunOutcome.TimedOut ->
+                error(
+                    "javap timed out after ${outcome.timeoutMs}ms reading $name " +
+                        "from ${jar.name} (issue #81)",
+                )
         }
         val keys = mutableSetOf<Javap.MemberKey>()
         for (key in Javap.parseMembers(output)) {

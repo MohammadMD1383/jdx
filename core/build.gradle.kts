@@ -52,7 +52,9 @@ pitest {
     timeoutConstInMillis.set(if (isCi) 60_000 else 10_000)
     outputFormats.set(setOf("XML", "HTML"))
     timestampedReports.set(false)
-    threads.set(maxOf(2, Runtime.getRuntime().availableProcessors() - 1))
+    // #81: `threads` is owned by the root `projectsEvaluated` hook
+    // (`pitestThreadCount`) — core stays `cores - 1` (no `javap` fan-out) unless
+    // `-PpitestThreads=<n>` overrides. Do not set threads here.
     // Kotlin compiles `!!` and not-null assertions into `Intrinsics.checkNotNullExpressionValue`
     // calls. Removing them is an equivalent mutant by construction — no correct test can kill
     // it — so they are excluded from mutation, not from coverage. This is PIT's standard

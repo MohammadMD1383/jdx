@@ -84,10 +84,11 @@ internal object ServiceDifferential {
     }
 
     /**
-     * Runs the comparison for one class in [jar]. Never throws: `javap`
-     * failures become [Comparison.Skipped], `jdx` failures become
-     * [Comparison.ServiceError], and only a completed both-sides read becomes
-     * [Comparison.Compared].
+     * Runs the comparison for one class in [jar]. Never throws: unreadable
+     * `javap` outcomes become [Comparison.Skipped], `javap` timeouts and `jdx`
+     * failures become [Comparison.ServiceError] (issue #81 — a timed-out oracle
+     * must fail loudly, never look like a soft skip), and only a completed
+     * both-sides read becomes [Comparison.Compared].
      */
     internal fun compare(jar: File, binaryName: String, javap: String): Comparison {
         // T-065: names the model cannot represent (JFR `A$B$$C` shapes) fail in
@@ -134,9 +135,22 @@ internal object ServiceDifferential {
         val actualRefs = listing.groups.flatMap { group -> group.rows }
             .map { it.canonicalRef }.toSet()
 
-        val javapOutput = Javap.tryRun(javap, jar.absolutePath, binaryName)
-            ?: return Comparison.Skipped(binaryName, "javap cannot read $binaryName from ${jar.name}")
-        val quirks = JavapQuirks.applyToJavapSet(Javap.parseMembers(javapOutput))
+        val javapLines = when (val outcome = Javap.tryRun(javap, jar.absolutePath, binaryName)) {
+            is Javap.RunOutcome.Ok -> outcome.lines
+            is Javap.RunOutcome.Unreadable ->
+                return Comparison.Skipped(
+                    binaryName,
+                    "javap cannot read $binaryName from ${jar.name}: ${outcome.detail}",
+                )
+            is Javap.RunOutcome.TimedOut ->
+                return Comparison.ServiceError(
+                    binaryName,
+                    0,
+                    "javap timed out after ${outcome.timeoutMs}ms reading $binaryName " +
+                        "from ${jar.name} (issue #81)",
+                )
+        }
+        val quirks = JavapQuirks.applyToJavapSet(Javap.parseMembers(javapLines))
 
         val declaring = try {
             typeNameFromBinaryName(binaryName) as? TypeName.ClassType
