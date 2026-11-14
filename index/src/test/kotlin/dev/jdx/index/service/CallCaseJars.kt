@@ -96,3 +96,92 @@ internal fun buildCallsCaseJar(dir: Path): Path {
         ),
     )
 }
+
+/**
+ * Override / interface call-graph corpus (issue #6): virtual-dispatch edges
+ * that exact name+descriptor matching misses.
+ *
+ * - `o.Iface#act()` is abstract; `o.Impl` overrides it.
+ * - `o.ViaIface#run()` calls through the interface (`INVOKEINTERFACE`).
+ * - `o.ViaImpl#run()` calls through the concrete type (`INVOKEVIRTUAL`).
+ * - `o.Base#hook()` / `o.Child#hook()` is a class override pair with the same
+ *   shape (call sites through base vs child).
+ * - `o.StaticHost#util()` is static — override expansion must leave it alone.
+ */
+internal fun buildOverrideCallsCaseJar(dir: Path): Path {
+    val act = "()V"
+    val abstractMethod = Opcodes.ACC_PUBLIC or Opcodes.ACC_ABSTRACT
+    return ArtifactTestJars.craftJar(
+        dir.resolve("override-calls-case.jar"),
+        mapOf(
+            "o/Iface.class" to buildClass(
+                "o/Iface",
+                access = Opcodes.ACC_PUBLIC or Opcodes.ACC_INTERFACE or Opcodes.ACC_ABSTRACT,
+                superName = "java/lang/Object",
+            ) {
+                method(abstractMethod, "act", act, null, null)
+            },
+            "o/Impl.class" to buildClass(
+                "o/Impl",
+                access = Opcodes.ACC_PUBLIC or Opcodes.ACC_SUPER,
+                interfaces = arrayOf("o/Iface"),
+            ) {
+                method(Opcodes.ACC_PUBLIC, "act", act, null, null) {
+                    code(Opcodes.RETURN to null)
+                }
+            },
+            "o/ViaIface.class" to buildClass("o/ViaIface") {
+                method(Opcodes.ACC_PUBLIC, "run", "()V", null, null) {
+                    invoke(Opcodes.INVOKEINTERFACE, "o/Iface", "act", act)
+                    code(Opcodes.RETURN to null)
+                }
+            },
+            "o/ViaImpl.class" to buildClass("o/ViaImpl") {
+                method(Opcodes.ACC_PUBLIC, "run", "()V", null, null) {
+                    invoke(Opcodes.INVOKEVIRTUAL, "o/Impl", "act", act)
+                    code(Opcodes.RETURN to null)
+                }
+            },
+            "o/Base.class" to buildClass(
+                "o/Base",
+                access = Opcodes.ACC_PUBLIC or Opcodes.ACC_SUPER,
+            ) {
+                method(Opcodes.ACC_PUBLIC, "hook", act, null, null) {
+                    code(Opcodes.RETURN to null)
+                }
+            },
+            "o/Child.class" to buildClass(
+                "o/Child",
+                access = Opcodes.ACC_PUBLIC or Opcodes.ACC_SUPER,
+                superName = "o/Base",
+            ) {
+                method(Opcodes.ACC_PUBLIC, "hook", act, null, null) {
+                    code(Opcodes.RETURN to null)
+                }
+            },
+            "o/ViaBase.class" to buildClass("o/ViaBase") {
+                method(Opcodes.ACC_PUBLIC, "run", "()V", null, null) {
+                    invoke(Opcodes.INVOKEVIRTUAL, "o/Base", "hook", act)
+                    code(Opcodes.RETURN to null)
+                }
+            },
+            "o/ViaChild.class" to buildClass("o/ViaChild") {
+                method(Opcodes.ACC_PUBLIC, "run", "()V", null, null) {
+                    invoke(Opcodes.INVOKEVIRTUAL, "o/Child", "hook", act)
+                    code(Opcodes.RETURN to null)
+                }
+            },
+            "o/StaticHost.class" to buildClass("o/StaticHost") {
+                method(Opcodes.ACC_PUBLIC or Opcodes.ACC_STATIC, "util", act, null, null) {
+                    code(Opcodes.RETURN to null)
+                }
+            },
+            "o/ViaStatic.class" to buildClass("o/ViaStatic") {
+                method(Opcodes.ACC_PUBLIC, "run", "()V", null, null) {
+                    invoke(Opcodes.INVOKESTATIC, "o/StaticHost", "util", act)
+                    code(Opcodes.RETURN to null)
+                }
+            },
+        ),
+    )
+}

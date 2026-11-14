@@ -89,7 +89,7 @@ import dev.jdx.index.workspace.WorkspaceStore
  *   `in`, `exclude`, `limit`, `context`.
  * - `hierarchy`: `up`, `down`, `direct`, `depth`, `in`, `exclude`, `limit`.
  * - `implementors`: `direct`, `depth`, `in`, `exclude`, `limit`.
- * - `callers`: `depth`, `in`, `exclude`, `limit`.
+ * - `callers`: `depth`, `in`, `exclude`, `limit`, `exact`.
  * - `calls`: `depth`, `in`, `exclude`, `externalOnly`, `limit`.
  * - `samples`: `limit`, `in`, `exclude`, `preferSources`, `maxLines`.
  * - `diff`: the query is the *old* artifact and the required `new` param the new
@@ -232,6 +232,7 @@ public fun JdxService.dispatch(request: RpcRequest, roots: RootsSpec): ServiceOu
                 inArtifact = scope.params["in"],
                 exclude = scope.params["exclude"],
                 limit = scope.int("limit", DEFAULT_CALLS_LIMIT) ?: return scope.failure(),
+                exact = scope.bool("exact"),
             ),
         )
         RpcCommand.CALLS -> calls(

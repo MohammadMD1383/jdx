@@ -3466,6 +3466,13 @@ public object JdxService {
         public val exclude: String? = null,
         public val limit: Int = DEFAULT_CALLS_LIMIT,
         public val externalOnly: Boolean = false,
+        /**
+         * When true, `callers` matches invoke owners exactly (pre-issue-#6).
+         * Default false: virtual-dispatch expansion includes call sites through
+         * overrides and through declaring supertypes. `calls` ignores this —
+         * callees stay the bytecode edge's named owner.
+         */
+        public val exact: Boolean = false,
     )
 
     /**
@@ -3478,9 +3485,12 @@ public object JdxService {
      * lands with the daemon/`jdx index` work). Structure is
      * bytecode-authoritative (D-009): the target resolves with the T-011
      * machinery before any scan, so a typo reports did-you-mean instead of an
-     * empty answer. Matching is exact name+descriptor at every level — no
-     * virtual-dispatch resolution in v1 — and overload-blind at the root
-     * unless the ref carries a parameter list (the usages rule, D-042 §5).
+     * empty answer. Matching is override-aware by default (issue #6): call sites
+     * through subtypes that override the method and through declaring
+     * supertypes (polymorphic receivers) are included; [CallOptions.exact]
+     * restores exact name+descriptor matching. Constructors, static and private
+     * methods stay exact. Overload-blind at the root unless the ref carries a
+     * parameter list (the usages rule, D-042 §5).
      */
     public fun callers(
         rawRef: String,
@@ -3695,16 +3705,34 @@ public object JdxService {
 
             val targetArtifact = rootLabel(opened[winner], binary)
             val scanned = scanCallEdges(opened, warnings)
+            // Direct-parent index for override expansion (issue #6): one pass
+            // over every loaded class, reused for every callers level.
+            val childrenOf = if (direction == CallDirection.CALLERS && !options.exact) {
+                buildDirectChildrenIndex(workspace, providers.keys)
+            } else {
+                emptyMap()
+            }
+            val relatedCache = mutableMapOf<Triple<String, String, String?>, Set<ExactMethod>>()
             val tree = if (direction == CallDirection.CALLERS) {
-                expandCallers(
+                val rootTargets = relatedCallTargets(
                     owner = binary,
                     name = ref.name,
                     descriptors = rootDescriptors,
+                    workspace = workspace,
+                    childrenOf = childrenOf,
+                    exact = options.exact,
+                    cache = relatedCache,
+                )
+                expandCallers(
+                    targets = rootTargets,
                     scanned = scanned,
                     options = options,
                     targetArtifact = targetArtifact,
                     path = emptySet(),
                     remaining = options.depth,
+                    workspace = workspace,
+                    childrenOf = childrenOf,
+                    relatedCache = relatedCache,
                 )
             } else {
                 expandCallees(
@@ -3825,33 +3853,32 @@ public object JdxService {
         providers[binary]?.firstOrNull()?.let { rootLabel(opened[it], binary) }
 
     /**
-     * One `callers` level: distinct callers of (`owner`, `name`,
-     * `descriptors`) — `descriptors == null` is the overload-blind root,
-     * deeper levels pass the exact singleton — sorted by label then ref,
-     * pruned by the display filters, cycle-marked against [path], expanded
-     * while [remaining] allows.
+     * One `callers` level: distinct callers of any method in [targets]
+     * (exact owner+name+descriptor set — already expanded for overrides when
+     * not `--exact`), sorted by label then ref, pruned by the display filters,
+     * cycle-marked against [path], expanded while [remaining] allows.
      */
     private fun expandCallers(
-        owner: String,
-        name: String,
-        descriptors: Set<String>?,
+        targets: Set<ExactMethod>,
         scanned: List<ScannedCall>,
         options: CallOptions,
         targetArtifact: String,
         path: Set<CallNodeKey>,
         remaining: Int,
+        workspace: Workspace,
+        childrenOf: Map<String, List<String>>,
+        relatedCache: MutableMap<Triple<String, String, String?>, Set<ExactMethod>>,
     ): List<CallNode> {
+        if (targets.isEmpty()) return emptyList()
         val seeds = scanned
             .filter { call ->
-                call.edge.toOwner == owner && call.edge.toMember == name &&
-                    (descriptors == null || call.edge.toDescriptor in descriptors)
+                val member = call.edge.toMember ?: return@filter false
+                val descriptor = call.edge.toDescriptor ?: return@filter false
+                ExactMethod(call.edge.toOwner, member, descriptor) in targets
             }
             .map { call ->
-                val descriptor = call.edge.toDescriptor
-                if (descriptor == null) return@map null
                 Triple(call.edge.fromClass, call.edge.fromMember, call.edge.fromDescriptor) to call.label
             }
-            .filterNotNull()
             .distinct()
             .filter { (_, label) -> keepCallNode(label, options, targetArtifact) }
             .sortedWith(compareBy({ it.second }, { it.first.first }, { it.first.second }, { it.first.third }))
@@ -3865,15 +3892,25 @@ public object JdxService {
                     ref = ref,
                     artifact = label,
                     children = if (remaining > 1) {
-                        expandCallers(
+                        val childTargets = relatedCallTargets(
                             owner = from.first,
                             name = from.second,
                             descriptors = setOf(from.third),
+                            workspace = workspace,
+                            childrenOf = childrenOf,
+                            exact = options.exact,
+                            cache = relatedCache,
+                        )
+                        expandCallers(
+                            targets = childTargets,
                             scanned = scanned,
                             options = options,
                             targetArtifact = targetArtifact,
                             path = path + key,
                             remaining = remaining - 1,
+                            workspace = workspace,
+                            childrenOf = childrenOf,
+                            relatedCache = relatedCache,
                         )
                     } else {
                         emptyList()
@@ -3881,6 +3918,124 @@ public object JdxService {
                 )
             }
         }
+    }
+
+    /**
+     * Direct-parent → children index over the workspace (issue #6). Built once
+     * per `callers` query so override expansion does not re-walk every class
+     * per tree node.
+     */
+    private fun buildDirectChildrenIndex(
+        workspace: Workspace,
+        binaries: Set<String>,
+    ): Map<String, List<String>> {
+        val children = mutableMapOf<String, MutableList<String>>()
+        for (binary in binaries) {
+            val info = workspace.load(binary) ?: continue
+            for ((_, parent) in directSupertypeEdges(info)) {
+                children.getOrPut(parent) { mutableListOf() }.add(binary)
+            }
+        }
+        return children
+    }
+
+    /**
+     * JVM method descriptor parameter key — everything up to and including
+     * `)` — so covariant bridges (`()LBase;` vs `()LChild;`) share one override
+     * identity (issue #6).
+     */
+    private fun methodParameterKey(descriptor: String): String {
+        val close = descriptor.indexOf(')')
+        return if (close >= 0) descriptor.substring(0, close + 1) else descriptor
+    }
+
+    /**
+     * Call-site targets for one `callers` expansion: the queried method(s) plus,
+     * unless [exact], every override in subtypes and every same-shape declaration
+     * in supertypes (polymorphic receivers). Constructors / static / private
+     * stay exact — they have no virtual dispatch.
+     */
+    private fun relatedCallTargets(
+        owner: String,
+        name: String,
+        descriptors: Set<String>?,
+        workspace: Workspace,
+        childrenOf: Map<String, List<String>>,
+        exact: Boolean,
+        cache: MutableMap<Triple<String, String, String?>, Set<ExactMethod>>,
+    ): Set<ExactMethod> {
+        val cacheKey = Triple(owner, name, descriptors?.sorted()?.joinToString("\u0000"))
+        cache[cacheKey]?.let { return it }
+
+        val info = workspace.load(owner)
+        val declared = info?.methods?.filter { method ->
+            method.name == name && (descriptors == null || method.descriptor.descriptor in descriptors)
+        }.orEmpty()
+        val exactTargets = when {
+            declared.isNotEmpty() ->
+                declared.map { ExactMethod(owner, name, it.descriptor.descriptor) }.toSet()
+            descriptors != null ->
+                descriptors.map { ExactMethod(owner, name, it) }.toSet()
+            else -> emptySet()
+        }
+        if (exact || name == "<init>" || name == "<clinit>" || exactTargets.isEmpty()) {
+            cache[cacheKey] = exactTargets
+            return exactTargets
+        }
+        if (declared.isNotEmpty() && declared.all {
+                it.access.has(AccessFlag.STATIC) || it.access.has(AccessFlag.PRIVATE)
+            }
+        ) {
+            cache[cacheKey] = exactTargets
+            return exactTargets
+        }
+
+        val paramKeys = exactTargets.map { methodParameterKey(it.descriptor) }.toSet()
+        val related = exactTargets.toMutableSet()
+
+        // Subtypes: call sites that name an override / bridge.
+        val subtypeQueue = ArrayDeque<String>()
+        subtypeQueue.add(owner)
+        val seenSubtypes = mutableSetOf(owner)
+        while (subtypeQueue.isNotEmpty()) {
+            val current = subtypeQueue.removeFirst()
+            for (child in childrenOf[current].orEmpty()) {
+                if (!seenSubtypes.add(child)) continue
+                subtypeQueue.add(child)
+                val childInfo = workspace.load(child) ?: continue
+                for (method in childInfo.methods) {
+                    if (method.name != name) continue
+                    if (method.access.has(AccessFlag.STATIC) || method.access.has(AccessFlag.PRIVATE)) continue
+                    if (methodParameterKey(method.descriptor.descriptor) in paramKeys) {
+                        related.add(ExactMethod(child, name, method.descriptor.descriptor))
+                    }
+                }
+            }
+        }
+
+        // Supertypes: polymorphic call sites that name the declaring type.
+        if (info != null) {
+            val visited = mutableSetOf(owner)
+            val queue = ArrayDeque(listOf(info))
+            while (queue.isNotEmpty()) {
+                val current = queue.removeFirst()
+                for ((_, parent) in directSupertypeEdges(current)) {
+                    if (!visited.add(parent)) continue
+                    val parentInfo = workspace.load(parent) ?: continue
+                    for (method in parentInfo.methods) {
+                        if (method.name != name) continue
+                        if (method.access.has(AccessFlag.STATIC) || method.access.has(AccessFlag.PRIVATE)) continue
+                        if (methodParameterKey(method.descriptor.descriptor) in paramKeys) {
+                            related.add(ExactMethod(parent, name, method.descriptor.descriptor))
+                        }
+                    }
+                    queue.add(parentInfo)
+                }
+            }
+        }
+
+        cache[cacheKey] = related
+        return related
     }
 
     /**

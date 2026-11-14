@@ -307,8 +307,16 @@ public val ALL_MCP_TOOLS: List<McpToolDefinition> = listOf(
     ),
     McpToolDefinition(
         command = RpcCommand.CALLERS,
-        description = "Call hierarchy in: who calls this method, as a depth-bounded tree.",
-        params = listOf(queryParam(), workspaceParam(), depthParam(1), inParam(), excludeParam(), limitParam(50)),
+        description = "Call hierarchy in: who calls this method, as a depth-bounded tree. " +
+            "Override-aware by default; set exact=true for invoke-owner matching only.",
+        params = listOf(
+            queryParam(), workspaceParam(), depthParam(1), inParam(), excludeParam(), limitParam(50),
+            McpParam(
+                name = "exact",
+                kind = McpParamKind.BOOLEAN,
+                description = "Match invoke owners exactly (no override / supertype expansion).",
+            ),
+        ),
     ),
     McpToolDefinition(
         command = RpcCommand.CALLS,

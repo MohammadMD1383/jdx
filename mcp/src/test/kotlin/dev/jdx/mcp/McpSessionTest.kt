@@ -229,6 +229,15 @@ class McpSessionTest {
     }
 
     @Test
+    fun `callers forwards exact`() {
+        checkParity(
+            "jdx_callers", args("dev.jdx.fixtures.Generics#identity", "exact" to true),
+            RpcRequest(RpcCommand.CALLERS, "dev.jdx.fixtures.Generics#identity", mapOf("exact" to "true")),
+            roots(),
+        )
+    }
+
+    @Test
     fun `calls forwards externalOnly`() {
         checkParity(
             "jdx_calls", args("dev.jdx.fixtures.Generics#identity", "externalOnly" to true),

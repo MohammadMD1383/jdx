@@ -52,6 +52,8 @@ class CallersCommand(
     override fun help(context: Context): String =
         "Show who calls a method, transitively to --depth (default 1): one " +
             "indented row per calling method, cycle-safe with …(cycle) markers. " +
+            "Override-aware by default (call sites through overrides and " +
+            "declaring supertypes); --exact keeps invoke-owner matching. " +
             "--in/--exclude filter rows by artifact label (jar file, JDK module " +
             "or class-dir name). Member refs only (methods + constructors); " +
             "type refs and field refs exit 3 (fields belong to jdx usages). " +
@@ -63,6 +65,11 @@ class CallersCommand(
         "--depth",
         help = "Maximum transitive levels shown (default 1, direct callers only).",
     ).int().default(1)
+
+    private val exact by option(
+        "--exact",
+        help = "Match invoke owners exactly (no override / supertype expansion).",
+    ).flag()
 
     private val inArtifact by option(
         "--in",
@@ -156,6 +163,7 @@ class CallersCommand(
                     inArtifact = inArtifact,
                     exclude = exclude,
                     limit = limit,
+                    exact = exact,
                 ),
                 flagWorkspace = effectiveWorkspace(workspace),
                 roots = WarmRoots(jars = jars, coords = coord, repos = repo, fetch = fetch, noJdk = noJdk),
@@ -189,6 +197,7 @@ class CallersCommand(
                         inArtifact = inArtifact,
                         exclude = exclude,
                         limit = limit,
+                        exact = exact,
                     ),
                     dev.jdx.core.render.CallDirection.CALLERS,
                 )

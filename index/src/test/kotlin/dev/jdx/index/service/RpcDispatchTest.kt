@@ -223,6 +223,15 @@ class RpcDispatchTest {
     }
 
     @Test
+    fun `callers dispatches with exact`() {
+        val query = "c.Lib#greet(java.lang.String)"
+        val request = req(RpcCommand.CALLERS, query, "exact" to "true")
+        val direct = JdxService.callers(query, fixtureRoots(), CallOptions(exact = true))
+        viaWire(request) shouldBe direct.toJson("callers")
+        direct.exitCode shouldBe 0
+    }
+
+    @Test
     fun `calls dispatches with external-only`() {
         val query = "c.App#run()"
         val request = req(RpcCommand.CALLS, query, "externalOnly" to "true")

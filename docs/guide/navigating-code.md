@@ -67,8 +67,11 @@ $ jdx samples 'com.google.gson.JsonParser#parseString(String)' --coord com.googl
 
 - Graph queries re-scan the bytecode roots on each query (there is no persistent graph index
   yet); the daemon and MCP server keep the scan warm.
-- Call matching is exact name + descriptor, not override-aware: a call through an interface is
-  attributed to the interface method.
+- `callers` is override-aware by default (issue #6): querying an interface/base method also
+  finds call sites through overrides, and querying an override also finds polymorphic call
+  sites through declaring supertypes. Pass `--exact` for invoke-owner matching only.
+  `calls` stays bytecode-exact — an invoke instruction names one owner, so callees are not
+  expanded to the override set.
 - Usages found in source directories are textual (`ref` kind only).
 - `usages --kind throw` reads `throws` declarations, not `ATHROW` sites (throw-site attribution needs data-flow analysis and is deferred to future work).
 
