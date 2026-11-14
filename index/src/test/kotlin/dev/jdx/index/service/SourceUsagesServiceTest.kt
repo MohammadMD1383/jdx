@@ -5,6 +5,7 @@ import dev.jdx.index.service.JdxService.ServiceOutcome
 import dev.jdx.index.service.JdxService.UsageKindFilter
 import dev.jdx.index.service.JdxService.UsageOptions
 import io.kotest.matchers.shouldBe
+import io.kotest.matchers.shouldNotBe
 import io.kotest.matchers.string.shouldContain
 import io.kotest.matchers.string.shouldNotContain
 import java.nio.file.Files
@@ -65,6 +66,22 @@ class SourceUsagesServiceTest {
         val text = textOf(outcome)
         text shouldContain "  ref Calls.java:2"
         text shouldNotContain "App.java"
+    }
+
+    @Test
+    fun `context slices source-dir mentions around the hit line`() {
+        val outcome = JdxService.usages(
+            "u.Lib#greet",
+            roots(writeSources()),
+            UsageOptions(contextLines = 1, kind = UsageKindFilter.REF, inArtifact = "proj-src"),
+        )
+        outcome.exitCode shouldBe 0
+        val hit = usageListOf(outcome).hits.single { it.fromRef.startsWith("Calls.java:") }
+        hit.snippet shouldNotBe null
+        val snippet = hit.snippet!!
+        snippet.file shouldBe "Calls.java"
+        snippet.lines.any { it.contains("greet") } shouldBe true
+        textOf(outcome) shouldContain "    Calls.java:"
     }
 
     @Test

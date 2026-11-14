@@ -23,7 +23,8 @@ Narrow by edge kind with `--kind`:
 
 `--in` / `--exclude` filter by artifact (jar file name, JDK module or source directory), and
 `--src <dir>` adds your project's source directories — those hits are textual mentions with
-line numbers.
+line numbers. `--context N` shows a short source window around each call site when paired
+sources (or `--src`) are available; `0` (default) is location-only (`File.java:line`).
 
 ## Type hierarchy: `hierarchy` and `implementors`
 
