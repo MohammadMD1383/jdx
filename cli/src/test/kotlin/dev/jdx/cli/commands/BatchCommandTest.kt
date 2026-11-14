@@ -112,6 +112,8 @@ class BatchCommandTest {
         val result = health["result"]?.jsonObject ?: error("health has no result: ${run.lines[1]}")
         result["rpcVersion"]?.jsonPrimitive?.intOrNull shouldBe 1
         result["indexedArtifacts"]?.jsonPrimitive?.intOrNull shouldBe 0
+        // Issue #4: bare 0 is labeled so health is not mistaken for an empty daemon.
+        result["indexMode"]?.jsonPrimitive?.content shouldBe "live-roots-first"
         // version + health so far: the daemon counts every request before answering.
         result["queryCount"]?.jsonPrimitive?.intOrNull shouldBe 2
     }

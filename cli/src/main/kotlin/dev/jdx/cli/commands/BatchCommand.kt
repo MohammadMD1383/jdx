@@ -215,6 +215,8 @@ class BatchCommand(
         append(",\"uptimeSeconds\":").append(TimeUnit.NANOSECONDS.toSeconds(System.nanoTime() - startNanos))
         append(",\"queryCount\":").append(queryCount)
         append(",\"indexedArtifacts\":0")
+        // Same label as daemon/HTTP/MCP health (issue #4): bare 0 is by design.
+        append(",\"indexMode\":\"live-roots-first\"")
         append(",\"rpcVersion\":").append(RPC_VERSION)
         append(",\"appVersion\":").append(JsonEscape.quote(appVersion))
         append(",\"pid\":").append(ProcessHandle.current().pid())

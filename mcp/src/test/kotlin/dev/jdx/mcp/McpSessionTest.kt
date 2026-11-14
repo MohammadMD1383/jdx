@@ -276,6 +276,9 @@ class McpSessionTest {
         val health = envelope["result"]?.jsonObject
         (health?.get("workspace")?.jsonPrimitive?.content) shouldBe "fx"
         (health?.get("appVersion")?.jsonPrimitive?.content) shouldBe "test"
+        (health?.get("indexedArtifacts")?.jsonPrimitive?.content) shouldBe "0"
+        // Issue #4: bare 0 is labeled so health is not mistaken for an empty daemon.
+        (health?.get("indexMode")?.jsonPrimitive?.content) shouldBe "live-roots-first"
         // Two calls so far on this session: version + this health.
         (health?.get("queryCount")?.jsonPrimitive?.content) shouldBe "2"
     }

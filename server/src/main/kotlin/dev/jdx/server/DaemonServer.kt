@@ -37,6 +37,14 @@ import java.util.concurrent.atomic.AtomicBoolean
 import java.util.concurrent.atomic.AtomicLong
 
 /**
+ * Graph queries are live-roots-first (AGENTS.md; issue #5): status reports
+ * [indexedArtifacts] `0` until a persistent index wires a real count. Every
+ * health JSON carries [INDEX_MODE_LIVE_ROOTS_FIRST] so a bare `0` is never
+ * mistaken for an empty/broken daemon (issue #4).
+ */
+public const val INDEX_MODE_LIVE_ROOTS_FIRST: String = "live-roots-first"
+
+/**
  * What `daemon status` reports (T-041): uptime, workspace, memory, indexed
  * artifacts, query count. Produced server-side so every client reads the same
  * numbers; rendered to text by the CLI and to JSON by `--json`.
@@ -117,6 +125,8 @@ internal fun healthResultJson(snapshot: DaemonStatusSnapshot): String = buildStr
     append(",\"uptimeSeconds\":").append(snapshot.uptimeSeconds)
     append(",\"queryCount\":").append(snapshot.queryCount)
     append(",\"indexedArtifacts\":").append(snapshot.indexedArtifacts)
+    // Self-explanatory while the count stays 0 by design (issue #4 / #5).
+    append(",\"indexMode\":").append(JsonEscape.quote(INDEX_MODE_LIVE_ROOTS_FIRST))
     append(",\"rpcVersion\":").append(snapshot.rpcVersion)
     append(",\"appVersion\":").append(JsonEscape.quote(snapshot.appVersion))
     append(",\"pid\":").append(snapshot.pid)
@@ -155,8 +165,10 @@ internal fun checkSocketPathLength(
  *
  * Idle shutdown is a single-shot [ScheduledExecutorService] task, reset on
  * every request; a `null` or zero [idleTimeout] disables it. Live-index
- * acceleration is deliberately out (D-043 precedent): [indexedArtifacts]
- * reports the supplier's count, `0` until T-082 wires the store.
+ * acceleration is deliberately out (D-043 / issue #5): [indexedArtifacts]
+ * reports the supplier's count (`0` until a persistent index wires a real
+ * count); health JSON always carries [INDEX_MODE_LIVE_ROOTS_FIRST] so the
+ * bare `0` is labeled (issue #4).
  *
  * Threading: one accept thread, one virtual thread per connection, one
  * scheduler thread. [stop] is idempotent and safe to call from any thread,

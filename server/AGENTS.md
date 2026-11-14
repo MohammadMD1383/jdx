@@ -20,7 +20,9 @@ are `toJson` bytes verbatim, no second shape. `explicitApi()` is on.
   `daemon run` child before signalling (never kills a reused pid) and escalates
   `destroy()` to `destroyForcibly()`.
 - `DaemonDispatch` — resolves roots, serialises outcomes; all 18 read commands to
-  `JdxService` (`indexedArtifacts` stays 0 — live roots, no persistent acceleration).
+  `JdxService` (`indexedArtifacts` stays 0 with `indexMode=live-roots-first` —
+  live roots, no persistent acceleration; issue #4 labels the bare 0, #5 tracks
+  the real count).
 - `HttpServer` — JDK builtin only: `GET /v1/<command>`, `POST /v1/batch` (NDJSON),
   `GET /v1/health`; `?workspace=` per-call override; localhost by default; blocks
   until interrupted (no idle shutdown, unlike the daemon).

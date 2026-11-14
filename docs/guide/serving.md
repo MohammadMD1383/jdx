@@ -28,6 +28,12 @@ jdx daemon status --workspace myapp  # uptime, memory, indexed artifacts, query 
 jdx daemon stop --workspace myapp
 ```
 
+`status` reports `indexed artifacts: 0` on purpose while graph queries are
+live-roots-first (no persistent index yet — [issue #5](https://github.com/MohammadMD1383/jdx/issues/5));
+the row and the health/`--json` `indexMode` field say `live-roots-first` so a
+healthy daemon is not mistaken for an empty one ([issue #4](https://github.com/MohammadMD1383/jdx/issues/4)).
+`GET /v1/health` and MCP `jdx_health` carry the same shape.
+
 It shuts itself down after 5 minutes without requests (`--idle 30m`, or `--idle 0` to
 disable). `--no-daemon` on any command forces in-process execution.
 
