@@ -7,6 +7,7 @@ import dev.jdx.index.workspace.InMemoryWorkspaceStore
 import dev.jdx.index.workspace.WorkspaceDefinition
 import io.kotest.matchers.shouldBe
 import io.kotest.matchers.string.shouldContain
+import io.kotest.matchers.string.shouldNotContain
 import java.io.ByteArrayOutputStream
 import java.io.File
 import java.io.PrintStream
@@ -104,7 +105,7 @@ class ReadCommandDiscoveryTest {
             ReadCommandSupport.discoverProject(root, cache, null, null)
         }
         var exit = 0
-        val output = captureStdout {
+        val captured = captureOutErr {
             try {
                 MembersCommand(
                     query = ::defaultMemberQuery,
@@ -118,22 +119,30 @@ class ReadCommandDiscoveryTest {
             }
         }
         exit shouldBe 0
-        output shouldContain "members of $binary"
-        output shouldContain "PROJECT_DISCOVERY_FALLBACK"
+        captured.out shouldContain "members of $binary"
+        // Issue #86: discovery fallback is a warning — stderr, not stdout.
+        captured.out shouldNotContain "PROJECT_DISCOVERY_FALLBACK"
+        captured.err shouldContain "PROJECT_DISCOVERY_FALLBACK"
     }
 
     private class TestExit(val code: Int) : RuntimeException()
 
-    private fun captureStdout(block: () -> Unit): String {
-        val original = System.out
-        val buffer = ByteArrayOutputStream()
-        System.setOut(PrintStream(buffer))
+    private data class CapturedStreams(val out: String, val err: String)
+
+    private fun captureOutErr(block: () -> Unit): CapturedStreams {
+        val originalOut = System.out
+        val originalErr = System.err
+        val outBuffer = ByteArrayOutputStream()
+        val errBuffer = ByteArrayOutputStream()
+        System.setOut(PrintStream(outBuffer))
+        System.setErr(PrintStream(errBuffer))
         try {
             block()
         } finally {
-            System.setOut(original)
+            System.setOut(originalOut)
+            System.setErr(originalErr)
         }
-        return buffer.toString(Charsets.UTF_8)
+        return CapturedStreams(outBuffer.toString(Charsets.UTF_8), errBuffer.toString(Charsets.UTF_8))
     }
 
     /** Copies the first top-level fixture class into the project's classes dir. */

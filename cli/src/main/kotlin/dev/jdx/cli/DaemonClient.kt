@@ -1,6 +1,7 @@
 package dev.jdx.cli
 
 import com.github.ajalt.clikt.core.CoreCliktCommand
+import dev.jdx.core.render.WarningLines
 import dev.jdx.core.rpc.RpcCommand
 import dev.jdx.core.rpc.RpcRequest
 import dev.jdx.index.workspace.WorkspaceStore
@@ -9,7 +10,9 @@ import dev.jdx.server.DaemonProbe
 import java.nio.file.Path
 import kotlinx.serialization.json.Json
 import kotlinx.serialization.json.booleanOrNull
+import kotlinx.serialization.json.contentOrNull
 import kotlinx.serialization.json.intOrNull
+import kotlinx.serialization.json.jsonArray
 import kotlinx.serialization.json.jsonObject
 import kotlinx.serialization.json.jsonPrimitive
 
@@ -27,9 +30,10 @@ import kotlinx.serialization.json.jsonPrimitive
  *
  * v1 scope (D-059, lifted by T-086): `--json` queries go warm verbatim and
  * text queries go warm via the server-rendered `"text"` envelope field
- * (plain, no ANSI — the daemon has no TTY). A missing/unreachable daemon, a
- * usage error, explicit root overrides, or a daemon that answers without the
- * `text` field (pre-T-086) all read as "run in-process".
+ * (plain, no ANSI — the daemon has no TTY; warnings peeled to stderr like
+ * cold text, issue #86). A missing/unreachable daemon, a usage error,
+ * explicit root overrides, or a daemon that answers without the `text`
+ * field (pre-T-086) all read as "run in-process".
  */
 public object DaemonClient {
     private val lenientJson: Json = Json { ignoreUnknownKeys = true }
@@ -43,10 +47,15 @@ public object DaemonClient {
 
     /**
      * The answer when the daemon served a text query: the server-rendered
-     * plain text to print verbatim plus the process exit code parsed out of
-     * the same envelope.
+     * plain answer text (warnings already peeled, issue #86), the process
+     * exit code, and the envelope's warning lines for stderr (capped like
+     * cold text).
      */
-    public data class WarmTextHit(val text: String, val exitCode: Int)
+    public data class WarmTextHit(
+        val text: String,
+        val exitCode: Int,
+        val warningLines: List<String> = emptyList(),
+    )
 
     /**
      * Decides whether this query may leave the process. Every clause is a
@@ -120,6 +129,7 @@ public object DaemonClient {
         runtimeDir: Path?,
         roundTrip: DaemonRoundTrip = defaultRoundTrip,
         printer: (String) -> Unit = ::println,
+        errPrinter: (String) -> Unit = System.err::println,
         brief: Boolean = false,
         warmMaxLines: Int? = null,
     ): Boolean {
@@ -141,6 +151,7 @@ public object DaemonClient {
         )
         val hit = tryWarmText(textRequest, socket, roundTrip) ?: return false
         printer(hit.text)
+        for (line in WarningLines.cap(hit.warningLines)) errPrinter(line)
         if (hit.exitCode != 0) terminate(hit.exitCode)
         return true
     }
@@ -160,7 +171,7 @@ public object DaemonClient {
         val line = runCatching { roundTrip(socketPath, request) }.getOrNull() ?: return null
         val code = parseExitCode(line, request.command.wire) ?: return null
         val text = parseWarmText(line) ?: return null
-        return WarmTextHit(text, code)
+        return WarmTextHit(text, code, parseWarningLines(line))
     }
 
     /**
@@ -231,6 +242,26 @@ public object DaemonClient {
             primitive.content
         } catch (_: Exception) {
             null
+        }
+    }
+
+    /**
+     * Reads envelope `warnings[]` as `warning CODE: message` lines for stderr
+     * (issue #86). Returns an empty list when the field is missing or malformed
+     * — never throws, never blocks the warm answer.
+     */
+    public fun parseWarningLines(line: String): List<String> {
+        return try {
+            val warnings = lenientJson.parseToJsonElement(line).jsonObject["warnings"]?.jsonArray
+                ?: return emptyList()
+            warnings.mapNotNull { element ->
+                val obj = element.jsonObject
+                val code = obj["code"]?.jsonPrimitive?.contentOrNull ?: return@mapNotNull null
+                val message = obj["message"]?.jsonPrimitive?.contentOrNull ?: return@mapNotNull null
+                "${WarningLines.LINE_PREFIX}$code: $message"
+            }
+        } catch (_: Exception) {
+            emptyList()
         }
     }
 

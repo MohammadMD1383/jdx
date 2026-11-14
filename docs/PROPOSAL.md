@@ -1033,7 +1033,9 @@ project-discovery fallback (auto-discovery found the project but not its depende
 dependency jars omitted, `PROJECT_DISCOVERY_FALLBACK`), unnameable class names (a class file
 whose own name carries an empty `$`-separated segment — JFR `Exception$JB$$Assertion` shapes —
 skipped with `UNNAMEABLE_CLASS`, never `CORRUPT_CLASS`), sealed/hidden classes —
-all surface as named warning codes in both text and JSON.
+all surface as named warning codes. Text mode prints them on **stderr** (soft-capped per
+code so a corrupt-heavy workspace cannot bury the answer; issue #86); `--json` carries the
+full uncapped list in the envelope `warnings` array only.
 
 ---
 

@@ -6,4 +6,3 @@ members of dev.jdx.fixtures.TrafficLight$1
   field public static final dev.jdx.fixtures.TrafficLight GREEN
   field public static final dev.jdx.fixtures.TrafficLight RED
   field public static final dev.jdx.fixtures.TrafficLight YELLOW
-warning UNRESOLVED_SUPERTYPE: supertype java.lang.Enum is not in the workspace — members inherited from it are missing

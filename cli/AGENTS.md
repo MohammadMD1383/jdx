@@ -11,13 +11,16 @@ is the CLI surface, pinned by help/parity goldens.)
   subcommand (dual position). `runCli` / `ShellExpandedValueOption` — pre-Clikt
   check for shell-expanded `--jars`/`--src` globs (issue #86: exit 3 with a
   quote-the-glob hint instead of Clikt's bare "unexpected extra arguments").
-  `commands/ReadCommandSupport` — shared roots resolution + budget validation.
+  `commands/ReadCommandSupport` — shared roots resolution + budget validation;
+  text `finish` peels `warning …` lines onto stderr (capped per code, issue #86)
+  so stdout stays the answer; `--json` keeps the full envelope `warnings` array.
   `render/HelpSheet` — the single `HELP_ROWS` table feeding `jdx help` and
   `jdx help --agent` (they cannot drift).
 - `DaemonClient` — forwards `--json` queries to the running daemon, degrades to
   in-process when down; explicit roots, unnamed workspaces, and usage errors stay
   cold; `--no-daemon` forces in-process. Warm text comes server-rendered (always
-  plain — the daemon has no TTY); `--json` bytes are untouched by budgets.
+  plain — the daemon has no TTY; answer-only `"text"`, warnings from the envelope
+  printed on stderr like cold text); `--json` bytes are untouched by budgets.
 - `bench/BenchRunner` + `render/BenchSheet` — fixed workload, median of iterations,
   advisory targets (never gate). `service/DoctorService` — injectable probes
   (workspace store, socket health, AppCDS archive + fat jar paths) so tests never

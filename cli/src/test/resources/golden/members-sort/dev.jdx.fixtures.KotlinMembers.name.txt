@@ -12,5 +12,4 @@ methods declared on dev.jdx.fixtures.KotlinMembers:
   method public final int originalName(int value)
   method public final java.lang.String withDefault(int first)
   method public final java.lang.String withDefault(int first, java.lang.String second = ...)
-warning UNRESOLVED_SUPERTYPE: supertype java.lang.Object is not in the workspace — members inherited from it are missing
 source: fixture-corpus.jar (bytecode)

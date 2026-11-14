@@ -22,7 +22,12 @@ $ jdx members java.util.List --limit 3
 Anything an agent should know but did not ask for is a named warning, never silent: duplicate
 classes across jars (shading), sources that do not match the binary, corrupt class files,
 multi-release variants, unresolvable supertypes, project-discovery fallbacks. Each has a stable
-code (`SOURCES_VERSION_MISMATCH`, `MULTI_RELEASE_VARIANT`, …) in both text and JSON.
+code (`SOURCES_VERSION_MISMATCH`, `MULTI_RELEASE_VARIANT`, …).
+
+In **text** mode, warning lines go to **stderr** (capped at five lines per code, then a
+`… and N more` summary) so a flood of `CORRUPT_CLASS` cannot bury the answer on stdout.
+In **`--json`** mode, the full uncapped list lives only in the envelope `warnings` array —
+stdout stays a single parseable object.
 
 ## JSON output
 

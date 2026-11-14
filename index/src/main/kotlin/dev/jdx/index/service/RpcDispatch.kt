@@ -22,6 +22,7 @@ import dev.jdx.core.render.ErrorResult
 import dev.jdx.core.render.JsonEscape
 import dev.jdx.core.render.MemberSort
 import dev.jdx.core.render.TokenBudget
+import dev.jdx.core.render.WarningLines
 import dev.jdx.core.rpc.RpcCommand
 import dev.jdx.core.rpc.RpcRequest
 import dev.jdx.decompile.DecompilerId
@@ -303,6 +304,11 @@ public fun JdxService.dispatchJson(request: RpcRequest, roots: RootsSpec): Strin
  * when [params] carries `warmText=true`. Presentation-only params (`warmBrief`,
  * `warmMaxLines`) affect the text alone; `--json` bytes without `warmText`
  * are byte-identical to [ServiceOutcome.toJson].
+ *
+ * The injected `"text"` is the answer body only: `warning …` lines are peeled
+ * before any `warmMaxLines` cap (issue #86), matching cold stdout. Full
+ * warnings stay in the envelope `warnings` array for the client to print on
+ * stderr.
  */
 public fun JdxService.ServiceOutcome.toJsonWithWarmText(command: String, params: Map<String, String>): String {
     val json = this.toJson(command)
@@ -312,7 +318,13 @@ public fun JdxService.ServiceOutcome.toJsonWithWarmText(command: String, params:
     } else {
         this.renderText(false)
     }
-    val text = params["warmMaxLines"]?.toIntOrNull()?.takeIf { it >= 0 }?.let { TokenBudget.capLines(base, it) } ?: base
+    // Peel warnings before the line budget (issue #86): cold text does the same
+    // in ReadCommandSupport.finish, so warm `"text"` stays byte-identical to
+    // cold stdout. Full warnings remain in the envelope `warnings` array.
+    val answer = WarningLines.answerOnly(base)
+    val text = params["warmMaxLines"]?.toIntOrNull()?.takeIf { it >= 0 }
+        ?.let { TokenBudget.capLines(answer, it) }
+        ?: answer
     return injectWarmText(json, text)
 }
 

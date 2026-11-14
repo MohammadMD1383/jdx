@@ -3,6 +3,7 @@ package dev.jdx.cli.commands
 import dev.jdx.core.model.Warning
 import dev.jdx.core.render.ErrorResult
 import dev.jdx.core.render.TokenBudget
+import dev.jdx.core.render.WarningLines
 import dev.jdx.index.maven.MavenCoords
 import dev.jdx.index.maven.MavenFetch
 import dev.jdx.index.maven.MavenResolveFn
@@ -392,6 +393,11 @@ internal object ReadCommandSupport {
      * and [maxLines] caps text lines via `TokenBudget` — both are text-only
      * presentation (D-059 precedent): `--json` bytes are unaffected, so warm
      * serving and adapter parity never see them.
+     *
+     * Text mode peels `warning …` lines onto stderr (capped per code, issue #86)
+     * so a flood of `CORRUPT_CLASS` cannot bury the answer on stdout. `--json`
+     * keeps the full uncapped `warnings` array in the envelope and prints
+     * nothing to stderr for those warnings.
      */
     internal fun finish(
         outcome: JdxService.ServiceOutcome,
@@ -406,8 +412,15 @@ internal object ReadCommandSupport {
             println(outcome.toJson(command))
         } else {
             val color = useColor(noColor)
-            val text = if (brief) outcome.renderBriefText(color) else outcome.renderText(color)
-            println(if (maxLines != null) TokenBudget.capLines(text, maxLines) else text)
+            val rendered = if (brief) outcome.renderBriefText(color) else outcome.renderText(color)
+            val parted = WarningLines.partition(rendered)
+            val answer = if (maxLines != null) {
+                TokenBudget.capLines(parted.answer, maxLines)
+            } else {
+                parted.answer
+            }
+            println(answer)
+            WarningLines.write(WarningLines.cap(parted.warningLines), System.err)
         }
         if (outcome.exitCode != 0) terminate(outcome.exitCode)
     }
