@@ -173,6 +173,24 @@ class UsagesServiceTest {
         textOf(outcome) shouldContain "jdx samples"
     }
 
+    @Test
+    fun `bytecode rows carry SourceFile colon LineNumberTable when present`() {
+        val jar = buildLinedUsagesJar(tempDir)
+        val roots = RootsSpec(jarSpecs = listOf(jar.toString()), includeJdk = false)
+        val outcome = JdxService.usages("lined.Lib#greet", roots)
+        outcome.exitCode shouldBe 0
+        val listing = usageListOf(outcome)
+        listing.hits.size shouldBe 1
+        val hit = listing.hits.single()
+        hit.fromRef shouldBe "lined.App#run()"
+        hit.file shouldBe "App.java"
+        hit.line shouldBe 14
+        textOf(outcome) shouldContain "  call lined.App#run()  App.java:14"
+        val json = outcome.toJson("usages")
+        json shouldContain "\"file\":\"App.java\""
+        json shouldContain "\"line\":14"
+    }
+
     // -- artifact filters and truncation ----------------------------------------
 
     @Test

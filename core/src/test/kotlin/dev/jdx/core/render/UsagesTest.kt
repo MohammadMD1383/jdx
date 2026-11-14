@@ -83,4 +83,29 @@ class UsagesTest {
         json shouldContain "\"kind\":\"call\""
         json shouldContain "\"target\":\"com.example.Lib#greet\""
     }
+
+    @Test
+    fun `bytecode file colon line rides the text line and the json envelope`() {
+        val withLocation = UsageHit(
+            fromRef = "com.example.App#run()",
+            artifact = "lib.jar",
+            kind = "call",
+            targetRef = "com.example.Lib#greet",
+            file = "App.java",
+            line = 42,
+        )
+        withLocation.textLine() shouldBe "  call com.example.App#run()  App.java:42"
+        withLocation.textLineWithTarget("com.example.Lib") shouldBe
+            "  call com.example.App#run()  App.java:42 -> #greet"
+        val json = buildUsageListing(
+            query = "com.example.Lib#greet",
+            targetRef = "com.example.Lib#greet",
+            hits = listOf(withLocation),
+        ).toJson("usages")
+        json shouldContain "\"file\":\"App.java\""
+        json shouldContain "\"line\":42"
+        // Stripped classes omit both fields — never a null sentinel.
+        hit("com.example.App#run()", "lib.jar", "call", "com.example.Lib#greet").toJson() shouldBe
+            "{\"from\":\"com.example.App#run()\",\"artifact\":\"lib.jar\",\"kind\":\"call\",\"target\":\"com.example.Lib#greet\"}"
+    }
 }

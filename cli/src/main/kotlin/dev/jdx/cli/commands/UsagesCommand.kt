@@ -89,7 +89,8 @@ class UsagesCommand(
 
     private val context by option(
         "--context",
-        help = "Source lines around each call site (not supported: source-rendered call sites live in jdx samples).",
+        help = "Source lines around each call site (not supported yet: bytecode rows carry " +
+            "file:line, but inline snippets still live in jdx samples — see issue #10).",
     ).int().default(0)
 
     private val jars by option(

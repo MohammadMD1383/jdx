@@ -9,6 +9,7 @@ import org.objectweb.asm.tree.FieldInsnNode
 import org.objectweb.asm.tree.FieldNode
 import org.objectweb.asm.tree.InsnNode
 import org.objectweb.asm.tree.LabelNode
+import org.objectweb.asm.tree.LineNumberNode
 import org.objectweb.asm.tree.LocalVariableNode
 import org.objectweb.asm.tree.MethodInsnNode
 import org.objectweb.asm.tree.MethodNode
@@ -127,6 +128,18 @@ internal class MethodBuilder(private val node: MethodNode) {
      */
     fun typeInsn(opcode: Int, descriptor: String): Unit {
         node.instructions.add(TypeInsnNode(opcode, descriptor))
+    }
+
+    /**
+     * Emits a `LineNumberTable` entry at the current instruction cursor
+     * (issue #8): subsequent invoke/field/type edges pick up [line] until the
+     * next [line] call. The label is synthetic — extraction only reads the
+     * line number, never the label target.
+     */
+    fun line(line: Int): Unit {
+        val label = LabelNode(Label())
+        node.instructions.add(label)
+        node.instructions.add(LineNumberNode(line, label))
     }
 
     /** Attaches a `LocalVariableTable` spanning the emitted code. */

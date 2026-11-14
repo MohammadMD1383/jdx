@@ -64,6 +64,14 @@ class ReferenceTest {
     }
 
     @Test
+    fun `sortedEdges orders known lines before a null line for the same edge`() {
+        val early = callEdge().copy(line = 10, sourceFile = "Client.java")
+        val late = callEdge().copy(line = 20, sourceFile = "Client.java")
+        val unknown = callEdge()
+        listOf(unknown, late, early).sortedEdges() shouldBe listOf(early, late, unknown)
+    }
+
+    @Test
     fun `sortedEdges is idempotent`() {
         val edges = listOf(
             callEdge(fromMember = "b"),

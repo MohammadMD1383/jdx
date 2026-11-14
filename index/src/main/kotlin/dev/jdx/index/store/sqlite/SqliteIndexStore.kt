@@ -434,7 +434,7 @@ public class SqliteIndexStore private constructor(
                     }
                     connection.prepareStatement(
                         "INSERT INTO ref(from_member_id, to_fqn, to_member, kind, line) " +
-                            "VALUES(?, ?, ?, ?, NULL)",
+                            "VALUES(?, ?, ?, ?, ?)",
                     ).use { insert ->
                         // True JDBC batching (T-064's warning does not apply:
                         // ref rows need no generated ids, so there is no
@@ -454,6 +454,10 @@ public class SqliteIndexStore private constructor(
                             insert.setString(2, edge.toOwner)
                             insert.setNullableString(3, encodeToMember(edge.toMember, edge.toDescriptor))
                             insert.setString(4, edge.kind.name)
+                            // LineNumberTable entry when present (issue #8); NULL
+                            // for stripped classes (`-g:none`) — degrade, don't fail.
+                            val line = edge.line
+                            if (line != null) insert.setInt(5, line) else insert.setObject(5, null)
                             insert.addBatch()
                             if (++batched >= 5_000) flush()
                         }
@@ -491,14 +495,17 @@ public class SqliteIndexStore private constructor(
                     append(
                         "SELECT a.id, a.hash, a.path, a.sources_path, a.kind, a.jar_mtime, a.jar_size, " +
                             "a.indexed_at, a.schema_ver, c.fqn, m.name, m.descriptor, " +
-                            "r.to_fqn, r.to_member, r.kind " +
+                            "r.to_fqn, r.to_member, r.kind, r.line, c.source_file " +
                             "FROM ref r JOIN member m ON m.id=r.from_member_id " +
                             "JOIN class c ON c.id=m.class_id JOIN artifact a ON a.id=c.artifact_id " +
                             "WHERE r.to_fqn=?",
                     )
                     if (toMember != null && toDescriptor != null) append(" AND r.to_member=?")
                     else if (toMember != null) append(" AND (r.to_member=? OR r.to_member LIKE ? ESCAPE '\\')")
-                    append(" ORDER BY a.hash, c.fqn, m.name, m.descriptor, r.to_fqn, r.to_member, r.kind")
+                    append(
+                        " ORDER BY a.hash, c.fqn, m.name, m.descriptor, r.to_fqn, r.to_member, " +
+                            "r.kind, r.line",
+                    )
                 }
                 connection.prepareStatement(sql).use { query ->
                     query.setString(1, toFqn)
@@ -523,6 +530,8 @@ public class SqliteIndexStore private constructor(
                                     schemaVer = rows.getInt(9),
                                 )
                                 val (member, descriptor) = decodeToMember(rows.getString(14))
+                                val lineValue = rows.getInt(16)
+                                val line = if (rows.wasNull()) null else lineValue
                                 add(
                                     ReferenceHit(
                                         artifact = artifact,
@@ -533,6 +542,8 @@ public class SqliteIndexStore private constructor(
                                         toMember = member,
                                         toDescriptor = descriptor,
                                         kind = ReferenceKind.valueOf(rows.getString(15)),
+                                        line = line,
+                                        sourceFile = rows.getString(17),
                                     ),
                                 )
                             }

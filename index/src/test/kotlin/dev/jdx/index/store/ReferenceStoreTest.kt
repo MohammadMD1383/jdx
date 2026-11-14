@@ -39,11 +39,16 @@ class ReferenceStoreTest {
             access = Access(Opcodes.ACC_PUBLIC),
         )
 
-    private fun testClass(binary: String, vararg methods: MethodInfo): ClassInfo =
+    private fun testClass(
+        binary: String,
+        vararg methods: MethodInfo,
+        sourceFileName: String? = null,
+    ): ClassInfo =
         ClassInfo(
             name = typeNameFromBinaryName(binary) as dev.jdx.core.model.TypeName.ClassType,
             kind = TypeKind.CLASS,
             methods = methods.toList(),
+            sourceFileName = sourceFileName,
         )
 
     private fun edge(
@@ -67,7 +72,12 @@ class ReferenceStoreTest {
         store.replaceClasses(
             artifact.id,
             listOf(
-                testClass("com.example.Client", method("run", "()V"), method("stop", "()V")),
+                testClass(
+                    "com.example.Client",
+                    method("run", "()V"),
+                    method("stop", "()V"),
+                    sourceFileName = "Client.java",
+                ),
                 testClass("com.example.Service", method("execute", "()V"), method("execute", "(I)V")),
             ),
         )
@@ -101,6 +111,28 @@ class ReferenceStoreTest {
             hit.toMember shouldBe "execute"
             hit.toDescriptor shouldBe "()V"
             hit.kind shouldBe ReferenceKind.METHOD_CALL
+            hit.line shouldBe null
+        }
+    }
+
+    @Test
+    fun `a LineNumberTable line round-trips and a null line stays null`() {
+        open().use { store ->
+            val artifact = storedFixture(store)
+            store.replaceReferences(
+                artifact.id,
+                listOf(
+                    edge().copy(line = 42, sourceFile = "Client.java"),
+                    edge(fromMember = "stop", toMember = "execute", toDescriptor = "(I)V"),
+                ),
+            )
+            val withLine = store.findReferencesTo("com.example.Service", "execute", "()V").single()
+            withLine.line shouldBe 42
+            // sourceFile is joined from class.source_file, not stored on ref.
+            withLine.sourceFile shouldBe "Client.java"
+            val stripped = store.findReferencesTo("com.example.Service", "execute", "(I)V").single()
+            stripped.line shouldBe null
+            stripped.sourceFile shouldBe "Client.java"
         }
     }
 

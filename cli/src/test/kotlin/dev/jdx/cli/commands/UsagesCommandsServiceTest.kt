@@ -83,7 +83,11 @@ class UsagesCommandsServiceTest {
         run.exit shouldBe 0
         run.output shouldContain "usages of 'dev.jdx.fixtures.TrafficLight'"
         run.output shouldContain "testfixtures-"
-        run.output shouldContain "read dev.jdx.fixtures.TrafficLight#values() -> #\$VALUES"
+        // Bytecode rows carry SourceFile:LineNumberTable (issue #8) when the
+        // fixture class retains debug info — location sits between the from-ref
+        // and the `->` target suffix.
+        run.output shouldContain "read dev.jdx.fixtures.TrafficLight#values()  TrafficLight.java:"
+        run.output shouldContain " -> #\$VALUES"
     }
 
     @Test
@@ -134,6 +138,8 @@ class UsagesCommandsServiceTest {
         parsed["command"]?.toString() shouldBe "\"usages\""
         parsed["query"]?.toString() shouldBe "\"dev.jdx.fixtures.TrafficLight\""
         json.output shouldContain "dev.jdx.fixtures.TrafficLight#values()"
+        json.output shouldContain "\"file\":\"TrafficLight.java\""
+        json.output shouldContain "\"line\":"
     }
 
     @Test

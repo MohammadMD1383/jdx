@@ -161,6 +161,53 @@ class ReferenceExtractorTest {
     }
 
     @Test
+    fun `LineNumberTable and SourceFile ride the first occurrence of each edge`() {
+        val writer = ClassWriter(ClassWriter.COMPUTE_MAXS)
+        writer.visit(Opcodes.V17, Opcodes.ACC_PUBLIC, "com/example/Client", null, "java/lang/Object", null)
+        writer.visitSource("Client.java", null)
+        val body = writer.visitMethod(Opcodes.ACC_PUBLIC, "run", "()V", null, null)
+        body.visitCode()
+        val line10 = org.objectweb.asm.Label()
+        body.visitLabel(line10)
+        body.visitLineNumber(10, line10)
+        body.visitVarInsn(Opcodes.ALOAD, 0)
+        body.visitMethodInsn(Opcodes.INVOKEVIRTUAL, "com/example/Service", "ping", "()V", false)
+        val line20 = org.objectweb.asm.Label()
+        body.visitLabel(line20)
+        body.visitLineNumber(20, line20)
+        // Same call again — first-wins keeps line 10, not 20.
+        body.visitVarInsn(Opcodes.ALOAD, 0)
+        body.visitMethodInsn(Opcodes.INVOKEVIRTUAL, "com/example/Service", "ping", "()V", false)
+        val line30 = org.objectweb.asm.Label()
+        body.visitLabel(line30)
+        body.visitLineNumber(30, line30)
+        body.visitFieldInsn(Opcodes.GETFIELD, "com/example/Service", "count", "I")
+        body.visitInsn(Opcodes.POP)
+        body.visitInsn(Opcodes.RETURN)
+        body.visitMaxs(0, 0)
+        body.visitEnd()
+        writer.visitEnd()
+        val edges = ReferenceExtractor.extract(writer.toByteArray())
+        val ping = edges.single { it.toMember == "ping" }
+        ping.line shouldBe 10
+        ping.sourceFile shouldBe "Client.java"
+        val read = edges.single { it.kind == ReferenceKind.FIELD_READ }
+        read.line shouldBe 30
+        read.sourceFile shouldBe "Client.java"
+    }
+
+    @Test
+    fun `stripped classes yield null lines without failing`() {
+        // No visitSource / visitLineNumber — mirrors javac -g:none.
+        val edges = ReferenceExtractor.extract(clientBytes())
+        edges.isNotEmpty() shouldBe true
+        edges.forEach { edge ->
+            edge.line shouldBe null
+            edge.sourceFile shouldBe null
+        }
+    }
+
+    @Test
     fun `invokedynamic records the bootstrap and the lambda implementation`() {
         val edges = ReferenceExtractor.extract(lambdaBytes())
         assert(

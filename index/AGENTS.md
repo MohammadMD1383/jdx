@@ -21,7 +21,10 @@ behaviour lives here** (adapters call in, never the reverse). `explicitApi()` is
   resolve variants), content-hash artifact identity. Dedup identical resolved roots
   before querying (same file via glob + explicit path must not double-scan).
 - `refs/ReferenceExtractor` — bytecode → reference edges (`call`/`read`/`write`/
-  `ref`/`new`/`throw`/`annotation`); no line numbers on bytecode edges by design.
+  `ref`/`new`/`throw`/`annotation`); reads `LineNumberTable` + `SourceFile`
+  (issue #8) and keeps the first line per logical edge (dedup identity excludes
+  line/file). Stripped classes (`-g:none`) yield `line == null` — degrade, don't
+  fail. `usages --context` still redirects to `samples` (issue #10).
 - `store/` — `IndexStore` interface + `sqlite/SqliteIndexStore` (WAL, single global
   `<cache-dir>/index/v1.db`, artifact-scoped rows). No SQL outside the impl package.
 - `workspace/` — TOML workspaces, classpath-order shadowing, `DUPLICATE_FQN`,

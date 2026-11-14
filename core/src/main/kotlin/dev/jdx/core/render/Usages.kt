@@ -15,24 +15,44 @@ public const val DEFAULT_USAGES_LIMIT: Int = 50
  * `Owner#member` when the descriptor cannot parse — hostile bytes, never a
  * failure) and the bare owner binary for pure [type-reference][dev.jdx.core.model.ReferenceKind.TYPE_REFERENCE]
  * edges.
+ *
+ * [file]/[line] carry the bytecode call site's `SourceFile` +
+ * `LineNumberTable` location when the class retains debug info (issue #8);
+ * both are `null` for stripped classes and for source-dir textual mentions
+ * (those already encode `path:line` in [fromRef]). Text appends
+ * `  File.java:42` when both are present; JSON always includes them when set
+ * so the envelope stays complete (AGENTS.md — no text-only information).
  */
 public data class UsageHit(
     public val fromRef: String,
     public val artifact: String,
     public val kind: String,
     public val targetRef: String,
+    public val file: String? = null,
+    public val line: Int? = null,
 ) {
-    /** The text line without the edge target: `  call com.example.App#run()`. */
-    public fun textLine(): String = "  $kind $fromRef"
+    /** `File.java:42` when both [file] and [line] are known; otherwise `null`. */
+    public fun location(): String? =
+        if (file != null && line != null) "$file:$line" else null
+
+    /** The text line without the edge target: `  call com.example.App#run()  App.java:42`. */
+    public fun textLine(): String = buildString {
+        append("  ").append(kind).append(" ").append(fromRef)
+        location()?.let { append("  ").append(it) }
+    }
 
     /**
      * The text line for a type query (`showTargets`): the edge target
-     * shortened past the queried owner (`  call u.App#run() -> #greet(...)`),
+     * shortened past the queried owner (`  call u.App#run()  App.java:42 -> #greet(...)`),
      * so same-method touches of different members stay distinct.
      */
     public fun textLineWithTarget(queryOwner: String): String {
         val suffix = if (targetRef.startsWith("$queryOwner#")) targetRef.removePrefix(queryOwner) else targetRef
-        return "  $kind $fromRef -> $suffix"
+        return buildString {
+            append("  ").append(kind).append(" ").append(fromRef)
+            location()?.let { append("  ").append(it) }
+            append(" -> ").append(suffix)
+        }
     }
 
     /** The structural row: every text fact appears here (D-007). */
@@ -41,6 +61,8 @@ public data class UsageHit(
         append(",\"artifact\":").append(JsonEscape.quote(artifact))
         append(",\"kind\":").append(JsonEscape.quote(kind))
         append(",\"target\":").append(JsonEscape.quote(targetRef))
+        if (file != null) append(",\"file\":").append(JsonEscape.quote(file))
+        if (line != null) append(",\"line\":").append(line)
         append("}")
     }
 }

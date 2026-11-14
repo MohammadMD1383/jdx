@@ -2505,8 +2505,9 @@ public object JdxService {
         public val limit: Int = DEFAULT_USAGES_LIMIT,
         /**
          * Source lines around each call site (`--context N`). Parsed here so
-         * the flag exists, but always rejected: no line data in v1 (D-042 §4)
-         * and source rendering belongs to `samples` (`jdx samples`, T-034).
+         * the flag exists, but still rejected: bytecode edges now carry
+         * `file:line` (issue #8), yet inline snippets are not rendered yet
+         * (issue #10 — source-rendered call sites stay in `jdx samples`).
          */
         public val contextLines: Int = 0,
     )
@@ -2805,6 +2806,8 @@ public object JdxService {
                                     artifact = label,
                                     kind = if (newOnly) "new" else usageKindWord(edge.kind),
                                     targetRef = edgeTargetRef(edge),
+                                    file = edge.sourceFile,
+                                    line = edge.line,
                                 ),
                             )
                         }
