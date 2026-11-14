@@ -6,8 +6,10 @@ package dev.jdx.core.model
  * Produced by `index` (which reads the metadata) and applied by `core`
  * renderers; `core` never reads metadata itself. A missing entry in
  * [ClassInfo.kotlinMethodViews] is the JVM projection — every Java method and
- * every unmapped Kotlin method (constructors, `$default` stubs, file-facade
- * members, corrupt metadata) renders exactly as today.
+ * every unmapped Kotlin method (constructors, `$default` stubs, corrupt
+ * metadata) renders exactly as today. File-facade and multi-file-part members
+ * map through `KmPackage` the same way class members map through `KmClass`
+ * (issue #12).
  *
  * [displayName] is the Kotlin declaration name (`originalName` for a
  * `@JvmName("renamedForJvm")` function, `internalHelper` for a mangled

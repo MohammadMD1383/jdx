@@ -126,8 +126,9 @@ private fun summarise(refs: List<String>): String {
  * Bytecode entries are projected into declaration space before pairing:
  *
  * - JVM names map through `kotlinMethodViews` (`renamedForJvm` →
- *   `originalName`, `internalHelper$module` → `internalHelper`); unmatched
- *   members keep their JVM name (file facades have no carrier).
+ *   `originalName`, `internalHelper$module` → `internalHelper`, including
+ *   file-facade / multi-file-part members via `KmPackage` — issue #12);
+ *   unmatched members keep their JVM name.
  * - `suspend` functions drop the trailing `Continuation` parameter (the
  *   source never spells it).
  * - folded accessors/backing fields (`kotlinHiddenMethods`/`kotlinHiddenFields`)

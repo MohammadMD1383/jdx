@@ -33,7 +33,16 @@ class KotlinClassesTest {
     private fun readFixture(binaryName: String): dev.jdx.core.model.ClassInfo {
         val entry = binaryName.replace('.', '/') + ".class"
         val bytes = ArtifactTestJars.fixtureClassBytes(binaryJar, entry)
-        return AsmClassReader.read(bytes, entry).shouldBeInstanceOf<ClassReadResult.Ok>().info
+        // Multi-file facades need sibling part bytes (issue #12).
+        val partResolver: (String) -> ByteArray? = { partInternal ->
+            try {
+                ArtifactTestJars.fixtureClassBytes(binaryJar, "$partInternal.class")
+            } catch (_: Exception) {
+                null
+            }
+        }
+        return AsmClassReader.read(bytes, entry, partResolver)
+            .shouldBeInstanceOf<ClassReadResult.Ok>().info
     }
 
     private fun decodeFixture(binaryName: String): KotlinMetadata? {
@@ -82,6 +91,9 @@ class KotlinClassesTest {
         val metadata = decodeFixture("dev.jdx.fixtures.KotlinShapesKt")
         metadata?.metadataKind shouldBe KotlinMetadataKind.FILE_FACADE
         metadata?.classKind shouldBe null
+        metadata?.kmClass shouldBe null
+        // Issue #12: facades carry KmPackage, not KmClass.
+        (metadata?.kmPackage != null) shouldBe true
 
         val info = readFixture("dev.jdx.fixtures.KotlinShapesKt")
         info.isKotlin shouldBe true
@@ -141,8 +153,91 @@ class KotlinClassesTest {
     }
 
     @Test
-    fun `a file facade carries no KmClass`() {
-        decodeFixture("dev.jdx.fixtures.KotlinShapesKt")?.kmClass shouldBe null
+    fun `a file facade carries KmPackage functions and properties`() {
+        val metadata = requireNotNull(decodeFixture("dev.jdx.fixtures.KotlinShapesKt"))
+        metadata.kmClass shouldBe null
+        val kmPackage = requireNotNull(metadata.kmPackage) { "FILE_FACADE carries KmPackage" }
+        val functions = kmPackage.functions.map { it.name }
+        (functions.contains("facadeOriginal")) shouldBe true
+        (functions.contains("facadeFetch")) shouldBe true
+        (functions.contains("facadeInternal")) shouldBe true
+        (functions.contains("extensionGreeting")) shouldBe true
+        val properties = kmPackage.properties.map { it.name }
+        (properties.contains("facadeGreeting")) shouldBe true
+        (properties.contains("facadeNickname")) shouldBe true
+    }
+
+    @Test
+    fun `file facade ClassInfo maps JvmName suspend internal and properties`() {
+        val info = readFixture("dev.jdx.fixtures.KotlinShapesKt")
+        // @JvmName: JVM key → Kotlin declaration name
+        val renamed = info.kotlinMethodViews[
+            dev.jdx.core.model.kotlinViewKey("facadeRenamed", "(I)I"),
+        ]
+        renamed?.displayName shouldBe "facadeOriginal"
+        // suspend: Continuation strip + mark
+        val suspendView = info.kotlinMethodViews.entries
+            .firstOrNull { it.key.startsWith("facadeFetch") }
+            ?.value
+        requireNotNull(suspendView)
+        suspendView.markSuspend shouldBe true
+        suspendView.stripTrailingContinuation shouldBe true
+        suspendView.displayReturn shouldBe "java.lang.String"
+        // Top-level `internal` keeps its JVM name (no `$module` mangle on facades);
+        // still present in the package, but no rename view is needed.
+        (info.methods.any { it.name == "facadeInternal" }) shouldBe true
+        // properties folded
+        info.kotlinProperties["facadeGreeting"]?.isVar shouldBe false
+        info.kotlinProperties["facadeNickname"]?.isVar shouldBe true
+        (info.kotlinHiddenMethods.isNotEmpty()) shouldBe true
+    }
+
+    @Test
+    fun `a multi-file facade umbrella merges part packages into views`() {
+        val metadata = decodeFixture("dev.jdx.fixtures.KotlinMultifile")
+        metadata?.metadataKind shouldBe KotlinMetadataKind.MULTI_FILE_FACADE
+        metadata?.kmClass shouldBe null
+        metadata?.kmPackage shouldBe null
+        metadata?.declarationContainer() shouldBe null
+        (metadata?.partClassNames?.isNotEmpty() == true) shouldBe true
+
+        val info = readFixture("dev.jdx.fixtures.KotlinMultifile")
+        info.isKotlin shouldBe true
+        info.kind shouldBe TypeKind.CLASS
+        // Merged from parts: @JvmName + suspend
+        info.kotlinMethodViews[
+            dev.jdx.core.model.kotlinViewKey("multiRenamed", "(I)I"),
+        ]?.displayName shouldBe "multiOriginal"
+        val suspendView = info.kotlinMethodViews.entries
+            .firstOrNull { it.key.startsWith("multiSuspend") }
+            ?.value
+        requireNotNull(suspendView)
+        suspendView.markSuspend shouldBe true
+        suspendView.stripTrailingContinuation shouldBe true
+    }
+
+    @Test
+    fun `a multi-file part carries KmPackage and Kotlin views`() {
+        // Part binary names: KotlinMultifile__KotlinMultifileAKt / …BKt
+        val partA = decodeFixture("dev.jdx.fixtures.KotlinMultifile__KotlinMultifileAKt")
+        partA?.metadataKind shouldBe KotlinMetadataKind.MULTI_FILE_PART
+        val packageA = requireNotNull(partA?.kmPackage)
+        (packageA.functions.map { it.name }.contains("multiOriginal")) shouldBe true
+
+        val infoA = readFixture("dev.jdx.fixtures.KotlinMultifile__KotlinMultifileAKt")
+        infoA.kotlinMethodViews[
+            dev.jdx.core.model.kotlinViewKey("multiRenamed", "(I)I"),
+        ]?.displayName shouldBe "multiOriginal"
+
+        val partB = decodeFixture("dev.jdx.fixtures.KotlinMultifile__KotlinMultifileBKt")
+        partB?.metadataKind shouldBe KotlinMetadataKind.MULTI_FILE_PART
+        val infoB = readFixture("dev.jdx.fixtures.KotlinMultifile__KotlinMultifileBKt")
+        val suspendView = infoB.kotlinMethodViews.entries
+            .firstOrNull { it.key.startsWith("multiSuspend") }
+            ?.value
+        requireNotNull(suspendView)
+        suspendView.markSuspend shouldBe true
+        suspendView.stripTrailingContinuation shouldBe true
     }
 
     @Test

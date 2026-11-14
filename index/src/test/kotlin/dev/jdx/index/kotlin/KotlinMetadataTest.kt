@@ -47,4 +47,29 @@ class KotlinMetadataTest {
         val empty = AnnotationNode("Lkotlin/Metadata;")
         KotlinMetadataReader.read(listOf(empty), null) shouldBe null
     }
+
+    @Test
+    fun `absent d2 is empty not corrupt for multi-file facades`() {
+        // Issue #12: MultiFileClassFacade annotations often omit `d2` (annotation
+        // default `{}`); requiring it made every multifile umbrella look non-Kotlin.
+        // A mistyped d2 is still corrupt:
+        val mistyped = metadataNode(
+            "k", 2,
+            "mv", listOf(2, 2, 0),
+            "d1", listOf("x"),
+            "d2", 42,
+        )
+        KotlinMetadataReader.read(listOf(mistyped), null) shouldBe null
+        // Omitted d2 reaches readLenient (may still be null on hostile d1, but
+        // must not fail the absent-d2 gate). Real multifile decode is in
+        // KotlinClassesTest.
+        val omitted = metadataNode(
+            "k", 2,
+            "mv", listOf(2, 2, 0),
+            "d1", listOf("x"),
+            "xi", 0,
+        )
+        // Hostile d1 → null from readLenient, not from the d2 gate:
+        KotlinMetadataReader.read(listOf(omitted), null) shouldBe null
+    }
 }

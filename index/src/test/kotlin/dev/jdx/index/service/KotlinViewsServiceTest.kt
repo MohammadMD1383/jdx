@@ -138,6 +138,34 @@ class KotlinViewsServiceTest {
     }
 
     @Test
+    fun `file facade members render JvmName suspend and properties`() {
+        // Issue #12: KmPackage on FILE_FACADE drives the same views as KmClass.
+        val outcome = JdxService.members("dev.jdx.fixtures.KotlinShapesKt", fixtureRoots(), MemberFilters())
+        outcome.exitCode shouldBe 0
+        val text = textOf(outcome)
+        text shouldContain "facadeOriginal(int value)"
+        text shouldNotContain "facadeRenamed"
+        text shouldContain "suspend java.lang.String facadeFetch(java.lang.String id)"
+        text shouldNotContain "Continuation"
+        // File-facade properties are static on the JVM utility class.
+        text shouldContain "property public static final val java.lang.String facadeGreeting"
+        text shouldContain "property public static final var java.lang.String? facadeNickname"
+        text shouldNotContain "getFacadeGreeting()"
+    }
+
+    @Test
+    fun `multi-file facade umbrella renders merged part views`() {
+        // Issue #12: MULTI_FILE_FACADE merges each part's KmPackage when the jar is open.
+        val outcome = JdxService.members("dev.jdx.fixtures.KotlinMultifile", fixtureRoots(), MemberFilters())
+        outcome.exitCode shouldBe 0
+        val text = textOf(outcome)
+        text shouldContain "multiOriginal(int value)"
+        text shouldNotContain "multiRenamed"
+        text shouldContain "suspend java.lang.String multiSuspend(java.lang.String id)"
+        text shouldNotContain "Continuation"
+    }
+
+    @Test
     fun `a kotlin data class folds properties and annotates copy defaults`() {
         // T-078 owns properties/`$default`: getters hide, `val`/`var` rows appear,
         // and `copy` (all-defaulted in Kotlin) annotates `= ...` per param.

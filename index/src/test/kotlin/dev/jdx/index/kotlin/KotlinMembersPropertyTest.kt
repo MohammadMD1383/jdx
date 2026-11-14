@@ -9,6 +9,7 @@ import io.kotest.property.arbitrary.string
 import io.kotest.property.checkAll
 import kotlin.metadata.KmClass
 import kotlin.metadata.KmFunction
+import kotlin.metadata.KmPackage
 import kotlin.metadata.KmType
 import kotlin.metadata.isNullable
 import kotlin.metadata.isSuspend
@@ -21,7 +22,8 @@ import org.junit.jupiter.api.Test
 /**
  * Generative tests for [KotlinMembers] (T-077, TESTING.md §4): whatever shapes
  * the fuzzer invents for metadata containers, mapping never throws and stays
- * keyed on its inputs. Fixture truth decodes in `KotlinClassesTest` (tier 2).
+ * keyed on its inputs. Covers both [KmClass] and [KmPackage] (issue #12).
+ * Fixture truth decodes in `KotlinClassesTest` (tier 2).
  */
 class KotlinMembersPropertyTest {
 
@@ -41,8 +43,10 @@ class KotlinMembersPropertyTest {
     fun `mapping never throws on arbitrary functions`() = runBlocking<Unit> {
         checkAll(1_000, Arb.list(functionArb(), 0..8)) { functions ->
             val kmClass = KmClass().apply { this.functions.addAll(functions) }
+            val kmPackage = KmPackage().apply { this.functions.addAll(functions) }
             // The assertion is the absence of a throw: any map (empty or not) is fine.
             KotlinMembers.viewsFor(kmClass).size
+            KotlinMembers.viewsFor(kmPackage).size
         }
     }
 
@@ -50,10 +54,20 @@ class KotlinMembersPropertyTest {
     fun `every view key joins one of its inputs`() = runBlocking<Unit> {
         checkAll(1_000, Arb.list(functionArb(), 0..8)) { functions ->
             val kmClass = KmClass().apply { this.functions.addAll(functions) }
+            val kmPackage = KmPackage().apply { this.functions.addAll(functions) }
             val keys = functions.map { (it.signature?.name ?: "") + (it.signature?.descriptor ?: "") }.toSet()
-            for (key in KotlinMembers.viewsFor(kmClass).keys) {
+            for (key in KotlinMembers.viewsFor(kmClass).keys + KotlinMembers.viewsFor(kmPackage).keys) {
                 check(key in keys) { "view key $key was not built from an input signature" }
             }
+        }
+    }
+
+    @Test
+    fun `KmClass and KmPackage agree on the same function list`() = runBlocking<Unit> {
+        checkAll(500, Arb.list(functionArb(), 0..8)) { functions ->
+            val kmClass = KmClass().apply { this.functions.addAll(functions) }
+            val kmPackage = KmPackage().apply { this.functions.addAll(functions) }
+            KotlinMembers.viewsFor(kmClass) shouldBe KotlinMembers.viewsFor(kmPackage)
         }
     }
 
@@ -106,19 +120,18 @@ class KotlinMembersPropertyTest {
     @Test
     fun `properties mapping never throws on arbitrary names`() = runBlocking<Unit> {
         checkAll(1_000, Arb.list(nameArb, 0..8)) { names ->
-            val kmClass = KmClass().apply {
-                properties.addAll(
-                    names.map { name ->
-                        kotlin.metadata.KmProperty(name).apply {
-                            if (name.isNotEmpty()) {
-                                getterSignature = JvmMethodSignature("get$name", "()V")
-                            }
-                        }
-                    },
-                )
+            val props = names.map { name ->
+                kotlin.metadata.KmProperty(name).apply {
+                    if (name.isNotEmpty()) {
+                        getterSignature = JvmMethodSignature("get$name", "()V")
+                    }
+                }
             }
+            val kmClass = KmClass().apply { properties.addAll(props) }
+            val kmPackage = KmPackage().apply { properties.addAll(props) }
             // The assertion is the absence of a throw: any map is fine.
             KotlinMembers.propertiesFor(kmClass).properties.size
+            KotlinMembers.propertiesFor(kmPackage).properties.size
         }
     }
 }

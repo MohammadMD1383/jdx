@@ -5,6 +5,7 @@ import io.kotest.matchers.shouldBe
 import kotlin.metadata.KmClass
 import kotlin.metadata.KmClassifier
 import kotlin.metadata.KmFunction
+import kotlin.metadata.KmPackage
 import kotlin.metadata.KmType
 import kotlin.metadata.KmTypeProjection
 import kotlin.metadata.KmVariance
@@ -48,6 +49,10 @@ class KotlinMembersTest {
     }
 
     private fun kmClass(vararg functions: KmFunction): KmClass = KmClass().apply {
+        this.functions.addAll(functions)
+    }
+
+    private fun kmPackage(vararg functions: KmFunction): KmPackage = KmPackage().apply {
         this.functions.addAll(functions)
     }
 
@@ -385,5 +390,68 @@ class KotlinMembersTest {
         val folded = KotlinMembers.propertiesFor(kmClass)
         folded.properties shouldBe emptyMap()
         folded.hiddenMethods shouldBe emptySet()
+    }
+
+    @Test
+    fun `a KmPackage JvmName function maps like a KmClass`() {
+        // Issue #12: file-facade / multi-file-part packages share the mapping.
+        val views = KotlinMembers.viewsFor(
+            kmPackage(kmFunction("facadeOriginal", "facadeRenamed", "(I)I")),
+        )
+        views[kotlinViewKey("facadeRenamed", "(I)I")]?.displayName shouldBe "facadeOriginal"
+    }
+
+    @Test
+    fun `a KmPackage suspend function strips Continuation like a KmClass`() {
+        val views = KotlinMembers.viewsFor(
+            kmPackage(
+                kmFunction(
+                    "facadeFetch",
+                    "facadeFetch",
+                    "(Ljava/lang/String;Lkotlin/coroutines/Continuation;)Ljava/lang/Object;",
+                    suspend = true,
+                    returnType = kmType("kotlin/String"),
+                ),
+            ),
+        )
+        val view = views[
+            kotlinViewKey(
+                "facadeFetch",
+                "(Ljava/lang/String;Lkotlin/coroutines/Continuation;)Ljava/lang/Object;",
+            ),
+        ]!!
+        view.markSuspend shouldBe true
+        view.stripTrailingContinuation shouldBe true
+        view.displayReturn shouldBe "java.lang.String"
+    }
+
+    @Test
+    fun `a KmPackage property folds without constructorDeclared`() {
+        val property = kotlin.metadata.KmProperty("facadeGreeting").apply {
+            getterSignature = kotlin.metadata.jvm.JvmMethodSignature(
+                "getFacadeGreeting",
+                "()Ljava/lang/String;",
+            )
+            returnType = kmType("kotlin/String")
+        }
+        val folded = KotlinMembers.propertiesFor(KmPackage().apply { properties.add(property) })
+        folded.properties["facadeGreeting"]?.isVar shouldBe false
+        folded.properties["facadeGreeting"]?.constructorDeclared shouldBe false
+        folded.hiddenMethods shouldBe setOf("getFacadeGreeting()Ljava/lang/String;")
+    }
+
+    @Test
+    fun `KmClass and KmPackage with the same functions produce identical views`() {
+        val functions = arrayOf(
+            kmFunction("originalName", "renamedForJvm", "(I)I"),
+            kmFunction(
+                "fetch",
+                "fetch",
+                "(Ljava/lang/String;Lkotlin/coroutines/Continuation;)Ljava/lang/Object;",
+                suspend = true,
+                returnType = kmType("kotlin/String"),
+            ),
+        )
+        KotlinMembers.viewsFor(kmClass(*functions)) shouldBe KotlinMembers.viewsFor(kmPackage(*functions))
     }
 }

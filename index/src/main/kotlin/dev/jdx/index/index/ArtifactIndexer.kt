@@ -312,7 +312,15 @@ public object ArtifactIndexer {
             // warning-carrying value, so one bad class cannot abort its artifact.
             // Reference extraction runs on the same bytes for readable classes;
             // it never throws either, so it adds no failure mode here.
-            when (val read = AsmClassReader.read(bytes, "$binary in $pathLabel")) {
+            // Multi-file facades merge part KmPackages when siblings are reachable (issue #12).
+            val partResolver: (String) -> ByteArray? = { partInternal ->
+                try {
+                    root.openClass("$partInternal.class").use { it.readBytes() }
+                } catch (_: Exception) {
+                    null
+                }
+            }
+            when (val read = AsmClassReader.read(bytes, "$binary in $pathLabel", partResolver)) {
                 is ClassReadResult.Ok -> {
                     classes.add(read.info)
                     edges.addAll(ReferenceExtractor.extract(bytes))
