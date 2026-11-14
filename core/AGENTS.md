@@ -44,8 +44,13 @@ via `JsonEscape` — reuse it, never a second escaper). `explicitApi()` is on.
 
 ## Grammar rules (`SymbolRefParser`, pinned by property tests)
 
-- `$` always separates nesting; leading lowercase dot-segments are the package, the
-  final segment is always the class. `parse(print(ref)) == ref` is a pinned property.
+- `$` always separates nesting and selects **binary-name rules** (last `.` before the
+  first `$` splits package from top-level class — same as `typeNameFromBinaryName` /
+  `SymbolRefPrinter`). Dot-only input keeps the lowercase-initial package heuristic so
+  `Map.Entry` normalises to `Map$Entry`. `parse(print(ref)) == ref` is a pinned
+  property for `$`-joined nesting, including uppercase package segments (`…win32.COM.…`).
+  Dot-only top-level types under an uppercase package still need workspace recovery in
+  `index` (`JdxService.matchCandidates`, issue #1).
 - `.` is a member separator only with a param list or `<init>`/`<clinit>`; fields need
   `#` or `::`. `MemberSymbolRef.parameterTypes`: `null` = all overloads, `[]` = zero
   params (`Gson#toString()` ≠ `Gson#toString`).

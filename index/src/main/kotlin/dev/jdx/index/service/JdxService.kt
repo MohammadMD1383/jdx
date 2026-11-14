@@ -1393,15 +1393,43 @@ public object JdxService {
      * Resolves a parsed type name against the workspace's binary names.
      * A packaged name is exact; a short name matches every class with the same
      * simple (or nested `$`-joined) name. Sorted, so ambiguity lists are stable.
+     *
+     * **D-025 uppercase-package recovery (issue #1):** the ref parser's
+     * lowercase-initial heuristic can eat an uppercase package segment into
+     * [TypeName.ClassType.nestedNames] (e.g. `…win32.COM.DispatchVTable` →
+     * package `…win32`, nested `[COM, DispatchVTable]`). When the exact
+     * binary miss happens and there is more than one nested segment, every
+     * non-empty prefix of those segments is tried as additional package
+     * path — whichever recovered binary exists in [binaries] is returned.
+     * Several recoveries (or a primary hit plus a recovery) stay as multiple
+     * candidates so resolution exits `2` rather than guessing.
      */
     internal fun matchCandidates(ref: TypeName.ClassType, binaries: Set<String>): List<String> {
-        if (ref.packageName.isNotEmpty()) {
-            return if (ref.binaryName in binaries) listOf(ref.binaryName) else emptyList()
+        if (ref.packageName.isEmpty()) {
+            val nested = ref.nestedNames.joinToString("$")
+            return binaries.filter { binary ->
+                binary.substringAfterLast('.') == nested
+            }.sorted()
         }
-        val nested = ref.nestedNames.joinToString("$")
-        return binaries.filter { binary ->
-            binary.substringAfterLast('.') == nested
-        }.sorted()
+        val hits = linkedSetOf<String>()
+        if (ref.binaryName in binaries) hits.add(ref.binaryName)
+        // Move a prefix of nestedNames into the package (uppercase package
+        // segments the D-025 heuristic misclassified as nested class names).
+        if (ref.nestedNames.size > 1) {
+            for (packExtra in 1 until ref.nestedNames.size) {
+                val pkg = buildString {
+                    append(ref.packageName)
+                    for (i in 0 until packExtra) {
+                        append('.')
+                        append(ref.nestedNames[i])
+                    }
+                }
+                val classNesting = ref.nestedNames.subList(packExtra, ref.nestedNames.size)
+                val candidate = pkg + '.' + classNesting.joinToString("$")
+                if (candidate in binaries) hits.add(candidate)
+            }
+        }
+        return hits.sorted()
     }
 
     /**

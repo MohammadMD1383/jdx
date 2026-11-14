@@ -55,6 +55,45 @@ class SymbolRefParserTest {
     }
 
     @Test
+    fun `dollar form keeps uppercase package segments in the package`() {
+        // D-025 / issue #1: printed binary names round-trip when nesting uses `$`.
+        // `COM` is a real uppercase package segment (JNA); the lowercase heuristic
+        // alone would eat it into nestedNames and break parse(print(ref)).
+        parseOk("com.sun.jna.platform.win32.COM.DispatchVTable\$AddRefCallback") shouldBe
+            TypeSymbolRef(
+                TypeName.ClassType(
+                    "com.sun.jna.platform.win32.COM",
+                    listOf("DispatchVTable", "AddRefCallback"),
+                ),
+            )
+        val printed = SymbolRefPrinter.print(
+            TypeSymbolRef(
+                TypeName.ClassType(
+                    "com.sun.jna.platform.win32.COM",
+                    listOf("DispatchVTable", "AddRefCallback"),
+                ),
+            ),
+        )
+        parseOk(printed) shouldBe
+            TypeSymbolRef(
+                TypeName.ClassType(
+                    "com.sun.jna.platform.win32.COM",
+                    listOf("DispatchVTable", "AddRefCallback"),
+                ),
+            )
+    }
+
+    @Test
+    fun `dot-only form still treats uppercase mid-segments as nested classes`() {
+        // Without `$`, Map.Entry-style nesting wins (acceptance table). Top-level
+        // types under an uppercase package segment need resolution recovery.
+        parseOk("com.sun.jna.platform.win32.COM.DispatchVTable") shouldBe
+            TypeSymbolRef(
+                TypeName.ClassType("com.sun.jna.platform.win32", listOf("COM", "DispatchVTable")),
+            )
+    }
+
+    @Test
     fun `a maven coordinate prefix scopes the type to one artifact`() {
         parseOk("com.google.code.gson:gson:2.14.0/com.google.gson.Gson") shouldBe
             TypeSymbolRef(
