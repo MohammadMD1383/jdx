@@ -1102,7 +1102,13 @@ working. Checksums are `<hex>  <filename>` lines verified with `sha256sum`,
 `shasum -a 256`, or Windows `CertUtil` — a published checksum that cannot be
 checked fails the install loudly, never silently. `install-release.sh`
 `--tarball` accepts either extension (re-applying `+x` to the POSIX launcher
-after unzip, since repacked zips may lose it).
+after unzip, since repacked zips may lose it). Windows has its own installer
+(`install-release.ps1`, issue #92): it fetches `jdx-<version>-windows.zip` by
+default, unpacks into `%LOCALAPPDATA%\Programs\jdx`, writes the same
+`.jdx-release` marker `jdx upgrade` reads, and adds the install directory to
+the user `PATH` (optional `-BinDir` writes a `jdx.cmd` shim instead). Source
+builds use `install.ps1` (the `install.sh` twin) to drop a `jdx.cmd` forwarder
+into `%USERPROFILE%\.local\bin`.
 
 The `jdx.jsa` AppCDS archive in each bundle is trained by that leg's own JDK:
 the archive format is host-specific and a foreign one is ignored via

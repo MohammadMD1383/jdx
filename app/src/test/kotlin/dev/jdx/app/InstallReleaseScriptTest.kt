@@ -22,7 +22,8 @@ import java.nio.file.Files
 @DisabledOnOs(
     OS.WINDOWS,
     disabledReason = "Drives install-release.sh through sh with POSIX ln/tar/readlink assumptions " +
-        "(tar treats C: as a remote host); Windows installs from the -windows.zip asset instead",
+        "(tar treats C: as a remote host); Windows release installs are covered by " +
+        "InstallReleasePs1Test (install-release.ps1, issue #92)",
 )
 class InstallReleaseScriptTest {
 
