@@ -101,3 +101,7 @@ behaviour lives here** (adapters call in, never the reverse). `explicitApi()` is
   `dev.jdx.testsupport.fixtures.FixtureJars` (#66 collapsed the copy it used to hold).
   The `craftJar` / `manifestBytes` hostile-jar builders stay here because they are this
   module's fault-injection tools, not shared support.
+- Differential `javap` spawns go through `differential.Javap` (issue #81): every call has
+  an 8 s wall-clock budget (`-Djdx.javap.oracleTimeoutMs`), and `TimedOut` must become a
+  test failure — never a soft skip. PIT threads for this module are capped at 4 by the
+  root build (`-PpitestThreads` to override); do not reintroduce a private `threads.set`.

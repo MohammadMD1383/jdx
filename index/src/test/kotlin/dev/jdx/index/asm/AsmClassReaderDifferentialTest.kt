@@ -35,8 +35,15 @@ class AsmClassReaderDifferentialTest {
         val javap = assumeJavap()
         val failures = mutableListOf<String>()
         for (binaryName in fixtureClassNames()) {
-            val javapOutput = Javap.tryRun(javap, binaryJar.absolutePath, binaryName)
-            check(javapOutput != null) { "javap failed for $binaryName" }
+            val javapOutput = when (val outcome = Javap.tryRun(javap, binaryJar.absolutePath, binaryName)) {
+                is Javap.RunOutcome.Ok -> outcome.lines
+                is Javap.RunOutcome.Unreadable ->
+                    error("javap failed for $binaryName: ${outcome.detail}")
+                is Javap.RunOutcome.TimedOut ->
+                    error(
+                        "javap timed out after ${outcome.timeoutMs}ms for $binaryName (issue #81)",
+                    )
+            }
             val expected = Javap.parseMembers(javapOutput)
             val bytes = ArtifactTestJars.fixtureClassBytes(binaryJar, entryPath(binaryName))
             val result = AsmClassReader.read(bytes, entryPath(binaryName))

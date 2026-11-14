@@ -197,7 +197,9 @@ assert the two sets are EQUAL
 
 Any disagreement is a bug in `jdx` (or, rarely, a `javap` quirk worth documenting). This one
 test family covers a huge surface — access flags, synthetics, bridges, varargs, nested
-classes, enum internals, records — **without anyone enumerating those cases.**
+classes, enum internals, records — **without anyone enumerating those cases.** Every
+`javap` spawn goes through `index/.../differential/Javap` with an 8 s wall-clock budget
+(issue #81): a timeout is a hard test failure, never a soft "javap cannot read" skip.
 
 ### 5.2 `javac`/`kotlinc` as the oracle for source-derived facts
 The fixture corpus is compiled from source we control, so for every fixture we independently
@@ -361,12 +363,21 @@ Explicit permission is required via `-PconfirmTier4=true` or `-PallowHeavy=true`
 For fast iteration on one surviving mutant,
 `./gradlew :core:pitest -PpitestScope='dev.jdx.core.render.Truncation*'` narrows both
 the class and test filters to that glob — never quote a scoped run as the module's
-score (L-056). Three PIT/Kotlin wrinkles are handled in the build files, not worked
-around per-case: test discovery goes through `pitest-junit5-plugin` (JUnit-5-only
-upstream, verified working on this build's JUnit 6); `kotlin.jvm.internal.Intrinsics`
-calls are excluded via `avoidCallsTo` (equivalent mutants by construction); and
-build-wiring proof tests (`core.tiers`, the index soak suites) are excluded from PIT
-targets — they assert runner invariants, not product behaviour.
+score (L-056). `-PpitestThreads=<n>` overrides the minion count (issue #81). Four
+PIT/Kotlin wrinkles are handled in the build files, not worked around per-case: test
+discovery goes through `pitest-junit5-plugin` (JUnit-5-only upstream, verified working
+on this build's JUnit 6); `kotlin.jvm.internal.Intrinsics` calls are excluded via
+`avoidCallsTo` (equivalent mutants by construction); build-wiring proof tests
+(`core.tiers`, the index soak suites) are excluded from PIT targets — they assert
+runner invariants, not product behaviour; and **subprocess-heavy modules** (`index`)
+cap PIT threads at `min(4, cores - 1)` because their differentials shell out to
+`javap` per class — `cores - 1` concurrent `javap` farms saturates the box, trips
+`timeoutConstInMillis`, and scores `TIMED_OUT` minions as surviving mutants (issue
+#81). The oracle itself also has an 8 s wall-clock budget
+(`-Djdx.javap.oracleTimeoutMs`), so a hung `javap` fails the *test* with a reason
+instead of being cut in half by the mutant timeout. PIT's XML report still lists
+`TIMED_OUT` separately from `SURVIVED`; the console summary does not — treat a
+`TIMED_OUT`-heavy log as a load problem first, not a coverage gap.
 
 ### 10.1 A mutation gate that cannot run is not a gate
 
