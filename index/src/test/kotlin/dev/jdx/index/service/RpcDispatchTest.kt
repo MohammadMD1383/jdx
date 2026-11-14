@@ -5,6 +5,7 @@ import dev.jdx.core.render.WarningLines
 import dev.jdx.core.rpc.RpcCommand
 import dev.jdx.core.rpc.RpcRequest
 import dev.jdx.index.artifact.ArtifactTestJars
+import dev.jdx.index.maven.MavenResolver
 import dev.jdx.index.service.JdxService.BodyOptions
 import dev.jdx.index.service.JdxService.CallOptions
 import dev.jdx.index.service.JdxService.DocOptions
@@ -413,7 +414,44 @@ class RpcDispatchTest {
         store.save(WorkspaceDefinition(name = "fx", jars = emptyList(), coords = listOf("nope:nope:1.0")))
         val outcome = JdxService.daemonRoots("fx", "q", store)
         (outcome is DaemonRoots.Failed) shouldBe true
-        (outcome as DaemonRoots.Failed).outcome.toJson("show") shouldContain "\"code\":5"
+        val failed = outcome as DaemonRoots.Failed
+        val text = failed.outcome.renderText(false)
+        val json = failed.outcome.toJson("show")
+        // Issue #18: warm exit 5 must name the daemon-never-fetches cause and the
+        // cold --fetch priming fix — not the cold "Re-run with --fetch" hint.
+        text shouldBe
+            "artifact read error: Maven coordinate 'nope:nope:1.0' is not in the local " +
+            "caches. The daemon never fetches; run once cold with --fetch to populate " +
+            "~/.gradle/caches or ~/.m2, or use explicit --jars"
+        json shouldContain "\"code\":5"
+        json shouldContain "The daemon never fetches"
+        json shouldContain "run once cold with --fetch"
+        json shouldNotContain "Re-run with --fetch"
+    }
+
+    @Test
+    fun `daemonCoordReadError keeps non-fetch failures verbatim`() {
+        val failed = MavenResolver.ResolveAllOutcome.Failed(
+            message = "cannot resolve Maven coordinate 'x:y:1': boom",
+            fetchHint = false,
+            coordinateText = "x:y:1",
+        )
+        daemonCoordReadError(failed) shouldBe
+            "artifact read error: cannot resolve Maven coordinate 'x:y:1': boom"
+    }
+
+    @Test
+    fun `daemonCoordReadError names cold priming when fetch was the only missing piece`() {
+        val failed = MavenResolver.ResolveAllOutcome.Failed(
+            message = "Maven coordinate 'a:b:1' is not in the local caches (…). Re-run with --fetch …",
+            fetchHint = true,
+            coordinateText = "a:b:1",
+        )
+        val line = daemonCoordReadError(failed)
+        line shouldContain "The daemon never fetches"
+        line shouldContain "a:b:1"
+        line shouldContain "run once cold with --fetch"
+        line shouldNotContain "Re-run with --fetch"
     }
 
     // -- generating family -----------------------------------------------------------------

@@ -3,6 +3,7 @@ package dev.jdx.cli.commands
 import com.github.ajalt.clikt.core.parse
 import com.github.ajalt.clikt.core.subcommands
 import dev.jdx.cli.JdxCli
+import dev.jdx.index.workspace.InMemoryWorkspaceStore
 import io.kotest.matchers.shouldBe
 import io.kotest.matchers.string.shouldContain
 import java.io.ByteArrayOutputStream
@@ -111,6 +112,19 @@ class WsCommandsTest {
         val (badOut, badCode) = run(group, listOf("create", "bad", "--coord", "not-a-coordinate"))
         badCode shouldBe 3
         badOut shouldContain "group:artifact:version"
+    }
+
+    @Test
+    fun `create --help names daemon-never-fetches for coord and repo`() {
+        // Issue #18: ws help must state the warm path never fetches so agents
+        // do not expect stored --repo / --coord to download over the daemon.
+        val help = requireNotNull(
+            WsCreateCommand(store = InMemoryWorkspaceStore(), terminate = { code -> throw WsExit(code) })
+                .getFormattedHelp(),
+        )
+        help shouldContain "never fetches"
+        help shouldContain "--fetch"
+        help shouldContain "Inert on the daemon"
     }
 
     @Test

@@ -149,13 +149,16 @@ class WsCreateCommand(
         "--coord",
         help = "Maven coordinate roots group:artifact:version (repeatable). Stored in the " +
             "workspace and resolved to jars at query time (local caches first; --fetch on " +
-            "read commands allows Maven repository downloads).",
+            "cold read commands allows Maven repository downloads). The daemon/MCP/HTTP " +
+            "warm path never fetches — prime caches once cold with --fetch, or pass " +
+            "explicit --jars (issue #18).",
     ).multiple()
 
     private val repo by option(
         "--repo",
         help = "Maven repository base URLs for --coord fetches (repeatable). Stored in the " +
-            "workspace and tried in order before Maven Central at query time. " +
+            "workspace and tried in order before Maven Central on cold --fetch queries. " +
+            "Inert on the daemon/MCP/HTTP warm path (the daemon never fetches). " +
             "Must be http(s) URLs.",
     ).multiple()
 

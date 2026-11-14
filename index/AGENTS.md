@@ -66,7 +66,9 @@ behaviour lives here** (adapters call in, never the reverse). `explicitApi()` is
   pinned shapes (compare contents, never carriers). `KotlinPropertyView.constructorDeclared`
   marks primary-constructor properties so sources-mismatch pairs them through `<init>`
   and still warns on body-declared property removal (issue #14).
-- `doctor` is refused over the daemon wire (exit 6); the daemon never fetches.
+- `doctor` is refused over the daemon wire (exit 6); the daemon never fetches
+  (issue #18 — warm exit 5 for an absent stored `--coord` names cold `--fetch`
+  priming / `--jars`, not the cold "Re-run with --fetch" wording).
 - `diff` is the one command with **no classpath**: it names its own two artifacts, so
   it takes no `RootsSpec`, never consults the JDK, and `JdxService.daemonRoots(…,
   command = RpcCommand.DIFF)` short-circuits to an empty `RootsSpec` (otherwise the

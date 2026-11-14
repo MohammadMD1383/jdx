@@ -881,7 +881,9 @@ repositories (`--repo` mirrors in flag order, Maven Central last) into
 **including the `-sources.jar`**, with checksum
 verification. This lets an agent evaluate a library the project does not yet depend on.
 Network fetching is opt-in per invocation via `--fetch` (or `fetch = true` in config) so the
-tool never surprises anyone with network traffic.
+tool never surprises anyone with network traffic. The daemon / MCP / HTTP warm path
+**never** fetches (issue #18): stored `--repo` mirrors are inert there, and an absent
+stored `--coord` exits 5 naming cold `--fetch` priming (or explicit `--jars`).
 
 ---
 
@@ -1338,8 +1340,10 @@ the authoritative machine-readable version.)*
     --jars <path|glob|dir>  add binary roots (repeatable; quote globs — unquoted
                             multi-path shell expansion exits 3 with a hint)
     --src <dir>             add source roots (repeatable; same quote-glob rule)
-    --coord <g:a:v>         add a Maven coordinate root (repeatable)
-    --repo <url>            add a Maven repository base URL for --coord fetches (repeatable)
+    --coord <g:a:v>         add a Maven coordinate root (repeatable; daemon never
+                            fetches — prime caches cold with --fetch, or use --jars)
+    --repo <url>            add a Maven repository base URL for --coord fetches
+                            (repeatable; inert on the daemon/MCP/HTTP warm path)
     --sources <path>        explicitly pair a sources jar
     --jdk / --no-jdk        include the JDK stdlib (default: include)
     --fetch                 allow network fetches from Maven repositories (Central last by default)

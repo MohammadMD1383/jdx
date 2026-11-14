@@ -350,6 +350,19 @@ public sealed interface DaemonRoots {
 }
 
 /**
+ * Exit-5 text for a stored workspace coordinate the warm path cannot resolve
+ * (issue #18). The daemon never fetches, so the cold "Re-run with --fetch" hint
+ * is wrong here: name cold priming (or explicit `--jars`) instead. Keep exit 5.
+ * Hermetic: no absolute cache paths — agents copy the fix, not a machine path.
+ */
+internal fun daemonCoordReadError(failed: MavenResolver.ResolveAllOutcome.Failed): String {
+    if (!failed.fetchHint) return "artifact read error: ${failed.message}"
+    return "artifact read error: Maven coordinate '${failed.coordinateText}' is not in " +
+        "the local caches. The daemon never fetches; run once cold with --fetch to " +
+        "populate ~/.gradle/caches or ~/.m2, or use explicit --jars"
+}
+
+/**
  * Resolves the roots the daemon serves for one named workspace (T-082): the stored
  * workspace's jars plus its coordinates (local caches only — the daemon never
  * fetches, so stored `--repo` mirrors are inert here), its `srcs`, and the JDK
@@ -399,7 +412,11 @@ public fun JdxService.daemonRoots(
                 )
                 is MavenResolver.ResolveAllOutcome.Failed -> DaemonRoots.Failed(
                     ServiceOutcome.Failure(
-                        ErrorResult.generic(query, exitCode = 5, message = "artifact read error: ${coords.message}"),
+                        ErrorResult.generic(
+                            query,
+                            exitCode = 5,
+                            message = daemonCoordReadError(coords),
+                        ),
                     ),
                 )
             }
