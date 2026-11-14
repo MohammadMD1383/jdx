@@ -30,7 +30,8 @@ import kotlinx.serialization.json.jsonPrimitive
  *
  * `version` and `health` are answered internally in the daemon's envelope
  * shapes (same key order, so clients read either server alike);
- * `indexedArtifacts` stays 0 by design — live roots, no persistent index
+ * `indexedArtifacts` stays 0 by design with `indexMode=live-roots-first`
+ * (issues #4 / #5) — live roots, no persistent index
  * (the D-043 precedent the daemon documents). `doctor` is refused honestly:
  * it reports the caller's machine environment and `DoctorService` lives in
  * `:cli`, which this module cannot depend on (`:cli` depends on `:mcp`).
@@ -130,6 +131,8 @@ public class McpSession(
         append(",\"uptimeSeconds\":").append(TimeUnit.NANOSECONDS.toSeconds(System.nanoTime() - startNanos))
         append(",\"queryCount\":").append(queriesServed.get())
         append(",\"indexedArtifacts\":0")
+        // Same label as daemon/HTTP health (issue #4): bare 0 is by design.
+        append(",\"indexMode\":\"live-roots-first\"")
         append(",\"rpcVersion\":").append(RPC_VERSION)
         append(",\"appVersion\":").append(JsonEscape.quote(appVersion))
         append(",\"pid\":").append(ProcessHandle.current().pid())

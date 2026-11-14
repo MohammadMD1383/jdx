@@ -925,6 +925,11 @@ listening on a **unix domain socket** at `<runtime-dir>/jdx/<workspace-hash>.soc
   (never kills a reused pid), escalates `destroy()` to `destroyForcibly()`, and
   sweeps stale `.sock`/`.pid` files so a killed daemon restarts clean.
 - `jdx daemon status` reports uptime, workspace, memory, indexed artifacts, query count.
+  `indexed artifacts` stays `0` while graph queries are live-roots-first (no
+  persistent-index acceleration yet); the text row and health/`--json`
+  `indexMode: "live-roots-first"` label that explicitly (issue #4; real count
+  lands with issue #5). HTTP `/v1/health` and MCP `jdx_health` share the same
+  shape and key order.
 
 ### 14.4 HTTP/JSON — `jdx serve`
 Built on the JDK's own `com.sun.net.httpserver` (zero dependencies), bound to `127.0.0.1` by

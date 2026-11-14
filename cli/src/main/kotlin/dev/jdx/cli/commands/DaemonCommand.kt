@@ -16,6 +16,7 @@ import dev.jdx.server.DaemonPaths
 import dev.jdx.server.DaemonProbe
 import dev.jdx.server.DaemonServer
 import dev.jdx.server.DaemonStatusSnapshot
+import dev.jdx.server.INDEX_MODE_LIVE_ROOTS_FIRST
 import dev.jdx.server.SocketPathTooLongException
 import dev.jdx.server.jdxServiceHandler
 import dev.jdx.server.parseIdleDuration
@@ -156,6 +157,8 @@ private data class DaemonPayload(
     val uptimeSeconds: Long? = null,
     val memoryUsedMb: Long? = null,
     val indexedArtifacts: Int? = null,
+    /** Present when running: explains a by-design `indexedArtifacts: 0` (issue #4). */
+    val indexMode: String? = null,
     val queryCount: Long? = null,
     val pid: Long? = null,
     val message: String,
@@ -171,6 +174,7 @@ private fun snapshotPayload(snapshot: DaemonStatusSnapshot, message: String): Da
         uptimeSeconds = snapshot.uptimeSeconds,
         memoryUsedMb = snapshot.memoryUsedMb,
         indexedArtifacts = snapshot.indexedArtifacts,
+        indexMode = INDEX_MODE_LIVE_ROOTS_FIRST,
         queryCount = snapshot.queryCount,
         pid = snapshot.pid,
         message = message,
@@ -390,9 +394,20 @@ private fun statusText(snapshot: DaemonStatusSnapshot): String = buildString {
     appendLine("  workspace: ${snapshot.workspace}")
     appendLine("  uptime: ${formatUptime(snapshot.uptimeSeconds)}")
     appendLine("  memory: ${snapshot.memoryUsedMb} MB used")
-    appendLine("  indexed artifacts: ${snapshot.indexedArtifacts}")
+    appendLine("  ${formatIndexedArtifactsStatus(snapshot.indexedArtifacts)}")
     append("  queries served: ${snapshot.queryCount}")
 }.trimEnd()
+
+/**
+ * Labels a by-design zero so operators do not read "empty daemon" (issue #4).
+ * Non-zero counts print bare once a persistent index (#5) wires a real number.
+ */
+internal fun formatIndexedArtifactsStatus(indexedArtifacts: Int): String =
+    if (indexedArtifacts == 0) {
+        "indexed artifacts: 0 (live-roots-first — no persistent index; see #5)"
+    } else {
+        "indexed artifacts: $indexedArtifacts"
+    }
 
 class DaemonStartCommand(
     private val env: DaemonEnv = DaemonEnv.system(),
@@ -496,7 +511,9 @@ class DaemonStatusCommand(
 ) : CoreCliktCommand(name = "status") {
     override fun help(context: Context): String =
         "Report the daemon for a workspace: uptime, memory, indexed artifacts, query count. " +
-            "Exits 1 when no daemon is running."
+            "indexed artifacts stays 0 while graph queries are live-roots-first " +
+            "(no persistent index yet — see GitHub issue #5); the row and --json " +
+            "indexMode field say so explicitly. Exits 1 when no daemon is running."
 
     private val workspace by option("--workspace", help = "Workspace the daemon serves.").default("default")
 

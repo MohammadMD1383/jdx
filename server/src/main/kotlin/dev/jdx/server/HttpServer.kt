@@ -48,8 +48,8 @@ public const val DEFAULT_HTTP_PORT: Int = 7070
  *   T-040 framing, shared with `jdx batch` stdin), one envelope line per
  *   request out, never aborting the stream on a per-query failure.
  * - `GET /v1/health` — the daemon's health shape and key order, so clients
- *   read either server alike; `indexedArtifacts` stays 0 (live roots, no
- *   persistent index — the D-043 precedent).
+ *   read either server alike; `indexedArtifacts` stays 0 with
+ *   `indexMode=live-roots-first` (D-043 / issues #4 and #5).
  *
  * Separate port/socket from the daemon (T-041): the two do not interfere.
  * Every handler is total — hostile paths, methods, query strings and bodies

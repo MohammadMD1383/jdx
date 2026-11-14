@@ -44,6 +44,15 @@ class DaemonCommandTest {
     }
 
     @Test
+    fun `indexed artifacts zero is labeled live-roots-first`() {
+        // Issue #4: bare "0" read as a broken/empty daemon; label the by-design
+        // live-roots-first gap until #5 wires a real persistent-index count.
+        formatIndexedArtifactsStatus(0) shouldBe
+            "indexed artifacts: 0 (live-roots-first — no persistent index; see #5)"
+        formatIndexedArtifactsStatus(12) shouldBe "indexed artifacts: 12"
+    }
+
+    @Test
     fun `status on a stopped daemon exits 1`() {
         var code = -1
         val out = capturedStdout {

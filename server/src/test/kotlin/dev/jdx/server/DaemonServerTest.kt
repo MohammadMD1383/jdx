@@ -75,11 +75,31 @@ class DaemonServerTest {
             snapshot.rpcVersion shouldBe RPC_VERSION
             snapshot.appVersion shouldBe "test-0.0.0"
             snapshot.pid shouldBe ProcessHandle.current().pid()
+            snapshot.indexedArtifacts shouldBe 0
             (snapshot.queryCount >= 1) shouldBe true // the health probe itself counted
+            // Issue #4: health JSON labels the by-design zero (probe keeps Int only).
+            val raw = DaemonProbe.roundTrip(control().socket, RpcRequest(RpcCommand.HEALTH))
+            raw shouldNotBe null
+            raw!! shouldContain "\"indexedArtifacts\":0"
+            raw shouldContain "\"indexMode\":\"live-roots-first\""
         } finally {
             server.stop()
         }
         DaemonProbe.health(control().socket) shouldBe null
+    }
+
+    @Test
+    fun `healthResultJson labels live-roots-first index mode`() {
+        val json = healthResultJson(
+            DaemonStatusSnapshot("ws", 1, 2, 0, RPC_VERSION, "x", 1, 1),
+        )
+        json shouldContain "\"indexedArtifacts\":0"
+        json shouldContain "\"indexMode\":\"${INDEX_MODE_LIVE_ROOTS_FIRST}\""
+        // Key order: indexMode sits between indexedArtifacts and rpcVersion.
+        val artifactsAt = json.indexOf("\"indexedArtifacts\":")
+        val modeAt = json.indexOf("\"indexMode\":")
+        val rpcAt = json.indexOf("\"rpcVersion\":")
+        (artifactsAt in 0 until modeAt && modeAt < rpcAt) shouldBe true
     }
 
     @Test

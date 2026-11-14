@@ -116,6 +116,9 @@ class HttpServerTest {
             response.body() shouldContain "\"ok\":true"
             response.body() shouldContain "\"rpcVersion\":$RPC_VERSION"
             response.body() shouldContain "\"workspace\":\"fx\""
+            // Issue #4: bare indexedArtifacts:0 is labeled live-roots-first.
+            response.body() shouldContain "\"indexedArtifacts\":0"
+            response.body() shouldContain "\"indexMode\":\"live-roots-first\""
             response.body() shouldNotContain "\n"
         } finally {
             server.stop()
