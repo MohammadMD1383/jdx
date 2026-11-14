@@ -20,7 +20,7 @@ No. jdx parses bytecode with ASM and never loads inspected classes, so no static
 
 ## Does it need the library's sources?
 
-No. With a `-sources.jar` (or a source directory, or the JDK's `src.zip`) it shows real source. Without one it decompiles with Vineflower and marks the result as reconstructed, and `--engine javap` shows raw bytecode. Structure always comes from bytecode, so member lists and signatures are exact either way.
+No. With a `-sources.jar` (or a source directory, or the JDK's `src.zip`) it shows real source. Without one it decompiles with Vineflower and marks the result as reconstructed, and `--engine javap` shows raw bytecode. When Vineflower returns only a `$VF: Could not decompile…` stub (common for suspend lambdas), the default ladder falls through to `javap` automatically instead of serving the stub. Structure always comes from bytecode, so member lists and signatures are exact either way.
 
 ## Does it support Kotlin?
 

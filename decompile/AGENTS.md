@@ -17,10 +17,13 @@ Decompilation engines behind one seam. Vineflower is the default (readable Java)
 ## Rules
 
 - Serving ladder: paired sources → Vineflower → `javap` → signatures → not found.
-  A default-ladder Vineflower failure (timeout/crash/unparseable) auto-retries via
-  `javap`; forced `--engine vineflower` stays strict (failure exits 1 naming the
-  `--engine javap` hatch). Provenance always names the engine; decompiled output is
-  labelled reconstructed.
+  A default-ladder Vineflower failure (timeout/crash/unparseable/`$VF:` stub body —
+  issue #86) auto-retries via `javap`; forced `--engine vineflower` stays strict
+  (failure exits 1 naming the `--engine javap` hatch). Provenance always names the
+  engine; decompiled output is labelled reconstructed. `VineflowerStubs` detects
+  marker-only member bodies (`// $VF: Could not decompile…`) so they never ship as
+  if they were source — the detail prefers `suspend lambda` over Vineflower's
+  question phrasing.
 - Overload ambiguity is decided from bytecode before any decompilation runs
   (bytecode-authoritative). Decompiled text carries no javadoc — `doc` has no
   decompiled path.
