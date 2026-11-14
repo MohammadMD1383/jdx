@@ -1,5 +1,7 @@
 package dev.jdx.index.service
 
+import dev.jdx.core.render.TokenBudget
+import dev.jdx.core.render.WarningLines
 import dev.jdx.core.rpc.RpcCommand
 import dev.jdx.core.rpc.RpcRequest
 import dev.jdx.index.artifact.ArtifactTestJars
@@ -320,15 +322,19 @@ class RpcDispatchTest {
     }
 
     @Test
-    fun `dispatchJson with warmText carries the plain rendering`() {
+    fun `dispatchJson with warmText carries the plain answer without warning lines`() {
         val query = "dev.jdx.fixtures.Generics"
         val request = req(RpcCommand.SHOW, query, "warmText" to "true")
         val outcome = JdxService.dispatch(req(RpcCommand.SHOW, query), fixtureRoots())
         val line = warmJson(request)
-        line shouldContain "\"text\":" + quoteForTest(outcome.renderText(false))
+        // Issue #86: warm `"text"` matches cold stdout (warnings peeled).
+        val answer = WarningLines.answerOnly(outcome.renderText(false))
+        line shouldContain "\"text\":" + quoteForTest(answer)
         line shouldContain "\"command\":\"show\""
-        // The JSON result stays intact beside the text.
+        // The JSON result stays intact beside the text — full warnings still
+        // live in the envelope array.
         line shouldContain "\"ok\":true"
+        line shouldContain "\"warnings\":"
     }
 
     @Test
@@ -336,17 +342,19 @@ class RpcDispatchTest {
         val query = "dev.jdx.fixtures.Generics"
         val full = JdxService.members(query, fixtureRoots())
         val brief = req(RpcCommand.MEMBERS, query, "warmText" to "true", "warmBrief" to "true")
-        warmJson(brief) shouldContain "\"text\":" + quoteForTest(full.renderBriefText(false))
+        val briefAnswer = WarningLines.answerOnly(full.renderBriefText(false))
+        warmJson(brief) shouldContain "\"text\":" + quoteForTest(briefAnswer)
         val capped = req(RpcCommand.MEMBERS, query, "warmText" to "true", "warmMaxLines" to "2")
-        val cappedText = dev.jdx.core.render.TokenBudget.capLines(full.renderText(false), 2)
+        val cappedText = TokenBudget.capLines(WarningLines.answerOnly(full.renderText(false)), 2)
         warmJson(capped) shouldContain "\"text\":" + quoteForTest(cappedText)
         // The JSON half is untouched by presentation params.
         warmJson(capped) shouldContain "\"ok\":true"
-        // Hostile presentation params degrade to the plain rendering, never a throw.
+        // Hostile presentation params degrade to the plain answer, never a throw.
+        val plainAnswer = WarningLines.answerOnly(full.renderText(false))
         val hostile = req(RpcCommand.MEMBERS, query, "warmText" to "true", "warmMaxLines" to "many")
-        warmJson(hostile) shouldContain "\"text\":" + quoteForTest(full.renderText(false))
+        warmJson(hostile) shouldContain "\"text\":" + quoteForTest(plainAnswer)
         val negative = req(RpcCommand.MEMBERS, query, "warmText" to "true", "warmMaxLines" to "-1")
-        warmJson(negative) shouldContain "\"text\":" + quoteForTest(full.renderText(false))
+        warmJson(negative) shouldContain "\"text\":" + quoteForTest(plainAnswer)
     }
 
     @Test
@@ -356,7 +364,7 @@ class RpcDispatchTest {
         (outcome is ServiceOutcome.Failure) shouldBe true
         val line = warmJson(request)
         line shouldContain "\"ok\":false"
-        line shouldContain "\"text\":" + quoteForTest(outcome.renderText(false))
+        line shouldContain "\"text\":" + quoteForTest(WarningLines.answerOnly(outcome.renderText(false)))
     }
 
     private fun quoteForTest(text: String): String = buildString {

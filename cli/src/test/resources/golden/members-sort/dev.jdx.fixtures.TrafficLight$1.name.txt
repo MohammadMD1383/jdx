@@ -9,5 +9,4 @@ methods inherited from dev.jdx.fixtures.TrafficLight:
   method public int seconds()
   method public static dev.jdx.fixtures.TrafficLight valueOf(java.lang.String arg0)
   method public static dev.jdx.fixtures.TrafficLight[] values()
-warning UNRESOLVED_SUPERTYPE: supertype java.lang.Enum is not in the workspace — members inherited from it are missing
 source: fixture-corpus.jar (bytecode)

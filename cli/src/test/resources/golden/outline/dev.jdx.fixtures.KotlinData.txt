@@ -13,5 +13,4 @@ properties declared on dev.jdx.fixtures.KotlinData:
   property public final val java.lang.String name
   property public final var int count
   property public final var java.lang.String? nickname
-warning UNRESOLVED_SUPERTYPE: supertype java.lang.Object is not in the workspace — members inherited from it are missing
 source: fixture-corpus.jar (bytecode)

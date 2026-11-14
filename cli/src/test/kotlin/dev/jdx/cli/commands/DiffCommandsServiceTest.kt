@@ -36,22 +36,26 @@ class DiffCommandsServiceTest {
 
     private val noExit: (Int) -> Nothing = { throw TestExit(it) }
 
-    private data class Run(val output: String, val exit: Int)
+    private data class Run(val output: String, val err: String, val exit: Int)
 
     /** The real command with the real service and a throwing exit. */
     private fun run(args: List<String>): Run {
-        val original = System.out
-        val buffer = ByteArrayOutputStream()
-        System.setOut(PrintStream(buffer))
+        val originalOut = System.out
+        val originalErr = System.err
+        val outBuffer = ByteArrayOutputStream()
+        val errBuffer = ByteArrayOutputStream()
+        System.setOut(PrintStream(outBuffer))
+        System.setErr(PrintStream(errBuffer))
         val exit = try {
             DiffCommand(terminate = noExit).parse(args)
             0
         } catch (e: TestExit) {
             e.code
         } finally {
-            System.setOut(original)
+            System.setOut(originalOut)
+            System.setErr(originalErr)
         }
-        return Run(buffer.toString(Charsets.UTF_8), exit)
+        return Run(outBuffer.toString(Charsets.UTF_8), errBuffer.toString(Charsets.UTF_8), exit)
     }
 
     /** The crafted pair, or a skip when the test runtime has no Java compiler. */
@@ -358,10 +362,12 @@ class DiffCommandsServiceTest {
         val run = run(listOf(brokenOld.toString(), new.toString()))
 
         run.exit shouldBe 0
-        run.output shouldContain "warning CORRUPT_CLASS"
+        // Issue #86: warnings land on stderr so the answer on stdout stays readable.
+        run.err shouldContain "warning CORRUPT_CLASS"
+        run.err shouldContain "difffix/Broken.class"
+        run.output shouldNotContain "warning CORRUPT_CLASS"
         // The warning names the entry, not an invented type: the skipped class
         // must not turn into a fake TYPE_REMOVED.
-        run.output shouldContain "difffix/Broken.class"
         run.output shouldContain "breaking  MEMBER_REMOVED  difffix.Api#legacy()"
         run.output shouldNotContain "TYPE_REMOVED  difffix.Broken"
     }

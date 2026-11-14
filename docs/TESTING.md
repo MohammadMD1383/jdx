@@ -321,8 +321,10 @@ Four front-ends (D-004) will drift unless a test forbids it.
 
 - **Adapter parity:** the same query through CLI `--json`, HTTP, and MCP must produce
   **byte-identical result payloads**. One test, parameterised over every command.
-- **Text↔JSON completeness:** every entity and warning in the text rendering must appear in
-  the JSON. Enforced structurally, not by eyeball (D-007).
+- **Text↔JSON completeness:** every entity in the text rendering must appear in the JSON.
+  Warnings are carried in the envelope `warnings` array (and on stderr in text mode —
+  issue #86); they are not required to appear in the stdout answer body. Enforced
+  structurally, not by eyeball (D-007).
 - **Exit-code contract:** a table-driven test asserting the D-015 code for each documented
   situation. Changing a code must break a test — that is the point.
 - **`--help` coverage:** every flag documented in `docs/PROPOSAL.md` Appendix B exists, and

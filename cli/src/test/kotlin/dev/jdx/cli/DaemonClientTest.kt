@@ -259,6 +259,35 @@ class DaemonClientTest {
     }
 
     @Test
+    fun `warm text prints envelope warnings on stderr`() {
+        val line = "{" +
+            "\"jdx\":1,\"ok\":true,\"command\":\"show\",\"query\":\"Foo\"," +
+            "\"result\":{},\"text\":\"answer only\"," +
+            "\"warnings\":[{\"code\":\"CORRUPT_CLASS\",\"message\":\"bad bytes\"}]," +
+            "\"provenance\":[]}"
+        DaemonClient.parseWarningLines(line) shouldBe listOf("warning CORRUPT_CLASS: bad bytes")
+        val printed = mutableListOf<String>()
+        val err = mutableListOf<String>()
+        val served = DaemonClient.serveWarmIfReady(
+            request = DaemonClient.showRequest("Foo"),
+            flagWorkspace = "fx",
+            roots = WarmRoots(),
+            noDaemon = false,
+            json = false,
+            terminate = { throw DaemonExit(it) },
+            store = store(active = "fx"),
+            getenv = { null },
+            runtimeDir = Path.of("/run/user/1000"),
+            roundTrip = { _, _ -> line },
+            printer = { printed.add(it) },
+            errPrinter = { err.add(it) },
+        )
+        served shouldBe true
+        printed shouldBe listOf("answer only")
+        err shouldBe listOf("warning CORRUPT_CLASS: bad bytes")
+    }
+
+    @Test
     fun `warm text carries a non-zero exit code to terminate`() {
         val line = textEnvelope("show", "not found", ok = false, code = 1)
         var code = -1

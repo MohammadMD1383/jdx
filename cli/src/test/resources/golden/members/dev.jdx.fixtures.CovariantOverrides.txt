@@ -1,5 +1,4 @@
 members of dev.jdx.fixtures.CovariantOverrides
 constructors declared on dev.jdx.fixtures.CovariantOverrides:
   constructor public CovariantOverrides()
-warning UNRESOLVED_SUPERTYPE: supertype java.lang.Object is not in the workspace — members inherited from it are missing
 source: fixture-corpus.jar (bytecode)

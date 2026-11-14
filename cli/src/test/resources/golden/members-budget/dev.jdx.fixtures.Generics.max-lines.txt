@@ -4,4 +4,4 @@ constructors declared on dev.jdx.fixtures.Generics:
 methods declared on dev.jdx.fixtures.Generics:
   method public <V extends T> V bounded(V input)
   method public U identity(U value)
-… 3 more lines (--max-lines 9 to see more)
+… 2 more lines (--max-lines 8 to see more)

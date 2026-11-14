@@ -12,5 +12,4 @@ methods declared on dev.jdx.fixtures.KotlinMembers:
 fields declared on dev.jdx.fixtures.KotlinMembers:
   field public static final dev.jdx.fixtures.KotlinMembers$Companion Companion
   field public static final int VERSION = 1
-warning UNRESOLVED_SUPERTYPE: supertype java.lang.Object is not in the workspace — members inherited from it are missing
 source: fixture-corpus.jar (bytecode)

@@ -9,4 +9,3 @@ members of dev.jdx.fixtures.KotlinMembers
   method public static final dev.jdx.fixtures.KotlinMembers create()
   field public static final dev.jdx.fixtures.KotlinMembers$Companion Companion
   field public static final int VERSION = 1
-warning UNRESOLVED_SUPERTYPE: supertype java.lang.Object is not in the workspace — members inherited from it are missing

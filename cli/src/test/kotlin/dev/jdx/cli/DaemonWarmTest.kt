@@ -4,6 +4,8 @@ import com.github.ajalt.clikt.core.parse
 import com.github.ajalt.clikt.core.subcommands
 import dev.jdx.cli.commands.DaemonExit
 import dev.jdx.cli.commands.ShowCommand
+import dev.jdx.core.render.TokenBudget
+import dev.jdx.core.render.WarningLines
 import dev.jdx.core.rpc.RpcCommand
 import dev.jdx.core.rpc.RpcRequest
 import dev.jdx.index.service.JdxService
@@ -268,7 +270,8 @@ class DaemonWarmTest {
             }
             code shouldBe expected.exitCode
             printed.size shouldBe 1
-            printed.single() shouldBe expected.renderText(false)
+            // Issue #86: warm stdout matches cold stdout (warnings peeled).
+            printed.single() shouldBe WarningLines.answerOnly(expected.renderText(false))
 
             var probed = false
             val explicit = DaemonClient.serveWarmIfReady(
@@ -320,7 +323,7 @@ class DaemonWarmTest {
                 }
                 code shouldBe expected.exitCode
                 printed.size shouldBe 1
-                printed.single() shouldBe expected.renderText(false)
+                printed.single() shouldBe WarningLines.answerOnly(expected.renderText(false))
             }
             // Brief + cap ride the text path: the daemon shapes the text alone.
             val briefExpected = JdxService.dispatch(warmRequest(), roots)
@@ -332,8 +335,8 @@ class DaemonWarmTest {
                 printer = { briefPrinted.add(it) }, brief = true, warmMaxLines = 2,
             )
             briefServed shouldBe true
-            val briefBase = briefExpected.renderBriefText(false)
-            briefPrinted.single() shouldBe dev.jdx.core.render.TokenBudget.capLines(briefBase, 2)
+            val briefBase = WarningLines.answerOnly(briefExpected.renderBriefText(false))
+            briefPrinted.single() shouldBe TokenBudget.capLines(briefBase, 2)
         } finally {
             server.stop()
         }

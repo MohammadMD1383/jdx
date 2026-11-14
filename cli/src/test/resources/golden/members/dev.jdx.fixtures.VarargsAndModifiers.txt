@@ -7,5 +7,4 @@ methods declared on dev.jdx.fixtures.VarargsAndModifiers:
   method public static java.lang.String join(java.lang.String separator, java.lang.String... parts)
   method public synchronized void syncMethod()
   method public void oldApi()
-warning UNRESOLVED_SUPERTYPE: supertype java.lang.Object is not in the workspace — members inherited from it are missing
 source: fixture-corpus.jar (bytecode)
