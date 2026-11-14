@@ -107,7 +107,28 @@ internal fun CoreCliktCommand.effectiveJson(ownJson: Boolean): Boolean =
     ownJson || rootCommand()?.json == true
 
 /** One-shot CLI entry point; the fat jar's `Main-Class` (see `app/build.gradle.kts`). */
-fun main(args: Array<String>): Unit = buildRoot().main(args)
+fun main(args: Array<String>): Unit = runCli(args)
+
+/**
+ * CLI entry used by [main] and in-process tests. Runs the shell-expanded
+ * `--jars`/`--src` check (issue #86) before Clikt so an unquoted glob gets a
+ * copy-pasteable hint instead of "got unexpected extra arguments".
+ *
+ * [terminate] and [printer] are injectable so tests can capture the exit code and
+ * message without killing the host JVM or racing on [System.out].
+ */
+internal fun runCli(
+    args: Array<String>,
+    terminate: (Int) -> Unit = { kotlin.system.exitProcess(it) },
+    printer: (String) -> Unit = ::println,
+) {
+    ShellExpandedValueOption.detect(args.toList())?.let { message ->
+        printer(message)
+        terminate(3)
+        return
+    }
+    buildRoot(terminate).main(args)
+}
 
 /**
  * Builds the rooted command tree with clikt's `exitProcess` seam owned by us.

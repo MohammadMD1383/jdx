@@ -19,6 +19,15 @@ The running JDK's standard library is on every classpath (through `jrt:/`), pair
 
 `jdx usages` additionally takes `--src <dir>` for project source directories.
 
+**Quote globs.** `--jars` and `--src` each take one value per occurrence (jdx expands
+the glob). An unquoted `lib/*.jar` is expanded by the shell into many argv tokens and
+exits 3 with a hint to quote it — or repeat the flag per path:
+
+```bash
+jdx outline PluginUtils --jars "$HOME/.../lib/*.jar"
+jdx outline PluginUtils --jars a.jar --jars b.jar
+```
+
 ```console exec max-lines=8
 $ jdx ls com.google.gson.stream --coord com.google.code.gson:gson:2.14.0
 ```
