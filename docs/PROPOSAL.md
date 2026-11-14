@@ -385,6 +385,8 @@ Symbol search across the workspace.
 - Matching: glob (`*Http*Client`), regex (`--regex`), **camel-hump** (`HMap` → `HashMap`,
   `gJson` → `getJson`) — IntelliJ's `Ctrl+N` behaviour.
 - `--kind class|interface|enum|record|annotation|method|field|package|module`
+  (default `all` = types + packages + modules; `method`/`field` are opt-in because they
+  parse every in-scope class. A miss under the default names `--kind method` — issue #86.)
 - `--in <artifact-glob>`, `--package <glob>`, `--limit N` *(default 50)*
 - `--fuzzy` — Levenshtein fallback when nothing matches exactly
 

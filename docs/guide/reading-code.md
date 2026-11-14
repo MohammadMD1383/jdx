@@ -93,8 +93,9 @@ $ jdx search 'parse*' --kind method --in 'gson*' --coord com.google.code.gson:gs
 ```
 
 Globs by default, `--regex` for regular expressions; bare words match case-insensitively or as
-camel humps (`HMap` finds `HashMap`); `--fuzzy` retries a miss by edit distance. `--kind`
-narrows to classes, interfaces, methods, fields, packages or modules.
+camel humps (`HMap` finds `HashMap`); `--fuzzy` retries a miss by edit distance. Default
+`--kind all` covers types, packages and modules — pass `--kind method` or `--kind field` to
+scan members (a miss under the default hints at that flag).
 
 - `jdx resolve <name>` — every candidate for a simple name, with kind and artifact.
 - `jdx ls 'com.google.*'` — packages with type counts; an exact package lists its types.

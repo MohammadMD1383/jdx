@@ -234,13 +234,16 @@ public val ALL_MCP_TOOLS: List<McpToolDefinition> = listOf(
     ),
     McpToolDefinition(
         command = RpcCommand.SEARCH,
-        description = "Search everywhere: symbols by glob, regex or fuzzy name, with did-you-mean.",
+        description = "Search symbols by glob, regex or fuzzy name. Default kind=all covers " +
+            "types, packages and modules; pass kind=method|field to scan members. " +
+            "A default-kind miss hints at --kind method.",
         params = listOf(
             queryParam(), workspaceParam(),
             McpParam(
                 name = "kind", kind = McpParamKind.STRING,
                 description = "Symbol kind: all, type, class, interface, enum, record, annotation, " +
-                    "object, companion, method, field, package or module (default all).",
+                    "object, companion, method, field, package or module " +
+                    "(default all = types+packages+modules; method|field required to scan members).",
             ),
             McpParam(name = "regex", kind = McpParamKind.BOOLEAN, description = "Treat the pattern as a regex."),
             McpParam(name = "fuzzy", kind = McpParamKind.BOOLEAN, description = "Levenshtein fallback when nothing matches."),

@@ -50,6 +50,10 @@ behaviour lives here** (adapters call in, never the reverse). `explicitApi()` is
 - Bytecode-authoritative: overload ambiguity is decided from bytecode *before*
   sources/decompilers run. Member matching is overload-blind unless the ref carries
   params. Call matching is exact name+descriptor — not override-aware, by design.
+- `search --kind all` (default) covers types + packages + modules only; `method`/
+  `field` are opt-in (slow path parses every in-scope class). A default-kind miss
+  carries `SEARCH_MEMBERS_OPT_IN_HINT` as `ErrorResult.detail` (issue #86) — do not
+  widen `ALL` to include members without revisiting that tip and the perf story.
 - Kotlin views ride `ClassInfo` with defaults (no `ktmeta` blob writes); file facades
   stay JVM-projected; `core` carriers must not leak mutable `KmClass` equality into
   pinned shapes (compare contents, never carriers).

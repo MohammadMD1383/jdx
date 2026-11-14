@@ -23,7 +23,11 @@ public val HELP_ROWS: List<HelpRow> = listOf(
     HelpRow("doc <symbol>", "Quick documentation", "jdx doc 'Gson#toJson(Object)'"),
     HelpRow("body <member>", "Open the method", "jdx body 'Gson#toJson(Object)'"),
     HelpRow("source <type>", "Open the file / decompile", "jdx source com.google.gson.Gson"),
-    HelpRow("search <pattern>", "Search everywhere", "jdx search '*Http*Client' --kind class"),
+    HelpRow(
+        "search <pattern>",
+        "Search types/packages/modules (pass --kind method|field for members)",
+        "jdx search 'toJson' --kind method",
+    ),
     HelpRow("resolve <name>", "What is this symbol?", "jdx resolve Gson"),
     HelpRow("ls [package]", "External library browser (packages/types)", "jdx ls com.google.gson"),
     HelpRow("tree [artifact]", "External library browser (artifacts)", "jdx tree gson"),

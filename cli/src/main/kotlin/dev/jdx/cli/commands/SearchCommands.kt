@@ -50,6 +50,7 @@ class SearchCommand(
             "case-insensitively or as camel humps (HMap finds HashMap). " +
             "--kind narrows to class|interface|enum|record|annotation|method|field|package|module " +
             "(default: types, packages and modules; pass method|field to scan members). " +
+            "A miss under the default hints at --kind method. " +
             "--fuzzy retries a miss by Levenshtein distance. " +
             "Exits 1 when nothing matches."
 

@@ -70,6 +70,40 @@ class SearchServiceTest {
         val outcome = JdxService.search("ZzzQqxNope", fixtureRoots())
         outcome.exitCode shouldBe 1
         textOf(outcome) shouldContain "not found: ZzzQqxNope"
+        // Default --kind all skips members; name the next flag (issue #86).
+        textOf(outcome) shouldContain JdxService.SEARCH_MEMBERS_OPT_IN_HINT
+    }
+
+    @Test
+    fun `default kind miss for a method name hints at --kind method`() {
+        // `identity` is a real fixture method; under default kind it must not
+        // look like a true miss — the hint tells the agent what to type next.
+        val missed = JdxService.search("identity", fixtureRoots())
+        missed.exitCode shouldBe 1
+        textOf(missed) shouldContain "not found: identity"
+        textOf(missed) shouldContain JdxService.SEARCH_MEMBERS_OPT_IN_HINT
+        missed.toJson("search") shouldContain JdxService.SEARCH_MEMBERS_OPT_IN_HINT
+
+        val found = JdxService.search(
+            "identity",
+            fixtureRoots(),
+            SearchOptions(kind = SearchKindFilter.METHOD),
+        )
+        found.exitCode shouldBe 0
+        textOf(found) shouldContain "dev.jdx.fixtures.Generics#identity("
+        textOf(found) shouldNotContain JdxService.SEARCH_MEMBERS_OPT_IN_HINT
+    }
+
+    @Test
+    fun `explicit kind miss does not hint at --kind method`() {
+        val outcome = JdxService.search(
+            "ZzzQqxNope",
+            fixtureRoots(),
+            SearchOptions(kind = SearchKindFilter.METHOD),
+        )
+        outcome.exitCode shouldBe 1
+        textOf(outcome) shouldContain "not found: ZzzQqxNope"
+        textOf(outcome) shouldNotContain JdxService.SEARCH_MEMBERS_OPT_IN_HINT
     }
 
     @Test
@@ -207,6 +241,7 @@ class SearchServiceTest {
         val plain = JdxService.search("Generix", fixtureRoots())
         plain.exitCode shouldBe 1
         textOf(plain) shouldContain "dev.jdx.fixtures.Generics"
+        textOf(plain) shouldContain JdxService.SEARCH_MEMBERS_OPT_IN_HINT
 
         val fuzzy = JdxService.search("Generix", fixtureRoots(), SearchOptions(fuzzy = true))
         fuzzy.exitCode shouldBe 0
