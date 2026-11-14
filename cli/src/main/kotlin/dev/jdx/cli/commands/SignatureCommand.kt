@@ -149,6 +149,7 @@ class SignatureCommand(
                 getenv = getenv,
                 runtimeDir = daemonRuntimeDir,
                 roundTrip = daemonRoundTrip,
+                color = ReadCommandSupport.useColor(noColor),
             )
         ) return
         when (val resolved = ReadCommandSupport.resolveRoots(

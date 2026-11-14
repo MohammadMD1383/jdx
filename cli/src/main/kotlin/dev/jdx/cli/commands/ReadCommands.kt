@@ -233,6 +233,7 @@ class MembersCommand(
                 roundTrip = daemonRoundTrip,
                 brief = brief,
                 warmMaxLines = maxLines,
+                color = ReadCommandSupport.useColor(noColor),
             )
         ) return
         val filters = JdxService.MemberFilters(
@@ -468,6 +469,7 @@ class OutlineCommand(
                 roundTrip = daemonRoundTrip,
                 brief = brief,
                 warmMaxLines = maxLines,
+                color = ReadCommandSupport.useColor(noColor),
             )
         ) return
         val filters = JdxService.MemberFilters(

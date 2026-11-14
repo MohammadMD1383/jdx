@@ -166,6 +166,7 @@ class CallersCommand(
                 getenv = getenv,
                 runtimeDir = daemonRuntimeDir,
                 roundTrip = daemonRoundTrip,
+                color = ReadCommandSupport.useColor(noColor),
             )
         ) return
         when (val resolved = ReadCommandSupport.resolveRoots(
@@ -337,6 +338,7 @@ class CallsCommand(
                 getenv = getenv,
                 runtimeDir = daemonRuntimeDir,
                 roundTrip = daemonRoundTrip,
+                color = ReadCommandSupport.useColor(noColor),
             )
         ) return
         when (val resolved = ReadCommandSupport.resolveRoots(

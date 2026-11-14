@@ -19,8 +19,11 @@ is the CLI surface, pinned by help/parity goldens.)
 - `DaemonClient` — forwards `--json` queries to the running daemon, degrades to
   in-process when down; explicit roots, unnamed workspaces, and usage errors stay
   cold; `--no-daemon` forces in-process. Warm text comes server-rendered (always
-  plain — the daemon has no TTY; answer-only `"text"`, warnings from the envelope
-  printed on stderr like cold text); `--json` bytes are untouched by budgets.
+  plain on the wire — the daemon has no TTY; answer-only `"text"`, warnings from
+  the envelope printed on stderr like cold text). The CLI re-colorizes that plain
+  text locally when `serveWarmIfReady(…, color=true)` (same TTY/`--no-color` gate
+  as cold — issue #17); piped warm stays byte-identical to the wire. `--json`
+  bytes are untouched by budgets or colour.
 - `bench/BenchRunner` + `render/BenchSheet` — fixed workload, median of iterations,
   advisory targets (never gate). `service/DoctorService` — injectable probes
   (workspace store, socket health, AppCDS archive + fat jar paths) so tests never

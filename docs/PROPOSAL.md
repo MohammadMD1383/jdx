@@ -573,6 +573,8 @@ Optimised for a language model reading it:
 - **A `next:` line** on single-entity output, suggesting the highest-value follow-up command.
 - **Truncation is always explicit**, always with the flag that would reveal the rest.
 - **ANSI colour only when stdout is a TTY**; never when piped (agents always get plain text).
+  Daemon warm text is plain on the wire (no TTY server-side); the CLI re-colorizes
+  locally with the same gate so piped warm == piped cold (issue #17).
 
 ### 8.2 JSON (`--json`)
 A stable envelope, versioned, identical across CLI / HTTP / MCP:

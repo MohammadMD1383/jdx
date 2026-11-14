@@ -251,8 +251,8 @@ class DaemonWarmTest {
         server.start()
         try {
             // Warm text prints the daemon's plain rendering: byte-identical to
-            // the cold plain text (the daemon has no TTY, so no ANSI on either
-            // side when piped).
+            // cold plain text when color=false (piped / --no-color). Issue #17
+            // re-colorizes only when the CLI passes color=true.
             val request = warmRequest()
             val expected = JdxService.dispatch(request, fixtureRoots())
             val printed = mutableListOf<String>()
@@ -263,6 +263,7 @@ class DaemonWarmTest {
                     noDaemon = false, json = false, terminate = { throw DaemonExit(it) },
                     store = InMemoryWorkspaceStore(), getenv = { null }, runtimeDir = socketScope,
                     printer = { printed.add(it) },
+                    color = false,
                 )
                 assert(served) { "warm text failed for ${request.command} ${request.query}" }
             } catch (e: DaemonExit) {

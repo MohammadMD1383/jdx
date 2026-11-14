@@ -51,7 +51,9 @@ class DaemonCommand : CoreCliktCommand(name = "daemon") {
     override fun help(context: Context): String =
         "Manage the background daemon: a hot JVM answering queries over a unix socket " +
             "(start, stop, status, restart). The daemon shuts itself down after --idle " +
-            "without requests (default 5m, 0 disables)."
+            "without requests (default 5m, 0 disables). Warm text on the wire is always " +
+            "plain (no TTY); the CLI re-colorizes it locally on a terminal unless " +
+            "--no-color (issue #17)."
 
     override fun run() = Unit
 }

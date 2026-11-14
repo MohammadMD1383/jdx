@@ -104,8 +104,10 @@ project roots auto-discover from the working directory) ·
 
 Global output flags: `--json` (accepted before or after the subcommand, e.g.
 `jdx --json show …`), `--no-color` (piped output is always plain),
-`--no-daemon` (force in-process). Warm (daemon) text is always plain; `--json` bytes are
-identical cold and warm.
+`--no-daemon` (force in-process). The daemon wire always carries plain text (no TTY);
+the CLI re-colorizes warm text locally on a TTY with the same `--no-color` / console
+gate as cold, so piped warm stays byte-identical to piped cold (issue #17). `--json`
+bytes are identical cold and warm.
 
 ## Exit codes and symbol references
 

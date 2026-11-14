@@ -1,6 +1,7 @@
 package dev.jdx.cli
 
 import com.github.ajalt.clikt.core.CoreCliktCommand
+import dev.jdx.core.render.Ansi
 import dev.jdx.core.render.WarningLines
 import dev.jdx.core.rpc.RpcCommand
 import dev.jdx.core.rpc.RpcRequest
@@ -30,10 +31,14 @@ import kotlinx.serialization.json.jsonPrimitive
  *
  * v1 scope (D-059, lifted by T-086): `--json` queries go warm verbatim and
  * text queries go warm via the server-rendered `"text"` envelope field
- * (plain, no ANSI — the daemon has no TTY; warnings peeled to stderr like
- * cold text, issue #86). A missing/unreachable daemon, a usage error,
- * explicit root overrides, or a daemon that answers without the `text`
- * field (pre-T-086) all read as "run in-process".
+ * (always plain on the wire — the daemon has no TTY; issue #17). The CLI
+ * adapter re-colorizes that plain text locally when [serveWarmIfReady]'s
+ * `color` is true (same gate as cold: TTY and not `--no-color`), so piped
+ * warm stays byte-identical to piped cold while a TTY gets the bold-header
+ * pass. Warnings peel to stderr like cold text (issue #86). A
+ * missing/unreachable daemon, a usage error, explicit root overrides, or a
+ * daemon that answers without the `text` field (pre-T-086) all read as
+ * "run in-process".
  */
 public object DaemonClient {
     private val lenientJson: Json = Json { ignoreUnknownKeys = true }
@@ -116,6 +121,11 @@ public object DaemonClient {
      * [warmMaxLines] are the text-only presentation flags (`members`/`outline`
      * `--brief`/`--max-lines`); every other text-affecting flag already rides
      * the request as a query param.
+     *
+     * [color] is the CLI-side ANSI gate (issue #17): the daemon always sends
+     * plain text; when true this adapter runs [Ansi.colorizeListing] before
+     * printing so a TTY matches cold. Piped/`--no-color` callers pass false
+     * and stay byte-identical to the wire. JSON is never colourised.
      */
     public fun serveWarmIfReady(
         request: RpcRequest,
@@ -132,6 +142,7 @@ public object DaemonClient {
         errPrinter: (String) -> Unit = System.err::println,
         brief: Boolean = false,
         warmMaxLines: Int? = null,
+        color: Boolean = false,
     ): Boolean {
         val workspaceName = workspaceNameForDaemon(flagWorkspace, getenv, store)
         if (!shouldAttempt(noDaemon, json, roots, workspaceName, runtimeDir)) return false
@@ -150,7 +161,8 @@ public object DaemonClient {
             },
         )
         val hit = tryWarmText(textRequest, socket, roundTrip) ?: return false
-        printer(hit.text)
+        val answer = if (color) Ansi.colorizeListing(hit.text) else hit.text
+        printer(answer)
         for (line in WarningLines.cap(hit.warningLines)) errPrinter(line)
         if (hit.exitCode != 0) terminate(hit.exitCode)
         return true
