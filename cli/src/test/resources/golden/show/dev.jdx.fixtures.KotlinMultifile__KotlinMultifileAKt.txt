@@ -1,0 +1,7 @@
+class dev.jdx.fixtures.KotlinMultifile__KotlinMultifileAKt
+  final class KotlinMultifile__KotlinMultifileAKt
+  extends java.lang.Object
+  kotlin
+  members: 0 constructors, 2 methods, 0 fields
+source: fixture-corpus.jar (bytecode)
+next: jdx members dev.jdx.fixtures.KotlinMultifile__KotlinMultifileAKt --inherited

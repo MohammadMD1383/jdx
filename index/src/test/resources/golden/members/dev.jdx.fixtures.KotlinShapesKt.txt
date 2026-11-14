@@ -1,4 +1,10 @@
 members of dev.jdx.fixtures.KotlinShapesKt
 methods declared on dev.jdx.fixtures.KotlinShapesKt:
+  method public static final int facadeOriginal(int value)
   method public static final java.lang.String extensionGreeting(dev.jdx.fixtures.KotlinMembers $this$extensionGreeting)
+  method public static final suspend java.lang.String facadeFetch(java.lang.String id)
+  method public static final void facadeInternal()
+properties declared on dev.jdx.fixtures.KotlinShapesKt:
+  property public static final val java.lang.String facadeGreeting
+  property public static final var java.lang.String? facadeNickname
 source: fixture-corpus.jar (bytecode)

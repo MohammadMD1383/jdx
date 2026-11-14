@@ -1,0 +1,5 @@
+members of dev.jdx.fixtures.KotlinMultifile__KotlinMultifileBKt
+methods declared on dev.jdx.fixtures.KotlinMultifile__KotlinMultifileBKt:
+  method public static final int multiPartB()
+  method public static final suspend java.lang.String multiSuspend(java.lang.String id)
+source: fixture-corpus.jar (bytecode)

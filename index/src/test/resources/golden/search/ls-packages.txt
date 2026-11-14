@@ -1,2 +1,2 @@
 packages matching 'dev.jdx.*'
-  package dev.jdx.fixtures (35 types)
+  package dev.jdx.fixtures (38 types)

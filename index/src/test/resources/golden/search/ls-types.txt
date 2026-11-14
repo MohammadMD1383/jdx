@@ -1,5 +1,5 @@
 types in package 'dev.jdx.fixtures'
-  package dev.jdx.fixtures (35 types)
+  package dev.jdx.fixtures (38 types)
   class dev.jdx.fixtures.Annos  fixture-corpus.jar
   class dev.jdx.fixtures.CovariantOverrides  fixture-corpus.jar
   class dev.jdx.fixtures.CovariantOverrides$Base  fixture-corpus.jar
@@ -10,6 +10,9 @@ types in package 'dev.jdx.fixtures'
   class dev.jdx.fixtures.KotlinData  fixture-corpus.jar
   class dev.jdx.fixtures.KotlinMembers  fixture-corpus.jar
   companion dev.jdx.fixtures.KotlinMembers$Companion  fixture-corpus.jar
+  class dev.jdx.fixtures.KotlinMultifile  fixture-corpus.jar
+  class dev.jdx.fixtures.KotlinMultifile__KotlinMultifileAKt  fixture-corpus.jar
+  class dev.jdx.fixtures.KotlinMultifile__KotlinMultifileBKt  fixture-corpus.jar
   object dev.jdx.fixtures.KotlinRegistry  fixture-corpus.jar
   class dev.jdx.fixtures.KotlinSealed  fixture-corpus.jar
   object dev.jdx.fixtures.KotlinSealed$Empty  fixture-corpus.jar

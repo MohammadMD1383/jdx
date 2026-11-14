@@ -1,0 +1,7 @@
+members of dev.jdx.fixtures.KotlinMultifile
+methods declared on dev.jdx.fixtures.KotlinMultifile:
+  method public static final int multiOriginal(int value)
+  method public static final int multiPartB()
+  method public static final java.lang.String multiPartA()
+  method public static final suspend java.lang.String multiSuspend(java.lang.String id)
+source: fixture-corpus.jar (bytecode)

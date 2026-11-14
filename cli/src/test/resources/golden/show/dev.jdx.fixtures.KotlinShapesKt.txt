@@ -2,6 +2,6 @@ class dev.jdx.fixtures.KotlinShapesKt
   public final class KotlinShapesKt
   extends java.lang.Object
   kotlin
-  members: 0 constructors, 2 methods, 0 fields
+  members: 0 constructors, 8 methods, 2 fields, 2 properties
 source: fixture-corpus.jar (bytecode)
 next: jdx members dev.jdx.fixtures.KotlinShapesKt --inherited
