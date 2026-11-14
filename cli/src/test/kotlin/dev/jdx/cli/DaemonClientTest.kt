@@ -1,6 +1,8 @@
 package dev.jdx.cli
 
 import dev.jdx.cli.commands.DaemonExit
+import dev.jdx.core.render.Ansi
+import dev.jdx.core.render.stripAnsi
 import dev.jdx.core.rpc.RpcCommand
 import dev.jdx.core.rpc.RpcRequest
 import dev.jdx.index.workspace.InMemoryWorkspaceStore
@@ -256,6 +258,56 @@ class DaemonClientTest {
         )
         served shouldBe true
         printed shouldBe listOf("line one\nline two")
+    }
+
+    @Test
+    fun `warm text stays plain when color is off — pipe parity with cold`() {
+        // Issue #17: daemon wire is always plain; color=false (piped / --no-color)
+        // must print the wire text byte-identical — same as cold piped output.
+        val plain = "members of com.example.Point\n  method public int getX()"
+        val line = textEnvelope("members", plain)
+        val printed = mutableListOf<String>()
+        DaemonClient.serveWarmIfReady(
+            request = DaemonClient.membersRequest("com.example.Point"),
+            flagWorkspace = "fx",
+            roots = WarmRoots(),
+            noDaemon = false,
+            json = false,
+            terminate = { throw DaemonExit(it) },
+            store = store(active = "fx"),
+            getenv = { null },
+            runtimeDir = Path.of("/run/user/1000"),
+            roundTrip = { _, _ -> line },
+            printer = { printed.add(it) },
+            color = false,
+        )
+        printed shouldBe listOf(plain)
+    }
+
+    @Test
+    fun `warm text re-colorizes headers on a TTY — color-only diff from plain`() {
+        // Issue #17: CLI adapter applies Ansi.colorizeListing locally; the
+        // daemon stays plain. stripAnsi recovers the wire text exactly.
+        val plain = "members of com.example.Point\n  method public int getX()"
+        val line = textEnvelope("members", plain)
+        val printed = mutableListOf<String>()
+        DaemonClient.serveWarmIfReady(
+            request = DaemonClient.membersRequest("com.example.Point"),
+            flagWorkspace = "fx",
+            roots = WarmRoots(),
+            noDaemon = false,
+            json = false,
+            terminate = { throw DaemonExit(it) },
+            store = store(active = "fx"),
+            getenv = { null },
+            runtimeDir = Path.of("/run/user/1000"),
+            roundTrip = { _, _ -> line },
+            printer = { printed.add(it) },
+            color = true,
+        )
+        printed.single() shouldBe Ansi.colorizeListing(plain)
+        printed.single().stripAnsi() shouldBe plain
+        printed.single() shouldNotBe plain
     }
 
     @Test

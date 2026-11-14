@@ -12,6 +12,9 @@ jdx output is designed to be read by a language model with a finite context wind
   sources, bytecode or a decompiler.
 - **A `next:` line** on single-entity answers with the most useful follow-up command.
 - **No colour when piped.** ANSI colour only on a terminal (`--no-color` turns it off there too).
+  Warm (daemon) answers arrive plain on the wire — the daemon has no TTY — and the CLI
+  re-colorizes them locally with the same gate, so a TTY demo matches cold while a pipe
+  stays byte-identical (issue #17).
 
 ```console exec
 $ jdx members java.util.List --limit 3

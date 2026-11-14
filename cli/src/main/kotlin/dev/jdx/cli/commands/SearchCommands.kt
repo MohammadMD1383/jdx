@@ -166,6 +166,7 @@ class SearchCommand(
                 getenv = getenv,
                 runtimeDir = daemonRuntimeDir,
                 roundTrip = daemonRoundTrip,
+                color = ReadCommandSupport.useColor(noColor),
             )
         ) return
         when (val resolved = ReadCommandSupport.resolveRoots(
@@ -293,6 +294,7 @@ class ResolveCommand(
                 getenv = getenv,
                 runtimeDir = daemonRuntimeDir,
                 roundTrip = daemonRoundTrip,
+                color = ReadCommandSupport.useColor(noColor),
             )
         ) return
         when (val resolved = ReadCommandSupport.resolveRoots(
@@ -410,6 +412,7 @@ class LsCommand(
                 getenv = getenv,
                 runtimeDir = daemonRuntimeDir,
                 roundTrip = daemonRoundTrip,
+                color = ReadCommandSupport.useColor(noColor),
             )
         ) return
         when (val resolved = ReadCommandSupport.resolveRoots(
@@ -542,6 +545,7 @@ class TreeCommand(
                 getenv = getenv,
                 runtimeDir = daemonRuntimeDir,
                 roundTrip = daemonRoundTrip,
+                color = ReadCommandSupport.useColor(noColor),
             )
         ) return
         when (val resolved = ReadCommandSupport.resolveRoots(

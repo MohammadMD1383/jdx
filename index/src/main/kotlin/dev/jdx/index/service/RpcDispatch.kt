@@ -107,8 +107,9 @@ import dev.jdx.index.workspace.WorkspaceStore
  * (`color=false`) rendering — `renderBriefText` when `warmBrief=true`, capped
  * via `TokenBudget.capLines` when `warmMaxLines` carries a valid `>= 0` int.
  * Requests without `warmText` are byte-identical to [ServiceOutcome.toJson],
- * so T-046 parity is untouched. The daemon has no TTY, so warm text is always
- * plain (no ANSI); piped output is identical, TTY color is the only difference.
+ * so T-046 parity is untouched. The daemon has no TTY, so the wire is always
+ * plain (no ANSI); the CLI adapter re-colorizes locally on a TTY (issue #17).
+ * Piped warm stays byte-identical to piped cold.
  */
 public fun JdxService.dispatch(request: RpcRequest, roots: RootsSpec): ServiceOutcome {
     val scope = ParamScope(request.query, request.command.wire, request.params)

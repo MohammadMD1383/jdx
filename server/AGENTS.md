@@ -35,3 +35,6 @@ are `toJson` bytes verbatim, no second shape. `explicitApi()` is on.
   never-throws wrapper fails everywhere at once, suspect its shared primitive first.
 - Malformed/unknown requests stay transport-owned envelopes; `doctor` refused
   (exit 6); `ws`/`cache` absent from the wire on purpose. The daemon never fetches.
+- Warm text (`warmText=true`) is always plain (`color=false`) — the daemon has no
+  TTY. Client-side re-color lives in the CLI adapter only (`DaemonClient`, issue
+  #17); this module must not inject ANSI. Piped warm == piped cold byte-identical.

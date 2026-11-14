@@ -37,6 +37,12 @@ healthy daemon is not mistaken for an empty one ([issue #4](https://github.com/M
 It shuts itself down after 5 minutes without requests (`--idle 30m`, or `--idle 0` to
 disable). `--no-daemon` on any command forces in-process execution.
 
+Warm text on the wire is always plain (the daemon has no TTY). The one-shot CLI
+re-colorizes that text locally when stdout is a terminal and `--no-color` is off —
+same gate as cold — so demos match while piped warm stays byte-identical to piped
+cold ([issue #17](https://github.com/MohammadMD1383/jdx/issues/17)). `--json` is
+never colourised.
+
 ## HTTP/JSON API: `jdx serve`
 
 For editor plugins, scripts, notebooks and non-MCP agents:
