@@ -75,6 +75,19 @@ class BodyServiceTest {
         }
     }
 
+    /**
+     * Vineflower "success" that is only a `$VF:` failure stub for `identity`
+     * (issue #86). Parseable enough for the Java seam to locate the member.
+     */
+    private val VF_SUSPEND_LAMBDA_STUB: String = """
+        |package dev.jdx.fixtures;
+        |public class Generics {
+        |    public <U> U identity(U value) {
+        |       // ${'$'}VF: Could not decompile lambda - root function was not found. Is this a suspend lambda?
+        |    }
+        |}
+        """.trimMargin()
+
     private fun tempEngine(tempDir: Path): VineflowerDecompiler =
         VineflowerDecompiler(DecompileCache(tempDir.resolve("decompile-cache")))
 
@@ -425,6 +438,59 @@ class BodyServiceTest {
         text shouldContain "descriptor: (Ljava/lang/Object;)Ljava/lang/Object;"
         text shouldNotContain "Exception in thread"
         outcome.toJson("body") shouldContain "\"origin\":\"decompiled-javap\""
+    }
+
+    @Test
+    fun `a vineflower VF stub falls back to disassembly`(@TempDir tempDir: Path) {
+        // Issue #86: Vineflower "succeeds" with a `$VF: Could not decompile`
+        // body (often a suspend lambda). That is an engine failure on the
+        // default ladder — javap answers from the constant pool instead.
+        assumeTrue(javapPresent(), "no javap on this machine")
+        val binary = bareJar(tempDir)
+        val roots = RootsSpec(jarSpecs = listOf(binary.toString()), includeJdk = false)
+        val scripted = ScriptedDecompiler(VF_SUSPEND_LAMBDA_STUB)
+        val outcome = JdxService.body(
+            "dev.jdx.fixtures.Generics#identity(java.lang.Object)",
+            roots,
+            BodyOptions(decompiler = scripted, javapDecompiler = tempJavapEngine(tempDir)),
+        )
+        outcome.exitCode shouldBe 0
+        scripted.calls shouldBe 1
+        val text = textOf(outcome)
+        text shouldContain "disassembled by javap from bare.jar"
+        text shouldContain "descriptor: (Ljava/lang/Object;)Ljava/lang/Object;"
+        text shouldNotContain "Is this a suspend lambda?"
+        text shouldNotContain "Exception in thread"
+        outcome.toJson("body") shouldContain "\"origin\":\"decompiled-javap\""
+    }
+
+    @Test
+    fun `forced vineflower names a VF stub as an engine failure`(@TempDir tempDir: Path) {
+        // Forced `--engine vineflower` stays strict (T-073): a `$VF:` stub
+        // exits 1 naming the reason and the javap hatch — never asks the
+        // agent a question, never silently swaps engines.
+        val binary = bareJar(tempDir)
+        val roots = RootsSpec(jarSpecs = listOf(binary.toString()), includeJdk = false)
+        val scripted = ScriptedDecompiler(VF_SUSPEND_LAMBDA_STUB)
+        val javap = FailingJavapDecompiler("unused")
+        val outcome = JdxService.body(
+            "dev.jdx.fixtures.Generics#identity(java.lang.Object)",
+            roots,
+            BodyOptions(
+                engine = DecompilerId.VINEFLOWER,
+                decompiler = scripted,
+                javapDecompiler = javap,
+            ),
+        )
+        outcome.exitCode shouldBe 1
+        scripted.calls shouldBe 1
+        javap.calls shouldBe 0
+        val text = textOf(outcome)
+        text shouldContain "suspend lambda"
+        text shouldContain "--engine javap"
+        text shouldNotContain "Is this a suspend lambda?"
+        text shouldNotContain "Exception in thread"
+        outcome.toJson("body") shouldContain "suspend lambda"
     }
 
     @Test

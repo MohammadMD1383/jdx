@@ -107,6 +107,7 @@ import dev.jdx.decompile.DecompilerEngine
 import dev.jdx.decompile.DecompilerId
 import dev.jdx.decompile.JavapDecompiler
 import dev.jdx.decompile.VineflowerDecompiler
+import dev.jdx.decompile.VineflowerStubs
 import dev.jdx.decompile.findJavapSection
 import dev.jdx.decompile.splitJavapSections
 import dev.jdx.index.artifact.ArtifactKind
@@ -5668,12 +5669,13 @@ public object JdxService {
     /**
      * The default-ladder `body` reconstruction (T-073): Vineflower first, then
      * the T-027 `javap` engine when Vineflower fails. Only an exit-1
-     * Vineflower failure retries (timeout, crash, unparseable text, a member
-     * missing from the reconstruction): ambiguity (exit 2) is structural
-     * (D-009) and identical through either engine, so it returns as-is. A
-     * `javap` failure too exits 1 naming both causes; a `javap` success exits
-     * 0 with `DECOMPILED_JAVAP` provenance. Forced `--engine vineflower`
-     * never reaches here — it stays strict (no silent swap).
+     * Vineflower failure retries (timeout, crash, unparseable text, a `$VF:`
+     * stub body — issue #86 — or a member missing from the reconstruction):
+     * ambiguity (exit 2) is structural (D-009) and identical through either
+     * engine, so it returns as-is. A `javap` failure too exits 1 naming both
+     * causes; a `javap` success exits 0 with `DECOMPILED_JAVAP` provenance.
+     * Forced `--engine vineflower` never reaches here — it stays strict
+     * (no silent swap).
      */
     private fun defaultBodyOutcome(
         memberRef: MemberSymbolRef,
@@ -5802,6 +5804,20 @@ public object JdxService {
                     }
                     val body = found.bodies.singleOrNull()
                         ?: return ServiceOutcome.Failure(ErrorResult.ambiguous(rawRef, matchRefs))
+                    // Vineflower "success" that is only a `$VF: Could not
+                    // decompile` stub (issue #86) is an engine failure: the
+                    // default ladder falls through to javap; forced
+                    // `--engine vineflower` exits 1 naming the hatch.
+                    if (VineflowerStubs.isFailureStub(body.text)) {
+                        return ServiceOutcome.Failure(
+                            ErrorResult.notFound(
+                                rawRef,
+                                detail = "could not decompile $rawRef with vineflower: " +
+                                    "${VineflowerStubs.failureReason(body.text)} " +
+                                    "(raw bytecode: --engine javap)",
+                            ),
+                        )
+                    }
                     val fileLines = text.split('\n').map { it.removeSuffix("\r") }
                     return ServiceOutcome.Body(
                         buildBodyBlock(
@@ -5956,6 +5972,18 @@ public object JdxService {
                     }
                     val body = found.bodies.singleOrNull()
                         ?: return ServiceOutcome.Failure(ErrorResult.ambiguous(aroundRaw, matchRefs))
+                    // Same `$VF:` stub law as [decompiledBodyOutcome] (issue #86):
+                    // a marker-only around-slice is an engine failure, not source.
+                    if (VineflowerStubs.isFailureStub(body.text)) {
+                        return ServiceOutcome.Failure(
+                            ErrorResult.notFound(
+                                aroundRaw,
+                                detail = "could not decompile $aroundRaw with vineflower: " +
+                                    "${VineflowerStubs.failureReason(body.text)} " +
+                                    "(raw bytecode: --engine javap)",
+                            ),
+                        )
+                    }
                     val fileLines = splitTextLines(text)
                     return ServiceOutcome.Source(
                         buildSourceBlock(

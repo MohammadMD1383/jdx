@@ -11,6 +11,7 @@ import dev.jdx.testsupport.fixtures.FixtureJars
 import io.kotest.assertions.withClue
 import io.kotest.matchers.shouldBe
 import io.kotest.matchers.string.shouldContain
+import io.kotest.matchers.string.shouldNotContain
 import java.nio.file.Path
 import java.util.zip.ZipEntry
 import java.util.zip.ZipFile
@@ -113,6 +114,29 @@ class DecompilerFallbackFaultTest {
             "\u0000\u0001\u0002 binary garbage",
         )
 
+        /**
+         * Parseable reconstructions whose *member body* is only a Vineflower
+         * `$VF:` failure stub (issue #86). Each must degrade like a crash.
+         */
+        val VF_STUB_TEXTS: List<String> = listOf(
+            """
+            |package dev.jdx.fixtures;
+            |public class Generics {
+            |    public <U> U identity(U value) {
+            |       // ${'$'}VF: Could not decompile lambda - root function was not found. Is this a suspend lambda?
+            |    }
+            |}
+            """.trimMargin(),
+            """
+            |package dev.jdx.fixtures;
+            |public class Generics {
+            |    public <U> U identity(U value) {
+            |       /* ${'$'}VF: Could not decompile method */
+            |    }
+            |}
+            """.trimMargin(),
+        )
+
         /** Canned `javap -c -p -s` disassembly of the fixture `Generics` class. */
         val JAVAP_GENERICS_TEXT: String = """
             |Compiled from "Generics.java"
@@ -213,6 +237,61 @@ class DecompilerFallbackFaultTest {
                 val rendered = FaultSupport.renderBoth(outcome, "source")
                 rendered.text shouldContain "disassembled by javap"
                 rendered.text shouldContain "descriptor: (Ljava/lang/Object;)Ljava/lang/Object;"
+                rendered.json shouldContain "\"origin\":\"decompiled-javap\""
+            }
+        }
+    }
+
+    // -- `$VF:` stub reconstructions degrade too (issue #86) -----------------------
+
+    @Test
+    fun `vineflower VF stubs degrade body to disassembly`(@TempDir tempDir: Path) {
+        val roots = FaultSupport.rootsOf(bareJar(tempDir))
+        for (text in VF_STUB_TEXTS) {
+            withClue("vf stub: ${text.lines().first { it.contains("\$VF:") }.trim()}") {
+                val vineflower = ScriptedVineflower(text)
+                val javap = ScriptedJavap(JAVAP_GENERICS_TEXT)
+                val captured = FaultSupport.captureStreams {
+                    JdxService.body(bodyRef, roots, BodyOptions(decompiler = vineflower, javapDecompiler = javap))
+                }
+                FaultSupport.assertNoStackTrace(captured.stdout, "body stdout")
+                FaultSupport.assertNoStackTrace(captured.stderr, "body stderr")
+                val outcome = captured.value
+                withClue("expected exit 0, got ${outcome.exitCode}") { outcome.exitCode shouldBe 0 }
+                vineflower.calls shouldBe 1
+                javap.calls shouldBe 1
+                val rendered = FaultSupport.renderBoth(outcome, "body")
+                rendered.text shouldContain "disassembled by javap"
+                rendered.text shouldContain "Code:"
+                rendered.text shouldNotContain "Is this a suspend lambda?"
+                rendered.json shouldContain "\"origin\":\"decompiled-javap\""
+            }
+        }
+    }
+
+    @Test
+    fun `vineflower VF stubs degrade source around to disassembly`(@TempDir tempDir: Path) {
+        val roots = FaultSupport.rootsOf(bareJar(tempDir))
+        for (text in VF_STUB_TEXTS) {
+            withClue("vf stub around: ${text.lines().first { it.contains("\$VF:") }.trim()}") {
+                val vineflower = ScriptedVineflower(text)
+                val javap = ScriptedJavap(JAVAP_GENERICS_TEXT)
+                val options = SourceOptions(
+                    aroundRef = bodyRef,
+                    decompiler = vineflower,
+                    javapDecompiler = javap,
+                )
+                val captured = FaultSupport.captureStreams { JdxService.source(typeRef, roots, options) }
+                FaultSupport.assertNoStackTrace(captured.stdout, "around stdout")
+                FaultSupport.assertNoStackTrace(captured.stderr, "around stderr")
+                val outcome = captured.value
+                withClue("expected exit 0, got ${outcome.exitCode}") { outcome.exitCode shouldBe 0 }
+                vineflower.calls shouldBe 1
+                javap.calls shouldBe 1
+                val rendered = FaultSupport.renderBoth(outcome, "source")
+                rendered.text shouldContain "disassembled by javap"
+                rendered.text shouldContain "descriptor: (Ljava/lang/Object;)Ljava/lang/Object;"
+                rendered.text shouldNotContain "Is this a suspend lambda?"
                 rendered.json shouldContain "\"origin\":\"decompiled-javap\""
             }
         }

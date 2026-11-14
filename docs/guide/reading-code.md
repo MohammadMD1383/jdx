@@ -76,7 +76,9 @@ jdx source com.google.gson.Gson --around 'com.google.gson.Gson#toJson(Object)' -
 
 jdx always prefers real sources (a paired `-sources.jar`, a source directory, the JDK's
 `src.zip`). Without them it decompiles with Vineflower and marks the result
-`⚠ reconstructed`; `--engine javap` shows raw bytecode instead:
+`⚠ reconstructed`; `--engine javap` shows raw bytecode instead. When Vineflower returns
+only a `$VF: Could not decompile…` stub (common for suspend lambdas), the default ladder
+falls through to `javap` automatically instead of serving the stub:
 
 ```console exec max-lines=12
 $ jdx body 'java.util.HashMap#get(java.lang.Object)' --engine javap
