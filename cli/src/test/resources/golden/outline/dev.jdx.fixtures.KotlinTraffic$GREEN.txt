@@ -1,0 +1,4 @@
+members of dev.jdx.fixtures.KotlinTraffic$GREEN
+methods declared on dev.jdx.fixtures.KotlinTraffic$GREEN:
+  method public boolean isStop()
+source: fixture-corpus.jar (bytecode)

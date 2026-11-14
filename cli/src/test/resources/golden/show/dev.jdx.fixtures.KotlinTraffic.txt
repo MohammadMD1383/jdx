@@ -1,0 +1,7 @@
+enum dev.jdx.fixtures.KotlinTraffic
+  public abstract enum KotlinTraffic
+  extends java.lang.Enum
+  kotlin
+  members: 2 constructors, 5 methods, 4 fields
+source: fixture-corpus.jar (bytecode)
+next: jdx members dev.jdx.fixtures.KotlinTraffic --inherited

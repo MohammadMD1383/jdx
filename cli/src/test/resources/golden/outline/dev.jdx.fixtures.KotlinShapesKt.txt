@@ -1,5 +1,6 @@
 members of dev.jdx.fixtures.KotlinShapesKt
 methods declared on dev.jdx.fixtures.KotlinShapesKt:
+  method public static final <T> T kotlinFirstOrNull(java.util.List<? extends T> $this$kotlinFirstOrNull)
   method public static final int facadeOriginal(int value)
   method public static final java.lang.String extensionGreeting(dev.jdx.fixtures.KotlinMembers $this$extensionGreeting)
   method public static final suspend java.lang.String facadeFetch(java.lang.String id)
