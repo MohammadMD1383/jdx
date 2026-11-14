@@ -93,7 +93,7 @@ no workspace, no `--jars` and no `--no-daemon`, and is answered by the MCP tool
 
 ## Classpath flags (every query command)
 
-`--jars <jar|dir|glob>` (repeatable, merged in front of the workspace) ·
+`--jars <jar|dir|glob>` (repeatable, merged in front of the workspace; quote globs so the shell does not expand them — an unquoted multi-path expansion exits 3 with a hint) ·
 `--coord group:artifact:version` (repeatable; local `~/.gradle/caches` + `~/.m2` first) ·
 `--repo <url>` (repeatable Maven mirror, tried before Central) ·
 `--fetch` (allow downloads incl. `-sources.jar`, checksum-verified into `<cache-dir>/m2/` (`~/.cache/jdx/m2/` on Linux)) ·

@@ -1,11 +1,12 @@
 package dev.jdx.cli
 
 import com.github.ajalt.clikt.core.PrintMessage
-import com.github.ajalt.clikt.core.main
 import com.github.ajalt.clikt.core.parse
+import io.kotest.assertions.throwables.shouldThrow
 import io.kotest.matchers.shouldBe
 import io.kotest.matchers.shouldNotBe
-import io.kotest.assertions.throwables.shouldThrow
+import io.kotest.matchers.string.shouldContain
+import io.kotest.matchers.string.shouldNotContain
 import org.junit.jupiter.api.Test
 
 /** In-process tests of the root command; the launcher-level round-trip lives in `:app`. */
@@ -37,8 +38,19 @@ class JdxCliTest {
 
     private fun mainExitCodes(argv: List<String>): List<Int> {
         val codes = mutableListOf<Int>()
-        buildRoot(terminate = codes::add).main(argv)
+        runCli(args = argv.toTypedArray(), terminate = codes::add)
         return codes
+    }
+
+    private fun mainOutput(argv: List<String>): Pair<List<Int>, String> {
+        val codes = mutableListOf<Int>()
+        val printed = mutableListOf<String>()
+        runCli(
+            args = argv.toTypedArray(),
+            terminate = codes::add,
+            printer = printed::add,
+        )
+        return codes to printed.joinToString("\n")
     }
 
     @Test
@@ -64,5 +76,18 @@ class JdxCliTest {
     @Test
     fun `--help still exits 0`() {
         mainExitCodes(listOf("--help")) shouldBe listOf(0)
+    }
+
+    @Test
+    fun `unquoted jars glob exits 3 with a quote-the-glob hint`() {
+        val (codes, output) = mainOutput(
+            listOf("outline", "PluginUtils", "--jars", "a.jar", "b.jar", "c.jar"),
+        )
+
+        codes shouldBe listOf(3)
+        output shouldContain "usage error: --jars got 3 paths"
+        output shouldContain "quote the glob"
+        // Must not fall through to Clikt's bare "unexpected extra arguments" dump.
+        output shouldNotContain "unexpected extra arguments"
     }
 }

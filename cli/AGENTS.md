@@ -8,9 +8,12 @@ is the CLI surface, pinned by help/parity goldens.)
 ## Key files
 
 - `JdxCli` — root; `--json`/`-w`/`--no-daemon` accepted before *or* after the
-  subcommand (dual position). `commands/ReadCommandSupport` — shared roots
-  resolution + budget validation. `render/HelpSheet` — the single `HELP_ROWS` table
-  feeding `jdx help` and `jdx help --agent` (they cannot drift).
+  subcommand (dual position). `runCli` / `ShellExpandedValueOption` — pre-Clikt
+  check for shell-expanded `--jars`/`--src` globs (issue #86: exit 3 with a
+  quote-the-glob hint instead of Clikt's bare "unexpected extra arguments").
+  `commands/ReadCommandSupport` — shared roots resolution + budget validation.
+  `render/HelpSheet` — the single `HELP_ROWS` table feeding `jdx help` and
+  `jdx help --agent` (they cannot drift).
 - `DaemonClient` — forwards `--json` queries to the running daemon, degrades to
   in-process when down; explicit roots, unnamed workspaces, and usage errors stay
   cold; `--no-daemon` forces in-process. Warm text comes server-rendered (always

@@ -1331,8 +1331,9 @@ the authoritative machine-readable version.)*
 ### Global
 ```
 -w, --workspace <name>      use a named workspace
-    --jars <path|glob|dir>  add binary roots (repeatable)
-    --src <dir>             add source roots (repeatable)
+    --jars <path|glob|dir>  add binary roots (repeatable; quote globs — unquoted
+                            multi-path shell expansion exits 3 with a hint)
+    --src <dir>             add source roots (repeatable; same quote-glob rule)
     --coord <g:a:v>         add a Maven coordinate root (repeatable)
     --repo <url>            add a Maven repository base URL for --coord fetches (repeatable)
     --sources <path>        explicitly pair a sources jar
