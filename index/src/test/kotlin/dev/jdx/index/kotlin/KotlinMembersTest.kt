@@ -353,6 +353,30 @@ class KotlinMembersTest {
         val kmClass = KmClass().apply { properties.add(property) }
         val folded = KotlinMembers.propertiesFor(kmClass)
         folded.properties["name"]?.isVar shouldBe false
+        folded.properties["name"]?.constructorDeclared shouldBe false
+    }
+
+    @Test
+    fun `a primary-constructor property is marked constructorDeclared`() {
+        // Issue #14: the sources-mismatch detector pairs these through `<init>`,
+        // never as body-declared field rows.
+        val property = kotlin.metadata.KmProperty("name").apply {
+            getterSignature = kotlin.metadata.jvm.JvmMethodSignature("getName", "()Ljava/lang/String;")
+            returnType = kmType("kotlin/String")
+        }
+        val primary = kotlin.metadata.KmConstructor().apply {
+            valueParameters.add(
+                kotlin.metadata.KmValueParameter("name").apply {
+                    type = kmType("kotlin/String")
+                },
+            )
+        }
+        val kmClass = KmClass().apply {
+            properties.add(property)
+            constructors.add(primary)
+        }
+        val folded = KotlinMembers.propertiesFor(kmClass)
+        folded.properties["name"]?.constructorDeclared shouldBe true
     }
 
     @Test

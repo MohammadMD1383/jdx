@@ -131,10 +131,11 @@ private fun summarise(refs: List<String>): String {
  * - `suspend` functions drop the trailing `Continuation` parameter (the
  *   source never spells it).
  * - folded accessors/backing fields (`kotlinHiddenMethods`/`kotlinHiddenFields`)
- *   drop out; one `FIELD` entry per property takes their place — but only for
- *   properties the sources actually declare as fields (body-declared ones
- *   like `greeting`); primary-constructor properties (`val name` in the
- *   header) pair through the `<init>` parameter lists instead.
+ *   drop out; one `FIELD` entry per body-declared property takes their place
+ *   (`KotlinPropertyView.constructorDeclared == false`). Primary-constructor
+ *   properties (`val name` in the header) pair through the `<init>` parameter
+ *   lists instead — never as field rows — so adding, renaming, or removing a
+ *   body-declared property warns (issue #14).
  * - extension-receiver parameters pair positionally (the facade static's
  *   first argument; [listedKotlinMembers] counts the receiver).
  *
@@ -163,14 +164,11 @@ private fun summarise(refs: List<String>): String {
  * here, and warning on every aliased parameter would be noise. A stale
  * change between two known types still warns.
  *
- * Known limitations (documented, not silent bugs):
- *
- * - companion `const` vals live only in the outer bytecode, so a direct
- *   `$Companion` query may warn on them; outer queries are exact, and
- *   companion-member staleness still warns under `$Companion`;
- * - removing a body-declared property from sources is not detected (its
- *   hidden accessors are dropped unconditionally) — adding or renaming one
- *   still warns.
+ * Companion `const` vals (issue #14): they live only in the outer bytecode.
+ * Pass the outer [ClassInfo] as [outer] so a direct `$Companion` query pairs
+ * those source fields against the outer's statics instead of false-warning.
+ * When [outer] is omitted and a `$Companion` query would still warn about
+ * source-only fields, the message names the outer type to query instead.
  *
  * Pure and total like [detectSourcesMismatch]: hostile names, empty lists
  * and odd spellings return a value, never throw.
@@ -179,17 +177,14 @@ public fun detectKotlinSourcesMismatch(
     target: ClassInfo,
     sourceMembers: List<DeclaredSourceMember>,
     sourcesName: String,
+    outer: ClassInfo? = null,
 ): Warning? {
     // Not Kotlin: the JVM-name pairing is the honest one (file facades and
     // plain classes without metadata ride the same call path in callers).
     if (!target.isKotlin) return detectSourcesMismatch(target, sourceMembers, sourcesName)
     val binary = target.name.binaryName
     val remaining = sourceMembers.filterNot { it.name == "<clinit>" }.toMutableList()
-    val sourceFields = remaining
-        .filter { it.kind == SourceBodyKind.FIELD || it.kind == SourceBodyKind.ENUM_ENTRY }
-        .map { it.name }
-        .toSet()
-    val bytecode = kotlinBytecodeEntriesOf(target, sourceFields)
+    val bytecode = kotlinBytecodeEntriesOf(target)
     // A value class's constructor is private synthetic: bytecode shows none,
     // while sources declare the primary — that declaration is not evidence.
     if (bytecode.none { it.kind == EntryKind.CONSTRUCTOR }) {
@@ -215,7 +210,24 @@ public fun detectKotlinSourcesMismatch(
             missingFromSources.add(renderBytecodeEntry(binary, entry))
         }
     }
+    // Companion `const` vals live as outer statics (issue #14): when the
+    // outer ClassInfo is supplied, pair leftover companion source fields
+    // against those statics so a direct `$Companion` query stays silent.
+    val companionQuery = isCompanionQuery(target)
+    if (companionQuery && outer != null) {
+        val outerStatics = outer.fields
+            .filter { it.access.has(AccessFlag.STATIC) }
+            .map { it.name }
+            .toSet()
+        remaining.removeAll {
+            (it.kind == SourceBodyKind.FIELD || it.kind == SourceBodyKind.ENUM_ENTRY) &&
+                it.name in outerStatics
+        }
+    }
     val extraInSources = remaining.map { renderSourceEntry(binary, it) }.sorted()
+    val companionFieldExtras = companionQuery &&
+        outer == null &&
+        remaining.any { it.kind == SourceBodyKind.FIELD || it.kind == SourceBodyKind.ENUM_ENTRY }
 
     if (missingFromSources.isEmpty() && extraInSources.isEmpty()) return null
     val message = buildString {
@@ -235,16 +247,29 @@ public fun detectKotlinSourcesMismatch(
             append(binary)
             append(". ")
         }
+        if (companionFieldExtras) {
+            val outerName = target.outerClass?.binaryName
+                ?: binary.substringBeforeLast("\$Companion", missingDelimiterValue = "")
+                    .takeIf { it.isNotEmpty() && it != binary }
+            if (outerName != null) {
+                append("Companion const vals live on the outer type — query `")
+                append(outerName)
+                append("` instead of `")
+                append(binary)
+                append("`. ")
+            }
+        }
         append("Structure shown from bytecode.")
     }
     return Warning(code = WarningCode.SOURCES_VERSION_MISMATCH, message = message, subject = binary)
 }
 
+/** Whether [target] is a companion object binary (`$Companion` / [TypeKind.COMPANION]). */
+private fun isCompanionQuery(target: ClassInfo): Boolean =
+    target.kind == TypeKind.COMPANION || target.name.binaryName.endsWith("\$Companion")
+
 /** One type's bytecode projected into Kotlin declaration space for pairing. */
-private fun kotlinBytecodeEntriesOf(
-    target: ClassInfo,
-    sourceFields: Set<String>,
-): List<BytecodeEntry> {
+private fun kotlinBytecodeEntriesOf(target: ClassInfo): List<BytecodeEntry> {
     val fields = target.fields
         // Plain-named synthetics are kept (unlike Java): `inline`/`reified`
         // implementations are synthetic yet source-declared; `$`-named
@@ -283,13 +308,13 @@ private fun kotlinBytecodeEntriesOf(
             jvmName = method.name,
         )
     }
-    // Property rows for body-declared properties only (see the KDoc on
-    // [detectKotlinSourcesMismatch]): primary-constructor properties pair
-    // through the `<init>` parameter lists, so a property without a
-    // same-named source field gets no row (its hidden field is already
-    // dropped above).
-    val properties = target.kotlinProperties.keys
-        .filter { it in sourceFields }
+    // Body-declared property rows (issue #14): always emit one FIELD per
+    // non-constructor property so removal from sources warns. Primary-
+    // constructor properties (`constructorDeclared`) pair through `<init>`
+    // instead — their hidden backing fields are already dropped above.
+    val properties = target.kotlinProperties
+        .filterValues { !it.constructorDeclared }
+        .keys
         .map { BytecodeEntry(EntryKind.FIELD, it, emptyList(), null, isStatic = false) }
     return fields + methods + properties
 }

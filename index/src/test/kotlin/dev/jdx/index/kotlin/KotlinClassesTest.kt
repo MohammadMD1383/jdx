@@ -121,6 +121,17 @@ class KotlinClassesTest {
     }
 
     @Test
+    fun `constructor properties are marked constructorDeclared on ClassInfo`() {
+        // Issue #14: primary-ctor props (`name`/`count`) pair through `<init>`;
+        // body-declared ones (`greeting`/`nickname`) must warn on removal.
+        val info = readFixture("dev.jdx.fixtures.KotlinData")
+        info.kotlinProperties["name"]?.constructorDeclared shouldBe true
+        info.kotlinProperties["count"]?.constructorDeclared shouldBe true
+        info.kotlinProperties["greeting"]?.constructorDeclared shouldBe false
+        info.kotlinProperties["nickname"]?.constructorDeclared shouldBe false
+    }
+
+    @Test
     fun `a companion object carries its KmClass members`() {
         val kmClass = requireNotNull(decodeFixture("dev.jdx.fixtures.KotlinMembers\$Companion")?.kmClass) {
             "CLASS metadata carries KmClass"
