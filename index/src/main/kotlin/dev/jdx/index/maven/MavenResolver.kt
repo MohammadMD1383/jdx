@@ -141,7 +141,11 @@ public object MavenResolver {
         for (text in coordinateTexts) {
             when (val outcome = resolve(text, allowFetch, repositories, fetcher)) {
                 is Outcome.Resolved -> resolved.add(outcome.artifact)
-                is Outcome.Unresolved -> return ResolveAllOutcome.Failed(outcome.message, outcome.fetchHint)
+                is Outcome.Unresolved -> return ResolveAllOutcome.Failed(
+                    message = outcome.message,
+                    fetchHint = outcome.fetchHint,
+                    coordinateText = text,
+                )
             }
         }
         return ResolveAllOutcome.Ok(resolved)
@@ -150,7 +154,16 @@ public object MavenResolver {
     /** The multi-coordinate outcome: all jars, or the first failure's message. */
     public sealed interface ResolveAllOutcome {
         public data class Ok(val artifacts: List<ResolvedArtifact>) : ResolveAllOutcome
-        public data class Failed(val message: String, val fetchHint: Boolean) : ResolveAllOutcome
+        /**
+         * First coordinate that failed. [coordinateText] is the raw `--coord`
+         * string that failed (callers that rewrite the message — e.g. the daemon
+         * warm path, issue #18 — need the name without re-parsing [message]).
+         */
+        public data class Failed(
+            val message: String,
+            val fetchHint: Boolean,
+            val coordinateText: String,
+        ) : ResolveAllOutcome
     }
 
     // -- local lookup -----------------------------------------------------------

@@ -37,7 +37,9 @@ $ jdx ls com.google.gson.stream --coord com.google.code.gson:gson:2.14.0
 Coordinates resolve from `~/.gradle/caches` and `~/.m2` first — usually no download is
 needed. With `--fetch`, a missing artifact is downloaded from Maven Central (or your `--repo`
 mirrors) into the jdx cache, with checksum verification. Network access is opt-in per
-invocation: jdx never downloads anything you did not ask for.
+invocation: jdx never downloads anything you did not ask for. The daemon, MCP server, and
+HTTP API never fetch either — prime caches once cold with `--fetch`, or store explicit
+`--jars`, before warm queries against stored `--coord` roots.
 
 ## Named workspaces
 

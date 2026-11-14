@@ -140,7 +140,9 @@ jdx show com.google.gson.Gson --coord com.google.code.gson:gson:2.14.0 --fetch
 # Token budgets for the biggest listings (text only; --json bytes are unaffected)
 jdx members java.util.HashMap --inherited --brief --max-lines 20
 
-# Warm path: start once, query at ~20 ms instead of ~250 ms cold
+# Warm path: start once, query at ~20 ms instead of ~250 ms cold.
+# The daemon never fetches — prime stored --coord jars once cold with --fetch
+# (or use --jars) before `daemon start` / `mcp` / `serve`.
 jdx daemon start -w fx
 jdx -w fx members 'com.example.Service'   # served warm automatically
 

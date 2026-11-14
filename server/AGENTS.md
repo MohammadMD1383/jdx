@@ -34,7 +34,10 @@ are `toJson` bytes verbatim, no second shape. `explicitApi()` is on.
   client read timeout via `Selector`, blocking reads on server threads). When a
   never-throws wrapper fails everywhere at once, suspect its shared primitive first.
 - Malformed/unknown requests stay transport-owned envelopes; `doctor` refused
-  (exit 6); `ws`/`cache` absent from the wire on purpose. The daemon never fetches.
+  (exit 6); `ws`/`cache` absent from the wire on purpose. The daemon never fetches
+  (issue #18): stored `--repo` mirrors are inert; an unresolvable stored `--coord`
+  exits 5 naming cold `--fetch` priming (or explicit `--jars`), never "Re-run with
+  --fetch" as if the warm query itself could download.
 - Warm text (`warmText=true`) is always plain (`color=false`) — the daemon has no
   TTY. Client-side re-color lives in the CLI adapter only (`DaemonClient`, issue
   #17); this module must not inject ANSI. Piped warm == piped cold byte-identical.
