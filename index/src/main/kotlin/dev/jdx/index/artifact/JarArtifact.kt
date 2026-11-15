@@ -34,6 +34,13 @@ public class JarArtifact private constructor(
      */
     private val serviceEntries: Map<String, String>
 
+    /**
+     * Servable `module-info.class` base path → actual zip entry (issue #25
+     * module-info slice). Drawn from [resolved] so multi-release selection
+     * matches what the JVM would load.
+     */
+    private val moduleInfoEntry: String?
+
     override val displayName: String = jarPath.fileName.toString()
 
     override val kind: ArtifactKind = ArtifactKind.BINARY_JAR
@@ -80,6 +87,7 @@ public class JarArtifact private constructor(
         serviceEntries = files
             .filter { ServiceEntries.isServicePath(it) }
             .associateWith { it }
+        moduleInfoEntry = resolved["module-info.class"]
         warnings = buildList {
             if (MultiRelease.hasVersionedSelection(resolved)) {
                 add(
@@ -119,6 +127,24 @@ public class JarArtifact private constructor(
             ?: throw ArtifactReadException("artifact read error: rejected unsafe entry name: $path")
         val actual = serviceEntries[normal]
             ?: throw ArtifactReadException("artifact read error: $displayName has no resource $path")
+        val entry = zip.getEntry(actual)
+            ?: throw ArtifactReadException("artifact read error: $displayName!$actual vanished")
+        ZipSafety.checkDeclaredSize(actual, entry.size, displayName)
+        val bytes = zip.getInputStream(entry).use { ZipSafety.readCapped(it, actual) }
+        return bytes.inputStream()
+    }
+
+    override fun moduleInfoPaths(): List<String> =
+        if (moduleInfoEntry != null) listOf("module-info.class") else emptyList()
+
+    override fun openModuleInfo(path: String): InputStream {
+        val normal = ZipSafety.normalizeEntryName(path)
+            ?: throw ArtifactReadException("artifact read error: rejected unsafe entry name: $path")
+        if (normal != "module-info.class") {
+            throw ArtifactReadException("artifact read error: $displayName has no module-info $path")
+        }
+        val actual = moduleInfoEntry
+            ?: throw ArtifactReadException("artifact read error: $displayName has no module-info $path")
         val entry = zip.getEntry(actual)
             ?: throw ArtifactReadException("artifact read error: $displayName!$actual vanished")
         ZipSafety.checkDeclaredSize(actual, entry.size, displayName)

@@ -1,0 +1,10 @@
+modules matching 'example'
+modules-case.jar (1)
+  module com.example.mod open @1.0
+    requires java.base mandated
+    requires java.logging transitive
+    exports com.example.api
+    exports com.example.spi to com.friend
+    opens com.example.internal to com.friend
+    uses com.example.Spi
+    provides com.example.Spi with com.example.Impl

@@ -63,6 +63,25 @@ public interface ArtifactRoot : Closeable {
         throw ArtifactReadException("artifact read error: $displayName has no resource $path")
 
     /**
+     * Every `module-info.class` entry in this root (issue #25 module-info slice),
+     * normalised slash paths, sorted. For jars/class-dirs this is typically
+     * `["module-info.class"]` or empty; for `jrt:/` one path per JDK module
+     * (`java.base/module-info.class`, …). Versioned copies under
+     * `META-INF/versions/` follow multi-release selection for jars.
+     */
+    public fun moduleInfoPaths(): List<String> = emptyList()
+
+    /**
+     * Opens one [moduleInfoPaths] entry for reading. The caller closes the
+     * stream. Default refuses — roots that list module-info override this.
+     *
+     * @throws ArtifactReadException when [path] is unsafe, absent, or breaches a
+     *   decompression cap (D-015 exit 5 at the service layer).
+     */
+    public fun openModuleInfo(path: String): InputStream =
+        throw ArtifactReadException("artifact read error: $displayName has no module-info $path")
+
+    /**
      * Content-hash identity of this root: the jar's bytes, the directory's content hash,
      * or the JDK release for `jrt:/`. The index cache key (PROPOSAL.md §10.2).
      */

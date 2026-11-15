@@ -32,7 +32,8 @@ import kotlin.system.exitProcess
  * Lists classic ServiceLoader provider files across the workspace. An omitted
  * pattern lists every registration; a non-empty pattern matches the service
  * interface FQN or a provider class FQN. Exits 1 when nothing matches.
- * `module-info` `provides` directives and resource extraction are later slices.
+ * `module-info` `provides` live under `jdx modules`; resource extraction is a
+ * later slice of issue #25.
  */
 class ServicesCommand(
     private val query: ServicesQuery = ::defaultServicesQuery,

@@ -31,6 +31,12 @@ public class JrtArtifact private constructor(
 
     private val moduleByPath: Map<String, String>
 
+    /**
+     * JDK modules that ship a `module-info.class`, as `<module>/module-info.class`
+     * paths (issue #25 module-info slice). Sorted for determinism.
+     */
+    private val moduleInfos: List<String>
+
     override val displayName: String = "jrt:/"
 
     override val kind: ArtifactKind = ArtifactKind.JRT
@@ -53,9 +59,14 @@ public class JrtArtifact private constructor(
         val fileSystem = FileSystems.getFileSystem(URI.create("jrt:/"))
         val found = mutableMapOf<String, String>()
         val duplicates = mutableMapOf<String, MutableSet<String>>()
+        val foundInfos = mutableListOf<String>()
         Files.newDirectoryStream(fileSystem.getPath("/modules")).use { modules ->
             modules.sortedBy { it.fileName.toString() }.forEach { module ->
                 val moduleName = module.fileName.toString()
+                val infoPath = module.resolve("module-info.class")
+                if (Files.isRegularFile(infoPath)) {
+                    foundInfos.add("$moduleName/module-info.class")
+                }
                 Files.walk(module).use { walk ->
                     walk.filter { Files.isRegularFile(it) }.forEach { file ->
                         val relative = module.relativize(file).toString().replace('\\', '/')
@@ -71,8 +82,9 @@ public class JrtArtifact private constructor(
                 }
             }
         }
-        ZipSafety.checkEntryCount(found.size, displayName)
+        ZipSafety.checkEntryCount(found.size + foundInfos.size, displayName)
         moduleByPath = found.toSortedMap()
+        moduleInfos = foundInfos.sorted()
         warnings = buildList {
             if (duplicates.isNotEmpty()) {
                 val sample = duplicates.entries.sortedBy { it.key }.take(5)
@@ -111,6 +123,25 @@ public class JrtArtifact private constructor(
             throw ArtifactReadException("artifact read error: jrt:/$module!$normal vanished")
         }
         ZipSafety.checkDeclaredSize("jrt:/$module!$normal", Files.size(file), displayName)
+        val bytes = Files.newInputStream(file).use { ZipSafety.readCapped(it, normal) }
+        return bytes.inputStream()
+    }
+
+    override fun moduleInfoPaths(): List<String> = moduleInfos
+
+    override fun openModuleInfo(path: String): InputStream {
+        val normal = ZipSafety.normalizeEntryName(path)
+            ?: throw ArtifactReadException("artifact read error: rejected unsafe entry name: $path")
+        if (!normal.endsWith("/module-info.class") || normal !in moduleInfos) {
+            throw ArtifactReadException("artifact read error: jrt:/ has no module-info $path")
+        }
+        val moduleName = normal.removeSuffix("/module-info.class")
+        val fileSystem = FileSystems.getFileSystem(URI.create("jrt:/"))
+        val file = fileSystem.getPath("/modules", moduleName, "module-info.class")
+        if (!Files.isRegularFile(file)) {
+            throw ArtifactReadException("artifact read error: jrt:/$moduleName!module-info.class vanished")
+        }
+        ZipSafety.checkDeclaredSize("jrt:/$moduleName!module-info.class", Files.size(file), displayName)
         val bytes = Files.newInputStream(file).use { ZipSafety.readCapped(it, normal) }
         return bytes.inputStream()
     }

@@ -22,6 +22,9 @@ public class DirArtifact private constructor(
     /** Base `META-INF/services/<iface>` paths under [dir] (issue #25). */
     private val serviceEntries: List<String>
 
+    /** Whether [dir] holds a root `module-info.class` (issue #25 module-info). */
+    private val hasModuleInfo: Boolean
+
     override val displayName: String = dir.fileName?.toString() ?: dir.toString()
 
     override val kind: ArtifactKind = ArtifactKind.CLASS_DIR
@@ -37,20 +40,22 @@ public class DirArtifact private constructor(
         }
         val found = mutableListOf<String>()
         val services = mutableListOf<String>()
+        var moduleInfo = false
         Files.walk(dir).use { walk ->
             walk.filter { Files.isRegularFile(it) }.forEach { file ->
                 val relative = dir.relativize(file).toString().replace('\\', '/')
                 val normal = ZipSafety.normalizeEntryName(relative) ?: return@forEach
-                if (normal.endsWith(".class") && normal != "module-info.class") {
-                    found.add(normal)
-                } else if (ServiceEntries.isServicePath(normal)) {
-                    services.add(normal)
+                when {
+                    normal == "module-info.class" -> moduleInfo = true
+                    normal.endsWith(".class") -> found.add(normal)
+                    ServiceEntries.isServicePath(normal) -> services.add(normal)
                 }
             }
         }
-        ZipSafety.checkEntryCount(found.size + services.size, displayName)
+        ZipSafety.checkEntryCount(found.size + services.size + if (moduleInfo) 1 else 0, displayName)
         entries = found.sorted()
         serviceEntries = services.sorted()
+        hasModuleInfo = moduleInfo
     }
 
     override fun classEntryPaths(): List<String> = entries
@@ -71,6 +76,18 @@ public class DirArtifact private constructor(
             ?: throw ArtifactReadException("artifact read error: rejected unsafe entry name: $path")
         if (normal !in serviceEntries) {
             throw ArtifactReadException("artifact read error: $displayName has no resource $path")
+        }
+        return openContainedFile(normal, path)
+    }
+
+    override fun moduleInfoPaths(): List<String> =
+        if (hasModuleInfo) listOf("module-info.class") else emptyList()
+
+    override fun openModuleInfo(path: String): InputStream {
+        val normal = ZipSafety.normalizeEntryName(path)
+            ?: throw ArtifactReadException("artifact read error: rejected unsafe entry name: $path")
+        if (normal != "module-info.class" || !hasModuleInfo) {
+            throw ArtifactReadException("artifact read error: $displayName has no module-info $path")
         }
         return openContainedFile(normal, path)
     }

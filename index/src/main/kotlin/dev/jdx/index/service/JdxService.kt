@@ -66,15 +66,23 @@ import dev.jdx.core.render.MAX_SAMPLE_SNIPPET_LINES
 import dev.jdx.core.render.DEFAULT_SEARCH_LIMIT
 import dev.jdx.core.render.DEFAULT_TREE_DEPTH
 import dev.jdx.core.render.DEFAULT_LITERALS_LIMIT
+import dev.jdx.core.render.DEFAULT_MODULES_LIMIT
 import dev.jdx.core.render.DEFAULT_SERVICES_LIMIT
 import dev.jdx.core.render.DEFAULT_USAGES_LIMIT
 import dev.jdx.core.render.ErrorResult
 import dev.jdx.core.render.HierarchyListing
 import dev.jdx.core.render.LiteralHit
 import dev.jdx.core.render.LiteralListing
+import dev.jdx.core.render.ModuleHit
+import dev.jdx.core.render.ModuleListing
+import dev.jdx.core.render.ModulePackageTarget
+import dev.jdx.core.render.ModuleProvide
+import dev.jdx.core.render.ModuleRequire
 import dev.jdx.core.render.ServiceHit
 import dev.jdx.core.render.ServiceListing
+import dev.jdx.core.render.buildModuleListing
 import dev.jdx.core.render.buildServiceListing
+import dev.jdx.index.asm.ModuleInfoReader
 import dev.jdx.core.render.LsListing
 import dev.jdx.core.render.LsTypeEntry
 import dev.jdx.core.render.MemberListing
@@ -341,6 +349,13 @@ public object JdxService {
 
         /** `META-INF/services` SPI listing (`services`) — exit 0. */
         public data class ServiceList(public val listing: ServiceListing) : ServiceOutcome {
+            override val exitCode: Int = 0
+            override fun renderText(color: Boolean): String = listing.renderText(color)
+            override fun toJson(command: String): String = listing.toJson(command)
+        }
+
+        /** JPMS `module-info` listing (`modules`) — exit 0. */
+        public data class ModuleList(public val listing: ModuleListing) : ServiceOutcome {
             override val exitCode: Int = 0
             override fun renderText(color: Boolean): String = listing.renderText(color)
             override fun toJson(command: String): String = listing.toJson(command)
@@ -4835,6 +4850,174 @@ public object JdxService {
         pattern: String,
         name: String,
         options: ServiceOptions,
+    ): Boolean {
+        if (options.regex) return SymbolSearch.matchesRegex(pattern, name)
+        return if (options.ignoreCase) {
+            name.contains(pattern, ignoreCase = true)
+        } else {
+            name.contains(pattern)
+        }
+    }
+
+    // -- modules (issue #25 module-info slice) -------------------------------------
+
+    /**
+     * Options for `modules`: how to match the optional pattern and how much of
+     * the workspace to cover. An empty pattern lists every module descriptor.
+     */
+    public data class ModuleOptions(
+        public val regex: Boolean = false,
+        public val ignoreCase: Boolean = false,
+        public val inArtifact: String? = null,
+        public val exclude: String? = null,
+        public val limit: Int = DEFAULT_MODULES_LIMIT,
+    )
+
+    /**
+     * Answers `modules [pattern]`: every `module-info.class` across the
+     * workspace's binary roots (issue #25 module-info slice).
+     *
+     * Live-roots scan — no persistent index, no class load. An empty / blank
+     * [rawPattern] lists every descriptor; a non-empty pattern matches the
+     * module name, an exported/opened package, a `uses`/`provides` service,
+     * or a provider class (substring by default). A valid miss is exit 1.
+     */
+    public fun modules(
+        rawPattern: String?,
+        roots: RootsSpec,
+        options: ModuleOptions = ModuleOptions(),
+    ): ServiceOutcome {
+        val pattern = rawPattern?.trim().orEmpty()
+        if (options.limit < 0) {
+            return failure(3, pattern, "usage error: --limit must be >= 0, got ${options.limit}")
+        }
+        if (options.regex) {
+            if (pattern.isEmpty()) {
+                return failure(3, pattern, "usage error: --regex needs a non-empty pattern")
+            }
+            if (!SymbolSearch.isValidRegex(pattern)) {
+                return failure(3, pattern, "usage error: invalid --regex pattern '$pattern'")
+            }
+        }
+        if (roots.jarSpecs.isEmpty() && !roots.includeJdk) {
+            return failure(
+                4,
+                pattern,
+                "no workspace: no --jars given, no workspace selected (-w <name>, " +
+                    "JDX_WORKSPACE, jdx ws use) and --no-jdk set " +
+                    "(pass --jars <path>, select a workspace, or drop --no-jdk)",
+            )
+        }
+        return try {
+            executeModules(pattern, roots, options)
+        } catch (e: ArtifactReadException) {
+            failure(5, pattern, e.message ?: "artifact read error")
+        } catch (e: Exception) {
+            failure(6, pattern, "internal error: ${e.javaClass.simpleName}: ${e.message ?: "no detail"}")
+        }
+    }
+
+    /**
+     * Serves `modules`: walks every open root's [ArtifactRoot.moduleInfoPaths],
+     * parses each descriptor, and filters by [pattern]. Unreadable /
+     * non-module bytes are skipped (degrade, don't fail).
+     */
+    private fun executeModules(
+        pattern: String,
+        roots: RootsSpec,
+        options: ModuleOptions,
+    ): ServiceOutcome {
+        val opened = openRoots(roots)
+        val hits = mutableListOf<ModuleHit>()
+        try {
+            for (open in opened) {
+                val label = open.root.displayName
+                if (!matchesArtifactFilter(options.inArtifact, label) ||
+                    (options.exclude != null && matchesArtifactFilter(options.exclude, label))
+                ) {
+                    continue
+                }
+                for (entry in open.root.moduleInfoPaths()) {
+                    val bytes = try {
+                        open.root.openModuleInfo(entry).use { it.readBytes() }
+                    } catch (_: Exception) {
+                        continue
+                    }
+                    val parsed = ModuleInfoReader.read(bytes) ?: continue
+                    val hit = toModuleHit(parsed, label)
+                    if (pattern.isNotEmpty() && !matchesModulePattern(pattern, hit, options)) {
+                        continue
+                    }
+                    hits.add(hit)
+                }
+            }
+        } finally {
+            opened.forEach { it.root.close() }
+        }
+        if (hits.isEmpty()) {
+            val detail = if (pattern.isEmpty()) {
+                "no modules found"
+            } else {
+                "no modules matching '$pattern'"
+            }
+            return ServiceOutcome.Failure(ErrorResult.notFound(pattern, detail = detail))
+        }
+        // Deterministic: artifact, name (D-007).
+        hits.sortWith(compareBy({ it.artifact }, { it.name }))
+        return ServiceOutcome.ModuleList(
+            buildModuleListing(
+                query = pattern,
+                hits = hits,
+                limit = options.limit,
+            ),
+        )
+    }
+
+    private fun toModuleHit(parsed: ModuleInfoReader.ParsedModule, artifact: String): ModuleHit =
+        ModuleHit(
+            name = parsed.name,
+            artifact = artifact,
+            open = parsed.open,
+            version = parsed.version,
+            requires = parsed.requires.map { ModuleRequire(it.module, it.flags) },
+            exports = parsed.exports.map { ModulePackageTarget(it.packageName, it.to) },
+            opens = parsed.opens.map { ModulePackageTarget(it.packageName, it.to) },
+            uses = parsed.uses,
+            provides = parsed.provides.map { ModuleProvide(it.service, it.providers) },
+        )
+
+    /**
+     * Pattern match for one module: hits when [pattern] matches the module
+     * name, an export/open package, a uses/provides service, or a provider.
+     */
+    private fun matchesModulePattern(
+        pattern: String,
+        hit: ModuleHit,
+        options: ModuleOptions,
+    ): Boolean {
+        if (matchesModuleName(pattern, hit.name, options)) return true
+        for (exp in hit.exports) {
+            if (matchesModuleName(pattern, exp.packageName, options)) return true
+        }
+        for (opn in hit.opens) {
+            if (matchesModuleName(pattern, opn.packageName, options)) return true
+        }
+        for (use in hit.uses) {
+            if (matchesModuleName(pattern, use, options)) return true
+        }
+        for (prov in hit.provides) {
+            if (matchesModuleName(pattern, prov.service, options)) return true
+            for (provider in prov.providers) {
+                if (matchesModuleName(pattern, provider, options)) return true
+            }
+        }
+        return false
+    }
+
+    private fun matchesModuleName(
+        pattern: String,
+        name: String,
+        options: ModuleOptions,
     ): Boolean {
         if (options.regex) return SymbolSearch.matchesRegex(pattern, name)
         return if (options.ignoreCase) {
