@@ -68,4 +68,22 @@ class AnnotationMatchPropertyTest {
             }
         }
     }
+
+    @Test
+    fun `peel of renderUse round-trips type and clauses`(): Unit = runBlocking {
+        // Issue #26 shortcut: the spelling usages prints on each row must peel
+        // back into a type ref + where clauses that still match.
+        checkAll(JDX_PROPERTY_ITERATIONS, arbPairs()) { pairs ->
+            val annot = AnnotationInfo(typeNameFromBinaryName("com.example.Mark"), pairs)
+            val peeled = peelAnnotationUseQuery(annot.renderUse())
+            assert(peeled != null) { "renderUse must look like annotation-use spelling" }
+            val query = peeled!!.getOrThrow()
+            assert(query.typeRef == "com.example.Mark") {
+                "peeled typeRef: ${query.typeRef}"
+            }
+            assert(annot.matchesWhere(query.where)) {
+                "peeled where must match rendered values: ${query.where} vs $pairs"
+            }
+        }
+    }
 }

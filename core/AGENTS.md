@@ -29,7 +29,8 @@ via `JsonEscape` — reuse it, never a second escaper). `explicitApi()` is on.
   to stderr via `WarningLines` (issue #86). `--json` must carry every entity text
   shows, plus the full uncapped `warnings` array.
 - `model/AnnotationMatch` — `--where key=value` parse + `AnnotationInfo.renderUse` /
-  `matchesWhere` (issue #26; quote-tolerant string compare, sorted element names).
+  `matchesWhere` + `peelAnnotationUseQuery` for `@Type(k=v)` spelling (issue #26;
+  quote-tolerant string compare, sorted element names, depth-aware element split).
 - `rpc/RpcProtocol` — v1 wire: NDJSON requests, deterministic key order, responses
   **are** the `--json` envelope (no second shape). `decode` never throws.
 - `paths/JdxPaths` — per-OS cache/config/runtime dirs (D-044; table in
