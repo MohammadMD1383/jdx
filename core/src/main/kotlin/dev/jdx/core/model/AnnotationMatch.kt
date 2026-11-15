@@ -9,6 +9,11 @@ package dev.jdx.core.model
  * tolerant of a missing pair of quotes around a string value so
  * `--where since=99` matches a stored `"99"`.
  *
+ * Agents may also spell the predicate inline as an annotation use
+ * (`@java.lang.Deprecated(forRemoval=true)` / `Deprecated(forRemoval=true)`):
+ * [peelAnnotationUseQuery] turns that into a plain type ref plus where
+ * clauses so `--where` is optional for the common case.
+ *
  * Rendering sorts element names so the same annotation use is byte-identical
  * regardless of source / bytecode declaration order (AGENTS.md §2.5).
  */
@@ -21,6 +26,18 @@ package dev.jdx.core.model
 public data class AnnotationWhere(
     public val key: String,
     public val value: String,
+)
+
+/**
+ * Peeled annotation-use query (issue #26 shortcut spelling).
+ *
+ * [typeRef] is the type to resolve — no leading `@`, no element-value
+ * parentheses. [where] comes from the optional `(k=v, …)` suffix (may be
+ * empty when the caller only wrote `@Type`).
+ */
+public data class AnnotationUseQuery(
+    public val typeRef: String,
+    public val where: List<AnnotationWhere> = emptyList(),
 )
 
 /**
@@ -98,4 +115,186 @@ private fun unquoteOnce(raw: String): String {
     } else {
         raw
     }
+}
+
+/**
+ * Peels `@Type` / `Type(k=v,…)` / `@Type(k=v,…)` into a type ref + where
+ * clauses (issue #26 shortcut).
+ *
+ * Returns `null` when [raw] is not annotation-use spelling: no leading `@`
+ * and no trailing element-value parentheses that contain `=`. Ordinary
+ * symbol refs (`Gson#toJson(Object)`, `Foo(Object)`, bare type names) stay
+ * untouched so [dev.jdx.core.ref.SymbolRefParser] keeps owning them.
+ *
+ * A leading `@` or a trailing `(k=v,…)` commits to this grammar: malformed
+ * element lists return a failure [Result] (never a silent null).
+ */
+public fun peelAnnotationUseQuery(raw: String): Result<AnnotationUseQuery>? {
+    val trimmed = raw.trim()
+    if (trimmed.isEmpty()) return null
+    val atPrefixed = trimmed.startsWith('@')
+    val body = if (atPrefixed) trimmed.substring(1).trimStart() else trimmed
+    if (body.isEmpty()) {
+        return Result.failure(
+            IllegalArgumentException("usage error: annotation use '@' needs a type name"),
+        )
+    }
+    // Member refs keep their own `(…)` grammar — never peel across `#` / `::`.
+    if (body.contains('#') || body.contains("::")) return null
+
+    if (!body.endsWith(')')) {
+        // `@Type` alone is annotation-use spelling; bare `Type` / unclosed
+        // `Type(…` without a committed `@` stays for SymbolRefParser.
+        if (!atPrefixed) {
+            return if (body.contains('(') && body.substringAfter('(').contains('=')) {
+                Result.failure(
+                    IllegalArgumentException(
+                        "usage error: annotation use '$raw' is missing a closing ')'",
+                    ),
+                )
+            } else {
+                null
+            }
+        }
+        if (body.contains('(')) {
+            return Result.failure(
+                IllegalArgumentException(
+                    "usage error: annotation use '$raw' is missing a closing ')'",
+                ),
+            )
+        }
+        return Result.success(AnnotationUseQuery(body))
+    }
+
+    val paren = matchingOpenParen(body)
+        ?: return if (atPrefixed) {
+            Result.failure(
+                IllegalArgumentException(
+                    "usage error: annotation use '$raw' has unbalanced parentheses",
+                ),
+            )
+        } else {
+            null
+        }
+    val inside = body.substring(paren + 1, body.length - 1)
+    // `Type(Object)` / `Type(...)` are the member-ref grammar, not annotation
+    // elements — leave them alone unless the caller wrote a leading `@`.
+    if (!atPrefixed && !inside.contains('=')) return null
+
+    val typeRef = body.substring(0, paren).trim()
+    if (typeRef.isEmpty()) {
+        return Result.failure(
+            IllegalArgumentException("usage error: annotation use '$raw' needs a type name"),
+        )
+    }
+    if (inside.isBlank()) {
+        return Result.success(AnnotationUseQuery(typeRef))
+    }
+    val clauses = mutableListOf<AnnotationWhere>()
+    for (piece in splitAnnotationElements(inside)) {
+        val parsed = parseAnnotationWhere(piece)
+        if (parsed.isFailure) {
+            return Result.failure(
+                IllegalArgumentException(
+                    parsed.exceptionOrNull()!!.message
+                        ?: "usage error: --where expects key=value (got '$piece')",
+                ),
+            )
+        }
+        clauses.add(parsed.getOrThrow())
+    }
+    return Result.success(AnnotationUseQuery(typeRef, clauses))
+}
+
+/**
+ * Index of the `(` that matches the final `)` of [body], respecting quotes.
+ * Null when the trailing paren group is unbalanced.
+ */
+internal fun matchingOpenParen(body: String): Int? {
+    if (!body.endsWith(')')) return null
+    var depth = 0
+    var quote: Char? = null
+    for (i in body.lastIndex downTo 0) {
+        val c = body[i]
+        if (quote != null) {
+            if (c == quote) {
+                // Skip escaped quotes (`\"` / `\'`): the char before the quote
+                // is a backslash that is itself unescaped.
+                if (i > 0 && body[i - 1] == '\\') continue
+                quote = null
+            }
+            continue
+        }
+        when (c) {
+            '"', '\'' -> quote = c
+            ')' -> depth++
+            '(' -> {
+                depth--
+                if (depth == 0) return i
+            }
+        }
+    }
+    return null
+}
+
+/**
+ * Splits a comma-separated annotation element list while respecting quoted
+ * strings, nested `{…}` arrays, and nested `(…)` / `@Inner(…)` values.
+ */
+internal fun splitAnnotationElements(inside: String): List<String> {
+    if (inside.isBlank()) return emptyList()
+    val parts = mutableListOf<String>()
+    val buf = StringBuilder()
+    var depthParen = 0
+    var depthBrace = 0
+    var quote: Char? = null
+    var i = 0
+    while (i < inside.length) {
+        val c = inside[i]
+        if (quote != null) {
+            buf.append(c)
+            if (c == '\\' && i + 1 < inside.length) {
+                buf.append(inside[i + 1])
+                i += 2
+                continue
+            }
+            if (c == quote) quote = null
+            i++
+            continue
+        }
+        when (c) {
+            '"', '\'' -> {
+                quote = c
+                buf.append(c)
+            }
+            '(' -> {
+                depthParen++
+                buf.append(c)
+            }
+            ')' -> {
+                depthParen--
+                buf.append(c)
+            }
+            '{' -> {
+                depthBrace++
+                buf.append(c)
+            }
+            '}' -> {
+                depthBrace--
+                buf.append(c)
+            }
+            ',' -> {
+                if (depthParen == 0 && depthBrace == 0) {
+                    parts.add(buf.toString().trim())
+                    buf.setLength(0)
+                } else {
+                    buf.append(c)
+                }
+            }
+            else -> buf.append(c)
+        }
+        i++
+    }
+    parts.add(buf.toString().trim())
+    return parts.filter { it.isNotEmpty() }
 }

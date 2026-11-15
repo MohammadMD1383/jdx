@@ -78,8 +78,10 @@ behaviour lives here** (adapters call in, never the reverse). `explicitApi()` is
   invoke-owner matching. `calls` stays bytecode-exact (the invoke names one owner).
   `usages --kind annotation` reads `ClassInfo` annotation metadata (not reference
   edges); `--where key=value` (issue #26) filters by rendered element values (AND;
-  quote-tolerant for strings) and requires `--kind annotation`. Matching rows carry
-  `UsageHit.annotation` (`@Fqn(k=v,…)` with sorted keys).
+  quote-tolerant for strings) and requires `--kind annotation`. Annotation-use
+  spelling (`@Type(k=v)` / `Type(k=v)`) peels into the type ref + where clauses
+  (AND-merged with `--where`; leading `@` without `--kind annotation` is exit 3).
+  Matching rows carry `UsageHit.annotation` (`@Fqn(k=v,…)` with sorted keys).
   `literals` (issue #86) is live-roots-first like the graph queries: scans `LDC`
   string loads + `String` field `ConstantValue`s and `.properties` resource
   keys/values (`prop` kind; match on key or value). `services` (issue #25) is live-roots-first over base

@@ -118,6 +118,8 @@ is the CLI surface, pinned by help/parity goldens.)
 
 - `--brief`/`--max-lines` are text-only (`members`/`outline`); `--json` bytes are
   identical with or without them. `--brief --with-doc` and `--max-lines < 0` exit 3.
+  Issue #26 annotation-use spelling on the CLI omits the leading `@`
+  (`Type(k=v)`): Clikt reserves `@file` for argfiles; MCP/daemon accept `@Type(k=v)`.
 - Batch: NDJSON in, one envelope per line, per-query failures never abort the
   stream, exit = max query exit. Empty batch exits 3, malformed lines exit 6.
 - Command tests must inject `InMemoryWorkspaceStore()` — never the real-home store

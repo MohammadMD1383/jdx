@@ -21,6 +21,14 @@ Narrow by edge kind with `--kind`:
 | `throw` | methods declaring the type in `throws` (declaration-level, not `ATHROW` throw sites) |
 | `annotation` | classes and members carrying the annotation |
 
+With `--kind annotation`, filter by element values via `--where key=value` (repeatable,
+AND), or spell the predicate inline as an annotation use (omit the leading `@` on the
+CLI — Clikt reserves `@file` for argfiles; MCP accepts `@Type(k=v)`):
+
+```console
+$ jdx usages 'java.lang.Deprecated(forRemoval=true)' --kind annotation --jars lib.jar
+```
+
 `--in` / `--exclude` filter by artifact (jar file name, JDK module or source directory), and
 `--src <dir>` adds your project's source directories — those hits are textual mentions with
 line numbers. `--context N` shows a short source window around each call site when paired

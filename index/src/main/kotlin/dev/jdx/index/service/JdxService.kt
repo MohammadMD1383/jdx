@@ -31,6 +31,7 @@ import dev.jdx.core.model.Warning
 import dev.jdx.core.model.WarningCode
 import dev.jdx.core.model.arrayTypeName
 import dev.jdx.core.model.matchesWhere
+import dev.jdx.core.model.peelAnnotationUseQuery
 import dev.jdx.core.model.renderUse
 import dev.jdx.core.model.typeNameFromBinaryName
 import dev.jdx.core.ref.SymbolRefParser
@@ -2679,14 +2680,34 @@ public object JdxService {
             // T-029 vocabulary + ClassInfo metadata). `--context N` (issue #10)
             // slices paired sources around LineNumberTable sites.
             // `--where` (issue #26) filters annotation rows by element values.
+            // Annotation-use spelling `@Fqn(k=v)` peels into the type ref +
+            // where clauses below (issue #26 shortcut).
             else -> Unit
         }
-        val parsed = SymbolRefParser.parse(rawRef)
+        // Issue #26 shortcut: `@Deprecated(forRemoval=true)` peels into a type
+        // ref + where clauses. Only `--kind annotation` accepts this spelling;
+        // a leading `@` without that kind is a usage error (never guess).
+        val peeled = peelAnnotationUseQuery(rawRef)
+        if (peeled != null && options.kind != UsageKindFilter.ANNOTATION) {
+            return failure(
+                3,
+                rawRef,
+                "usage error: annotation-use spelling '$rawRef' requires --kind annotation " +
+                    "(issue #26 — e.g. jdx usages '$rawRef' --kind annotation)",
+            )
+        }
+        if (peeled != null && peeled.isFailure) {
+            return failure(3, rawRef, peeled.exceptionOrNull()!!.message!!)
+        }
+        val annotationUse = peeled?.getOrThrow()
+        val effectiveRef = annotationUse?.typeRef ?: rawRef
+        val effectiveWhere = (annotationUse?.where ?: emptyList()) + options.where
+        val parsed = SymbolRefParser.parse(effectiveRef)
         if (parsed is SymbolRefParseResult.Failure) {
             return failure(
                 3,
                 rawRef,
-                "usage error: invalid reference '$rawRef': ${parsed.message} at column ${parsed.position}",
+                "usage error: invalid reference '$effectiveRef': ${parsed.message} at column ${parsed.position}",
             )
         }
         val ref = (parsed as SymbolRefParseResult.Ok).ref
@@ -2735,8 +2756,9 @@ public object JdxService {
             scopedRoots = roots.copy(jarSpecs = listOf(binarySpec) + roots.jarSpecs)
             candidateScope = scope
         }
+        val effectiveOptions = options.copy(where = effectiveWhere)
         return try {
-            executeUsages(ref, rawRef, scopedRoots, options, candidateScope)
+            executeUsages(ref, rawRef, scopedRoots, effectiveOptions, candidateScope)
         } catch (e: ArtifactReadException) {
             failure(5, rawRef, e.message ?: "artifact read error")
         } catch (e: Exception) {

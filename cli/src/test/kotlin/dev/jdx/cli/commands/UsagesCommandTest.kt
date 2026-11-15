@@ -46,11 +46,18 @@ class UsagesCommandTest {
         ),
     )
 
-    private data class Run(val output: String, val exit: Int, val options: JdxService.UsageOptions?)
+    private data class Run(
+        val output: String,
+        val exit: Int,
+        val options: JdxService.UsageOptions?,
+        val ref: String?,
+    )
 
     private fun run(args: List<String>): Run {
         var seen: JdxService.UsageOptions? = null
-        val query: UsagesQuery = { _, _, options ->
+        var seenRef: String? = null
+        val query: UsagesQuery = { ref, _, options ->
+            seenRef = ref
             seen = options
             usageOutcome()
         }
@@ -71,7 +78,7 @@ class UsagesCommandTest {
         } finally {
             System.setOut(original)
         }
-        return Run(buffer.toString(Charsets.UTF_8), exit, seen)
+        return Run(buffer.toString(Charsets.UTF_8), exit, seen, seenRef)
     }
 
     @Test
@@ -122,6 +129,21 @@ class UsagesCommandTest {
                 AnnotationWhere("since", "99"),
             ),
         )
+    }
+
+    @Test
+    fun `annotation-use spelling without at-sign reaches the service`() {
+        // Issue #26 CLI form omits leading `@` (Clikt reserves `@file` for
+        // argfiles). Peeling of `Type(k=v)` into where clauses is service-side.
+        val run = run(
+            listOf(
+                "java.lang.Deprecated(forRemoval=true)",
+                "--kind", "annotation",
+            ),
+        )
+        run.exit shouldBe 0
+        run.ref shouldBe "java.lang.Deprecated(forRemoval=true)"
+        run.options?.kind shouldBe JdxService.UsageKindFilter.ANNOTATION
     }
 
     @Test

@@ -56,6 +56,8 @@ class UsagesCommand(
             "annotation shows annotated classes and members; " +
             "--where key=value (repeatable, requires --kind annotation) filters by " +
             "annotation element values (issue #26 — e.g. --where forRemoval=true); " +
+            "annotation-use spelling 'Type(k=v)' (omit leading @ on the CLI) is " +
+            "accepted with --kind annotation and peels into the type + where clauses; " +
             "source-dir hits are textual mentions (ref only), so call|read|write|new|throw|annotation " +
             "show bytecode-backed edges alone. " +
             "impl|override land with hierarchy (jdx hierarchy, jdx implementors). " +
@@ -63,7 +65,11 @@ class UsagesCommand(
             "--src adds a source dir root (repeatable; stored via jdx ws create --src). " +
             "Exits 1 when the symbol is unknown or unused, 2 on an ambiguous short name."
 
-    private val ref by argument(help = "Type or member reference to find usages of (full or short form).")
+    private val ref by argument(
+        help = "Type or member reference to find usages of (full or short form). " +
+            "With --kind annotation, also accepts annotation-use spelling " +
+            "'Type(k=v)' (omit leading @ on the CLI; issue #26).",
+    )
 
     private val kind by option(
         "--kind",
@@ -80,7 +86,8 @@ class UsagesCommand(
         "--where",
         help = "Annotation value predicate key=value (repeatable; requires --kind annotation). " +
             "Every clause must match (AND). String values may omit the surrounding quotes " +
-            "(--where since=99 matches since=\"99\").",
+            "(--where since=99 matches since=\"99\"). Equivalent inline form: " +
+            "jdx usages 'Type(k=v)' --kind annotation.",
     ).multiple()
 
     private val inArtifact by option(

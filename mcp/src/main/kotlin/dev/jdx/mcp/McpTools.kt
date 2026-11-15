@@ -276,7 +276,8 @@ public val ALL_MCP_TOOLS: List<McpToolDefinition> = listOf(
     ),
     McpToolDefinition(
         command = RpcCommand.USAGES,
-        description = "Find usages of a type or member across the workspace jars and source dirs.",
+        description = "Find usages of a type or member across the workspace jars and source dirs. " +
+            "With kind=annotation, query may use annotation-use spelling '@Type(k=v)' (issue #26).",
         params = listOf(
             queryParam(), workspaceParam(),
             McpParam(
@@ -289,7 +290,7 @@ public val ALL_MCP_TOOLS: List<McpToolDefinition> = listOf(
                 name = "where",
                 kind = McpParamKind.STRING,
                 description = "Comma-separated annotation value predicates key=value (requires kind=annotation; " +
-                    "e.g. forRemoval=true). Issue #26.",
+                    "e.g. forRemoval=true). Equivalent: query='@Type(k=v)' with kind=annotation. Issue #26.",
             ),
         ),
     ),

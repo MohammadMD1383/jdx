@@ -204,6 +204,48 @@ class UsagesServiceTest {
     }
 
     @Test
+    fun `annotation-use spelling peels type and where clauses`() {
+        // Issue #26 shortcut: `@u.Mark(level=1)` ≡ `u.Mark --where level=1`.
+        val peeled = JdxService.usages(
+            "@u.Mark(level=1)",
+            caseRoots(),
+            UsageOptions(kind = UsageKindFilter.ANNOTATION),
+        )
+        peeled.exitCode shouldBe 0
+        usageListOf(peeled).hits.map { it.fromRef } shouldBe listOf("u.Factory")
+        textOf(peeled) shouldContain "@u.Mark(level=1)"
+
+        val withoutAt = JdxService.usages(
+            "u.Mark(level=2)",
+            caseRoots(),
+            UsageOptions(kind = UsageKindFilter.ANNOTATION),
+        )
+        withoutAt.exitCode shouldBe 0
+        usageListOf(withoutAt).hits.map { it.fromRef } shouldBe listOf("u.Other#work()")
+
+        // Inline clauses AND with explicit --where.
+        val anded = JdxService.usages(
+            "@u.Mark(level=1)",
+            caseRoots(),
+            UsageOptions(
+                kind = UsageKindFilter.ANNOTATION,
+                where = listOf(AnnotationWhere("level", "2")),
+            ),
+        )
+        anded.exitCode shouldBe 1
+    }
+
+    @Test
+    fun `annotation-use spelling without kind annotation is exit 3`() {
+        val outcome = JdxService.usages(
+            "@u.Mark(level=1)",
+            caseRoots(),
+        )
+        outcome.exitCode shouldBe 3
+        textOf(outcome) shouldContain "requires --kind annotation"
+    }
+
+    @Test
     fun `all includes the metadata rows`() {
         val thrown = JdxService.usages("u.Boom", caseRoots())
         thrown.exitCode shouldBe 0
