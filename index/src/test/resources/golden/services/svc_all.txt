@@ -1,0 +1,7 @@
+services
+services-case.jar (3)
+  service com.example.Other
+    provider com.example.Gamma
+  service com.example.Spi
+    provider com.example.Alpha
+    provider com.example.Beta

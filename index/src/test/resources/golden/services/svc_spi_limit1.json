@@ -1,0 +1,1 @@
+{"jdx":1,"ok":true,"command":"services","query":"Spi","result":{"pattern":"Spi","services":[{"service":"com.example.Spi","provider":"com.example.Alpha","artifact":"services-case.jar"}]},"truncated":{"shown":1,"total":2,"hint":"--limit 2"},"warnings":[],"provenance":[]}

@@ -17,6 +17,7 @@ import dev.jdx.index.service.JdxService.RootsSpec
 import dev.jdx.index.service.JdxService.SampleOptions
 import dev.jdx.index.service.JdxService.SearchKindFilter
 import dev.jdx.index.service.JdxService.SearchOptions
+import dev.jdx.index.service.JdxService.ServiceOptions
 import dev.jdx.index.service.JdxService.ServiceOutcome
 import dev.jdx.index.service.JdxService.SignatureOptions
 import dev.jdx.index.service.JdxService.SourceOptions
@@ -273,6 +274,15 @@ class RpcDispatchTest {
         viaWire(request) shouldBe direct.toJson("literals")
         viaWire(req(RpcCommand.LITERALS, "", "limit" to "5")) shouldContain "non-empty text pattern"
         viaWire(req(RpcCommand.LITERALS, query, "limit" to "-1")) shouldContain "--limit must be >= 0"
+    }
+
+    @Test
+    fun `services dispatches with empty query and limit`() {
+        val request = req(RpcCommand.SERVICES, "", "limit" to "5")
+        val direct = JdxService.services(null, fixtureRoots(), ServiceOptions(limit = 5))
+        viaWire(request) shouldBe direct.toJson("services")
+        viaWire(req(RpcCommand.SERVICES, "x", "limit" to "-1")) shouldContain "--limit must be >= 0"
+        viaWire(req(RpcCommand.SERVICES, "", "regex" to "true")) shouldContain "--regex needs a non-empty pattern"
     }
 
     // -- param errors: exit 3 naming the param -----------------------------------------

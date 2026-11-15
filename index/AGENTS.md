@@ -16,10 +16,13 @@ behaviour lives here** (adapters call in, never the reverse). `explicitApi()` is
   and never decompiles.
 - `asm/AsmClassReader` — `ClassReader` with `SKIP_FRAMES` (never `SKIP_DEBUG`:
   parameter names live there). Rejects class files newer than the *running* JDK.
-- `artifact/` — `ArtifactLoader` (jars, dirs, `jrt:/`), `ZipSafety` (traversal +
+- `artifact/` — `ArtifactLoader` (jars, dirs, `jrt:/`),   `ZipSafety` (traversal +
   zip-bomb caps), `SourcesPairing` (5 pairing rules), `MultiRelease` (warn, don't
-  resolve variants), content-hash artifact identity. Dedup identical resolved roots
-  before querying (same file via glob + explicit path must not double-scan).
+  resolve variants), `ServiceEntries` (issue #25: base `META-INF/services` paths
+  + ServiceLoader file grammar), content-hash artifact identity. Dedup identical
+  resolved roots before querying (same file via glob + explicit path must not
+  double-scan). `ArtifactRoot.serviceEntryPaths` / `openResource` list and read
+  those SPI files (class-scan deliberately drops bare `META-INF/`).
 - `refs/ReferenceExtractor` — bytecode → reference edges (`call`/`read`/`write`/
   `ref`/`new`/`throw`/`annotation`); reads `LineNumberTable` + `SourceFile`
   (issue #8) and keeps the first line per logical edge (dedup identity excludes
@@ -63,7 +66,10 @@ behaviour lives here** (adapters call in, never the reverse). `explicitApi()` is
   invoke-owner matching. `calls` stays bytecode-exact (the invoke names one owner).
   `literals` (issue #86) is live-roots-first like the graph queries: scans `LDC`
   string loads + `String` field `ConstantValue`s only — no `.properties` / resource
-  scan in this slice.
+  scan in this slice. `services` (issue #25) is live-roots-first over base
+  `META-INF/services/<iface>` files (jar + class dir; `jrt:/` empty today);
+  versioned copies under `META-INF/versions/` and `module-info` `provides` are
+  out of this slice.
 - `search --kind all` (default) covers types + packages + modules only; `method`/
   `field` are opt-in (slow path parses every in-scope class). A default-kind miss
   carries `SEARCH_MEMBERS_OPT_IN_HINT` as `ErrorResult.detail` (issue #86) — do not

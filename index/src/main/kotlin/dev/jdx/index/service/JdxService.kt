@@ -66,11 +66,15 @@ import dev.jdx.core.render.MAX_SAMPLE_SNIPPET_LINES
 import dev.jdx.core.render.DEFAULT_SEARCH_LIMIT
 import dev.jdx.core.render.DEFAULT_TREE_DEPTH
 import dev.jdx.core.render.DEFAULT_LITERALS_LIMIT
+import dev.jdx.core.render.DEFAULT_SERVICES_LIMIT
 import dev.jdx.core.render.DEFAULT_USAGES_LIMIT
 import dev.jdx.core.render.ErrorResult
 import dev.jdx.core.render.HierarchyListing
 import dev.jdx.core.render.LiteralHit
 import dev.jdx.core.render.LiteralListing
+import dev.jdx.core.render.ServiceHit
+import dev.jdx.core.render.ServiceListing
+import dev.jdx.core.render.buildServiceListing
 import dev.jdx.core.render.LsListing
 import dev.jdx.core.render.LsTypeEntry
 import dev.jdx.core.render.MemberListing
@@ -119,6 +123,7 @@ import dev.jdx.index.artifact.ArtifactKind
 import dev.jdx.index.artifact.ArtifactLoader
 import dev.jdx.index.artifact.ArtifactReadException
 import dev.jdx.index.artifact.ArtifactRoot
+import dev.jdx.index.artifact.ServiceEntries
 import dev.jdx.index.asm.AsmClassReader
 import dev.jdx.index.asm.ClassReadResult
 import dev.jdx.index.diff.ApiSnapshotResult
@@ -329,6 +334,13 @@ public object JdxService {
 
         /** String-constant search (`literals`) — exit 0. */
         public data class LiteralList(public val listing: LiteralListing) : ServiceOutcome {
+            override val exitCode: Int = 0
+            override fun renderText(color: Boolean): String = listing.renderText(color)
+            override fun toJson(command: String): String = listing.toJson(command)
+        }
+
+        /** `META-INF/services` SPI listing (`services`) — exit 0. */
+        public data class ServiceList(public val listing: ServiceListing) : ServiceOutcome {
             override val exitCode: Int = 0
             override fun renderText(color: Boolean): String = listing.renderText(color)
             override fun toJson(command: String): String = listing.toJson(command)
@@ -4670,6 +4682,165 @@ public object JdxService {
             value.contains(pattern, ignoreCase = true)
         } else {
             value.contains(pattern)
+        }
+    }
+
+    // -- services (issue #25) ------------------------------------------------------
+
+    /**
+     * Options for `services`: how to match the optional pattern and how much of
+     * the workspace to cover. An empty pattern lists every registration.
+     * [regex] is `--regex` (full Java regex against the service or provider
+     * FQN); otherwise a case-sensitive substring. [ignoreCase] folds substring
+     * matches (ignored under `--regex` — put `(?i)` in the pattern instead).
+     */
+    public data class ServiceOptions(
+        public val regex: Boolean = false,
+        public val ignoreCase: Boolean = false,
+        public val inArtifact: String? = null,
+        public val exclude: String? = null,
+        public val limit: Int = DEFAULT_SERVICES_LIMIT,
+    )
+
+    /**
+     * Answers `services [pattern]`: every `META-INF/services/<iface>`
+     * registration across the workspace's binary roots (issue #25).
+     *
+     * Live-roots scan of ServiceLoader files — no persistent index, no class
+     * load. An empty / blank [rawPattern] lists every registration; a non-empty
+     * pattern matches the service interface FQN **or** a provider class FQN
+     * (substring by default). A valid miss is exit 1.
+     */
+    public fun services(
+        rawPattern: String?,
+        roots: RootsSpec,
+        options: ServiceOptions = ServiceOptions(),
+    ): ServiceOutcome {
+        val pattern = rawPattern?.trim().orEmpty()
+        if (options.limit < 0) {
+            return failure(3, pattern, "usage error: --limit must be >= 0, got ${options.limit}")
+        }
+        if (options.regex) {
+            if (pattern.isEmpty()) {
+                return failure(3, pattern, "usage error: --regex needs a non-empty pattern")
+            }
+            if (!SymbolSearch.isValidRegex(pattern)) {
+                return failure(3, pattern, "usage error: invalid --regex pattern '$pattern'")
+            }
+        }
+        if (roots.jarSpecs.isEmpty() && !roots.includeJdk) {
+            return failure(
+                4,
+                pattern,
+                "no workspace: no --jars given, no workspace selected (-w <name>, " +
+                    "JDX_WORKSPACE, jdx ws use) and --no-jdk set " +
+                    "(pass --jars <path>, select a workspace, or drop --no-jdk)",
+            )
+        }
+        return try {
+            executeServices(pattern, roots, options)
+        } catch (e: ArtifactReadException) {
+            failure(5, pattern, e.message ?: "artifact read error")
+        } catch (e: Exception) {
+            failure(6, pattern, "internal error: ${e.javaClass.simpleName}: ${e.message ?: "no detail"}")
+        }
+    }
+
+    /**
+     * Serves `services`: walks every open root's [ArtifactRoot.serviceEntryPaths],
+     * parses provider lines, and filters by [pattern]. Unreadable service files
+     * are skipped (degrade, don't fail — no dedicated warning code yet for
+     * resource reads; a vanished entry is rarer than a corrupt class).
+     */
+    private fun executeServices(
+        pattern: String,
+        roots: RootsSpec,
+        options: ServiceOptions,
+    ): ServiceOutcome {
+        val opened = openRoots(roots)
+        val hits = mutableListOf<ServiceHit>()
+        try {
+            for (open in opened) {
+                val label = open.root.displayName
+                if (!matchesArtifactFilter(options.inArtifact, label) ||
+                    (options.exclude != null && matchesArtifactFilter(options.exclude, label))
+                ) {
+                    continue
+                }
+                for (entry in open.root.serviceEntryPaths()) {
+                    val service = ServiceEntries.serviceName(entry) ?: continue
+                    val bytes = try {
+                        open.root.openResource(entry).use { it.readBytes() }
+                    } catch (_: Exception) {
+                        continue
+                    }
+                    for (provider in ServiceEntries.parseProviders(bytes)) {
+                        if (pattern.isNotEmpty() &&
+                            !matchesServicePattern(pattern, service, provider, options)
+                        ) {
+                            continue
+                        }
+                        hits.add(
+                            ServiceHit(
+                                service = service,
+                                provider = provider,
+                                artifact = label,
+                            ),
+                        )
+                    }
+                }
+            }
+        } finally {
+            opened.forEach { it.root.close() }
+        }
+        if (hits.isEmpty()) {
+            val detail = if (pattern.isEmpty()) {
+                "no services found"
+            } else {
+                "no services matching '$pattern'"
+            }
+            return ServiceOutcome.Failure(ErrorResult.notFound(pattern, detail = detail))
+        }
+        // Deterministic: artifact, service, provider (D-007).
+        hits.sortWith(
+            compareBy(
+                { it.artifact },
+                { it.service },
+                { it.provider },
+            ),
+        )
+        return ServiceOutcome.ServiceList(
+            buildServiceListing(
+                query = pattern,
+                hits = hits,
+                limit = options.limit,
+            ),
+        )
+    }
+
+    /**
+     * Pattern match for one service registration: hits when [pattern] matches
+     * the service interface FQN **or** the provider class FQN. Never throws.
+     */
+    private fun matchesServicePattern(
+        pattern: String,
+        service: String,
+        provider: String,
+        options: ServiceOptions,
+    ): Boolean =
+        matchesServiceName(pattern, service, options) ||
+            matchesServiceName(pattern, provider, options)
+
+    private fun matchesServiceName(
+        pattern: String,
+        name: String,
+        options: ServiceOptions,
+    ): Boolean {
+        if (options.regex) return SymbolSearch.matchesRegex(pattern, name)
+        return if (options.ignoreCase) {
+            name.contains(pattern, ignoreCase = true)
+        } else {
+            name.contains(pattern)
         }
     }
 

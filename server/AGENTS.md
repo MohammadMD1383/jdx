@@ -19,7 +19,7 @@ are `toJson` bytes verbatim, no second shape. `explicitApi()` is on.
   `parseIdleDuration` never throws. `stop` validates the pid file owns a
   `daemon run` child before signalling (never kills a reused pid) and escalates
   `destroy()` to `destroyForcibly()`.
-- `DaemonDispatch` — resolves roots, serialises outcomes; all 19 read commands to
+- `DaemonDispatch` — resolves roots, serialises outcomes; all 20 read commands to
   `JdxService` (`indexedArtifacts` stays 0 with `indexMode=live-roots-first` —
   live roots, no persistent acceleration; issue #4 labels the bare 0, #5 tracks
   the real count).

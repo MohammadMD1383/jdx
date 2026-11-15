@@ -1,0 +1,5 @@
+services matching 'com.example.Spi'
+services-case.jar (2)
+  service com.example.Spi
+    provider com.example.Alpha
+    provider com.example.Beta

@@ -43,8 +43,9 @@ public const val REQUEST_TERMINATOR: Char = '\n'
  * daemon serving several clients cannot have one of them reconfigure the others.
  *
  * [requiresQuery] says whether the command needs a subject at all — `ls`/`tree` default their
- * glob to `*` and `version`/`doctor`/`health` take none. It lives here so all four adapters
- * validate identically instead of each re-deriving it (CONTRIBUTING.md: no logic in adapters).
+ * glob to `*`, `services` lists every registration when empty (issue #25), and
+ * `version`/`doctor`/`health` take none. It lives here so all four adapters validate
+ * identically instead of each re-deriving it (CONTRIBUTING.md: no logic in adapters).
  */
 public enum class RpcCommand(public val wire: String, public val requiresQuery: Boolean) {
     SHOW("show", true),
@@ -69,6 +70,11 @@ public enum class RpcCommand(public val wire: String, public val requiresQuery: 
      * and field `ConstantValue`s matching a text / regex pattern.
      */
     LITERALS("literals", true),
+    /**
+     * `META-INF/services` SPI provider listing (issue #25): who provides a
+     * given service interface, or every registration when the query is empty.
+     */
+    SERVICES("services", false),
     DIFF("diff", true),
 
     /** Build identity — answered without touching an index. */

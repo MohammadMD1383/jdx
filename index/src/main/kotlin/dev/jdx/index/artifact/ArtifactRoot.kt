@@ -44,6 +44,25 @@ public interface ArtifactRoot : Closeable {
     public fun openClass(path: String): InputStream
 
     /**
+     * Every base `META-INF/services/<iface>` entry in this root (issue #25),
+     * normalised slash paths, sorted. Versioned copies under
+     * `META-INF/versions/` are excluded in this slice. Empty for roots that
+     * carry no classic ServiceLoader files (`jrt:/` today).
+     */
+    public fun serviceEntryPaths(): List<String> = emptyList()
+
+    /**
+     * Opens one resource entry (today: a [serviceEntryPaths] path) for reading.
+     * The caller closes the stream. Default refuses — roots that list services
+     * override this.
+     *
+     * @throws ArtifactReadException when [path] is unsafe, absent, or breaches a
+     *   decompression cap (D-015 exit 5 at the service layer).
+     */
+    public fun openResource(path: String): InputStream =
+        throw ArtifactReadException("artifact read error: $displayName has no resource $path")
+
+    /**
      * Content-hash identity of this root: the jar's bytes, the directory's content hash,
      * or the JDK release for `jrt:/`. The index cache key (PROPOSAL.md §10.2).
      */

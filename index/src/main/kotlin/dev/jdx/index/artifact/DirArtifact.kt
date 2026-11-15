@@ -19,6 +19,9 @@ public class DirArtifact private constructor(
 
     private val entries: List<String>
 
+    /** Base `META-INF/services/<iface>` paths under [dir] (issue #25). */
+    private val serviceEntries: List<String>
+
     override val displayName: String = dir.fileName?.toString() ?: dir.toString()
 
     override val kind: ArtifactKind = ArtifactKind.CLASS_DIR
@@ -33,17 +36,21 @@ public class DirArtifact private constructor(
             throw ArtifactReadException("artifact read error: no such class directory: $dir")
         }
         val found = mutableListOf<String>()
+        val services = mutableListOf<String>()
         Files.walk(dir).use { walk ->
             walk.filter { Files.isRegularFile(it) }.forEach { file ->
                 val relative = dir.relativize(file).toString().replace('\\', '/')
                 val normal = ZipSafety.normalizeEntryName(relative) ?: return@forEach
                 if (normal.endsWith(".class") && normal != "module-info.class") {
                     found.add(normal)
+                } else if (ServiceEntries.isServicePath(normal)) {
+                    services.add(normal)
                 }
             }
         }
-        ZipSafety.checkEntryCount(found.size, displayName)
+        ZipSafety.checkEntryCount(found.size + services.size, displayName)
         entries = found.sorted()
+        serviceEntries = services.sorted()
     }
 
     override fun classEntryPaths(): List<String> = entries
@@ -54,11 +61,29 @@ public class DirArtifact private constructor(
         if (normal !in entries) {
             throw ArtifactReadException("artifact read error: $displayName has no class $path")
         }
-        // Containment holds by construction (walk + normalisation), re-checked so a
-        // future refactor cannot turn this into a path escape.
+        return openContainedFile(normal, path)
+    }
+
+    override fun serviceEntryPaths(): List<String> = serviceEntries
+
+    override fun openResource(path: String): InputStream {
+        val normal = ZipSafety.normalizeEntryName(path)
+            ?: throw ArtifactReadException("artifact read error: rejected unsafe entry name: $path")
+        if (normal !in serviceEntries) {
+            throw ArtifactReadException("artifact read error: $displayName has no resource $path")
+        }
+        return openContainedFile(normal, path)
+    }
+
+    /**
+     * Opens a normalised relative path that was already proven to sit under
+     * [dir] during the walk. Re-checks containment so a future refactor cannot
+     * turn this into a path escape.
+     */
+    private fun openContainedFile(normal: String, requested: String): InputStream {
         val file = dir.resolve(normal).normalize()
         if (!file.startsWith(dir)) {
-            throw ArtifactReadException("artifact read error: rejected unsafe entry name: $path")
+            throw ArtifactReadException("artifact read error: rejected unsafe entry name: $requested")
         }
         if (!Files.isRegularFile(file)) {
             throw ArtifactReadException("artifact read error: $displayName!$normal vanished")
