@@ -285,6 +285,12 @@ public val ALL_MCP_TOOLS: List<McpToolDefinition> = listOf(
             ),
             inParam(), excludeParam(), limitParam(50),
             McpParam(name = "context", kind = McpParamKind.INTEGER, description = "Snippet lines around each hit (default 0)."),
+            McpParam(
+                name = "where",
+                kind = McpParamKind.STRING,
+                description = "Comma-separated annotation value predicates key=value (requires kind=annotation; " +
+                    "e.g. forRemoval=true). Issue #26.",
+            ),
         ),
     ),
     McpToolDefinition(

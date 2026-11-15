@@ -422,6 +422,11 @@ java.util.Map
 #### `jdx usages <symbol>`
 Find Usages across **all workspace jars plus the project's own source dirs**.
 - `--kind call|ref|impl|override|read|write|new|throw|annotation|all`
+- `--where key=value` (repeatable; requires `--kind annotation`) — annotation
+  value predicates (issue #26). Every clause must match the rendered annotation
+  element values (AND). String values may omit the surrounding quotes
+  (`--where since=99` matches a stored `"99"`). Matching rows carry the rendered
+  `@Fqn(k=v,…)` use in text and JSON.
 - `--in <artifact-glob>`, `--exclude <glob>`, `--limit N`, `--context N`
 - Groups by artifact, then by declaring method, with the canonical ref of each call site.
 - `--kind throw` matches `throws` declarations (declaration-level), not `ATHROW` throw sites.
@@ -1283,6 +1288,10 @@ Explicitly out of v1 scope, recorded so they are not lost:
   `jdx manifest --entries` + `jdx resources --cat`)**; issue #25 slices shipped.
 - **Annotation-driven views** — "show me every `@Deprecated(forRemoval=true)` in this
   dependency", "all Spring `@Bean` factories", "all JUnit `@Test`s".
+  **Partial (issue #26):** `jdx usages <AnnotationType> --kind annotation --where key=value`
+  filters annotated classes/members by element values and prints the rendered
+  `@Fqn(k=v,…)` use per row. Shortcuts / recipes (`@Bean`, `@Test`) and a
+  dedicated command shape remain open.
 - **`--since` / API-level reporting** — which JDK release introduced a member.
 - **Dataflow-lite** — `jdx flow <method>` for a simplified reaching-values view.
 - **Multi-release jar variant selection** beyond warning.
@@ -1426,6 +1435,7 @@ resolve   <name> [--limit]
 ls        [package-glob] [--limit]
 tree      [artifact-glob] [--depth --counts --limit]
 usages    --kind call|ref|impl|override|read|write|new|throw|annotation|all
+          --where key=value (repeatable; requires --kind annotation; issue #26)
           --in --exclude --limit --context --src
           [-w …] [--jars …] [--no-jdk] [--json] [--no-color]
 hierarchy --up --down --direct --depth N --in --exclude --limit

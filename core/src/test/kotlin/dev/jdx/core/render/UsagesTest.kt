@@ -85,6 +85,25 @@ class UsagesTest {
     }
 
     @Test
+    fun `annotation use rides the text line and the json envelope`() {
+        val annotated = UsageHit(
+            fromRef = "com.example.Api#old()",
+            artifact = "lib.jar",
+            kind = "annotation",
+            targetRef = "java.lang.Deprecated",
+            annotation = "@java.lang.Deprecated(forRemoval=true, since=\"99\")",
+        )
+        annotated.textLine() shouldBe
+            "  annotation com.example.Api#old()  @java.lang.Deprecated(forRemoval=true, since=\"99\")"
+        val json = buildUsageListing(
+            "java.lang.Deprecated",
+            "java.lang.Deprecated",
+            listOf(annotated),
+        ).toJson("usages")
+        json shouldContain "\"annotation\":\"@java.lang.Deprecated(forRemoval=true, since=\\\"99\\\")\""
+    }
+
+    @Test
     fun `bytecode file colon line rides the text line and the json envelope`() {
         val withLocation = UsageHit(
             fromRef = "com.example.App#run()",

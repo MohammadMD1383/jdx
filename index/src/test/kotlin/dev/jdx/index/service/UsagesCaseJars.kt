@@ -76,8 +76,10 @@ internal fun buildLinedUsagesJar(dir: Path): Path {
  * - T-075 enrichment: `u.Widget` (concrete, empty) is constructed once by
  *   `u.Factory#create()` (`NEW` + `<init>` call → `--kind new`); `u.Boom`
  *   (exception) is declared in `u.App#risky()`'s `throws` (`--kind throw`);
- *   `u.Mark` (annotation) annotates the `u.Factory` class and the
- *   `u.Other#work()` method (`--kind annotation`).
+ *   `u.Mark` (annotation with `int level()`) annotates the `u.Factory` class
+ *   (`level=1`) and the `u.Other#work()` method (`level=2`) — so
+ *   `--kind annotation --where level=1` (issue #26) can assert value filtering
+ *   hermetically without the JDK.
  */
 internal fun buildUsagesCaseJar(dir: Path): Path {
     val abstractMethod = Opcodes.ACC_PUBLIC or Opcodes.ACC_ABSTRACT
@@ -106,7 +108,10 @@ internal fun buildUsagesCaseJar(dir: Path): Path {
             },
             "u/Other.class" to buildClass("u/Other") {
                 method(Opcodes.ACC_PUBLIC, "work", "()V", null, null) {
-                    annotation("Lu/Mark;", true).visitEnd()
+                    annotation("Lu/Mark;", true).apply {
+                        visit("level", 2)
+                        visitEnd()
+                    }
                     invoke(Opcodes.INVOKEVIRTUAL, "u/Lib", "greet", "(Ljava/lang/String;I)Ljava/lang/String;")
                 }
             },
@@ -117,7 +122,10 @@ internal fun buildUsagesCaseJar(dir: Path): Path {
                 }
             },
             "u/Factory.class" to buildClass("u/Factory") {
-                annotate("Lu/Mark;", true).visitEnd()
+                annotate("Lu/Mark;", true).apply {
+                    visit("level", 1)
+                    visitEnd()
+                }
                 method(Opcodes.ACC_PUBLIC, "create", "()V", null, null) {
                     typeInsn(Opcodes.NEW, "u/Widget")
                     invoke(Opcodes.INVOKESPECIAL, "u/Widget", "<init>", "()V")
@@ -127,7 +135,11 @@ internal fun buildUsagesCaseJar(dir: Path): Path {
             "u/Mark.class" to buildClass(
                 "u/Mark",
                 access = Opcodes.ACC_PUBLIC or Opcodes.ACC_ABSTRACT or Opcodes.ACC_ANNOTATION or Opcodes.ACC_INTERFACE,
-            ),
+            ) {
+                method(abstractMethod, "level", "()I", null, null) {
+                    annotationDefault(0)
+                }
+            },
             "v/Lib.class" to buildClass("v/Lib"),
         ),
     )

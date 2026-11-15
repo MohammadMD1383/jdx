@@ -21,6 +21,7 @@ class UsagesPropertyTest {
         val withLocation = (0..1).random() == 0
         val line = if (withLocation) (1..200).random() else null
         val withSnippet = withLocation && (0..1).random() == 0
+        val withAnnotation = kind == "annotation" && (0..1).random() == 0
         UsageHit(
             fromRef = "com.example.App#m${(0..9999).random()}()",
             artifact = "artifact-${(0..9).random()}.jar",
@@ -40,11 +41,24 @@ class UsagesPropertyTest {
             } else {
                 null
             },
+            annotation = if (withAnnotation) {
+                "@java.lang.Deprecated(forRemoval=true)"
+            } else {
+                null
+            },
         )
     }
 
     private fun sorted(hits: List<UsageHit>): List<UsageHit> =
-        hits.sortedWith(compareBy({ it.artifact }, { it.fromRef }, { it.kind }, { it.targetRef }))
+        hits.sortedWith(
+            compareBy(
+                { it.artifact },
+                { it.fromRef },
+                { it.kind },
+                { it.targetRef },
+                { it.annotation ?: "" },
+            ),
+        )
 
     @Test
     fun `rendering is deterministic across runs`(): Unit = runBlocking {
@@ -92,6 +106,10 @@ class UsagesPropertyTest {
                     assert(json.contains("\"file\":\"${hit.file}\"")) { "$location file missing from json" }
                     assert(json.contains("\"line\":${hit.line}")) { "$location line missing from json" }
                     assert(text.contains(location)) { "$location missing from text" }
+                }
+                hit.annotation?.let { annotation ->
+                    assert(json.contains(annotation)) { "$annotation missing from json" }
+                    assert(text.contains(annotation)) { "$annotation missing from text" }
                 }
                 hit.snippet?.let { snippet ->
                     assert(json.contains("\"snippet\":")) { "snippet missing from json for ${hit.fromRef}" }

@@ -6,6 +6,8 @@ import dev.jdx.core.diff.FailOn
 import dev.jdx.core.diff.SeverityFilter
 import dev.jdx.core.model.AccessFlag
 import dev.jdx.core.paths.JdxOs
+import dev.jdx.core.model.AnnotationInfo
+import dev.jdx.core.model.AnnotationWhere
 import dev.jdx.core.model.ClassInfo
 import dev.jdx.core.model.FieldInfo
 import dev.jdx.core.model.JvmDescriptor
@@ -28,6 +30,8 @@ import dev.jdx.core.model.kotlinViewKey
 import dev.jdx.core.model.Warning
 import dev.jdx.core.model.WarningCode
 import dev.jdx.core.model.arrayTypeName
+import dev.jdx.core.model.matchesWhere
+import dev.jdx.core.model.renderUse
 import dev.jdx.core.model.typeNameFromBinaryName
 import dev.jdx.core.ref.SymbolRefParser
 import dev.jdx.core.ref.SymbolRefParseResult
@@ -2624,6 +2628,13 @@ public object JdxService {
          * or stripped classes degrade to a snippet-less row.
          */
         public val contextLines: Int = 0,
+        /**
+         * Annotation value predicates (`--where key=value`, issue #26).
+         * Only meaningful with [UsageKindFilter.ANNOTATION]; every clause
+         * must match the rendered [AnnotationInfo.values] map (AND). Empty
+         * means no value filter.
+         */
+        public val where: List<AnnotationWhere> = emptyList(),
     )
 
     /**
@@ -2648,6 +2659,14 @@ public object JdxService {
         if (options.contextLines < 0) {
             return failure(3, rawRef, "usage error: --context must be >= 0, got ${options.contextLines}")
         }
+        if (options.where.isNotEmpty() && options.kind != UsageKindFilter.ANNOTATION) {
+            return failure(
+                3,
+                rawRef,
+                "usage error: --where requires --kind annotation " +
+                    "(annotation value predicates; issue #26)",
+            )
+        }
         when (options.kind) {
             UsageKindFilter.IMPL, UsageKindFilter.OVERRIDE ->
                 return failure(
@@ -2659,6 +2678,7 @@ public object JdxService {
             // T-075: NEW/THROW/ANNOTATION are live (graph enrichment over the
             // T-029 vocabulary + ClassInfo metadata). `--context N` (issue #10)
             // slices paired sources around LineNumberTable sites.
+            // `--where` (issue #26) filters annotation rows by element values.
             else -> Unit
         }
         val parsed = SymbolRefParser.parse(rawRef)
@@ -2932,7 +2952,7 @@ public object JdxService {
                         val metaHits = mutableListOf<UsageHit>()
                         collectMetadataUsages(
                             bytes, fromBinary, label, binary, wantThrows, wantAnnotations,
-                            reported, warnings, metaHits,
+                            options.where, reported, warnings, metaHits,
                         )
                         for (hit in metaHits) pending.add(PendingUsage(hit = hit))
                     }
@@ -2992,6 +3012,7 @@ public object JdxService {
                     { it.hit.fromRef },
                     { it.hit.kind },
                     { it.hit.targetRef },
+                    { it.hit.annotation ?: "" },
                 ),
             )
             val plainHits = sorted.map { it.hit }
@@ -3052,7 +3073,9 @@ public object JdxService {
      * attributing the thrown type needs data-flow; site attribution is
      * deferred to future `jdx flow` work), `annotation` rows
      * for the class and each member annotated with it. One row per declaring
-     * method / annotated element, kind-led like the edge rows. Never throws:
+     * method / annotated element, kind-led like the edge rows. [where]
+     * (issue #26) keeps only annotation uses whose rendered values match
+     * every clause; matching rows carry [UsageHit.annotation]. Never throws:
      * unparseable bytes warn once via [reported] and read as no hits (D-017).
      */
     private fun collectMetadataUsages(
@@ -3062,6 +3085,7 @@ public object JdxService {
         targetBinary: String,
         wantThrows: Boolean,
         wantAnnotations: Boolean,
+        where: List<AnnotationWhere>,
         reported: MutableSet<String>,
         warnings: MutableList<Warning>,
         hits: MutableList<UsageHit>,
@@ -3103,18 +3127,24 @@ public object JdxService {
             }
         }
         if (wantAnnotations) {
-            if (info.annotations.any { (it.type as? TypeName.ClassType)?.binaryName == targetBinary }) {
+            fun matching(annotations: List<AnnotationInfo>): List<AnnotationInfo> =
+                annotations.filter { annotation ->
+                    (annotation.type as? TypeName.ClassType)?.binaryName == targetBinary &&
+                        annotation.matchesWhere(where)
+                }
+            for (annotation in matching(info.annotations)) {
                 hits.add(
                     UsageHit(
                         fromRef = hostBinary,
                         artifact = label,
                         kind = "annotation",
                         targetRef = canonicalTarget,
+                        annotation = annotation.renderUse(),
                     ),
                 )
             }
             for (member in info.members) {
-                if (member.annotations.any { (it.type as? TypeName.ClassType)?.binaryName == targetBinary }) {
+                for (annotation in matching(member.annotations)) {
                     val fromRef = when (member) {
                         is MethodInfo -> SymbolRefPrinter.print(
                             MemberSymbolRef(
@@ -3131,6 +3161,7 @@ public object JdxService {
                             artifact = label,
                             kind = "annotation",
                             targetRef = canonicalTarget,
+                            annotation = annotation.renderUse(),
                         ),
                     )
                 }

@@ -3,7 +3,9 @@ package dev.jdx.index.service
 import dev.jdx.core.diff.ApiSurface
 import dev.jdx.core.diff.FailOn
 import dev.jdx.core.diff.SeverityFilter
+import dev.jdx.core.model.AnnotationWhere
 import dev.jdx.core.model.Visibility
+import dev.jdx.core.model.parseAnnotationWhere
 import dev.jdx.core.render.DEFAULT_BODY_MAX_LINES
 import dev.jdx.core.render.DEFAULT_CALLS_DEPTH
 import dev.jdx.core.render.DEFAULT_CALLS_LIMIT
@@ -97,7 +99,8 @@ import dev.jdx.index.workspace.WorkspaceStore
  * - `tree`: `depth`, `counts`, `limit` (empty query covers every artifact).
  * - `usages`: `kind` (all|call|read|write|ref|new|throw|annotation;
  *   throw reads `throws` declarations, not `ATHROW` sites),
- *   `in`, `exclude`, `limit`, `context`.
+ *   `in`, `exclude`, `limit`, `context`, `where` (comma-separated
+ *   `key=value` predicates; requires `--kind annotation`, issue #26).
  * - `hierarchy`: `up`, `down`, `direct`, `depth`, `in`, `exclude`, `limit`.
  * - `implementors`: `direct`, `depth`, `in`, `exclude`, `limit`.
  * - `callers`: `depth`, `in`, `exclude`, `limit`, `exact`.
@@ -220,6 +223,7 @@ public fun JdxService.dispatch(request: RpcRequest, roots: RootsSpec): ServiceOu
                 exclude = scope.params["exclude"],
                 limit = scope.int("limit", DEFAULT_USAGES_LIMIT) ?: return scope.failure(),
                 contextLines = scope.int("context", 0) ?: return scope.failure(),
+                where = scope.annotationWhere() ?: return scope.failure(),
             ),
         )
         RpcCommand.HIERARCHY -> hierarchy(
@@ -726,6 +730,28 @@ private class ParamScope(
                 null
             }
         }
+
+    /**
+     * Comma-separated `--where key=value` clauses (issue #26). Empty/absent
+     * means no value filter. A malformed clause records the usage error and
+     * returns null so the dispatch exits 3 without guessing.
+     */
+    fun annotationWhere(): List<AnnotationWhere>? {
+        val raw = params["where"] ?: return emptyList()
+        if (raw.isBlank()) return emptyList()
+        val clauses = mutableListOf<AnnotationWhere>()
+        for (part in raw.split(",")) {
+            val trimmed = part.trim()
+            if (trimmed.isEmpty()) continue
+            val parsed = parseAnnotationWhere(trimmed)
+            if (parsed.isFailure) {
+                fail(parsed.exceptionOrNull()!!.message!!)
+                return null
+            }
+            clauses.add(parsed.getOrThrow())
+        }
+        return clauses
+    }
 
     /**
      * The `source` `lines` (`A:B`) window. Callers check [has] first: absent reads as
