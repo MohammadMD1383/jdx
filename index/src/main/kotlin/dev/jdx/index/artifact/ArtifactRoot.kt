@@ -82,6 +82,24 @@ public interface ArtifactRoot : Closeable {
         throw ArtifactReadException("artifact read error: $displayName has no module-info $path")
 
     /**
+     * Every base `META-INF/MANIFEST.MF` entry in this root (issue #25 manifest
+     * slice), normalised slash paths, sorted. Typically `[META-INF/MANIFEST.MF]`
+     * or empty; `jrt:/` is empty (JDK modules have no classic jar manifest).
+     * Versioned copies under `META-INF/versions/` are excluded.
+     */
+    public fun manifestPaths(): List<String> = emptyList()
+
+    /**
+     * Opens one [manifestPaths] entry for reading. The caller closes the
+     * stream. Default refuses — roots that list a manifest override this.
+     *
+     * @throws ArtifactReadException when [path] is unsafe, absent, or breaches a
+     *   decompression cap (D-015 exit 5 at the service layer).
+     */
+    public fun openManifest(path: String): InputStream =
+        throw ArtifactReadException("artifact read error: $displayName has no manifest $path")
+
+    /**
      * Content-hash identity of this root: the jar's bytes, the directory's content hash,
      * or the JDK release for `jrt:/`. The index cache key (PROPOSAL.md §10.2).
      */

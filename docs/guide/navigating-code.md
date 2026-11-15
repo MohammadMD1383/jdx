@@ -100,6 +100,18 @@ Omit the pattern to list every `module-info.class` in the workspace (including t
 running JDK). A pattern matches the module name, an exported/opened package, a
 `uses`/`provides` service, or a provider class.
 
+## Manifest attributes
+
+To answer *what is this jar's Main-Class / Implementation-Version / Multi-Release?*
+without `unzip -p …/MANIFEST.MF` (issue #25):
+
+```console exec
+$ jdx manifest Multi-Release --coord com.google.code.gson:gson:2.14.0 --no-jdk
+```
+
+Omit the pattern to list every main attribute. A pattern matches the attribute name or
+value. Per-entry (JarEntry) attributes are not listed in this slice.
+
 ## Limitations
 
 - Graph queries re-scan the bytecode roots on each query (there is no persistent graph index

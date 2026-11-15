@@ -1,0 +1,5 @@
+manifests
+manifest-case.jar (2)
+  Implementation-Title: CaseLib
+  Implementation-Version: 1.2.3
+2 of 5 attributes shown (--limit 5 to see more)

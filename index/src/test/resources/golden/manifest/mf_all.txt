@@ -1,0 +1,7 @@
+manifests
+manifest-case.jar (5)
+  Implementation-Title: CaseLib
+  Implementation-Version: 1.2.3
+  Main-Class: com.example.Main
+  Manifest-Version: 1.0
+  Multi-Release: true

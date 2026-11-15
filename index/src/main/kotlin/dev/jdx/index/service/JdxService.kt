@@ -66,6 +66,7 @@ import dev.jdx.core.render.MAX_SAMPLE_SNIPPET_LINES
 import dev.jdx.core.render.DEFAULT_SEARCH_LIMIT
 import dev.jdx.core.render.DEFAULT_TREE_DEPTH
 import dev.jdx.core.render.DEFAULT_LITERALS_LIMIT
+import dev.jdx.core.render.DEFAULT_MANIFEST_LIMIT
 import dev.jdx.core.render.DEFAULT_MODULES_LIMIT
 import dev.jdx.core.render.DEFAULT_SERVICES_LIMIT
 import dev.jdx.core.render.DEFAULT_USAGES_LIMIT
@@ -73,6 +74,8 @@ import dev.jdx.core.render.ErrorResult
 import dev.jdx.core.render.HierarchyListing
 import dev.jdx.core.render.LiteralHit
 import dev.jdx.core.render.LiteralListing
+import dev.jdx.core.render.ManifestHit
+import dev.jdx.core.render.ManifestListing
 import dev.jdx.core.render.ModuleHit
 import dev.jdx.core.render.ModuleListing
 import dev.jdx.core.render.ModulePackageTarget
@@ -80,8 +83,10 @@ import dev.jdx.core.render.ModuleProvide
 import dev.jdx.core.render.ModuleRequire
 import dev.jdx.core.render.ServiceHit
 import dev.jdx.core.render.ServiceListing
+import dev.jdx.core.render.buildManifestListing
 import dev.jdx.core.render.buildModuleListing
 import dev.jdx.core.render.buildServiceListing
+import dev.jdx.index.artifact.ManifestEntries
 import dev.jdx.index.asm.ModuleInfoReader
 import dev.jdx.core.render.LsListing
 import dev.jdx.core.render.LsTypeEntry
@@ -356,6 +361,13 @@ public object JdxService {
 
         /** JPMS `module-info` listing (`modules`) — exit 0. */
         public data class ModuleList(public val listing: ModuleListing) : ServiceOutcome {
+            override val exitCode: Int = 0
+            override fun renderText(color: Boolean): String = listing.renderText(color)
+            override fun toJson(command: String): String = listing.toJson(command)
+        }
+
+        /** `META-INF/MANIFEST.MF` main attributes (`manifest`) — exit 0. */
+        public data class ManifestList(public val listing: ManifestListing) : ServiceOutcome {
             override val exitCode: Int = 0
             override fun renderText(color: Boolean): String = listing.renderText(color)
             override fun toJson(command: String): String = listing.toJson(command)
@@ -5024,6 +5036,155 @@ public object JdxService {
             name.contains(pattern, ignoreCase = true)
         } else {
             name.contains(pattern)
+        }
+    }
+
+    // -- manifest (issue #25 manifest slice) ---------------------------------------
+
+    /**
+     * Options for `manifest`: how to match the optional pattern and how much of
+     * the workspace to cover. An empty pattern lists every main attribute.
+     */
+    public data class ManifestOptions(
+        public val regex: Boolean = false,
+        public val ignoreCase: Boolean = false,
+        public val inArtifact: String? = null,
+        public val exclude: String? = null,
+        public val limit: Int = DEFAULT_MANIFEST_LIMIT,
+    )
+
+    /**
+     * Answers `manifest [pattern]`: every base `META-INF/MANIFEST.MF` main
+     * attribute across the workspace's binary roots (issue #25 manifest slice).
+     *
+     * Live-roots scan — no persistent index, no class load. An empty / blank
+     * [rawPattern] lists every attribute; a non-empty pattern matches the
+     * attribute name **or** value (substring by default). A valid miss is
+     * exit 1. Per-entry (JarEntry) attributes and arbitrary resource
+     * extraction remain later slices.
+     */
+    public fun manifest(
+        rawPattern: String?,
+        roots: RootsSpec,
+        options: ManifestOptions = ManifestOptions(),
+    ): ServiceOutcome {
+        val pattern = rawPattern?.trim().orEmpty()
+        if (options.limit < 0) {
+            return failure(3, pattern, "usage error: --limit must be >= 0, got ${options.limit}")
+        }
+        if (options.regex) {
+            if (pattern.isEmpty()) {
+                return failure(3, pattern, "usage error: --regex needs a non-empty pattern")
+            }
+            if (!SymbolSearch.isValidRegex(pattern)) {
+                return failure(3, pattern, "usage error: invalid --regex pattern '$pattern'")
+            }
+        }
+        if (roots.jarSpecs.isEmpty() && !roots.includeJdk) {
+            return failure(
+                4,
+                pattern,
+                "no workspace: no --jars given, no workspace selected (-w <name>, " +
+                    "JDX_WORKSPACE, jdx ws use) and --no-jdk set " +
+                    "(pass --jars <path>, select a workspace, or drop --no-jdk)",
+            )
+        }
+        return try {
+            executeManifest(pattern, roots, options)
+        } catch (e: ArtifactReadException) {
+            failure(5, pattern, e.message ?: "artifact read error")
+        } catch (e: Exception) {
+            failure(6, pattern, "internal error: ${e.javaClass.simpleName}: ${e.message ?: "no detail"}")
+        }
+    }
+
+    /**
+     * Serves `manifest`: walks every open root's [ArtifactRoot.manifestPaths],
+     * parses main attributes, and filters by [pattern]. Unreadable /
+     * corrupt manifests are skipped (degrade, don't fail).
+     */
+    private fun executeManifest(
+        pattern: String,
+        roots: RootsSpec,
+        options: ManifestOptions,
+    ): ServiceOutcome {
+        val opened = openRoots(roots)
+        val hits = mutableListOf<ManifestHit>()
+        try {
+            for (open in opened) {
+                val label = open.root.displayName
+                if (!matchesArtifactFilter(options.inArtifact, label) ||
+                    (options.exclude != null && matchesArtifactFilter(options.exclude, label))
+                ) {
+                    continue
+                }
+                for (entry in open.root.manifestPaths()) {
+                    val bytes = try {
+                        open.root.openManifest(entry).use { it.readBytes() }
+                    } catch (_: Exception) {
+                        continue
+                    }
+                    for ((name, value) in ManifestEntries.parseMainAttributes(bytes)) {
+                        if (pattern.isNotEmpty() &&
+                            !matchesManifestPattern(pattern, name, value, options)
+                        ) {
+                            continue
+                        }
+                        hits.add(
+                            ManifestHit(
+                                name = name,
+                                value = value,
+                                artifact = label,
+                            ),
+                        )
+                    }
+                }
+            }
+        } finally {
+            opened.forEach { it.root.close() }
+        }
+        if (hits.isEmpty()) {
+            val detail = if (pattern.isEmpty()) {
+                "no manifests found"
+            } else {
+                "no manifest attributes matching '$pattern'"
+            }
+            return ServiceOutcome.Failure(ErrorResult.notFound(pattern, detail = detail))
+        }
+        // Deterministic: artifact, name (D-007).
+        hits.sortWith(compareBy({ it.artifact }, { it.name }))
+        return ServiceOutcome.ManifestList(
+            buildManifestListing(
+                query = pattern,
+                hits = hits,
+                limit = options.limit,
+            ),
+        )
+    }
+
+    /**
+     * Pattern match for one attribute: hits when [pattern] matches the
+     * attribute name **or** value. Never throws.
+     */
+    private fun matchesManifestPattern(
+        pattern: String,
+        name: String,
+        value: String,
+        options: ManifestOptions,
+    ): Boolean =
+        matchesManifestText(pattern, name, options) ||
+            matchesManifestText(pattern, value, options)
+
+    private fun matchesManifestText(
+        pattern: String,
+        text: String,
+        options: ManifestOptions,
+    ): Boolean {
+        if (options.regex) return SymbolSearch.matchesRegex(pattern, text)
+        return if (options.ignoreCase) {
+            text.contains(pattern, ignoreCase = true)
+        } else {
+            text.contains(pattern)
         }
     }
 

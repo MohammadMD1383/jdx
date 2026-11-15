@@ -1,0 +1,1 @@
+{"jdx":1,"ok":true,"command":"manifest","query":"Main-Class","result":{"pattern":"Main-Class","attributes":[{"name":"Main-Class","value":"com.example.Main","artifact":"manifest-case.jar"}]},"warnings":[],"provenance":[]}
