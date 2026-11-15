@@ -15,6 +15,7 @@ import dev.jdx.core.render.DEFAULT_LITERALS_LIMIT
 import dev.jdx.core.render.DEFAULT_SAMPLES_LIMIT
 import dev.jdx.core.render.DEFAULT_MANIFEST_LIMIT
 import dev.jdx.core.render.DEFAULT_MODULES_LIMIT
+import dev.jdx.core.render.DEFAULT_RESOURCE_MAX_LINES
 import dev.jdx.core.render.DEFAULT_RESOURCES_LIMIT
 import dev.jdx.core.render.DEFAULT_SERVICES_LIMIT
 import dev.jdx.core.render.MAX_SAMPLE_SNIPPET_LINES
@@ -324,6 +325,8 @@ public fun JdxService.dispatch(request: RpcRequest, roots: RootsSpec): ServiceOu
                 inArtifact = scope.params["in"],
                 exclude = scope.params["exclude"],
                 limit = scope.int("limit", DEFAULT_RESOURCES_LIMIT) ?: return scope.failure(),
+                cat = scope.bool("cat"),
+                maxLines = scope.int("maxLines", DEFAULT_RESOURCE_MAX_LINES) ?: return scope.failure(),
             ),
         )
         RpcCommand.DIFF -> diff(

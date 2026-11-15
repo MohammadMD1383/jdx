@@ -55,4 +55,19 @@ class ResourceEntriesPropertyTest {
             ResourceEntries.isResourcePath("META-INF/versions/$ver/com/example/$name.class") shouldBe false
         }
     }
+
+    @Test
+    fun `NUL-bearing payloads are always binary and ASCII decodes round-trip`(): Unit = runBlocking {
+        val arbText = Arb.string(0..40, Codepoint.az())
+        checkAll(80, arbText) { text ->
+            val bytes = text.toByteArray(Charsets.UTF_8)
+            ResourceEntries.isBinary(bytes) shouldBe false
+            ResourceEntries.decodeText(bytes) shouldBe text
+            if (bytes.isNotEmpty()) {
+                val withNul = bytes + 0
+                ResourceEntries.isBinary(withNul) shouldBe true
+                ResourceEntries.decodeText(withNul) shouldBe null
+            }
+        }
+    }
 }

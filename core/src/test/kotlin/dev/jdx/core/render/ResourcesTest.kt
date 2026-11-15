@@ -7,8 +7,9 @@ import io.kotest.matchers.string.shouldNotContain
 import org.junit.jupiter.api.Test
 
 /**
- * Tier-1 coverage for the resource listing (issue #25): empty/miss text,
- * artifact grouping, truncation footer, and text⊆JSON (D-007).
+ * Tier-1 coverage for the resource listing + `--cat` content model
+ * (issue #25): empty/miss text, artifact grouping, truncation footer,
+ * text⊆JSON (D-007), binary refusal, and line capping.
  */
 class ResourcesTest {
 
@@ -72,5 +73,73 @@ class ResourcesTest {
         text shouldNotContain "res-3.txt"
         listing.toJson("resources") shouldContain "\"shown\":2"
         listing.toJson("resources") shouldContain "\"total\":5"
+    }
+
+    @Test
+    fun `cat candidate is path --in artifact`() {
+        ResourceHit("a/b.txt", "lib.jar").catCandidate() shouldBe "a/b.txt --in lib.jar"
+    }
+
+    @Test
+    fun `splitResourceLines normalises newlines and drops a trailing terminator`() {
+        splitResourceLines("") shouldBe emptyList()
+        splitResourceLines("one") shouldBe listOf("one")
+        splitResourceLines("one\n") shouldBe listOf("one")
+        splitResourceLines("one\r\ntwo\rthree") shouldBe listOf("one", "two", "three")
+    }
+
+    @Test
+    fun `text content renders body size and next hint`() {
+        val content = buildResourceContent(
+            query = "messages.properties",
+            path = "com/example/messages.properties",
+            artifact = "lib.jar",
+            sizeBytes = 12,
+            fileLines = listOf("hello=world"),
+        )
+        val text = content.renderText()
+        text shouldContain "com/example/messages.properties"
+        text shouldContain "artifact: lib.jar"
+        text shouldContain "size: 12 bytes"
+        text shouldContain "hello=world"
+        text shouldContain "next: jdx resources 'com/example/messages.properties' --in lib.jar"
+        text shouldNotContain "binary:"
+        val json = content.toJson("resources")
+        json shouldContain "\"binary\":false"
+        json shouldContain "\"text\":\"hello=world\""
+        json shouldContain "\"sizeBytes\":12"
+    }
+
+    @Test
+    fun `text content truncates with --max-lines footer`() {
+        val lines = (1..5).map { "line-$it" }
+        val content = buildResourceContent(
+            query = "x",
+            path = "x.txt",
+            artifact = "a.jar",
+            sizeBytes = 40,
+            fileLines = lines,
+            maxLines = 2,
+        )
+        content.lines shouldBe listOf("line-1", "line-2")
+        content.renderText() shouldContain "2 of 5 lines shown (--max-lines 5 to see more)"
+        content.toJson("resources") shouldContain "\"shown\":2"
+    }
+
+    @Test
+    fun `binary content refuses to dump bytes`() {
+        val content = buildBinaryResourceContent(
+            query = "logo.png",
+            path = "img/logo.png",
+            artifact = "ui.jar",
+            sizeBytes = 99,
+        )
+        val text = content.renderText()
+        text shouldContain "binary: contents not shown (not UTF-8 text)"
+        text shouldContain "size: 99 bytes"
+        text shouldNotContain "PNG"
+        val json = content.toJson("resources")
+        json shouldContain "\"binary\":true"
+        json shouldNotContain "\"text\""
     }
 }

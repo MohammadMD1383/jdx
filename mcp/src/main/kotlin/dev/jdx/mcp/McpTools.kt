@@ -398,7 +398,7 @@ public val ALL_MCP_TOOLS: List<McpToolDefinition> = listOf(
             "Default: main-section attributes. Set entries=true for per-entry (JarEntry) " +
             "attributes instead. Omit query to list every attribute in that section; with " +
             "a query, match the attribute name or value (and entry path when entries=true). " +
-            "Does not extract arbitrary resource contents (use jdx_resources for paths).",
+            "Does not extract resource file bytes (use jdx_resources with cat=true for text).",
         params = listOf(
             optionalQueryParam(),
             workspaceParam(),
@@ -419,11 +419,23 @@ public val ALL_MCP_TOOLS: List<McpToolDefinition> = listOf(
         command = RpcCommand.RESOURCES,
         description = "List non-class resource paths across the workspace jars (META-INF, " +
             ".properties, versioned META-INF/versions/… copies, …). Omit query to list " +
-            "every resource; with a query, match the entry path. Listing only — does not " +
-            "extract or dump resource contents.",
+            "every resource; with a query, match the entry path. Pass cat=true to print " +
+            "the unique match's text contents (binary payloads refuse to dump bytes; " +
+            "ambiguous matches exit 2). maxLines caps --cat text lines (default 200).",
         params = listOf(
             optionalQueryParam(),
             workspaceParam(),
+            McpParam(
+                name = "cat",
+                kind = McpParamKind.BOOLEAN,
+                description = "Print the unique matching resource's text instead of listing paths. " +
+                    "Requires a query; exits 2 when more than one path matches.",
+            ),
+            McpParam(
+                name = "maxLines",
+                kind = McpParamKind.INTEGER,
+                description = "Maximum text lines shown under cat=true (default 200).",
+            ),
             McpParam(name = "regex", kind = McpParamKind.BOOLEAN, description = "Treat query as a Java regex."),
             McpParam(
                 name = "ignoreCase", kind = McpParamKind.BOOLEAN,

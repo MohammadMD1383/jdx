@@ -33,8 +33,8 @@ import kotlin.system.exitProcess
  * main-section attributes; `--entries` switches to per-entry (JarEntry)
  * sections. An omitted pattern lists every attribute; a non-empty pattern
  * matches the attribute name or value (and, with `--entries`, the entry
- * path). Exits 1 when nothing matches. Arbitrary resource content extraction
- * remains a later slice (`jdx resources` lists paths only).
+ * path). Exits 1 when nothing matches. Resource file bytes live under
+ * `jdx resources --cat`.
  */
 class ManifestCommand(
     private val query: ManifestQuery = ::defaultManifestQuery,

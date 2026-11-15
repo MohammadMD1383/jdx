@@ -90,6 +90,20 @@ class ResourcesCommandTest {
         run.options.inArtifact shouldBe "app.jar"
         run.options.exclude shouldBe "other.jar"
         run.options.limit shouldBe 3
+        run.options.cat shouldBe false
+    }
+
+    @Test
+    fun `forwards cat and max-lines`() {
+        val run = run(
+            "com/example/messages.properties",
+            "--cat",
+            "--max-lines", "12",
+            "--no-jdk",
+        )
+        run.exit shouldBe 0
+        run.options!!.cat shouldBe true
+        run.options.maxLines shouldBe 12
     }
 
     @Test

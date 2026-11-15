@@ -466,13 +466,15 @@ resource contents (use `jdx resources` for paths). Versioned copies under
 `META-INF/versions/` are ignored (the JVM reads the jar-root manifest).
 
 #### `jdx resources [pattern]`
-Non-class resource path listing (issue #25 resource-listing slice): every non-`.class`
-entry across the workspace's binary roots (jars and class dirs; `jrt:/` empty). Omit the
-pattern to list every resource; with a pattern, match the entry path (substring by
-default). `--regex` / `--ignore-case` / `--in` / `--exclude` / `--limit`. Listing only —
-never dumps content into context. Versioned paths under `META-INF/versions/` are listed
-as stored (not collapsed). Content extraction remains a later slice of the same issue
-(per-entry manifest attributes live on `jdx manifest --entries`).
+Non-class resource path listing and optional content extraction (issue #25): every
+non-`.class` entry across the workspace's binary roots (jars and class dirs; `jrt:/`
+empty). Omit the pattern to list every resource; with a pattern, match the entry path
+(substring by default). `--regex` / `--ignore-case` / `--in` / `--exclude` / `--limit`.
+`--cat` switches to content extraction for the **unique** matching path: UTF-8 text is
+shown (capped by `--max-lines`, default 200); binary / non-UTF-8 payloads report size
+only and never dump bytes into context; zero matches → exit 1; two or more → exit 2 with
+`path --in artifact` candidates (never guess). Versioned paths under `META-INF/versions/`
+are listed / opened as stored (not collapsed).
 
 #### `jdx samples <symbol>`
 Real call sites as usage examples, source-rendered when sources are available, ranked by
@@ -1277,7 +1279,7 @@ Explicitly out of v1 scope, recorded so they are not lost:
   ~~`module-info` view~~ / ~~manifest main attributes~~ / ~~resource path
   listing~~ / ~~per-entry (JarEntry) manifest attributes~~ **partial (issue #25:
   `jdx services` + `jdx modules` + `jdx manifest` + `jdx resources` +
-  `jdx manifest --entries`)**; still deferred: resource content extraction.
+  `jdx manifest --entries` + `jdx resources --cat`)**; issue #25 slices shipped.
 - **Annotation-driven views** — "show me every `@Deprecated(forRemoval=true)` in this
   dependency", "all Spring `@Bean` factories", "all JUnit `@Test`s".
 - **`--since` / API-level reporting** — which JDK release introduced a member.
@@ -1447,9 +1449,9 @@ modules   [pattern] [--regex] [--ignore-case] [--in] [--exclude] [--limit]
 manifest  [pattern] [--entries] [--regex] [--ignore-case] [--in] [--exclude] [--limit]
           [-w …] [--jars …] [--no-jdk] [--json] [--no-color]
           (META-INF/MANIFEST.MF attrs; --entries = JarEntry sections; issue #25)
-resources [pattern] [--regex] [--ignore-case] [--in] [--exclude] [--limit]
+resources [pattern] [--cat] [--max-lines] [--regex] [--ignore-case] [--in] [--exclude] [--limit]
           [-w …] [--jars …] [--no-jdk] [--json] [--no-color]
-          (non-class resource paths; listing only; empty pattern lists all; issue #25)
+          (non-class resource paths; --cat = unique-match text; empty pattern lists all; issue #25)
 diff      <old> <new> [--visibility public|all] [--include-synthetic]
           [--severity all|suspicious|breaking] [--fail-on none|breaking|any]
           [--limit N] [--fetch] [--repo] [--json] [--no-color]

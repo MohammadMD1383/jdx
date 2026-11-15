@@ -1,0 +1,5 @@
+com/example/messages.properties
+  artifact: resources-case.jar
+  size: 12 bytes
+hello=world
+next: jdx resources 'com/example/messages.properties' --in resources-case.jar

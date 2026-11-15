@@ -91,7 +91,8 @@ public class DirArtifact private constructor(
     override fun openResource(path: String): InputStream {
         val normal = ZipSafety.normalizeEntryName(path)
             ?: throw ArtifactReadException("artifact read error: rejected unsafe entry name: $path")
-        if (normal !in serviceEntries) {
+        // Any listed non-class resource (issue #25 --cat), including SPI files.
+        if (normal !in resourceEntries) {
             throw ArtifactReadException("artifact read error: $displayName has no resource $path")
         }
         return openContainedFile(normal, path)

@@ -52,9 +52,10 @@ public interface ArtifactRoot : Closeable {
     public fun serviceEntryPaths(): List<String> = emptyList()
 
     /**
-     * Opens one resource entry (today: a [serviceEntryPaths] path) for reading.
-     * The caller closes the stream. Default refuses — roots that list services
-     * override this.
+     * Opens one resource entry for reading — any [resourceEntryPaths] path
+     * (issue #25 `--cat`), including [serviceEntryPaths] SPI files. The caller
+     * closes the stream. Default refuses — roots that list resources override
+     * this.
      *
      * @throws ArtifactReadException when [path] is unsafe, absent, or breaches a
      *   decompression cap (D-015 exit 5 at the service layer).
@@ -105,7 +106,7 @@ public interface ArtifactRoot : Closeable {
      * `.properties`, and versioned copies under `META-INF/versions/` as
      * stored — this slice does not collapse multi-release variants.
      * Empty for roots that carry no non-class files (`jrt:/` today).
-     * Content extraction is a later slice; listing only.
+     * Listing paths only here; open bytes via [openResource] for `--cat`.
      */
     public fun resourceEntryPaths(): List<String> = emptyList()
 

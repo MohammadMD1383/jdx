@@ -140,12 +140,15 @@ public class JarArtifact private constructor(
     override fun openResource(path: String): InputStream {
         val normal = ZipSafety.normalizeEntryName(path)
             ?: throw ArtifactReadException("artifact read error: rejected unsafe entry name: $path")
-        val actual = serviceEntries[normal]
-            ?: throw ArtifactReadException("artifact read error: $displayName has no resource $path")
-        val entry = zip.getEntry(actual)
-            ?: throw ArtifactReadException("artifact read error: $displayName!$actual vanished")
-        ZipSafety.checkDeclaredSize(actual, entry.size, displayName)
-        val bytes = zip.getInputStream(entry).use { ZipSafety.readCapped(it, actual) }
+        // Any listed non-class resource (issue #25 --cat), including SPI files
+        // and versioned META-INF/versions/… paths as stored.
+        if (normal !in resourceEntries) {
+            throw ArtifactReadException("artifact read error: $displayName has no resource $path")
+        }
+        val entry = zip.getEntry(normal)
+            ?: throw ArtifactReadException("artifact read error: $displayName!$normal vanished")
+        ZipSafety.checkDeclaredSize(normal, entry.size, displayName)
+        val bytes = zip.getInputStream(entry).use { ZipSafety.readCapped(it, normal) }
         return bytes.inputStream()
     }
 

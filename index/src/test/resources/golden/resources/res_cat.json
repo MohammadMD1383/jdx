@@ -1,0 +1,1 @@
+{"jdx":1,"ok":true,"command":"resources","query":"com/example/messages.properties","result":{"path":"com/example/messages.properties","artifact":"resources-case.jar","sizeBytes":12,"binary":false,"text":"hello=world"},"warnings":[],"provenance":[{"artifact":"resources-case.jar","origin":"bytecode","file":"com/example/messages.properties"}]}

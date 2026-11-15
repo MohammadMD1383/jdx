@@ -25,9 +25,11 @@ behaviour lives here** (adapters call in, never the reverse). `explicitApi()` is
   (same file via glob + explicit path must not double-scan).
   `ArtifactRoot.serviceEntryPaths` / `openResource` list and read those SPI
   files (class-scan deliberately drops bare `META-INF/`).
-  `ArtifactRoot.resourceEntryPaths` lists every non-`.class` entry (listing
-  only — no content extraction). `ManifestEntries.parseEntryAttributes`
-  covers per-entry JarEntry sections for `jdx manifest --entries`.
+  `ArtifactRoot.resourceEntryPaths` lists every non-`.class` entry;
+  `ResourceEntries.decodeText` / `isBinary` back `resources --cat` (UTF-8
+  only; NUL / malformed → binary refusal, never dump bytes).
+  `ManifestEntries.parseEntryAttributes` covers per-entry JarEntry sections
+  for `jdx manifest --entries`.
   `ArtifactRoot.moduleInfoPaths` / `openModuleInfo` list and read
   `module-info.class` (jar/dir root + every `jrt:/` module; multi-release
   selection for jars). `asm/ModuleInfoReader` parses the Module attribute.
@@ -81,11 +83,11 @@ behaviour lives here** (adapters call in, never the reverse). `explicitApi()` is
   class dir / every `jrt:/` module). `manifest` (issue #25) is live-roots-first
   over base `META-INF/MANIFEST.MF` (jar + class dir; `jrt:/` empty): main
   attributes by default, per-entry (JarEntry) attributes with `--entries`;
-  versioned copies under `META-INF/versions/` are ignored. `resources`
-  (issue #25 resource-listing) is live-roots-first over every non-`.class`
-  entry (jar + class dir; `jrt:/` empty), including versioned
-  `META-INF/versions/` paths as stored; listing only — content extraction
-  remains deferred.
+  versioned copies under `META-INF/versions/` are ignored.   `resources`
+  (issue #25) is live-roots-first over every non-`.class` entry (jar + class
+  dir; `jrt:/` empty), including versioned `META-INF/versions/` paths as
+  stored; `--cat` opens the unique match (exit 2 when ambiguous; binary
+  payloads report size only).
 - `search --kind all` (default) covers types + packages + modules only; `method`/
   `field` are opt-in (slow path parses every in-scope class). A default-kind miss
   carries `SEARCH_MEMBERS_OPT_IN_HINT` as `ErrorResult.detail` (issue #86) — do not

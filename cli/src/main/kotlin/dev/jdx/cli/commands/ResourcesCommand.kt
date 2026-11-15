@@ -16,6 +16,7 @@ import dev.jdx.cli.defaultRoundTrip
 import dev.jdx.cli.effectiveJson
 import dev.jdx.cli.effectiveNoDaemon
 import dev.jdx.cli.effectiveWorkspace
+import dev.jdx.core.render.DEFAULT_RESOURCE_MAX_LINES
 import dev.jdx.core.render.ErrorResult
 import dev.jdx.index.service.JdxService
 import dev.jdx.index.workspace.FileWorkspaceStore
@@ -26,13 +27,13 @@ import kotlin.system.exitProcess
 
 /**
  * `jdx resources [pattern]`. A thin adapter (D-004): parses the issue-#25
- * resource-listing flags, asks [JdxService] for non-class paths, renders
- * them, and maps the outcome to an exit code (D-015).
+ * resource flags, asks [JdxService] for non-class paths or `--cat` content,
+ * renders them, and maps the outcome to an exit code (D-015).
  *
  * Lists non-class resource paths across the workspace. An omitted pattern
- * lists every resource; a non-empty pattern matches the entry path. Exits
- * 1 when nothing matches. Content extraction is a later slice — listing
- * only, never dumps binary bytes into context.
+ * lists every resource; a non-empty pattern matches the entry path. With
+ * `--cat`, shows the unique match's text (or refuses binary dumps); zero
+ * matches exit 1, two or more exit 2 with `path --in artifact` candidates.
  */
 class ResourcesCommand(
     private val query: ResourcesQuery = ::defaultResourcesQuery,
@@ -47,16 +48,32 @@ class ResourcesCommand(
         "List non-class resource paths across the workspace's binary roots " +
             "(META-INF, .properties, versioned META-INF/versions/… copies, …). " +
             "With no pattern, every resource is shown; with a pattern, match " +
-            "the entry path (substring by default). --regex treats the " +
-            "pattern as a Java regex; --ignore-case folds substring matches. " +
-            "--in/--exclude filter by artifact label; --limit caps path rows " +
-            "(default 50). Exits 1 when nothing matches. Does not extract " +
-            "resource contents."
+            "the entry path (substring by default). --cat prints the unique " +
+            "match's text contents (binary payloads refuse to dump bytes; " +
+            "ambiguous matches exit 2). --max-lines caps --cat text lines " +
+            "(default 200). --regex treats the pattern as a Java regex; " +
+            "--ignore-case folds substring matches. --in/--exclude filter by " +
+            "artifact label; --limit caps path rows in listing mode (default " +
+            "50). Exits 1 when nothing matches."
 
     private val pattern by argument(
         help = "Optional substring (or --regex pattern) matched against " +
-            "resource entry paths. Omit to list every non-class resource.",
+            "resource entry paths. Omit to list every non-class resource " +
+            "(listing mode). Required with --cat.",
     ).optional()
+
+    private val cat by option(
+        "--cat",
+        help = "Print the unique matching resource's text contents instead of " +
+            "listing paths. Binary (NUL / non-UTF-8) payloads report size only. " +
+            "Requires a pattern; exits 2 when more than one path matches.",
+    ).flag()
+
+    private val maxLines by option(
+        "--max-lines",
+        help = "Maximum text lines shown under --cat (default 200); the rest " +
+            "become a truncation footer. Ignored in listing mode.",
+    ).int().default(DEFAULT_RESOURCE_MAX_LINES)
 
     private val regex by option(
         "--regex",
@@ -80,7 +97,8 @@ class ResourcesCommand(
 
     private val limit by option(
         "--limit",
-        help = "Maximum resource path rows shown (default 50); the rest become a truncation footer.",
+        help = "Maximum resource path rows shown in listing mode (default 50); " +
+            "the rest become a truncation footer. Ignored under --cat.",
     ).int().default(50)
 
     private val jars by option(
@@ -150,6 +168,17 @@ class ResourcesCommand(
             ReadCommandSupport.finish(failure, "resources", json, noColor, terminate)
             return
         }
+        if (maxLines < 0) {
+            val failure = JdxService.ServiceOutcome.Failure(
+                ErrorResult.generic(
+                    pattern.orEmpty(),
+                    exitCode = 3,
+                    message = "usage error: --max-lines must be >= 0, got $maxLines",
+                ),
+            )
+            ReadCommandSupport.finish(failure, "resources", json, noColor, terminate)
+            return
+        }
         if (DaemonClient.serveWarmIfReady(
                 request = DaemonClient.resourcesRequest(
                     pattern = pattern,
@@ -158,6 +187,8 @@ class ResourcesCommand(
                     inArtifact = inArtifact,
                     exclude = exclude,
                     limit = limit,
+                    cat = cat,
+                    maxLines = maxLines,
                 ),
                 flagWorkspace = effectiveWorkspace(workspace),
                 roots = WarmRoots(jars = jars, coords = coord, repos = repo, fetch = fetch, noJdk = noJdk),
@@ -192,6 +223,8 @@ class ResourcesCommand(
                         inArtifact = inArtifact,
                         exclude = exclude,
                         limit = limit,
+                        cat = cat,
+                        maxLines = maxLines,
                     ),
                 )
                 ReadCommandSupport.finish(outcome, "resources", json, noColor, terminate)

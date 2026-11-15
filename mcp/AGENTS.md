@@ -11,7 +11,8 @@ twice. `explicitApi()` is on.
   `META-INF/services` SPI listing), `jdx_modules` (issue #25 `module-info`
   requires/exports/opens/uses/provides),   `jdx_manifest` (issue #25
   `META-INF/MANIFEST.MF` attributes, including `entries` for JarEntry
-  sections), and `jdx_resources` (issue #25 non-class resource path listing).
+  sections), and `jdx_resources` (issue #25 non-class resource path listing +
+  `cat` content extraction).
 - `McpSession` — per-session daemon: per-call roots, `version`/`health` internal,
   `doctor` refused (exit 6), `isError = ok:false`.
 - `McpServer` — SDK registration + stdio to EOF. `jdx mcp [-w name]`; workspace-bound

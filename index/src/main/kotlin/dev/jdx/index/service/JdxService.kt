@@ -68,6 +68,7 @@ import dev.jdx.core.render.DEFAULT_TREE_DEPTH
 import dev.jdx.core.render.DEFAULT_LITERALS_LIMIT
 import dev.jdx.core.render.DEFAULT_MANIFEST_LIMIT
 import dev.jdx.core.render.DEFAULT_MODULES_LIMIT
+import dev.jdx.core.render.DEFAULT_RESOURCE_MAX_LINES
 import dev.jdx.core.render.DEFAULT_RESOURCES_LIMIT
 import dev.jdx.core.render.DEFAULT_SERVICES_LIMIT
 import dev.jdx.core.render.DEFAULT_USAGES_LIMIT
@@ -82,15 +83,20 @@ import dev.jdx.core.render.ModuleListing
 import dev.jdx.core.render.ModulePackageTarget
 import dev.jdx.core.render.ModuleProvide
 import dev.jdx.core.render.ModuleRequire
+import dev.jdx.core.render.ResourceContent
 import dev.jdx.core.render.ResourceHit
 import dev.jdx.core.render.ResourceListing
 import dev.jdx.core.render.ServiceHit
 import dev.jdx.core.render.ServiceListing
+import dev.jdx.core.render.buildBinaryResourceContent
 import dev.jdx.core.render.buildManifestListing
 import dev.jdx.core.render.buildModuleListing
+import dev.jdx.core.render.buildResourceContent
 import dev.jdx.core.render.buildResourceListing
 import dev.jdx.core.render.buildServiceListing
+import dev.jdx.core.render.splitResourceLines
 import dev.jdx.index.artifact.ManifestEntries
+import dev.jdx.index.artifact.ResourceEntries
 import dev.jdx.index.asm.ModuleInfoReader
 import dev.jdx.core.render.LsListing
 import dev.jdx.core.render.LsTypeEntry
@@ -382,6 +388,13 @@ public object JdxService {
             override val exitCode: Int = 0
             override fun renderText(color: Boolean): String = listing.renderText(color)
             override fun toJson(command: String): String = listing.toJson(command)
+        }
+
+        /** One resource's text (or binary refusal) under `resources --cat` — exit 0. */
+        public data class ResourceCat(public val content: ResourceContent) : ServiceOutcome {
+            override val exitCode: Int = 0
+            override fun renderText(color: Boolean): String = content.renderText(color)
+            override fun toJson(command: String): String = content.toJson(command)
         }
 
         /** A member body (`body`) — exit 0. */
@@ -5236,6 +5249,8 @@ public object JdxService {
     /**
      * Options for `resources`: how to match the optional pattern and how much
      * of the workspace to cover. An empty pattern lists every non-class path.
+     * [cat] switches to content extraction for a unique match; [maxLines]
+     * caps shown text lines under `--cat` (ignored in listing mode).
      */
     public data class ResourceOptions(
         public val regex: Boolean = false,
@@ -5243,18 +5258,22 @@ public object JdxService {
         public val inArtifact: String? = null,
         public val exclude: String? = null,
         public val limit: Int = DEFAULT_RESOURCES_LIMIT,
+        public val cat: Boolean = false,
+        public val maxLines: Int = DEFAULT_RESOURCE_MAX_LINES,
     )
 
     /**
      * Answers `resources [pattern]`: every non-class resource path across the
-     * workspace's binary roots (issue #25 resource-listing slice).
+     * workspace's binary roots (issue #25), or with `--cat` the text contents
+     * of the unique matching path.
      *
-     * Live-roots scan — no persistent index, no class load, no content dump.
-     * An empty / blank [rawPattern] lists every resource; a non-empty pattern
-     * matches the entry path (substring by default). A valid miss is exit 1.
-     * Content extraction remains a later slice of issue #25 (per-entry
-     * manifest attributes live on `jdx manifest --entries`).
-     * Versioned paths under `META-INF/versions/` are listed as stored.
+     * Live-roots scan — no persistent index, no class load. An empty / blank
+     * [rawPattern] lists every resource (listing mode only); a non-empty
+     * pattern matches the entry path (substring by default). A valid miss is
+     * exit 1. Under `--cat`, zero matches → exit 1, two or more → exit 2 with
+     * `path --in artifact` candidates (never guess), binary payloads refuse
+     * to dump bytes. Versioned paths under `META-INF/versions/` are listed /
+     * opened as stored.
      */
     public fun resources(
         rawPattern: String?,
@@ -5264,6 +5283,12 @@ public object JdxService {
         val pattern = rawPattern?.trim().orEmpty()
         if (options.limit < 0) {
             return failure(3, pattern, "usage error: --limit must be >= 0, got ${options.limit}")
+        }
+        if (options.maxLines < 0) {
+            return failure(3, pattern, "usage error: --max-lines must be >= 0, got ${options.maxLines}")
+        }
+        if (options.cat && pattern.isEmpty()) {
+            return failure(3, pattern, "usage error: --cat needs a non-empty pattern")
         }
         if (options.regex) {
             if (pattern.isEmpty()) {
@@ -5293,7 +5318,8 @@ public object JdxService {
 
     /**
      * Serves `resources`: walks every open root's [ArtifactRoot.resourceEntryPaths]
-     * and filters by [pattern]. Listing only — never opens entry bytes.
+     * and filters by [pattern]. Listing mode never opens entry bytes; `--cat`
+     * opens exactly one match (or exits 2 when ambiguous).
      */
     private fun executeResources(
         pattern: String,
@@ -5301,9 +5327,11 @@ public object JdxService {
         options: ResourceOptions,
     ): ServiceOutcome {
         val opened = openRoots(roots)
-        val hits = mutableListOf<ResourceHit>()
+        // Pair each hit with the open-root index so --cat does not re-resolve
+        // by displayName (labels can collide across roots).
+        val hits = mutableListOf<Pair<ResourceHit, Int>>()
         try {
-            for (open in opened) {
+            for ((rootIndex, open) in opened.withIndex()) {
                 val label = open.root.displayName
                 if (!matchesArtifactFilter(options.inArtifact, label) ||
                     (options.exclude != null && matchesArtifactFilter(options.exclude, label))
@@ -5314,29 +5342,93 @@ public object JdxService {
                     if (pattern.isNotEmpty() && !matchesResourcePattern(pattern, path, options)) {
                         continue
                     }
-                    hits.add(ResourceHit(path = path, artifact = label))
+                    hits.add(ResourceHit(path = path, artifact = label) to rootIndex)
                 }
+            }
+            if (hits.isEmpty()) {
+                val detail = if (pattern.isEmpty()) {
+                    "no resources found"
+                } else {
+                    "no resources matching '$pattern'"
+                }
+                return ServiceOutcome.Failure(ErrorResult.notFound(pattern, detail = detail))
+            }
+            // Deterministic: artifact, path (D-007).
+            hits.sortWith(compareBy({ it.first.artifact }, { it.first.path }))
+            if (!options.cat) {
+                return ServiceOutcome.ResourceList(
+                    buildResourceListing(
+                        query = pattern,
+                        hits = hits.map { it.first },
+                        limit = options.limit,
+                    ),
+                )
+            }
+            // Under --cat, an exact path match (respecting --ignore-case) wins
+            // over broader substring hits so typing the full path is not exit 2
+            // when a versioned copy also contains that substring. Regex mode
+            // keeps every match — never silently drop a regex hit.
+            val catHits = if (!options.regex && hits.size > 1) {
+                val exact = hits.filter { (hit, _) ->
+                    if (options.ignoreCase) hit.path.equals(pattern, ignoreCase = true)
+                    else hit.path == pattern
+                }
+                if (exact.isNotEmpty()) exact else hits
+            } else {
+                hits
+            }
+            if (catHits.size > 1) {
+                return ServiceOutcome.Failure(
+                    ErrorResult.ambiguous(pattern, catHits.map { it.first.catCandidate() }),
+                )
+            }
+            val (hit, rootIndex) = catHits.single()
+            val open = opened[rootIndex]
+            val bytes = try {
+                open.root.openResource(hit.path).use { it.readBytes() }
+            } catch (e: ArtifactReadException) {
+                throw e
+            } catch (e: Exception) {
+                throw ArtifactReadException(
+                    "cannot read resource '${hit.path}' from ${hit.artifact}: " +
+                        (e.message ?: e.javaClass.simpleName),
+                    e,
+                )
+            }
+            val provenance = listOf(
+                Provenance(
+                    artifact = hit.artifact,
+                    origin = Origin.BYTECODE,
+                    file = hit.path,
+                ),
+            )
+            val text = ResourceEntries.decodeText(bytes)
+            return if (text == null) {
+                ServiceOutcome.ResourceCat(
+                    buildBinaryResourceContent(
+                        query = pattern,
+                        path = hit.path,
+                        artifact = hit.artifact,
+                        sizeBytes = bytes.size.toLong(),
+                        provenance = provenance,
+                    ),
+                )
+            } else {
+                ServiceOutcome.ResourceCat(
+                    buildResourceContent(
+                        query = pattern,
+                        path = hit.path,
+                        artifact = hit.artifact,
+                        sizeBytes = bytes.size.toLong(),
+                        fileLines = splitResourceLines(text),
+                        maxLines = options.maxLines,
+                        provenance = provenance,
+                    ),
+                )
             }
         } finally {
             opened.forEach { it.root.close() }
         }
-        if (hits.isEmpty()) {
-            val detail = if (pattern.isEmpty()) {
-                "no resources found"
-            } else {
-                "no resources matching '$pattern'"
-            }
-            return ServiceOutcome.Failure(ErrorResult.notFound(pattern, detail = detail))
-        }
-        // Deterministic: artifact, path (D-007).
-        hits.sortWith(compareBy({ it.artifact }, { it.path }))
-        return ServiceOutcome.ResourceList(
-            buildResourceListing(
-                query = pattern,
-                hits = hits,
-                limit = options.limit,
-            ),
-        )
     }
 
     /** Pattern match for one resource path. Never throws. */
