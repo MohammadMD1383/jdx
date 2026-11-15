@@ -72,8 +72,10 @@ To find *which class holds this English string / resource key* without `unzip | 
 $ jdx literals 'com.google.gson' --coord com.google.code.gson:gson:2.14.0 --limit 5 --no-jdk
 ```
 
-Matches bytecode `LDC` loads and `String` field `ConstantValue`s. Resource `.properties`
-files are not scanned — keys that appear as class-file constants are found.
+Matches bytecode `LDC` loads, `String` field `ConstantValue`s, and `.properties`
+resource keys/values. A properties hit looks like
+`prop messages/Bundle.properties#some.key  "English value"` — paste the path into
+`jdx resources … --cat` to read the whole bundle.
 
 ## SPI / ServiceLoader registrations
 

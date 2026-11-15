@@ -341,8 +341,8 @@ public val ALL_MCP_TOOLS: List<McpToolDefinition> = listOf(
     McpToolDefinition(
         command = RpcCommand.LITERALS,
         description = "Search string constants across bytecode roots (LDC loads and String " +
-            "field ConstantValue). Substring by default; set regex=true for a Java regex. " +
-            "Does not scan resource .properties files.",
+            "field ConstantValue) and .properties resource keys/values. Substring by " +
+            "default; set regex=true for a Java regex.",
         params = listOf(
             McpParam(
                 name = "query", kind = McpParamKind.STRING, required = true,

@@ -435,9 +435,10 @@ bytecode-exact — an invoke names one owner.
 
 #### `jdx literals <text>`
 Search string constants across bytecode roots (issue #86): every `LDC` string load and
-`String` field `ConstantValue` whose value matches `<text>` (case-sensitive substring by
-default). `--regex` / `--ignore-case` / `--in` / `--exclude` / `--limit`. Does **not** scan
-resource `.properties` files — keys that appear as class-file constants are found.
+`String` field `ConstantValue` whose value matches `<text>`, plus every `.properties`
+resource key **or** value that matches (case-sensitive substring by default).
+`--regex` / `--ignore-case` / `--in` / `--exclude` / `--limit`. Properties hits render as
+`prop path#key` with the property value; binary / non-text `.properties` are skipped.
 
 #### `jdx services [pattern]`
 `META-INF/services` SPI provider listing (issue #25, services-first slice): every classic
@@ -1439,7 +1440,7 @@ samples   --limit N --max-lines N --prefer-sources
           [-w …] [--jars …] [--no-jdk] [--json] [--no-color]
 literals  <text> [--regex] [--ignore-case] [--in] [--exclude] [--limit]
           [-w …] [--jars …] [--no-jdk] [--json] [--no-color]
-          (bytecode string constants only — LDC + String ConstantValue; issue #86)
+          (LDC + String ConstantValue + .properties keys/values; issue #86)
 services  [pattern] [--regex] [--ignore-case] [--in] [--exclude] [--limit]
           [-w …] [--jars …] [--no-jdk] [--json] [--no-color]
           (META-INF/services SPI providers; empty pattern lists all; issue #25)

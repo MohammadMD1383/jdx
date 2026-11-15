@@ -39,9 +39,11 @@ behaviour lives here** (adapters call in, never the reverse). `explicitApi()` is
   line/file). Stripped classes (`-g:none`) yield `line == null` — degrade, don't
   fail. `usages --context N` (issue #10) slices paired sources / `--src` files
   around that line (cap [MAX_SAMPLE_SNIPPET_LINES]); missing sources stay
-  location-only. `refs/LiteralExtractor` — string `LDC` loads + `String` field
+  location-only.   `refs/LiteralExtractor` — string `LDC` loads + `String` field
   `ConstantValue`s for `jdx literals` (issue #86); never throws; empty values
   skipped; first-wins dedup per `(member, kind, value)`.
+  `refs/PropertiesLiteralExtractor` — `.properties` key/value pairs for the
+  same command (UTF-8 then ISO-8859-1; binary skipped; `prop path#key` hits).
 - `store/` — `IndexStore` interface + `sqlite/SqliteIndexStore` (WAL, single global
   `<cache-dir>/index/v1.db`, artifact-scoped rows). No SQL outside the impl package.
 - `workspace/` — TOML workspaces, classpath-order shadowing, `DUPLICATE_FQN`,
@@ -75,8 +77,8 @@ behaviour lives here** (adapters call in, never the reverse). `explicitApi()` is
   supertypes, param-key match so covariant bridges join); `--exact` restores
   invoke-owner matching. `calls` stays bytecode-exact (the invoke names one owner).
   `literals` (issue #86) is live-roots-first like the graph queries: scans `LDC`
-  string loads + `String` field `ConstantValue`s only — no `.properties` / resource
-  scan in this slice. `services` (issue #25) is live-roots-first over base
+  string loads + `String` field `ConstantValue`s and `.properties` resource
+  keys/values (`prop` kind; match on key or value). `services` (issue #25) is live-roots-first over base
   `META-INF/services/<iface>` files (jar + class dir; `jrt:/` empty today);
   versioned copies under `META-INF/versions/` are out of that slice. `modules`
   (issue #25 module-info) is live-roots-first over `module-info.class` (jar /
