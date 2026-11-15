@@ -106,7 +106,7 @@ To answer *what is this jar's Main-Class / Implementation-Version / Multi-Releas
 without `unzip -p …/MANIFEST.MF` (issue #25):
 
 ```console exec
-$ jdx manifest Implementation --coord com.google.code.gson:gson:2.14.0 --no-jdk
+$ jdx manifest Multi-Release --coord com.google.code.gson:gson:2.14.0 --no-jdk
 ```
 
 Omit the pattern to list every main attribute. A pattern matches the attribute name or

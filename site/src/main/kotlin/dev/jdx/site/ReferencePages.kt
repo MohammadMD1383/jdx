@@ -272,7 +272,7 @@ class ReferencePages(
             "literals" to "jdx literals 'com.google.gson' --coord $GSON --limit 5 --no-jdk",
             "services" to "jdx services java.sql.Driver --coord org.postgresql:postgresql:42.7.4 --fetch --no-jdk",
             "modules" to "jdx modules java.sql --limit 5",
-            "manifest" to "jdx manifest Implementation --coord $GSON --no-jdk",
+            "manifest" to "jdx manifest Multi-Release --coord $GSON --no-jdk",
             "diff" to "jdx diff com.google.code.gson:gson:2.11.0 $GSON --fetch",
             "batch" to "echo '{\"command\":\"show\",\"query\":\"java.util.Map\"}' | jdx batch",
         )
