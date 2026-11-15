@@ -345,6 +345,9 @@ private class KotlinPsiClasses(private val loader: ClassLoader) {
     val secondary: Class<*>? = load("org.jetbrains.kotlin.psi.KtSecondaryConstructor")
     val primary: Class<*>? = load("org.jetbrains.kotlin.psi.KtPrimaryConstructor")
     val enumEntry: Class<*>? = load("org.jetbrains.kotlin.psi.KtEnumEntry")
+    val packageDirective: Class<*>? = load("org.jetbrains.kotlin.psi.KtPackageDirective")
+    /** File-level KDoc is a child of `KtFile`, not a `getDocComment()` on the package. */
+    val kdoc: Class<*>? = load("org.jetbrains.kotlin.kdoc.psi.api.KDoc")
 }
 
 /** Reflective no-arg call, or `null` when absent (stale-tree tolerant). */
@@ -362,10 +365,45 @@ private fun buildKotlinFile(state: KotlinEnvState.Ready, text: String): KotlinFi
     } ?: return null
     val declarations = ktFile.psiCall("getDeclarations") as? List<*> ?: return null
     val packageName = (ktFile.psiCall("getPackageFqName")?.psiCall("asString") as? String) ?: ""
+    // File-level KDoc is a leading child of the file (precedes `package`);
+    // `KtPackageDirective` is not a `KtDeclaration`, so `getDocComment()` is
+    // absent — walk siblings instead (issue #15).
+    val fileDoc = kotlinFileDocOf(state.classes, ktFile)
     return KotlinFile(
         packageName = packageName,
         declarations = declarations.mapNotNull { buildKotlinDecl(state.classes, it) },
+        fileDocText = fileDoc.text,
+        fileDocStartOffset = fileDoc.start,
+        fileDocEndOffset = fileDoc.end,
     )
+}
+
+/**
+ * The KDoc that precedes `package` / the first declaration on a `.kt` file.
+ * Whitespace and `@file:` annotation lists may sit between the KDoc and the
+ * package; anything past the package directive is a declaration's own doc.
+ */
+private fun kotlinFileDocOf(classes: KotlinPsiClasses, ktFile: Any): KotlinDoc {
+    var child: Any? = ktFile.psiCall("getFirstChild")
+    while (child != null) {
+        if (classes.kdoc?.isInstance(child) == true) {
+            val raw = child.psiCall("getText") as? String ?: return KotlinDoc(null, null, null)
+            val range = kotlinRangeOf(child)
+            return KotlinDoc(kdocInnerOf(raw), range?.first, range?.second)
+        }
+        // Stop once package or a top-level declaration starts: later KDocs
+        // belong to those declarations, not the file.
+        if (classes.packageDirective?.isInstance(child) == true) return KotlinDoc(null, null, null)
+        if (classes.namedFunction?.isInstance(child) == true ||
+            classes.property?.isInstance(child) == true ||
+            classes.klass?.isInstance(child) == true ||
+            classes.obj?.isInstance(child) == true
+        ) {
+            return KotlinDoc(null, null, null)
+        }
+        child = child.psiCall("getNextSibling")
+    }
+    return KotlinDoc(null, null, null)
 }
 
 private fun buildKotlinDecl(classes: KotlinPsiClasses, node: Any?): KotlinDecl? {
@@ -386,7 +424,7 @@ private fun buildKotlinDeclOrThrow(classes: KotlinPsiClasses, node: Any): Kotlin
         classes.secondary?.isInstance(node) == true -> buildKotlinCtor(node, primary = false)
         classes.namedFunction?.isInstance(node) == true -> buildKotlinFunction(node)
         classes.property?.isInstance(node) == true -> buildKotlinProperty(node)
-        classes.enumEntry?.isInstance(node) == true -> buildKotlinEnumEntry(node)
+        classes.enumEntry?.isInstance(node) == true -> buildKotlinEnumEntry(classes, node)
         classes.klass?.isInstance(node) == true -> buildKotlinClass(classes, node)
         classes.obj?.isInstance(node) == true -> buildKotlinObject(classes, node)
         else -> null
@@ -478,10 +516,13 @@ private fun buildKotlinProperty(node: Any): KotlinDecl? {
     )
 }
 
-private fun buildKotlinEnumEntry(node: Any): KotlinDecl? {
+private fun buildKotlinEnumEntry(classes: KotlinPsiClasses, node: Any): KotlinDecl? {
     val (start, end) = kotlinRangeOf(node) ?: return null
     val name = kotlinNameOf(node) ?: return null
     val doc = kotlinDocOf(node)
+    // Entries with class bodies (`RED { … }`) compile to `Outer$RED` and
+    // declare members inside the body — capture children so `body`/`doc` on
+    // the nested binary work (issue #15). Plain entries stay childless.
     return KotlinDecl(
         kind = KotlinDeclKind.ENUM_ENTRY,
         name = name,
@@ -490,6 +531,7 @@ private fun buildKotlinEnumEntry(node: Any): KotlinDecl? {
         docText = doc.text,
         docStartOffset = doc.start,
         docEndOffset = doc.end,
+        children = kotlinChildrenOf(classes, node),
     )
 }
 

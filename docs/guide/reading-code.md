@@ -118,3 +118,6 @@ jdx kotlin install
 ```
 
 Without it, Kotlin binaries still render from metadata and source queries degrade with a label.
+With the sidecar, file-facade type docs come from the KDoc before `package`, enum entries with
+class bodies answer nested `$ENTRY` queries, and generic extension receivers (`List<T>`) narrow
+against `List` / `java.util.List` parameter keys.

@@ -1,0 +1,10 @@
+members of dev.jdx.fixtures.KotlinTraffic
+methods declared on dev.jdx.fixtures.KotlinTraffic:
+  method public abstract boolean isStop()
+  method public static dev.jdx.fixtures.KotlinTraffic valueOf(java.lang.String value)
+  method public static dev.jdx.fixtures.KotlinTraffic[] values()
+  method public static kotlin.enums.EnumEntries<dev.jdx.fixtures.KotlinTraffic> getEntries()
+fields declared on dev.jdx.fixtures.KotlinTraffic:
+  field public static final dev.jdx.fixtures.KotlinTraffic GREEN
+  field public static final dev.jdx.fixtures.KotlinTraffic RED
+source: fixture-corpus.jar (bytecode)

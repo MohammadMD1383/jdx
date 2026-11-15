@@ -1,5 +1,5 @@
 types in package 'dev.jdx.fixtures'
-  package dev.jdx.fixtures (38 types)
+  package dev.jdx.fixtures (41 types)
   class dev.jdx.fixtures.Annos  fixture-corpus.jar
   class dev.jdx.fixtures.CovariantOverrides  fixture-corpus.jar
   class dev.jdx.fixtures.CovariantOverrides$Base  fixture-corpus.jar
@@ -18,6 +18,9 @@ types in package 'dev.jdx.fixtures'
   object dev.jdx.fixtures.KotlinSealed$Empty  fixture-corpus.jar
   class dev.jdx.fixtures.KotlinSealed$Sub  fixture-corpus.jar
   class dev.jdx.fixtures.KotlinShapesKt  fixture-corpus.jar
+  enum dev.jdx.fixtures.KotlinTraffic  fixture-corpus.jar
+  class dev.jdx.fixtures.KotlinTraffic$GREEN  fixture-corpus.jar
+  class dev.jdx.fixtures.KotlinTraffic$RED  fixture-corpus.jar
   annotation dev.jdx.fixtures.Matrix  fixture-corpus.jar
   class dev.jdx.fixtures.Nesting  fixture-corpus.jar
   class dev.jdx.fixtures.Nesting$1  fixture-corpus.jar

@@ -1,3 +1,7 @@
+/**
+ * File-facade documentation for `KotlinShapesKt` (issue #15): facades have no
+ * class declaration, so the KDoc that precedes `package` is the type doc.
+ */
 package dev.jdx.fixtures
 
 /**
@@ -8,7 +12,8 @@ package dev.jdx.fixtures
  * (erasure), `inline`/`reified` (call-site specialisation).
  *
  * File-facade members (`KotlinShapesKt`: [extensionGreeting], [isInstanceOf],
- * plus `@JvmName` / `suspend` / property / `internal` shapes for issue #12)
+ * plus `@JvmName` / `suspend` / property / `internal` shapes for issue #12,
+ * generic extensions and enum-entry bodies for issue #15)
  * carry no annotation — `@ExpectedMembers` targets classes. Their expectations
  * live in `FixtureCorpusTest` instead. Multi-file parts live in
  * `KotlinMultifileA.kt` / `KotlinMultifileB.kt`.
@@ -84,6 +89,12 @@ class KotlinMembers {
 
 /** Extension function: a static method on the file facade with the receiver first. */
 fun KotlinMembers.extensionGreeting(): String = "hello"
+
+/**
+ * Generic extension (issue #15): receiver spelling is `List<T>`; signature
+ * narrowing must key it as `List` so `(java.util.List)` queries match.
+ */
+fun <T> List<T>.kotlinFirstOrNull(): T? = firstOrNull()
 
 /** Facade `@JvmName`: JVM sees `facadeRenamed`, Kotlin view restores `facadeOriginal`. */
 @JvmName("facadeRenamed")
@@ -166,3 +177,35 @@ object KotlinRegistry {
 
 /** `inline` + `reified`: no class-file trace of `T` at the call site. */
 inline fun <reified T> isInstanceOf(value: Any): Boolean = value is T
+
+/**
+ * Enum with entry class bodies (issue #15): each constant compiles to a
+ * nested `KotlinTraffic$ENTRY` class so `body`/`doc` on the nested binary
+ * can reach the override inside the entry.
+ */
+@ExpectedMembers(
+    "public static final dev.jdx.fixtures.KotlinTraffic RED",
+    "public static final dev.jdx.fixtures.KotlinTraffic GREEN",
+    "private static final dev.jdx.fixtures.KotlinTraffic[] \$VALUES",
+    "private static final kotlin.enums.EnumEntries \$ENTRIES",
+    "private dev.jdx.fixtures.KotlinTraffic()",
+    "public abstract boolean isStop()",
+    "public static dev.jdx.fixtures.KotlinTraffic[] values()",
+    "public static dev.jdx.fixtures.KotlinTraffic valueOf(java.lang.String)",
+    "public static kotlin.enums.EnumEntries<dev.jdx.fixtures.KotlinTraffic> getEntries()",
+    "private static final dev.jdx.fixtures.KotlinTraffic[] \$values()",
+    "public dev.jdx.fixtures.KotlinTraffic(java.lang.String, int, kotlin.jvm.internal.DefaultConstructorMarker)",
+)
+enum class KotlinTraffic {
+    /** Stop light with a class body. */
+    RED {
+        override fun isStop(): Boolean = true
+    },
+
+    /** Go light with a class body. */
+    GREEN {
+        override fun isStop(): Boolean = false
+    };
+
+    abstract fun isStop(): Boolean
+}

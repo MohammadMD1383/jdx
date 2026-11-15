@@ -344,6 +344,6 @@ class ReadCommandsServiceTest {
         ZipFile(fixtureJar()).use { zip ->
             zip.entries().asSequence().map { it.name }
                 .filter { it.endsWith(".class") && it != "module-info.class" }.toList()
-        }.size shouldBe 38 // +3 multifile umbrella/parts (issue #12)
+        }.size shouldBe 41 // +3 multifile (issue #12) + KotlinTraffic/$RED/$GREEN (issue #15)
     }
 }

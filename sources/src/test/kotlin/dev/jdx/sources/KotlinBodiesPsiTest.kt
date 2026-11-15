@@ -305,4 +305,61 @@ class KotlinBodiesPsiTest {
             }
         }
     }
+
+    @Test
+    fun `facade file-level KDoc resolves as the type doc`(@TempDir home: Path) {
+        // Issue #15: KDoc preceding `package` is the facade's type documentation.
+        withParser(home) { parser ->
+            fixtureSourcesRoot().use { root ->
+                val docs = findKotlinTypeDoc(root, "dev.jdx.fixtures.KotlinShapesKt", parser)
+                    .shouldBeInstanceOf<JavaDocResult.Found>().docs
+                docs shouldHaveSize 1
+                docs.single().name shouldBe "KotlinShapesKt"
+                docs.single().rawComment shouldContain "File-facade documentation"
+            }
+        }
+    }
+
+    @Test
+    fun `enum entry class bodies expose nested members`(@TempDir home: Path) {
+        // Issue #15: `KotlinTraffic$RED#isStop` is reachable through ENUM_ENTRY children.
+        withParser(home) { parser ->
+            fixtureSourcesRoot().use { root ->
+                val bodies = foundBodies(
+                    root,
+                    ref("dev.jdx.fixtures.KotlinTraffic\$RED", "isStop"),
+                    parser,
+                )
+                bodies shouldHaveSize 1
+                bodies.single().text shouldContain "true"
+                val docs = findKotlinMemberDocs(
+                    root,
+                    ref("dev.jdx.fixtures.KotlinTraffic", "RED"),
+                    parser,
+                ).shouldBeInstanceOf<JavaDocResult.Found>().docs
+                docs.single().rawComment shouldContain "Stop light"
+                docs.single().kind shouldBe SourceDocKind.ENUM_ENTRY
+            }
+        }
+    }
+
+    @Test
+    fun `generic extension receiver narrows against List queries`(@TempDir home: Path) {
+        // Issue #15: PSI keeps `List<T>` raw; matching keys it as `List`.
+        withParser(home) { parser ->
+            fixtureSourcesRoot().use { root ->
+                val bodies = foundBodies(
+                    root,
+                    ref(
+                        "dev.jdx.fixtures.KotlinShapesKt",
+                        "kotlinFirstOrNull",
+                        listOf("java.util.List"),
+                    ),
+                    parser,
+                )
+                bodies shouldHaveSize 1
+                bodies.single().text shouldContain "firstOrNull"
+            }
+        }
+    }
 }
