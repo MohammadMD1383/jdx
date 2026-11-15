@@ -1,0 +1,4 @@
+services matching 'Alpha'
+services-case.jar (1)
+  service com.example.Spi
+    provider com.example.Alpha

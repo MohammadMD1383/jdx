@@ -1,0 +1,5 @@
+services matching 'Spi'
+services-case.jar (1)
+  service com.example.Spi
+    provider com.example.Alpha
+1 of 2 providers shown (--limit 2 to see more)

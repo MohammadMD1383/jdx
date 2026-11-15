@@ -27,6 +27,13 @@ public class JarArtifact private constructor(
     /** Servable base path → actual entry name (a versioned variant when one won). */
     private val resolved: Map<String, String>
 
+    /**
+     * Base `META-INF/services/<iface>` path → actual zip entry name (issue #25).
+     * Kept separately from [resolved]: multi-release resolution only keeps
+     * `.class` entries and drops bare `META-INF/` paths.
+     */
+    private val serviceEntries: Map<String, String>
+
     override val displayName: String = jarPath.fileName.toString()
 
     override val kind: ArtifactKind = ArtifactKind.BINARY_JAR
@@ -64,10 +71,15 @@ public class JarArtifact private constructor(
         }
         ZipSafety.checkEntryCount(names.size, displayName)
         ZipSafety.checkTotalSize(knownBytes, displayName)
+        val files = names.filter { !it.endsWith("/") }.toSet()
         resolved = MultiRelease.resolve(
-            actualEntries = names.filter { !it.endsWith("/") }.toSet(),
+            actualEntries = files,
             multiRelease = isMultiRelease(zip),
         )
+        // Classic SPI files only — not META-INF/versions/<n>/META-INF/services/…
+        serviceEntries = files
+            .filter { ServiceEntries.isServicePath(it) }
+            .associateWith { it }
         warnings = buildList {
             if (MultiRelease.hasVersionedSelection(resolved)) {
                 add(
@@ -93,6 +105,20 @@ public class JarArtifact private constructor(
             ?: throw ArtifactReadException("artifact read error: rejected unsafe entry name: $path")
         val actual = resolved[normal]
             ?: throw ArtifactReadException("artifact read error: $displayName has no class $path")
+        val entry = zip.getEntry(actual)
+            ?: throw ArtifactReadException("artifact read error: $displayName!$actual vanished")
+        ZipSafety.checkDeclaredSize(actual, entry.size, displayName)
+        val bytes = zip.getInputStream(entry).use { ZipSafety.readCapped(it, actual) }
+        return bytes.inputStream()
+    }
+
+    override fun serviceEntryPaths(): List<String> = serviceEntries.keys.sorted()
+
+    override fun openResource(path: String): InputStream {
+        val normal = ZipSafety.normalizeEntryName(path)
+            ?: throw ArtifactReadException("artifact read error: rejected unsafe entry name: $path")
+        val actual = serviceEntries[normal]
+            ?: throw ArtifactReadException("artifact read error: $displayName has no resource $path")
         val entry = zip.getEntry(actual)
             ?: throw ArtifactReadException("artifact read error: $displayName!$actual vanished")
         ZipSafety.checkDeclaredSize(actual, entry.size, displayName)

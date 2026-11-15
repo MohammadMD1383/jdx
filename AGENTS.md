@@ -92,7 +92,7 @@ get an explicit reversal, record it here and in the commit message)
 | Classpath input | explicit paths/globs/dirs + **named workspaces** + **project auto-discovery** (never run Gradle/Maven) + **Maven coords (auto-download opt-in)** + **JDK stdlib via jrt-fs** |
 | Interfaces | one-shot **CLI**, **MCP** stdio server, **daemon** (5-min idle auto-shutdown), **HTTP/JSON** — all thin adapters over one `JdxService`, no logic in adapters |
 | Testing | **TDD mandatory in `core`** + generative families; Pitest mutation gate ≥ 80 % on `core` |
-| Deferred | mappings/remap, resources & services inspection, `--since`/API-level reporting |
+| Deferred | mappings/remap, resources inspection beyond `jdx services` (issue #25 services-first shipped), `--since`/API-level reporting |
 | Repo | local git; public GitHub repo ([github.com/MohammadMD1383/jdx](https://github.com/MohammadMD1383/jdx)), Apache-2.0 |
 
 ## 4. Repository layout

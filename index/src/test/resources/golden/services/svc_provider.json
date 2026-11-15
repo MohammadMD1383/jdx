@@ -1,0 +1,1 @@
+{"jdx":1,"ok":true,"command":"services","query":"Alpha","result":{"pattern":"Alpha","services":[{"service":"com.example.Spi","provider":"com.example.Alpha","artifact":"services-case.jar"}]},"warnings":[],"provenance":[]}

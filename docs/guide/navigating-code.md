@@ -75,6 +75,18 @@ $ jdx literals 'com.google.gson' --coord com.google.code.gson:gson:2.14.0 --limi
 Matches bytecode `LDC` loads and `String` field `ConstantValue`s. Resource `.properties`
 files are not scanned — keys that appear as class-file constants are found.
 
+## SPI / ServiceLoader registrations
+
+To answer *who provides this service interface?* without unzipping jars (issue #25):
+
+```console exec
+$ jdx services java.sql.Driver --coord org.postgresql:postgresql:42.7.4 --fetch --no-jdk
+```
+
+Omit the pattern to list every `META-INF/services` registration in the workspace. A
+pattern matches the service interface FQN or a provider class FQN. `module-info`
+`provides` directives are not read in this slice.
+
 ## Limitations
 
 - Graph queries re-scan the bytecode roots on each query (there is no persistent graph index
