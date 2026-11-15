@@ -108,6 +108,7 @@ class AdapterParityTest {
             ParityCase(DaemonClient.lsRequest("dev.jdx.fixtures"), roots),
             ParityCase(DaemonClient.treeRequest(null), roots),
             ParityCase(DaemonClient.usagesRequest("dev.jdx.fixtures.SealedHierarchy"), roots),
+            ParityCase(DaemonClient.annotatedRequest("java.lang.Deprecated", limit = 5), roots),
             ParityCase(DaemonClient.hierarchyRequest("dev.jdx.fixtures.SealedHierarchy"), roots),
             ParityCase(DaemonClient.implementorsRequest("dev.jdx.fixtures.SealedHierarchy"), roots),
             ParityCase(DaemonClient.callersRequest("dev.jdx.fixtures.Generics#identity"), roots),
@@ -171,7 +172,7 @@ class AdapterParityTest {
     @Test
     fun `all read commands answer byte-identical envelopes on every adapter`() {
         val cases = readCases()
-        cases.size shouldBe 23
+        cases.size shouldBe 24
         val session = mcpSession()
         val server = httpServer()
         server.start()
@@ -305,7 +306,7 @@ class AdapterParityTest {
 
     @Test
     fun `parity holds over generated hostile requests`(): Unit = runBlocking {
-        readCommands.size shouldBe 23
+        readCommands.size shouldBe 24
         val session = mcpSession()
         val server = httpServer()
         server.start()

@@ -84,6 +84,7 @@ IntelliJ IDEA provides, over any jar on the classpath, with or without sources:
 | Type hierarchy | `Ctrl+H` | `jdx hierarchy <type>` |
 | Call hierarchy | `Ctrl+Alt+H` | `jdx callers` / `jdx calls` |
 | Find usages | `Alt+F7` | `jdx usages <symbol>` |
+| Annotation-driven view | *(no IDE equivalent)* | `jdx annotated <annotation\|recipe>` |
 | Search everywhere / Go to class / symbol | `Shift Shift`, `Ctrl+N`, `Ctrl+Alt+Shift+N` | `jdx search <pattern>` |
 | File structure popup | `Ctrl+F12` | `jdx outline <type>` |
 | Decompile a class without sources | open a `.class` | `jdx body` / `jdx source` (Vineflower) |
@@ -434,6 +435,22 @@ Find Usages across **all workspace jars plus the project's own source dirs**.
 - `--in <artifact-glob>`, `--exclude <glob>`, `--limit N`, `--context N`
 - Groups by artifact, then by declaring method, with the canonical ref of each call site.
 - `--kind throw` matches `throws` declarations (declaration-level), not `ATHROW` throw sites.
+
+#### `jdx annotated <annotation|recipe>`
+Dedicated annotation-driven view (issue #26): equivalent to
+`usages --kind annotation`. The query may be an annotation type, annotation-use
+spelling (`Type(k=v)` / `@Type(k=v)`), or a recipe alias:
+
+| Recipe | Expands to |
+|---|---|
+| `deprecated` | `java.lang.Deprecated` |
+| `forRemoval` | `java.lang.Deprecated` + `--where forRemoval=true` |
+| `test` / `junit5` | `org.junit.jupiter.api.Test` |
+| `junit4` | `org.junit.Test` |
+| `bean` | `org.springframework.context.annotation.Bean` |
+
+Flags: `--where`, `--in` / `--exclude`, `--limit`, `--context`, `--src` (same
+semantics as `usages`). No `--kind` — always annotation.
 
 #### `jdx callers <method>` / `jdx calls <method>`
 Incoming / outgoing call edges. `--depth N` walks the tree (cycle-safe, with `…(cycle)`
@@ -1296,8 +1313,10 @@ Explicitly out of v1 scope, recorded so they are not lost:
   filters annotated classes/members by element values and prints the rendered
   `@Fqn(k=v,…)` use per row; annotation-use spelling
   `jdx usages 'Deprecated(forRemoval=true)' --kind annotation` peels into the
-  same type + where clauses (leading `@` OK on MCP/daemon). Dedicated command /
-  Spring-JUnit recipe aliases remain open.
+  same type + where clauses (leading `@` OK on MCP/daemon). Dedicated
+  `jdx annotated` command + recipe aliases (`deprecated`, `forRemoval`, `test`,
+  `junit5`, `junit4`, `bean`) ship; richer value modelling (arrays / nested
+  annotations beyond the rendered string form) remains open.
 - **`--since` / API-level reporting** — which JDK release introduced a member.
 - **Dataflow-lite** — `jdx flow <method>` for a simplified reaching-values view.
 - **Multi-release jar variant selection** beyond warning.
@@ -1444,6 +1463,10 @@ usages    --kind call|ref|impl|override|read|write|new|throw|annotation|all
           --where key=value (repeatable; requires --kind annotation; issue #26)
           query may also be 'Type(k=v)' with --kind annotation (MCP: '@Type(k=v)')
           --in --exclude --limit --context --src
+          [-w …] [--jars …] [--no-jdk] [--json] [--no-color]
+annotated <annotation|recipe|Type(k=v)> (issue #26 dedicated command)
+          recipes: deprecated|forRemoval|test|junit5|junit4|bean
+          --where key=value (repeatable) --in --exclude --limit --context --src
           [-w …] [--jars …] [--no-jdk] [--json] [--no-color]
 hierarchy --up --down --direct --depth N --in --exclude --limit
           [-w …] [--jars …] [--no-jdk] [--json] [--no-color]

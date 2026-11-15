@@ -32,6 +32,11 @@ public val HELP_ROWS: List<HelpRow> = listOf(
     HelpRow("ls [package]", "External library browser (packages/types)", "jdx ls com.google.gson"),
     HelpRow("tree [artifact]", "External library browser (artifacts)", "jdx tree gson"),
     HelpRow("usages <symbol>", "Find usages", "jdx usages com.google.gson.TypeAdapter"),
+    HelpRow(
+        "annotated <annotation>",
+        "Classes/members carrying an annotation (recipes: deprecated|forRemoval|test|bean)",
+        "jdx annotated forRemoval --jars lib.jar",
+    ),
     HelpRow("hierarchy <type>", "Type hierarchy", "jdx hierarchy java.util.Map"),
     HelpRow("implementors <type>", "Who implements this?", "jdx implementors java.util.Map"),
     HelpRow("callers <member>", "Call hierarchy (in)", "jdx callers 'Gson#toJson(Object)'"),

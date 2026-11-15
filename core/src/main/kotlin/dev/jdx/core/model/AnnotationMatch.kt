@@ -14,6 +14,10 @@ package dev.jdx.core.model
  * [peelAnnotationUseQuery] turns that into a plain type ref plus where
  * clauses so `--where` is optional for the common case.
  *
+ * The dedicated `jdx annotated` command (same issue) accepts the same use
+ * spelling plus short [ANNOTATION_RECIPES] aliases (`deprecated`, `forRemoval`,
+ * `test`, `bean`, …) that expand to a well-known type + optional where clauses.
+ *
  * Rendering sorts element names so the same annotation use is byte-identical
  * regardless of source / bytecode declaration order (AGENTS.md §2.5).
  */
@@ -297,4 +301,83 @@ internal fun splitAnnotationElements(inside: String): List<String> {
     }
     parts.add(buf.toString().trim())
     return parts.filter { it.isNotEmpty() }
+}
+
+/**
+ * Well-known short aliases for `jdx annotated` (issue #26 recipes).
+ *
+ * Keys are lowercase; [lookupAnnotationRecipe] matches case-insensitively.
+ * A recipe is only the bare name (optional leading `@`, no package dots, no
+ * `(…)` element list) — FQNs and annotation-use spelling stay on the peel /
+ * resolve path. Recipe-supplied where clauses AND-merge with any caller
+ * `--where` flags.
+ */
+public val ANNOTATION_RECIPES: Map<String, AnnotationUseQuery> = mapOf(
+    "deprecated" to AnnotationUseQuery("java.lang.Deprecated"),
+    "forremoval" to AnnotationUseQuery(
+        "java.lang.Deprecated",
+        listOf(AnnotationWhere("forRemoval", "true")),
+    ),
+    "test" to AnnotationUseQuery("org.junit.jupiter.api.Test"),
+    "junit5" to AnnotationUseQuery("org.junit.jupiter.api.Test"),
+    "junit4" to AnnotationUseQuery("org.junit.Test"),
+    "bean" to AnnotationUseQuery("org.springframework.context.annotation.Bean"),
+)
+
+/**
+ * Canonical recipe spellings for `--help` / docs (stable order, human case).
+ * Lookup stays case-insensitive via [ANNOTATION_RECIPES].
+ */
+public val ANNOTATION_RECIPE_NAMES: List<String> = listOf(
+    "deprecated",
+    "forRemoval",
+    "test",
+    "junit5",
+    "junit4",
+    "bean",
+)
+
+/**
+ * Resolved query for `jdx annotated`: the string handed to
+ * [dev.jdx.index.service.JdxService.usages] plus any recipe-supplied where
+ * clauses. [recipe] is the matched alias spelling when a recipe fired
+ * (null for peel / bare-type paths).
+ */
+public data class AnnotatedQuery(
+    public val query: String,
+    public val recipeWhere: List<AnnotationWhere> = emptyList(),
+    public val recipe: String? = null,
+)
+
+/**
+ * Looks up a recipe alias. Returns null when [raw] is not a bare recipe name
+ * (FQN, member ref, or `(k=v)` use spelling → peel / SymbolRefParser).
+ */
+public fun lookupAnnotationRecipe(raw: String): AnnotationUseQuery? {
+    var body = raw.trim()
+    if (body.startsWith('@')) body = body.substring(1).trimStart()
+    if (body.isEmpty()) return null
+    // Recipes are single bare words — anything with package/member/element
+    // punctuation is a real type or annotation-use spelling.
+    if (body.any { it == '.' || it == '#' || it == '$' || it == '(' || it == ')' || it == ':' }) {
+        return null
+    }
+    return ANNOTATION_RECIPES[body.lowercase()]
+}
+
+/**
+ * Resolves the subject of `jdx annotated <query>` (issue #26 dedicated
+ * command). Recipes expand first; everything else is returned unchanged so
+ * `usages --kind annotation` can peel `@Type(k=v)` / `Type(k=v)` or resolve
+ * a bare type.
+ */
+public fun resolveAnnotatedQuery(raw: String): AnnotatedQuery {
+    val trimmed = raw.trim()
+    val recipe = lookupAnnotationRecipe(trimmed) ?: return AnnotatedQuery(trimmed)
+    val name = trimmed.trim().removePrefix("@").trimStart()
+    return AnnotatedQuery(
+        query = recipe.typeRef,
+        recipeWhere = recipe.where,
+        recipe = name,
+    )
 }

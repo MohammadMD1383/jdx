@@ -103,4 +103,56 @@ class AnnotationMatchTest {
         unclosed.isFailure shouldBe true
         unclosed.exceptionOrNull()!!.message shouldContain "closing ')'"
     }
+
+    @Test
+    fun `recipes expand bare aliases for annotated`() {
+        // Issue #26 dedicated command: short aliases → well-known types.
+        lookupAnnotationRecipe("deprecated") shouldBe
+            AnnotationUseQuery("java.lang.Deprecated")
+        lookupAnnotationRecipe("@forRemoval") shouldBe
+            AnnotationUseQuery(
+                "java.lang.Deprecated",
+                listOf(AnnotationWhere("forRemoval", "true")),
+            )
+        lookupAnnotationRecipe("TEST") shouldBe
+            AnnotationUseQuery("org.junit.jupiter.api.Test")
+        lookupAnnotationRecipe("junit5") shouldBe
+            AnnotationUseQuery("org.junit.jupiter.api.Test")
+        lookupAnnotationRecipe("junit4") shouldBe
+            AnnotationUseQuery("org.junit.Test")
+        lookupAnnotationRecipe("bean") shouldBe
+            AnnotationUseQuery("org.springframework.context.annotation.Bean")
+        // FQNs / use-spelling / member refs are never recipes.
+        lookupAnnotationRecipe("java.lang.Deprecated") shouldBe null
+        lookupAnnotationRecipe("Deprecated(forRemoval=true)") shouldBe null
+        lookupAnnotationRecipe("Gson#toJson") shouldBe null
+    }
+
+    @Test
+    fun `resolveAnnotatedQuery prefers recipes then leaves peelables alone`() {
+        resolveAnnotatedQuery("forRemoval") shouldBe AnnotatedQuery(
+            query = "java.lang.Deprecated",
+            recipeWhere = listOf(AnnotationWhere("forRemoval", "true")),
+            recipe = "forRemoval",
+        )
+        resolveAnnotatedQuery("@deprecated") shouldBe AnnotatedQuery(
+            query = "java.lang.Deprecated",
+            recipe = "deprecated",
+        )
+        // Annotation-use spelling stays for usages --kind annotation to peel.
+        resolveAnnotatedQuery("Deprecated(forRemoval=true)") shouldBe
+            AnnotatedQuery("Deprecated(forRemoval=true)")
+        resolveAnnotatedQuery("java.lang.Deprecated") shouldBe
+            AnnotatedQuery("java.lang.Deprecated")
+    }
+
+    @Test
+    fun `recipe names list is the public help vocabulary`() {
+        ANNOTATION_RECIPE_NAMES shouldBe listOf(
+            "deprecated", "forRemoval", "test", "junit5", "junit4", "bean",
+        )
+        for (name in ANNOTATION_RECIPE_NAMES) {
+            (lookupAnnotationRecipe(name) != null) shouldBe true
+        }
+    }
 }

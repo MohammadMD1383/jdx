@@ -105,7 +105,7 @@ is the CLI surface, pinned by help/parity goldens.)
   (Codex tests additionally pin `$CODEX_HOME` via the `codexHome` ctor arg,
   Copilot tests pin `$COPILOT_HOME` via the `copilotHome` ctor arg).
 - `parity/AdapterParityTest` — the §9 contract: CLI `--json` == MCP == HTTP bytes
-  over all 23 read commands + failure branches + a hostile-property case.
+  over all 24 read commands + failure branches + a hostile-property case.
 - `commands/DiffCommand` is the one query with no `RootsSpec`, no `--jars`/`-w`/`--no-jdk`
   and **no `--no-daemon`**: a diff names its own two artifacts, and a warm daemon holds
   nothing a two-artifact comparison can reuse (nor a way to carry a `--fail-on` verdict
@@ -120,6 +120,8 @@ is the CLI surface, pinned by help/parity goldens.)
   identical with or without them. `--brief --with-doc` and `--max-lines < 0` exit 3.
   Issue #26 annotation-use spelling on the CLI omits the leading `@`
   (`Type(k=v)`): Clikt reserves `@file` for argfiles; MCP/daemon accept `@Type(k=v)`.
+  `jdx annotated` is the dedicated entry (recipes + no `--kind`); same listing as
+  `usages --kind annotation`.
 - Batch: NDJSON in, one envelope per line, per-query failures never abort the
   stream, exit = max query exit. Empty batch exits 3, malformed lines exit 6.
 - Command tests must inject `InMemoryWorkspaceStore()` — never the real-home store

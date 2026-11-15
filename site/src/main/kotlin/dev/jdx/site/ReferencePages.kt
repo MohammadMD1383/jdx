@@ -264,6 +264,7 @@ class ReferencePages(
             "ls" to "jdx ls com.google.gson.stream --coord $GSON",
             "tree" to "jdx tree 'gson*' --depth 3 --coord $GSON",
             "usages" to "jdx usages com.google.gson.JsonNull --limit 10 --coord $GSON",
+            "annotated" to "jdx annotated deprecated --limit 10 --coord $GSON",
             "hierarchy" to "jdx hierarchy com.google.gson.JsonElement --coord $GSON",
             "implementors" to "jdx implementors com.google.gson.TypeAdapterFactory --direct --limit 10 --coord $GSON",
             "callers" to "jdx callers 'com.google.gson.Gson#getAdapter(java.lang.Class)' --coord $GSON",
@@ -286,7 +287,7 @@ class ReferencePages(
             listOf("show", "members", "outline", "signature", "doc", "body", "source", "search", "resolve", "ls", "tree", "kotlin")
                 .forEach { put(it, reading) }
             listOf(
-                "usages", "hierarchy", "implementors", "callers", "calls", "samples",
+                "usages", "annotated", "hierarchy", "implementors", "callers", "calls", "samples",
                 "literals", "services", "modules", "manifest", "resources",
             )
                 .forEach { put(it, navigating) }

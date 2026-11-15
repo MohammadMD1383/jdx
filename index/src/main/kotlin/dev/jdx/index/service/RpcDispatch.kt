@@ -35,6 +35,7 @@ import dev.jdx.core.rpc.RpcCommand
 import dev.jdx.core.rpc.RpcRequest
 import dev.jdx.decompile.DecompilerId
 import dev.jdx.index.maven.MavenResolver
+import dev.jdx.index.service.JdxService.AnnotatedOptions
 import dev.jdx.index.service.JdxService.ArtifactSpec
 import dev.jdx.index.service.JdxService.BodyOptions
 import dev.jdx.index.service.JdxService.CallOptions
@@ -101,6 +102,10 @@ import dev.jdx.index.workspace.WorkspaceStore
  *   throw reads `throws` declarations, not `ATHROW` sites),
  *   `in`, `exclude`, `limit`, `context`, `where` (comma-separated
  *   `key=value` predicates; requires `--kind annotation`, issue #26).
+ * - `annotated`: always annotation kind (issue #26 dedicated command);
+ *   query may be a type, annotation-use spelling, or recipe alias
+ *   (`deprecated`/`forRemoval`/`test`/`bean`/…); `where`, `in`, `exclude`,
+ *   `limit`, `context`.
  * - `hierarchy`: `up`, `down`, `direct`, `depth`, `in`, `exclude`, `limit`.
  * - `implementors`: `direct`, `depth`, `in`, `exclude`, `limit`.
  * - `callers`: `depth`, `in`, `exclude`, `limit`, `exact`.
@@ -219,6 +224,16 @@ public fun JdxService.dispatch(request: RpcRequest, roots: RootsSpec): ServiceOu
             scope.query, roots,
             UsageOptions(
                 kind = scope.usagesKind() ?: return scope.failure(),
+                inArtifact = scope.params["in"],
+                exclude = scope.params["exclude"],
+                limit = scope.int("limit", DEFAULT_USAGES_LIMIT) ?: return scope.failure(),
+                contextLines = scope.int("context", 0) ?: return scope.failure(),
+                where = scope.annotationWhere() ?: return scope.failure(),
+            ),
+        )
+        RpcCommand.ANNOTATED -> annotated(
+            scope.query, roots,
+            AnnotatedOptions(
                 inArtifact = scope.params["in"],
                 exclude = scope.params["exclude"],
                 limit = scope.int("limit", DEFAULT_USAGES_LIMIT) ?: return scope.failure(),

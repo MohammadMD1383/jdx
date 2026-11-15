@@ -246,6 +246,61 @@ class UsagesServiceTest {
     }
 
     @Test
+    fun `annotated command matches usages kind annotation`() {
+        // Issue #26 dedicated command: same listing as usages --kind annotation.
+        val viaUsages = JdxService.usages(
+            "u.Mark",
+            caseRoots(),
+            UsageOptions(
+                kind = UsageKindFilter.ANNOTATION,
+                where = listOf(AnnotationWhere("level", "1")),
+            ),
+        )
+        val viaAnnotated = JdxService.annotated(
+            "u.Mark",
+            caseRoots(),
+            JdxService.AnnotatedOptions(where = listOf(AnnotationWhere("level", "1"))),
+        )
+        viaAnnotated.exitCode shouldBe 0
+        viaAnnotated.renderText(false) shouldBe viaUsages.renderText(false)
+        viaAnnotated.toJson("annotated") shouldContain "\"command\":\"annotated\""
+        textOf(viaAnnotated) shouldContain "@u.Mark(level=1)"
+        textOf(viaAnnotated) shouldContain "u.Factory"
+        textOf(viaAnnotated) shouldNotContain "u.Other#work()"
+    }
+
+    @Test
+    fun `annotated peels use spelling without kind flag`() {
+        val outcome = JdxService.annotated("@u.Mark(level=1)", caseRoots())
+        outcome.exitCode shouldBe 0
+        textOf(outcome) shouldContain "u.Factory"
+        textOf(outcome) shouldNotContain "u.Other#work()"
+    }
+
+    @Test
+    fun `annotated forRemoval recipe expands Deprecated predicate`() {
+        // Recipe expands before resolve. JDK must be on the classpath so
+        // java.lang.Deprecated resolves; --in keeps the fixture jar so JDK's
+        // own forRemoval APIs do not flood the default limit.
+        val jar = dev.jdx.testsupport.fixtures.FixtureJars.binaryJar()
+        val roots = RootsSpec(
+            jarSpecs = listOf(jar.absolutePath),
+            includeJdk = true,
+        )
+        val opts = JdxService.AnnotatedOptions(inArtifact = jar.name)
+        val viaRecipe = JdxService.annotated("forRemoval", roots, opts)
+        val viaWhere = JdxService.annotated(
+            "java.lang.Deprecated",
+            roots,
+            opts.copy(where = listOf(AnnotationWhere("forRemoval", "true"))),
+        )
+        viaRecipe.exitCode shouldBe 0
+        viaRecipe.renderText(false) shouldBe viaWhere.renderText(false)
+        textOf(viaRecipe) shouldContain "dev.jdx.fixtures.VarargsAndModifiers#oldApi()"
+        textOf(viaRecipe) shouldContain "forRemoval=true"
+    }
+
+    @Test
     fun `all includes the metadata rows`() {
         val thrown = JdxService.usages("u.Boom", caseRoots())
         thrown.exitCode shouldBe 0

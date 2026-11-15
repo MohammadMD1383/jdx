@@ -1,6 +1,7 @@
 package dev.jdx.core.model
 
 import dev.jdx.core.gen.JDX_PROPERTY_ITERATIONS
+import io.kotest.matchers.shouldBe
 import io.kotest.property.Arb
 import io.kotest.property.arbitrary.Codepoint
 import io.kotest.property.arbitrary.az
@@ -8,6 +9,7 @@ import io.kotest.property.arbitrary.bind
 import io.kotest.property.arbitrary.boolean
 import io.kotest.property.arbitrary.int
 import io.kotest.property.arbitrary.list
+import io.kotest.property.arbitrary.of
 import io.kotest.property.arbitrary.string
 import io.kotest.property.checkAll
 import kotlinx.coroutines.runBlocking
@@ -84,6 +86,23 @@ class AnnotationMatchPropertyTest {
             assert(annot.matchesWhere(query.where)) {
                 "peeled where must match rendered values: ${query.where} vs $pairs"
             }
+        }
+    }
+
+    @Test
+    fun `recipe lookup is case-insensitive and stable`(): Unit = runBlocking {
+        checkAll(JDX_PROPERTY_ITERATIONS, Arb.of(ANNOTATION_RECIPE_NAMES)) { name ->
+            val lower = lookupAnnotationRecipe(name.lowercase())
+            val upper = lookupAnnotationRecipe(name.uppercase())
+            val atPrefixed = lookupAnnotationRecipe("@$name")
+            assert(lower != null && lower == upper && lower == atPrefixed) {
+                "recipe '$name' must match lower/upper/@ forms"
+            }
+            val resolved = resolveAnnotatedQuery(name)
+            resolved.query shouldBe lower!!.typeRef
+            resolved.recipeWhere shouldBe lower.where
+            // FQN form of the same type is never a recipe.
+            lookupAnnotationRecipe(lower.typeRef) shouldBe null
         }
     }
 }

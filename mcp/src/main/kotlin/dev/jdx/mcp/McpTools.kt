@@ -295,6 +295,23 @@ public val ALL_MCP_TOOLS: List<McpToolDefinition> = listOf(
         ),
     ),
     McpToolDefinition(
+        command = RpcCommand.ANNOTATED,
+        description = "List classes/members carrying an annotation (issue #26). Query may be a type, " +
+            "'@Type(k=v)' use spelling, or a recipe alias (deprecated|forRemoval|test|junit5|junit4|bean). " +
+            "Equivalent to usages with kind=annotation.",
+        params = listOf(
+            queryParam(), workspaceParam(),
+            inParam(), excludeParam(), limitParam(50),
+            McpParam(name = "context", kind = McpParamKind.INTEGER, description = "Snippet lines around each hit (default 0)."),
+            McpParam(
+                name = "where",
+                kind = McpParamKind.STRING,
+                description = "Comma-separated annotation value predicates key=value (AND; " +
+                    "e.g. forRemoval=true). Equivalent: query='@Type(k=v)'. Issue #26.",
+            ),
+        ),
+    ),
+    McpToolDefinition(
         command = RpcCommand.HIERARCHY,
         description = "Type hierarchy: supertypes upward and subtypes downward across the workspace.",
         params = listOf(
