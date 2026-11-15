@@ -121,7 +121,9 @@ is the CLI surface, pinned by help/parity goldens.)
   Issue #26 annotation-use spelling on the CLI omits the leading `@`
   (`Type(k=v)`): Clikt reserves `@file` for argfiles; MCP/daemon accept `@Type(k=v)`.
   `jdx annotated` is the dedicated entry (recipes + no `--kind`); same listing as
-  `usages --kind annotation`.
+  `usages --kind annotation`. `--where` prefers the structured `AnnotationValue`
+  AST and merges annotation-element defaults for omitted bytecode values
+  (matching only — printed `@use` stays explicit).
 - Batch: NDJSON in, one envelope per line, per-query failures never abort the
   stream, exit = max query exit. Empty batch exits 3, malformed lines exit 6.
 - Command tests must inject `InMemoryWorkspaceStore()` — never the real-home store

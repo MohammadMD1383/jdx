@@ -2,6 +2,7 @@ package dev.jdx.index.asm
 
 import dev.jdx.core.model.Access
 import dev.jdx.core.model.AnnotationInfo
+import dev.jdx.core.model.AnnotationValue
 import dev.jdx.core.model.ClassInfo
 import dev.jdx.core.model.FieldInfo
 import dev.jdx.core.model.FieldSignature
@@ -13,6 +14,7 @@ import dev.jdx.core.model.TypeKind
 import dev.jdx.core.model.TypeName
 import dev.jdx.core.model.Warning
 import dev.jdx.core.model.WarningCode
+import dev.jdx.core.model.annotationInfo
 import dev.jdx.core.model.typeNameFromBinaryName
 import dev.jdx.index.kotlin.KotlinMetadataKind
 import dev.jdx.index.kotlin.KotlinMembers
@@ -449,16 +451,18 @@ public object AsmClassReader {
         ((visible ?: emptyList()) + (invisible ?: emptyList())).map { mapAnnotation(it) }
 
     private fun mapAnnotation(node: AnnotationNode): AnnotationInfo {
-        val values = linkedMapOf<String, String>()
+        val elements = linkedMapOf<String, AnnotationValue>()
         val flat = node.values ?: emptyList()
         var index = 0
         while (index + 1 < flat.size) {
             val key = flat[index] as? String
                 ?: throw IllegalArgumentException("malformed annotation values in ${node.desc}")
-            values[key] = renderValue(flat[index + 1])
+            elements[key] = mapValue(flat[index + 1])
             index += 2
         }
-        return AnnotationInfo(mapAnnotationType(node.desc), values)
+        // annotationInfo derives the rendered values map from the AST so the
+        // two stay in sync (issue #26 structured AnnotationValue).
+        return annotationInfo(mapAnnotationType(node.desc), elements)
     }
 
     private fun mapAnnotationType(descriptor: String): TypeName =
@@ -469,48 +473,39 @@ public object AsmClassReader {
             annotations.any { it.type.fqn == "java.lang.Deprecated" }
 
     /**
-     * Renders one annotation/constant value deterministically. Shapes follow ASM's
-     * `AnnotationNode` encoding: primitives and strings as-is, `Type` as `Fqn.class`,
-     * enums as the two-element `String` array ASM stores them in, nested annotations as
-     * `@Fqn(k=v, …)`, arrays as `{a, b}`. Unknown shapes are corrupt input, never guessed.
+     * Maps one ASM annotation/constant value into the structured
+     * [AnnotationValue] AST (issue #26). Shapes follow ASM's `AnnotationNode`
+     * encoding: leaves stay [AnnotationValue.Scalar] with the historical
+     * rendered spelling; nested annotations and arrays carry real structure.
+     * Unknown shapes are corrupt input, never guessed.
      */
-    private fun renderValue(value: Any?): String = when (value) {
-        is String -> "\"" + value
-            .replace("\\", "\\\\")
-            .replace("\"", "\\\"")
-            .replace("\n", "\\n")
-            .replace("\r", "\\r")
-            .replace("\t", "\\t") + "\""
-        is Char -> "'" + value.toString()
-            .replace("\\", "\\\\")
-            .replace("'", "\\'") + "'"
-        is Byte, is Short, is Int, is Long, is Boolean -> value.toString()
-        is Float, is Double -> value.toString()
-        is Type -> value.className + ".class"
+    private fun mapValue(value: Any?): AnnotationValue = when (value) {
+        is String -> AnnotationValue.Scalar(renderScalarString(value))
+        is Char -> AnnotationValue.Scalar(renderScalarChar(value))
+        is Byte, is Short, is Int, is Long, is Boolean ->
+            AnnotationValue.Scalar(value.toString())
+        is Float, is Double -> AnnotationValue.Scalar(value.toString())
+        is Type -> AnnotationValue.Scalar(value.className + ".class")
         is AnnotationNode -> {
-            val inner = linkedMapOf<String, String>()
+            val inner = linkedMapOf<String, AnnotationValue>()
             val flat = value.values ?: emptyList()
             var index = 0
             while (index + 1 < flat.size) {
                 val key = flat[index] as? String
                     ?: throw IllegalArgumentException("malformed nested annotation values")
-                inner[key] = renderValue(flat[index + 1])
+                inner[key] = mapValue(flat[index + 1])
                 index += 2
             }
-            // Sort keys like AnnotationInfo.renderUse so nested forms are
-            // byte-identical regardless of visit order (AGENTS.md §2.5).
-            val pairs = inner.entries
-                .sortedBy { it.key }
-                .joinToString(", ") { (key, rendered) -> "$key=$rendered" }
-            "@" + mapAnnotationType(value.desc).fqn + if (pairs.isEmpty()) "" else "($pairs)"
+            AnnotationValue.Nested(mapAnnotationType(value.desc), inner)
         }
-        is List<*> -> value.joinToString(", ", "{", "}") { renderValue(it) }
+        is List<*> -> AnnotationValue.Arr(value.map { mapValue(it) })
         is Array<*> -> {
             // ASM stores an enum use as String[descriptor, constant-name] — the only
             // array shape AnnotationNode ever produces (real arrays arrive as List).
             val parts = value.toList()
             if (parts.size == 2 && parts.all { it is String }) {
-                Type.getType(parts[0] as String).className + "." + (parts[1] as String)
+                val rendered = Type.getType(parts[0] as String).className + "." + (parts[1] as String)
+                AnnotationValue.Scalar(rendered)
             } else {
                 throw IllegalArgumentException("malformed annotation array value")
             }
@@ -519,6 +514,25 @@ public object AsmClassReader {
             "unsupported annotation value of ${value?.javaClass?.name ?: "null"}",
         )
     }
+
+    /**
+     * Renders one annotation/constant value deterministically. Delegates to
+     * [mapValue] so structured and rendered forms cannot drift.
+     */
+    private fun renderValue(value: Any?): String = mapValue(value).render()
+
+    private fun renderScalarString(value: String): String =
+        "\"" + value
+            .replace("\\", "\\\\")
+            .replace("\"", "\\\"")
+            .replace("\n", "\\n")
+            .replace("\r", "\\r")
+            .replace("\t", "\\t") + "\""
+
+    private fun renderScalarChar(value: Char): String =
+        "'" + value.toString()
+            .replace("\\", "\\\\")
+            .replace("'", "\\'") + "'"
 
     // -- names -----------------------------------------------------------------
 

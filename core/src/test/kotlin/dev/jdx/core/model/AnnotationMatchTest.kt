@@ -6,7 +6,8 @@ import org.junit.jupiter.api.Test
 
 /**
  * Annotation value-predicate helpers (issue #26): `--where key=value` parsing,
- * rendered-use spelling, and quote-tolerant value matching.
+ * rendered-use spelling, quote-tolerant value matching, structured
+ * [AnnotationValue] AST walks, and annotation-default merging.
  */
 class AnnotationMatchTest {
 
@@ -52,6 +53,89 @@ class AnnotationMatchTest {
                 AnnotationWhere("since", "1"),
             ),
         ) shouldBe false
+    }
+
+    @Test
+    fun `matchesWhere fills omitted elements from annotation defaults`() {
+        // Issue #26: bare @Deprecated omits forRemoval; default false matches.
+        val bare = deprecated()
+        bare.matchesWhere(listOf(AnnotationWhere("forRemoval", "false"))) shouldBe false
+        bare.matchesWhere(
+            listOf(AnnotationWhere("forRemoval", "false")),
+            defaults = mapOf("forRemoval" to "false", "since" to "\"\""),
+        ) shouldBe true
+        bare.matchesWhere(
+            listOf(AnnotationWhere("forRemoval", "true")),
+            defaults = mapOf("forRemoval" to "false"),
+        ) shouldBe false
+        // Explicit values still win over defaults.
+        deprecated("forRemoval" to "true").matchesWhere(
+            listOf(AnnotationWhere("forRemoval", "false")),
+            defaults = mapOf("forRemoval" to "false"),
+        ) shouldBe false
+        // renderUse never invents defaults into the printed use.
+        bare.renderUse() shouldBe "@java.lang.Deprecated"
+    }
+
+    @Test
+    fun `structured elements match nested paths and arrays without string peel`() {
+        // Issue #26 AnnotationValue AST: Nested / Arr walk directly.
+        val annot = annotationInfo(
+            typeNameFromBinaryName("com.example.Outer"),
+            mapOf(
+                "nested" to AnnotationValue.Nested(
+                    typeNameFromBinaryName("com.example.Inner"),
+                    mapOf(
+                        "k" to AnnotationValue.Scalar("1"),
+                        "since" to AnnotationValue.Scalar("\"99\""),
+                    ),
+                ),
+                "tags" to AnnotationValue.Arr(
+                    listOf(
+                        AnnotationValue.Scalar("\"a\""),
+                        AnnotationValue.Scalar("\"b\""),
+                    ),
+                ),
+            ),
+        )
+        annot.matchesWhere(listOf(AnnotationWhere("nested.k", "1"))) shouldBe true
+        annot.matchesWhere(listOf(AnnotationWhere("nested.since", "99"))) shouldBe true
+        annot.matchesWhere(listOf(AnnotationWhere("tags", "{b, a}"))) shouldBe true
+        annot.matchesWhere(listOf(AnnotationWhere("nested.k", "2"))) shouldBe false
+        // Omitted AST key uses top-level defaults only.
+        annot.matchesWhere(
+            listOf(AnnotationWhere("level", "0")),
+            defaults = mapOf("level" to "0"),
+        ) shouldBe true
+        annot.renderUse() shouldBe
+            "@com.example.Outer(nested=@com.example.Inner(k=1, since=\"99\"), tags={\"a\", \"b\"})"
+    }
+
+    @Test
+    fun `annotationElementDefaults reads AnnotationDefault methods`() {
+        fun method(name: String, descriptor: String, default: String? = null): MethodInfo =
+            MethodInfo(
+                name = name,
+                descriptor = JvmDescriptor.parse(descriptor) as JvmDescriptor.Method,
+                access = Access.NONE,
+                annotationDefault = default,
+            )
+        val type = typeNameFromBinaryName("u.Mark") as TypeName.ClassType
+        val info = ClassInfo(
+            name = type,
+            kind = TypeKind.ANNOTATION,
+            methods = listOf(
+                method("level", "()I", "0"),
+                method("name", "()Ljava/lang/String;", "\"\""),
+                method("required", "()I"),
+            ),
+        )
+        info.annotationElementDefaults() shouldBe mapOf("level" to "0", "name" to "\"\"")
+        ClassInfo(
+            name = typeNameFromBinaryName("u.NotAnnot") as TypeName.ClassType,
+            kind = TypeKind.CLASS,
+            methods = listOf(method("level", "()I", "0")),
+        ).annotationElementDefaults() shouldBe emptyMap()
     }
 
     @Test

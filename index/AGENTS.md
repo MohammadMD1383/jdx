@@ -77,11 +77,14 @@ behaviour lives here** (adapters call in, never the reverse). `explicitApi()` is
   supertypes, param-key match so covariant bridges join); `--exact` restores
   invoke-owner matching. `calls` stays bytecode-exact (the invoke names one owner).
   `usages --kind annotation` reads `ClassInfo` annotation metadata (not reference
-  edges); `--where key=value` (issue #26) filters by rendered element values (AND;
-  quote-tolerant for strings; dotted nested paths; `{…}` arrays as multisets) and
-  requires `--kind annotation`. Annotation-use spelling (`@Type(k=v)` / `Type(k=v)`)
-  peels into the type ref + where clauses (AND-merged with `--where`; leading `@`
-  without `--kind annotation` is exit 3). Matching rows carry `UsageHit.annotation`
+  edges); `--where key=value` (issue #26) filters by the structured
+  `AnnotationValue` AST when present (else rendered values; AND; quote-tolerant
+  for strings; dotted nested paths; `{…}` arrays as multisets) and requires
+  `--kind annotation`. Omitted bytecode elements are filled from the annotation
+  type's `AnnotationDefault`s for matching only (`renderUse` stays explicit).
+  Annotation-use spelling (`@Type(k=v)` / `Type(k=v)`) peels into the type ref +
+  where clauses (AND-merged with `--where`; leading `@` without `--kind
+  annotation` is exit 3). Matching rows carry `UsageHit.annotation`
   (`@Fqn(k=v,…)` with sorted keys, including nested). `annotated` (issue #26
   dedicated command) is thin over that path: always annotation kind, plus recipe
   aliases (`deprecated`/`forRemoval`/`test`/`bean`) via `resolveAnnotatedQuery`

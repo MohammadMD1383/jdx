@@ -144,13 +144,16 @@ class UsagesServiceTest {
         outcome.exitCode shouldBe 0
         val listing = usageListOf(outcome)
         listing.hits.map { it.kind + " " + it.fromRef }.sorted() shouldBe listOf(
+            "annotation u.Boom",
             "annotation u.Factory",
             "annotation u.Other#work()",
         )
         // Issue #26: every annotation row carries the rendered @use so agents
-        // see the values that matched without a follow-up.
+        // see the values that matched without a follow-up. Bare @Mark on Boom
+        // prints without inventing the level=0 default.
         listing.hits.single { it.fromRef == "u.Factory" }.annotation shouldBe "@u.Mark(level=1)"
         listing.hits.single { it.fromRef == "u.Other#work()" }.annotation shouldBe "@u.Mark(level=2)"
+        listing.hits.single { it.fromRef == "u.Boom" }.annotation shouldBe "@u.Mark"
         textOf(outcome) shouldContain "@u.Mark(level=1)"
         outcome.toJson("usages") shouldContain "\"annotation\":\"@u.Mark(level=1)\""
     }
@@ -304,6 +307,29 @@ class UsagesServiceTest {
             JdxService.AnnotatedOptions(where = listOf(AnnotationWhere("inner.level", "99"))),
         )
         miss.exitCode shouldBe 1
+    }
+
+    @Test
+    fun `where merges annotation defaults for omitted elements`() {
+        // Issue #26: bare @Mark on u.Boom omits level; AnnotationDefault 0
+        // fills `--where level=0`. Explicit level=1/2 still win for others.
+        val viaDefault = JdxService.annotated(
+            "u.Mark",
+            caseRoots(),
+            JdxService.AnnotatedOptions(where = listOf(AnnotationWhere("level", "0"))),
+        )
+        viaDefault.exitCode shouldBe 0
+        usageListOf(viaDefault).hits.map { it.fromRef } shouldBe listOf("u.Boom")
+        textOf(viaDefault) shouldContain "@u.Mark"
+        textOf(viaDefault) shouldNotContain "level="
+
+        val level1 = JdxService.annotated(
+            "u.Mark",
+            caseRoots(),
+            JdxService.AnnotatedOptions(where = listOf(AnnotationWhere("level", "1"))),
+        )
+        usageListOf(level1).hits.map { it.fromRef } shouldBe listOf("u.Factory")
+        textOf(level1) shouldNotContain "u.Boom"
     }
 
     @Test

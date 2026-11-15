@@ -3,16 +3,21 @@ package dev.jdx.core.model
 /**
  * Annotation value-predicate helpers for issue #26 (annotation-driven views).
  *
- * `--where key=value` on `usages --kind annotation` filters by the rendered
- * [AnnotationInfo.values] map (ASM's deterministic string form from
- * `AsmClassReader.renderValue`). Matching is exact on the element name and
- * tolerant of a missing pair of quotes around a string value so
- * `--where since=99` matches a stored `"99"`.
+ * `--where key=value` on `usages --kind annotation` filters by
+ * [AnnotationInfo.elements] when the structured [AnnotationValue] AST is
+ * present (ASM), else by the rendered [AnnotationInfo.values] map. Matching
+ * is exact on the element name and tolerant of a missing pair of quotes
+ * around a string value so `--where since=99` matches a stored `"99"`.
  *
- * Nested elements accept dotted path keys (`--where nested.k=1` peels the
- * stored `@Inner(…)` value and matches `k` inside). Array values compare as
- * order-insensitive multisets (`{2, 1}` matches `{1, 2}`), with the same
- * quote tolerance per element.
+ * Nested elements accept dotted path keys (`--where nested.k=1` walks a
+ * [AnnotationValue.Nested] or peels a stored `@Inner(…)` string). Array
+ * values compare as order-insensitive multisets (`{2, 1}` matches `{1, 2}`),
+ * with the same quote tolerance per element.
+ *
+ * When an element is omitted in bytecode, [defaults] (from the annotation
+ * type's `AnnotationDefault` methods via [ClassInfo.annotationElementDefaults])
+ * fills it for matching only — [renderUse] still prints explicit values so
+ * agents see what was written.
  *
  * Agents may also spell the predicate inline as an annotation use
  * (`@java.lang.Deprecated(forRemoval=true)` / `Deprecated(forRemoval=true)`):
@@ -77,9 +82,16 @@ public fun parseAnnotationWhere(raw: String): Result<AnnotationWhere> {
 /**
  * Renders this annotation use as `@Fqn` or `@Fqn(k=v, …)` with element names
  * sorted. Used on `usages --kind annotation` rows so the next command can see
- * the values that matched (issue #26).
+ * the values that matched (issue #26). Explicit values only — defaults are
+ * never invented into the printed use.
  */
 public fun AnnotationInfo.renderUse(): String {
+    if (elements.isNotEmpty()) {
+        val pairs = elements.entries
+            .sortedBy { it.key }
+            .joinToString(", ") { (key, value) -> "$key=${value.render()}" }
+        return "@${type.fqn}($pairs)"
+    }
     if (values.isEmpty()) return "@${type.fqn}"
     val pairs = values.entries
         .sortedBy { it.key }
@@ -88,32 +100,55 @@ public fun AnnotationInfo.renderUse(): String {
 }
 
 /**
- * True when every [where] clause matches this annotation's rendered values.
- * An empty [where] always matches. A missing element name fails the clause;
- * value comparison accepts the stored rendered form and an unquoted variant
- * of a quoted string (so `--where since=99` matches `"99"`). Dotted keys
- * walk into nested `@Inner(…)` values; `{…}` arrays match as multisets.
+ * True when every [where] clause matches this annotation's values.
+ * An empty [where] always matches. A missing element name fails the clause
+ * unless [defaults] supplies a rendered value that matches (annotation-default
+ * merging, issue #26). Value comparison accepts the stored rendered form and
+ * an unquoted variant of a quoted string (so `--where since=99` matches
+ * `"99"`). Dotted keys walk into nested `@Inner(…)` values; `{…}` arrays
+ * match as multisets. Nested paths do not consult [defaults] (only the
+ * top-level annotation type's defaults are in scope for one query).
  */
-public fun AnnotationInfo.matchesWhere(where: List<AnnotationWhere>): Boolean {
+public fun AnnotationInfo.matchesWhere(
+    where: List<AnnotationWhere>,
+    defaults: Map<String, String> = emptyMap(),
+): Boolean {
     if (where.isEmpty()) return true
-    return where.all { clause -> matchesClause(clause) }
+    return where.all { clause -> matchesClause(clause, defaults) }
 }
 
 /**
- * Matches one clause against this annotation's rendered values, including
- * dotted nested paths (`outer.rest`).
+ * Matches one clause against this annotation's values, including dotted
+ * nested paths (`outer.rest`). [defaults] fills omitted top-level elements.
  */
-internal fun AnnotationInfo.matchesClause(clause: AnnotationWhere): Boolean {
+internal fun AnnotationInfo.matchesClause(
+    clause: AnnotationWhere,
+    defaults: Map<String, String> = emptyMap(),
+): Boolean {
     val dot = clause.key.indexOf('.')
     if (dot > 0) {
         val outer = clause.key.substring(0, dot)
         val rest = clause.key.substring(dot + 1)
         if (rest.isEmpty()) return false
+        val structured = elements[outer]
+        if (structured is AnnotationValue.Nested) {
+            return annotationInfo(structured.type, structured.elements)
+                .matchesClause(AnnotationWhere(rest, clause.value))
+        }
         val stored = values[outer] ?: return false
         val nested = peelNestedAnnotationValue(stored) ?: return false
         return nested.matchesClause(AnnotationWhere(rest, clause.value))
     }
-    val stored = values[clause.key] ?: return false
+    val structured = elements[clause.key]
+    if (structured != null) {
+        return annotationValueMatches(structured.render(), clause.value)
+    }
+    if (elements.isNotEmpty()) {
+        // AST present but this key was omitted — try annotation defaults.
+        val fallback = defaults[clause.key] ?: return false
+        return annotationValueMatches(fallback, clause.value)
+    }
+    val stored = values[clause.key] ?: defaults[clause.key] ?: return false
     return annotationValueMatches(stored, clause.value)
 }
 
