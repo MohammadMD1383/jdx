@@ -273,6 +273,7 @@ class RpcProtocolTest {
             "show", "members", "outline", "body", "source", "signature", "doc",
             "search", "resolve", "ls", "tree", "usages", "hierarchy", "implementors",
             "callers", "calls", "samples", "literals", "services", "modules", "manifest",
+            "resources",
             "diff", "version", "doctor", "health",
         )
         RpcCommand.entries.map { it.wire }.toSet().size shouldBe RpcCommand.entries.size
@@ -291,11 +292,14 @@ class RpcProtocolTest {
 
     @Test
     fun `query requirement is pinned per command`() {
-        // `ls`/`tree` default their glob to `*`; `services`/`modules`/`manifest`
-        // list every registration/descriptor/attribute when empty (issue #25);
-        // version/doctor/health take no subject.
+        // `ls`/`tree` default their glob to `*`; `services`/`modules`/`manifest`/
+        // `resources` list every registration/descriptor/attribute/path when empty
+        // (issue #25); version/doctor/health take no subject.
         RpcCommand.entries.filterNot { it.requiresQuery }.map { it.wire } shouldBe
-            listOf("ls", "tree", "services", "modules", "manifest", "version", "doctor", "health")
+            listOf(
+                "ls", "tree", "services", "modules", "manifest", "resources",
+                "version", "doctor", "health",
+            )
     }
 
     @Test

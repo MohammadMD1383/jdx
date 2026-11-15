@@ -173,6 +173,9 @@ jdx diff gson-2.11.0.jar gson-2.14.0.jar --fail-on breaking
   opens / uses / provides) across jars and the running JDK (issue #25).
 - **`jdx manifest`** — list `META-INF/MANIFEST.MF` main attributes (`Main-Class`,
   `Implementation-Version`, `Multi-Release`, …) across a workspace (issue #25).
+- **`jdx resources`** — list non-class resource paths (`META-INF/…`, `.properties`,
+  versioned `META-INF/versions/…` copies, …) across a workspace (issue #25). Listing
+  only — never dumps binaries into context.
 - **`jdx diff a.jar b.jar`** — the public-API diff for a dependency upgrade, with every
   difference named as a rule (`MEMBER_REMOVED`, `RETURN_TYPE_CHANGED`, …) at
   `breaking`/`suspicious`/`info`, and a `--fail-on` gate for CI.
@@ -203,7 +206,7 @@ yet). `callers` is override-aware by default (`--exact` for invoke-owner matchin
 `calls` stays bytecode-exact. Full list in
 [GitHub Issues](https://github.com/MohammadMD1383/jdx/issues). Out-of-scope for v1
 (mappings/remap, remaining resources inspection beyond `jdx services`/`jdx modules`/
-`jdx manifest`, …) is the phase-2 backlog, also tracked there.
+`jdx manifest`/`jdx resources`, …) is the phase-2 backlog, also tracked there.
 
 ## Documentation
 

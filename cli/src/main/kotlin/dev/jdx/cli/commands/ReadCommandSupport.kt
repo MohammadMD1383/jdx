@@ -657,6 +657,19 @@ internal fun defaultManifestQuery(
     options: JdxService.ManifestOptions,
 ): JdxService.ServiceOutcome = JdxService.manifest(pattern, roots, options)
 
+/** Query behind `resources`, injectable so command tests run without IO (issue #25). */
+internal typealias ResourcesQuery = (
+    pattern: String?,
+    roots: JdxService.RootsSpec,
+    options: JdxService.ResourceOptions,
+) -> JdxService.ServiceOutcome
+
+internal fun defaultResourcesQuery(
+    pattern: String?,
+    roots: JdxService.RootsSpec,
+    options: JdxService.ResourceOptions,
+): JdxService.ServiceOutcome = JdxService.resources(pattern, roots, options)
+
 internal typealias SearchQuery = (
     pattern: String,
     roots: JdxService.RootsSpec,

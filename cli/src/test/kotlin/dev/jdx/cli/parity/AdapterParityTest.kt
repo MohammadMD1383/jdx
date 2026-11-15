@@ -117,6 +117,7 @@ class AdapterParityTest {
             ParityCase(DaemonClient.servicesRequest(limit = 5), roots),
             ParityCase(DaemonClient.modulesRequest("java.base", limit = 5), roots),
             ParityCase(DaemonClient.manifestRequest("Manifest-Version", limit = 5), roots),
+            ParityCase(DaemonClient.resourcesRequest("META-INF", limit = 5), roots),
             // `diff` is shaped like no other read command: it names its own two
             // artifacts (`query` is the OLD side, `new` the candidate, which is
             // exactly what DiffCommand builds) and resolves no classpath, so
@@ -170,7 +171,7 @@ class AdapterParityTest {
     @Test
     fun `all read commands answer byte-identical envelopes on every adapter`() {
         val cases = readCases()
-        cases.size shouldBe 22
+        cases.size shouldBe 23
         val session = mcpSession()
         val server = httpServer()
         server.start()
@@ -304,7 +305,7 @@ class AdapterParityTest {
 
     @Test
     fun `parity holds over generated hostile requests`(): Unit = runBlocking {
-        readCommands.size shouldBe 22
+        readCommands.size shouldBe 23
         val session = mcpSession()
         val server = httpServer()
         server.start()

@@ -1,0 +1,5 @@
+resources matching 'META-INF'
+resources-case.jar (3)
+  META-INF/MANIFEST.MF
+  META-INF/services/com.example.Spi
+  META-INF/versions/11/com/example/messages.properties
