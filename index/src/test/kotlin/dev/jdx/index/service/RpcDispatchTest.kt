@@ -293,6 +293,8 @@ class RpcDispatchTest {
         viaWire(req(RpcCommand.MODULES, "", "limit" to "5")) shouldContain "\"code\":1"
         viaWire(req(RpcCommand.MANIFEST, "x", "limit" to "-1")) shouldContain "--limit must be >= 0"
         viaWire(req(RpcCommand.MANIFEST, "", "regex" to "true")) shouldContain "--regex needs a non-empty pattern"
+        // Fixture jars typically lack JarEntry sections; entries=true still dispatches cleanly.
+        viaWire(req(RpcCommand.MANIFEST, "", "entries" to "true", "limit" to "5")) shouldContain "\"code\":1"
     }
 
     // -- param errors: exit 3 naming the param -----------------------------------------

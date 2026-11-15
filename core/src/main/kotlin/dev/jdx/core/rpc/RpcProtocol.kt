@@ -84,9 +84,9 @@ public enum class RpcCommand(public val wire: String, public val requiresQuery: 
      */
     MODULES("modules", false),
     /**
-     * `META-INF/MANIFEST.MF` main attributes (issue #25 manifest slice):
-     * attribute name/value rows per jar (or class dir), or every attribute
-     * when the query is empty. Per-entry attributes are out of this slice.
+     * `META-INF/MANIFEST.MF` attributes (issue #25): main-section name/value
+     * rows by default, or per-entry (JarEntry) rows with `entries=true`.
+     * Empty query lists every attribute in the selected section.
      */
     MANIFEST("manifest", false),
     /**

@@ -26,7 +26,8 @@ behaviour lives here** (adapters call in, never the reverse). `explicitApi()` is
   `ArtifactRoot.serviceEntryPaths` / `openResource` list and read those SPI
   files (class-scan deliberately drops bare `META-INF/`).
   `ArtifactRoot.resourceEntryPaths` lists every non-`.class` entry (listing
-  only — no content extraction in this slice).
+  only — no content extraction). `ManifestEntries.parseEntryAttributes`
+  covers per-entry JarEntry sections for `jdx manifest --entries`.
   `ArtifactRoot.moduleInfoPaths` / `openModuleInfo` list and read
   `module-info.class` (jar/dir root + every `jrt:/` module; multi-release
   selection for jars). `asm/ModuleInfoReader` parses the Module attribute.
@@ -77,13 +78,14 @@ behaviour lives here** (adapters call in, never the reverse). `explicitApi()` is
   `META-INF/services/<iface>` files (jar + class dir; `jrt:/` empty today);
   versioned copies under `META-INF/versions/` are out of that slice. `modules`
   (issue #25 module-info) is live-roots-first over `module-info.class` (jar /
-  class dir / every `jrt:/` module). `manifest` (issue #25 manifest) is
-  live-roots-first over base `META-INF/MANIFEST.MF` main attributes (jar +
-  class dir; `jrt:/` empty); versioned copies and per-entry attributes are out
-  of that slice. `resources` (issue #25 resource-listing) is live-roots-first
-  over every non-`.class` entry (jar + class dir; `jrt:/` empty), including
-  versioned `META-INF/versions/` paths as stored; listing only — content
-  extraction and per-entry attributes remain deferred.
+  class dir / every `jrt:/` module). `manifest` (issue #25) is live-roots-first
+  over base `META-INF/MANIFEST.MF` (jar + class dir; `jrt:/` empty): main
+  attributes by default, per-entry (JarEntry) attributes with `--entries`;
+  versioned copies under `META-INF/versions/` are ignored. `resources`
+  (issue #25 resource-listing) is live-roots-first over every non-`.class`
+  entry (jar + class dir; `jrt:/` empty), including versioned
+  `META-INF/versions/` paths as stored; listing only — content extraction
+  remains deferred.
 - `search --kind all` (default) covers types + packages + modules only; `method`/
   `field` are opt-in (slow path parses every in-scope class). A default-kind miss
   carries `SEARCH_MEMBERS_OPT_IN_HINT` as `ErrorResult.detail` (issue #86) — do not

@@ -456,13 +456,14 @@ package, a `uses`/`provides` service, or a provider class (substring by default)
 `META-INF/MANIFEST.MF` attributes (use `jdx manifest`) or extract arbitrary resources.
 
 #### `jdx manifest [pattern]`
-`META-INF/MANIFEST.MF` main-attribute listing (issue #25 manifest slice): every base jar
-manifest across the workspace's binary roots (jars and class dirs; `jrt:/` empty). Omit the
-pattern to list every attribute; with a pattern, match the attribute name **or** value
-(substring by default). `--regex` / `--ignore-case` / `--in` / `--exclude` / `--limit`.
-Does **not** list per-entry (JarEntry) attributes or extract resource contents (use
-`jdx resources` for paths). Versioned copies under `META-INF/versions/` are ignored (the
-JVM reads the jar-root manifest).
+`META-INF/MANIFEST.MF` attribute listing (issue #25): every base jar manifest across the
+workspace's binary roots (jars and class dirs; `jrt:/` empty). Default lists **main**
+attributes; `--entries` switches to per-entry (JarEntry) `Name:` sections. Omit the
+pattern to list every attribute in that section; with a pattern, match the attribute name
+**or** value (and, with `--entries`, the entry path) — substring by default.
+`--regex` / `--ignore-case` / `--in` / `--exclude` / `--limit`. Does **not** extract
+resource contents (use `jdx resources` for paths). Versioned copies under
+`META-INF/versions/` are ignored (the JVM reads the jar-root manifest).
 
 #### `jdx resources [pattern]`
 Non-class resource path listing (issue #25 resource-listing slice): every non-`.class`
@@ -470,8 +471,8 @@ entry across the workspace's binary roots (jars and class dirs; `jrt:/` empty). 
 pattern to list every resource; with a pattern, match the entry path (substring by
 default). `--regex` / `--ignore-case` / `--in` / `--exclude` / `--limit`. Listing only —
 never dumps content into context. Versioned paths under `META-INF/versions/` are listed
-as stored (not collapsed). Content extraction and per-entry manifest attributes remain
-later slices of the same issue.
+as stored (not collapsed). Content extraction remains a later slice of the same issue
+(per-entry manifest attributes live on `jdx manifest --entries`).
 
 #### `jdx samples <symbol>`
 Real call sites as usage examples, source-rendered when sources are available, ranked by
@@ -1274,9 +1275,9 @@ Explicitly out of v1 scope, recorded so they are not lost:
   files so `jdx` can answer in either namespace. High value on this particular machine.
 - **Resources & metadata inspection** — ~~`META-INF/services` SPI listing~~ /
   ~~`module-info` view~~ / ~~manifest main attributes~~ / ~~resource path
-  listing~~ **partial (issue #25: `jdx services` + `jdx modules` +
-  `jdx manifest` + `jdx resources`)**; still deferred: per-entry (JarEntry)
-  attributes, resource content extraction.
+  listing~~ / ~~per-entry (JarEntry) manifest attributes~~ **partial (issue #25:
+  `jdx services` + `jdx modules` + `jdx manifest` + `jdx resources` +
+  `jdx manifest --entries`)**; still deferred: resource content extraction.
 - **Annotation-driven views** — "show me every `@Deprecated(forRemoval=true)` in this
   dependency", "all Spring `@Bean` factories", "all JUnit `@Test`s".
 - **`--since` / API-level reporting** — which JDK release introduced a member.
@@ -1443,9 +1444,9 @@ services  [pattern] [--regex] [--ignore-case] [--in] [--exclude] [--limit]
 modules   [pattern] [--regex] [--ignore-case] [--in] [--exclude] [--limit]
           [-w …] [--jars …] [--no-jdk] [--json] [--no-color]
           (JPMS module-info: requires/exports/opens/uses/provides; issue #25)
-manifest  [pattern] [--regex] [--ignore-case] [--in] [--exclude] [--limit]
+manifest  [pattern] [--entries] [--regex] [--ignore-case] [--in] [--exclude] [--limit]
           [-w …] [--jars …] [--no-jdk] [--json] [--no-color]
-          (META-INF/MANIFEST.MF main attributes; empty pattern lists all; issue #25)
+          (META-INF/MANIFEST.MF attrs; --entries = JarEntry sections; issue #25)
 resources [pattern] [--regex] [--ignore-case] [--in] [--exclude] [--limit]
           [-w …] [--jars …] [--no-jdk] [--json] [--no-color]
           (non-class resource paths; listing only; empty pattern lists all; issue #25)

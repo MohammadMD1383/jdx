@@ -146,4 +146,56 @@ class ManifestServiceTest {
         val listing = (outcome as ServiceOutcome.ManifestList).listing
         listing.hits.map { it.value } shouldContainExactly listOf("com.dir.Main")
     }
+
+    @Test
+    fun `entries flag lists per-entry attributes and matches entry path`() {
+        val jar = ManifestCaseJars.buildManifestCaseJar(temp)
+        val all = JdxService.manifest(
+            null,
+            roots(jar),
+            ManifestOptions(entries = true),
+        ) as ServiceOutcome.ManifestList
+        all.listing.hits.map { "${it.entry}|${it.name}=${it.value}" } shouldContainExactly listOf(
+            "META-INF/services/com.example.Spi|SHA-256-Digest=def456digest",
+            "com/example/Main.class|Content-Type=application/java-vm",
+            "com/example/Main.class|SHA-256-Digest=abc123digest",
+        )
+        all.listing.renderText() shouldContain "  com/example/Main.class"
+        all.listing.renderText() shouldContain "    SHA-256-Digest: abc123digest"
+        all.listing.renderText() shouldNotContain "Main-Class"
+        all.listing.renderText() shouldNotContain "Versioned-Only"
+        all.listing.toJson("manifest") shouldContain "\"entry\":\"com/example/Main.class\""
+
+        val byPath = JdxService.manifest(
+            "Main.class",
+            roots(jar),
+            ManifestOptions(entries = true),
+        ) as ServiceOutcome.ManifestList
+        byPath.listing.hits.map { it.name } shouldContainExactly listOf(
+            "Content-Type",
+            "SHA-256-Digest",
+        )
+
+        val byDigest = JdxService.manifest(
+            "def456",
+            roots(jar),
+            ManifestOptions(entries = true),
+        ) as ServiceOutcome.ManifestList
+        byDigest.listing.hits.single().entry shouldBe "META-INF/services/com.example.Spi"
+    }
+
+    @Test
+    fun `entries miss exits 1 and default mode ignores entry sections`() {
+        val jar = ManifestCaseJars.buildManifestCaseJar(temp)
+        val miss = JdxService.manifest(
+            "No-Such-Entry",
+            roots(jar),
+            ManifestOptions(entries = true),
+        )
+        miss.shouldBeInstanceOf<ServiceOutcome.Failure>()
+        miss.exitCode shouldBe 1
+
+        val main = JdxService.manifest("SHA-256-Digest", roots(jar))
+        main.shouldBeInstanceOf<ServiceOutcome.Failure>()
+    }
 }

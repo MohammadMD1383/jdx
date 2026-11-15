@@ -1,0 +1,5 @@
+manifests matching 'Main.class'
+manifest-case.jar (2)
+  com/example/Main.class
+    Content-Type: application/java-vm
+    SHA-256-Digest: abc123digest

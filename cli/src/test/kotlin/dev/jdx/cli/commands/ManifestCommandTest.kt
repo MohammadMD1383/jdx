@@ -75,11 +75,12 @@ class ManifestCommandTest {
     }
 
     @Test
-    fun `forwards regex ignore-case in exclude and limit`() {
+    fun `forwards regex ignore-case in exclude limit and entries`() {
         val run = run(
             "Main",
             "--regex",
             "--ignore-case",
+            "--entries",
             "--in", "app.jar",
             "--exclude", "other.jar",
             "--limit", "3",
@@ -88,9 +89,16 @@ class ManifestCommandTest {
         run.exit shouldBe 0
         run.options!!.regex shouldBe true
         run.options.ignoreCase shouldBe true
+        run.options.entries shouldBe true
         run.options.inArtifact shouldBe "app.jar"
         run.options.exclude shouldBe "other.jar"
         run.options.limit shouldBe 3
+    }
+
+    @Test
+    fun `entries defaults to false`() {
+        val run = run("Main-Class", "--no-jdk")
+        run.options!!.entries shouldBe false
     }
 
     @Test

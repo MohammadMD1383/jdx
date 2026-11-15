@@ -26,13 +26,15 @@ import kotlin.system.exitProcess
 
 /**
  * `jdx manifest [pattern]`. A thin adapter (D-004): parses the issue-#25
- * manifest flags, asks [JdxService] for main-section attributes, renders
- * them, and maps the outcome to an exit code (D-015).
+ * manifest flags, asks [JdxService] for attributes, renders them, and maps
+ * the outcome to an exit code (D-015).
  *
- * Lists `META-INF/MANIFEST.MF` main attributes across the workspace. An
- * omitted pattern lists every attribute; a non-empty pattern matches the
- * attribute name or value. Exits 1 when nothing matches. Per-entry
- * (JarEntry) attributes and arbitrary resource extraction are later slices.
+ * Lists `META-INF/MANIFEST.MF` attributes across the workspace. Default is
+ * main-section attributes; `--entries` switches to per-entry (JarEntry)
+ * sections. An omitted pattern lists every attribute; a non-empty pattern
+ * matches the attribute name or value (and, with `--entries`, the entry
+ * path). Exits 1 when nothing matches. Arbitrary resource content extraction
+ * remains a later slice (`jdx resources` lists paths only).
  */
 class ManifestCommand(
     private val query: ManifestQuery = ::defaultManifestQuery,
@@ -44,22 +46,31 @@ class ManifestCommand(
     private val daemonRoundTrip: DaemonRoundTrip = defaultRoundTrip,
 ) : CoreCliktCommand(name = "manifest") {
     override fun help(context: Context): String =
-        "List META-INF/MANIFEST.MF main attributes across the workspace's " +
-            "binary roots. With no pattern, every attribute is shown; with a " +
-            "pattern, match the attribute name or value (substring by " +
-            "default). --regex treats the pattern as a Java regex; " +
-            "--ignore-case folds substring matches. --in/--exclude filter by " +
-            "artifact label; --limit caps attribute rows (default 50). Exits " +
-            "1 when nothing matches. Per-entry attributes are not listed."
+        "List META-INF/MANIFEST.MF attributes across the workspace's binary " +
+            "roots. Default: main-section attributes. --entries lists " +
+            "per-entry (JarEntry) attributes instead. With no pattern, every " +
+            "attribute in that section is shown; with a pattern, match the " +
+            "attribute name or value (and entry path under --entries). " +
+            "--regex treats the pattern as a Java regex; --ignore-case folds " +
+            "substring matches. --in/--exclude filter by artifact label; " +
+            "--limit caps attribute rows (default 50). Exits 1 when nothing " +
+            "matches."
 
     private val pattern by argument(
         help = "Optional substring (or --regex pattern) matched against " +
-            "attribute names and values. Omit to list every main attribute.",
+            "attribute names and values (and entry paths under --entries). " +
+            "Omit to list every attribute in the selected section.",
     ).optional()
+
+    private val entries by option(
+        "--entries",
+        help = "List per-entry (JarEntry) attributes instead of main-section attributes.",
+    ).flag()
 
     private val regex by option(
         "--regex",
-        help = "Treat the pattern as a Java regex matched against each attribute name/value.",
+        help = "Treat the pattern as a Java regex matched against each attribute name/value " +
+            "(and entry path under --entries).",
     ).flag()
 
     private val ignoreCase by option(
@@ -157,6 +168,7 @@ class ManifestCommand(
                     inArtifact = inArtifact,
                     exclude = exclude,
                     limit = limit,
+                    entries = entries,
                 ),
                 flagWorkspace = effectiveWorkspace(workspace),
                 roots = WarmRoots(jars = jars, coords = coord, repos = repo, fetch = fetch, noJdk = noJdk),
@@ -191,6 +203,7 @@ class ManifestCommand(
                         inArtifact = inArtifact,
                         exclude = exclude,
                         limit = limit,
+                        entries = entries,
                     ),
                 )
                 ReadCommandSupport.finish(outcome, "manifest", json, noColor, terminate)

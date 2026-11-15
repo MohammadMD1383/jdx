@@ -1,0 +1,7 @@
+manifests
+manifest-case.jar (3)
+  META-INF/services/com.example.Spi
+    SHA-256-Digest: def456digest
+  com/example/Main.class
+    Content-Type: application/java-vm
+    SHA-256-Digest: abc123digest

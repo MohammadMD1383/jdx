@@ -171,8 +171,9 @@ jdx diff gson-2.11.0.jar gson-2.14.0.jar --fail-on breaking
   (issue #25). Answer "who provides `com.foo.Spi`?" without unzipping jars.
 - **`jdx modules`** — list JPMS `module-info` descriptors (requires / exports /
   opens / uses / provides) across jars and the running JDK (issue #25).
-- **`jdx manifest`** — list `META-INF/MANIFEST.MF` main attributes (`Main-Class`,
-  `Implementation-Version`, `Multi-Release`, …) across a workspace (issue #25).
+- **`jdx manifest`** — list `META-INF/MANIFEST.MF` attributes across a workspace
+  (issue #25): main attributes by default (`Main-Class`, `Multi-Release`, …);
+  `--entries` for per-entry (JarEntry) sections.
 - **`jdx resources`** — list non-class resource paths (`META-INF/…`, `.properties`,
   versioned `META-INF/versions/…` copies, …) across a workspace (issue #25). Listing
   only — never dumps binaries into context.

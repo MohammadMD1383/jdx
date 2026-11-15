@@ -77,4 +77,27 @@ class ManifestsTest {
         listing.toJson("manifest") shouldContain "\"shown\":2"
         listing.toJson("manifest") shouldContain "\"total\":5"
     }
+
+    @Test
+    fun `entry hits nest under the entry path and emit entry in json`() {
+        val hits = listOf(
+            ManifestHit("Content-Type", "application/java", "lib.jar", entry = "com/foo/Bar.class"),
+            ManifestHit("SHA-256-Digest", "aaa", "lib.jar", entry = "com/foo/Bar.class"),
+            ManifestHit("SHA-256-Digest", "bbb", "lib.jar", entry = "META-INF/services/Spi"),
+        )
+        val listing = buildManifestListing("Digest", hits)
+        val text = listing.renderText()
+        text shouldContain "lib.jar (3)"
+        text shouldContain "  com/foo/Bar.class"
+        text shouldContain "    Content-Type: application/java"
+        text shouldContain "    SHA-256-Digest: aaa"
+        text shouldContain "  META-INF/services/Spi"
+        text shouldContain "    SHA-256-Digest: bbb"
+        val json = listing.toJson("manifest")
+        json shouldContain "\"entry\":\"com/foo/Bar.class\""
+        json shouldContain "\"entry\":\"META-INF/services/Spi\""
+        json shouldContain "\"name\":\"SHA-256-Digest\""
+        // Main-section rows omit the entry key.
+        ManifestHit("Main-Class", "com.foo.Main", "lib.jar").toJson() shouldNotContain "\"entry\""
+    }
 }

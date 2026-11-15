@@ -7,37 +7,43 @@ import dev.jdx.core.model.Warning
 public const val DEFAULT_MANIFEST_LIMIT: Int = 50
 
 /**
- * One main-section manifest attribute (issue #25 manifest slice): the attribute
- * name, its value, and the artifact that holds `META-INF/MANIFEST.MF`.
- * Canonical names so the next command is a copy-paste (`jdx manifest
- * Main-Class --in <jar>`).
+ * One manifest attribute row (issue #25): the attribute name, its value, the
+ * artifact that holds `META-INF/MANIFEST.MF`, and — when non-null — the
+ * per-entry (JarEntry) path this attribute belongs to.
  *
- * Per-entry (JarEntry) attributes are out of this slice — main attributes are
- * what agents ask for (`Main-Class`, `Implementation-Version`, `Multi-Release`).
+ * Main-section hits leave [entry] null (`Main-Class`, `Multi-Release`, …).
+ * `--entries` hits set [entry] to the `Name:` section path so the next
+ * command is a copy-paste (`jdx resources <entry> --in <jar>`).
  */
 public data class ManifestHit(
     public val name: String,
     public val value: String,
     public val artifact: String,
+    public val entry: String? = null,
 ) {
     /**
-     * One indented attribute row under an artifact header:
-     * `  Main-Class: com.foo.Main`.
+     * One indented attribute row under an artifact (and optional entry)
+     * header: `  Main-Class: com.foo.Main` or `    SHA-256-Digest: …`.
      */
-    public fun attributeLine(): String = "  $name: $value"
+    public fun attributeLine(): String =
+        if (entry == null) "  $name: $value" else "    $name: $value"
 
     /** The structural row: every text fact appears here (D-007). */
     public fun toJson(): String = buildString {
         append("{\"name\":").append(JsonEscape.quote(name))
         append(",\"value\":").append(JsonEscape.quote(value))
         append(",\"artifact\":").append(JsonEscape.quote(artifact))
+        if (entry != null) {
+            append(",\"entry\":").append(JsonEscape.quote(entry))
+        }
         append("}")
     }
 }
 
 /**
- * The full answer to `jdx manifest`: main-section attributes grouped by
- * artifact. The one result model both renderers read.
+ * The full answer to `jdx manifest`: attributes grouped by artifact (and by
+ * entry path when listing per-entry attributes). The one result model both
+ * renderers read.
  */
 public data class ManifestListing(
     public val query: String,
@@ -47,9 +53,10 @@ public data class ManifestListing(
     public val provenance: List<Provenance>,
 ) {
     /**
-     * Text layout: header, artifact group counts, indented `Name: value`
-     * rows, truncation footer. An empty [query] means "list every attribute"
-     * and the header drops the matching clause.
+     * Text layout: header, artifact group counts, optional entry sub-headers
+     * for `--entries`, indented `Name: value` rows, truncation footer. An
+     * empty [query] means "list every attribute" and the header drops the
+     * matching clause.
      */
     public fun renderText(color: Boolean = false): String {
         if (hits.isEmpty() && truncation == null) {
@@ -63,11 +70,18 @@ public data class ManifestListing(
             if (query.isEmpty()) "manifests" else "manifests matching '$query'",
         )
         var currentArtifact: String? = null
+        var currentEntry: String? = null
         val counts = hits.groupingBy { it.artifact }.eachCount()
         for (hit in hits) {
             if (hit.artifact != currentArtifact) {
                 currentArtifact = hit.artifact
+                currentEntry = null
                 lines.add("${hit.artifact} (${counts.getValue(hit.artifact)})")
+            }
+            val entry = hit.entry
+            if (entry != null && entry != currentEntry) {
+                currentEntry = entry
+                lines.add("  $entry")
             }
             lines.add(hit.attributeLine())
         }
@@ -98,7 +112,8 @@ public data class ManifestListing(
 /**
  * Builds the listing from already-sorted [hits]: keeps the first [limit]
  * attribute rows and reports the rest. Sorted input is the caller's contract
- * (D-007) — artifact, name — and this function never re-sorts.
+ * (D-007) — artifact, entry (nulls first), name — and this function never
+ * re-sorts.
  */
 public fun buildManifestListing(
     query: String,
