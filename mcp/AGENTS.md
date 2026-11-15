@@ -7,8 +7,9 @@ twice. `explicitApi()` is on.
 ## Key files
 
 - `McpTools` — the `ALL_MCP_TOOLS` table (one tool per wire command), including
-  `jdx_literals` (issue #86 string-constant search) and `jdx_services` (issue #25
-  `META-INF/services` SPI listing).
+  `jdx_literals` (issue #86 string-constant search), `jdx_services` (issue #25
+  `META-INF/services` SPI listing), and `jdx_modules` (issue #25 `module-info`
+  requires/exports/opens/uses/provides).
 - `McpSession` — per-session daemon: per-call roots, `version`/`health` internal,
   `doctor` refused (exit 6), `isError = ok:false`.
 - `McpServer` — SDK registration + stdio to EOF. `jdx mcp [-w name]`; workspace-bound

@@ -631,6 +631,19 @@ internal fun defaultServicesQuery(
     options: JdxService.ServiceOptions,
 ): JdxService.ServiceOutcome = JdxService.services(pattern, roots, options)
 
+/** Query behind `modules`, injectable so command tests run without IO (issue #25). */
+internal typealias ModulesQuery = (
+    pattern: String?,
+    roots: JdxService.RootsSpec,
+    options: JdxService.ModuleOptions,
+) -> JdxService.ServiceOutcome
+
+internal fun defaultModulesQuery(
+    pattern: String?,
+    roots: JdxService.RootsSpec,
+    options: JdxService.ModuleOptions,
+): JdxService.ServiceOutcome = JdxService.modules(pattern, roots, options)
+
 internal typealias SearchQuery = (
     pattern: String,
     roots: JdxService.RootsSpec,

@@ -169,6 +169,8 @@ jdx diff gson-2.11.0.jar gson-2.14.0.jar --fail-on breaking
   for resource keys, log messages, and markers (issue #86). No more `unzip | tr | grep`.
 - **`jdx services`** — list `META-INF/services` SPI providers across a workspace
   (issue #25). Answer "who provides `com.foo.Spi`?" without unzipping jars.
+- **`jdx modules`** — list JPMS `module-info` descriptors (requires / exports /
+  opens / uses / provides) across jars and the running JDK (issue #25).
 - **`jdx diff a.jar b.jar`** — the public-API diff for a dependency upgrade, with every
   difference named as a rule (`MEMBER_REMOVED`, `RETURN_TYPE_CHANGED`, …) at
   `breaking`/`suspicious`/`info`, and a `--fail-on` gate for CI.
@@ -198,7 +200,7 @@ Graph queries re-scan live bytecode roots per query (no persistent-index acceler
 yet). `callers` is override-aware by default (`--exact` for invoke-owner matching);
 `calls` stays bytecode-exact. Full list in
 [GitHub Issues](https://github.com/MohammadMD1383/jdx/issues). Out-of-scope for v1
-(mappings/remap, remaining resources inspection beyond `jdx services`, …) is the
+(mappings/remap, remaining resources inspection beyond `jdx services`/`jdx modules`, …) is the
 phase-2 backlog, also tracked there.
 
 ## Documentation

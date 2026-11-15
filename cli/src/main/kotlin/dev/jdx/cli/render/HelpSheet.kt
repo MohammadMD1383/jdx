@@ -39,6 +39,7 @@ public val HELP_ROWS: List<HelpRow> = listOf(
     HelpRow("samples <symbol>", "Real call sites as usage examples", "jdx samples 'Gson#toJson(Object)'"),
     HelpRow("literals <text>", "Search string constants (LDC / ConstantValue)", "jdx literals 'plugin.update'"),
     HelpRow("services [pattern]", "META-INF/services SPI providers", "jdx services java.sql.Driver"),
+    HelpRow("modules [pattern]", "JPMS module-info (requires/exports/opens/…)", "jdx modules java.sql"),
     HelpRow("diff <old> <new>", "Public-API diff + binary-compat warnings (upgrades)", "jdx diff gson-2.11.0.jar gson-2.14.0.jar --fail-on breaking"),
     HelpRow("version", "Print the jdx version", "jdx version"),
     HelpRow("upgrade [--check]", "Self-update from GitHub Releases", "jdx upgrade --check"),

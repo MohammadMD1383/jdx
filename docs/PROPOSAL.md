@@ -444,9 +444,17 @@ resource `.properties` files — keys that appear as class-file constants are fo
 ServiceLoader registration across the workspace's binary roots. Omit the pattern to list
 every registration; with a pattern, match the service interface FQN **or** a provider class
 FQN (substring by default). `--regex` / `--ignore-case` / `--in` / `--exclude` / `--limit`.
-Does **not** read `module-info` `provides` directives or extract arbitrary resources —
-those are later slices of the same issue. Versioned copies under `META-INF/versions/` are
-ignored in this slice.
+Does **not** read `module-info` `provides` directives (use `jdx modules`) or extract
+arbitrary resources. Versioned copies under `META-INF/versions/` are ignored in this slice.
+
+#### `jdx modules [pattern]`
+JPMS `module-info` listing (issue #25 module-info slice): every `module-info.class` across
+the workspace's binary roots (jars, class dirs, and the running JDK via `jrt:/`). Omit the
+pattern to list every module; with a pattern, match the module name, an exported/opened
+package, a `uses`/`provides` service, or a provider class (substring by default).
+`--regex` / `--ignore-case` / `--in` / `--exclude` / `--limit`. Does **not** read
+`META-INF/MANIFEST.MF` attributes or extract arbitrary resources — those remain later
+slices of the same issue.
 
 #### `jdx samples <symbol>`
 Real call sites as usage examples, source-rendered when sources are available, ranked by
@@ -921,7 +929,8 @@ back. For the stated goal — *an IDE for agents* — this is the highest-levera
 
 Tools exposed (v1): `jdx_show`, `jdx_members`, `jdx_signature`, `jdx_doc`, `jdx_body`,
 `jdx_source`, `jdx_outline`, `jdx_search`, `jdx_resolve`, `jdx_usages`, `jdx_hierarchy`,
-`jdx_callers`, `jdx_calls`, `jdx_samples`, `jdx_literals`, `jdx_services`, `jdx_workspace`.
+`jdx_callers`, `jdx_calls`, `jdx_samples`, `jdx_literals`, `jdx_services`, `jdx_modules`,
+`jdx_workspace`.
 
 The MCP server holds the index in memory for its lifetime — so it is effectively a
 per-session daemon, and repeated queries are instant.
@@ -972,9 +981,9 @@ A **request** is one line of JSON, newline-terminated (`\n`). Keys are in fixed 
 
 - `command` is one of the read-only queries — `show` `members` `outline` `body` `source`
   `signature` `doc` `search` `resolve` `ls` `tree` `usages` `hierarchy` `implementors`
-  `callers` `calls` `samples` `literals` `services` — plus `version`, `doctor` and `health`. The state-changing
-  commands (`ws`, `cache`) are deliberately **not** on the wire in v1: one client of a shared
-  daemon must not be able to reconfigure the others.
+  `callers` `calls` `samples` `literals` `services` `modules` — plus `version`, `doctor` and
+  `health`. The state-changing commands (`ws`, `cache`) are deliberately **not** on the wire
+  in v1: one client of a shared daemon must not be able to reconfigure the others.
 - `params` values are text, the same spelling the CLI flags use. Typed clients (MCP schemas,
   HTTP query strings) may send JSON numbers and booleans; the decoder canonicalises them.
 - Decoding is generous where it is safe — surrounding whitespace, a trailing `\r\n`, absent
@@ -1246,9 +1255,9 @@ Explicitly out of v1 scope, recorded so they are not lost:
   dependency upgrades.~~ **Shipped** (issue #23): spec in §7.7, flags in Appendix B.
 - **Mappings / remapping** — Minecraft-style obfuscated jars: read Tiny/SRG/ProGuard mapping
   files so `jdx` can answer in either namespace. High value on this particular machine.
-- **Resources & metadata inspection** — ~~`META-INF/services` SPI listing~~ **partial
-  (issue #25 services-first: `jdx services`)**; still deferred: `module-info`, manifest
-  attributes, resource listing and extraction.
+- **Resources & metadata inspection** — ~~`META-INF/services` SPI listing~~ /
+  ~~`module-info` view~~ **partial (issue #25: `jdx services` + `jdx modules`)**; still
+  deferred: manifest attributes, resource listing and extraction.
 - **Annotation-driven views** — "show me every `@Deprecated(forRemoval=true)` in this
   dependency", "all Spring `@Bean` factories", "all JUnit `@Test`s".
 - **`--since` / API-level reporting** — which JDK release introduced a member.
@@ -1412,6 +1421,9 @@ literals  <text> [--regex] [--ignore-case] [--in] [--exclude] [--limit]
 services  [pattern] [--regex] [--ignore-case] [--in] [--exclude] [--limit]
           [-w …] [--jars …] [--no-jdk] [--json] [--no-color]
           (META-INF/services SPI providers; empty pattern lists all; issue #25)
+modules   [pattern] [--regex] [--ignore-case] [--in] [--exclude] [--limit]
+          [-w …] [--jars …] [--no-jdk] [--json] [--no-color]
+          (JPMS module-info: requires/exports/opens/uses/provides; issue #25)
 diff      <old> <new> [--visibility public|all] [--include-synthetic]
           [--severity all|suspicious|breaking] [--fail-on none|breaking|any]
           [--limit N] [--fetch] [--repo] [--json] [--no-color]

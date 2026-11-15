@@ -420,6 +420,7 @@ private fun warningCodesOf(outcome: ServiceOutcome): List<WarningCode> = when (o
     is ServiceOutcome.SampleList -> outcome.listing.warnings.map { it.code }
     is ServiceOutcome.LiteralList -> outcome.listing.warnings.map { it.code }
     is ServiceOutcome.ServiceList -> outcome.listing.warnings.map { it.code }
+    is ServiceOutcome.ModuleList -> outcome.listing.warnings.map { it.code }
     is ServiceOutcome.Diff -> outcome.report.warnings.map { it.code }
     is ServiceOutcome.Failure -> emptyList()
 }
@@ -544,6 +545,20 @@ private fun entitiesOf(outcome: ServiceOutcome): List<String> = when (outcome) {
     is ServiceOutcome.ServiceList -> buildList {
         addAll(outcome.listing.hits.map { it.service })
         addAll(outcome.listing.hits.map { it.provider })
+    }
+    is ServiceOutcome.ModuleList -> buildList {
+        for (hit in outcome.listing.hits) {
+            add(hit.name)
+            add(hit.artifact)
+            for (req in hit.requires) add(req.module)
+            for (exp in hit.exports) add(exp.packageName)
+            for (use in hit.uses) add(use)
+            for (prov in hit.provides) {
+                add(prov.service)
+                addAll(prov.providers)
+            }
+        }
+        for (warning in outcome.listing.warnings) add(warning.code.name)
     }
     is ServiceOutcome.LiteralList -> buildList {
         for (hit in outcome.listing.hits) {

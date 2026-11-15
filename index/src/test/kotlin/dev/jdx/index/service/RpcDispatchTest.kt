@@ -285,6 +285,14 @@ class RpcDispatchTest {
         viaWire(req(RpcCommand.SERVICES, "", "regex" to "true")) shouldContain "--regex needs a non-empty pattern"
     }
 
+    @Test
+    fun `modules dispatches usage errors and empty query`() {
+        viaWire(req(RpcCommand.MODULES, "x", "limit" to "-1")) shouldContain "--limit must be >= 0"
+        viaWire(req(RpcCommand.MODULES, "", "regex" to "true")) shouldContain "--regex needs a non-empty pattern"
+        // Fixture jars ship no module-info; an empty query is a valid miss (exit 1).
+        viaWire(req(RpcCommand.MODULES, "", "limit" to "5")) shouldContain "\"code\":1"
+    }
+
     // -- param errors: exit 3 naming the param -----------------------------------------
 
     @Test

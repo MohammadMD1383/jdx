@@ -85,7 +85,20 @@ $ jdx services java.sql.Driver --coord org.postgresql:postgresql:42.7.4 --fetch 
 
 Omit the pattern to list every `META-INF/services` registration in the workspace. A
 pattern matches the service interface FQN or a provider class FQN. `module-info`
-`provides` directives are not read in this slice.
+`provides` directives are read by `jdx modules` instead.
+
+## JPMS module-info
+
+To answer *what does this module require / export / provide?* without `jmod describe`
+(issue #25):
+
+```console exec
+$ jdx modules java.sql --limit 5
+```
+
+Omit the pattern to list every `module-info.class` in the workspace (including the
+running JDK). A pattern matches the module name, an exported/opened package, a
+`uses`/`provides` service, or a provider class.
 
 ## Limitations
 
