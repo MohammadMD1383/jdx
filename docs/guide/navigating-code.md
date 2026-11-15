@@ -29,6 +29,18 @@ CLI — Clikt reserves `@file` for argfiles; MCP accepts `@Type(k=v)`):
 $ jdx usages 'java.lang.Deprecated(forRemoval=true)' --kind annotation --jars lib.jar
 ```
 
+Or use the dedicated command (same listing; recipe aliases for common cases):
+
+```console
+$ jdx annotated forRemoval --jars lib.jar
+$ jdx annotated test --coord org.junit.jupiter:junit-jupiter-api:5.10.2 --fetch --no-jdk
+$ jdx annotated bean --coord org.springframework:spring-context:6.1.14 --fetch --no-jdk
+```
+
+Recipes: `deprecated`, `forRemoval`, `test`/`junit5`, `junit4`, `bean`. Annotation-use
+spelling works here too (`jdx annotated 'Deprecated(forRemoval=true)'` — omit leading `@`
+on the CLI).
+
 `--in` / `--exclude` filter by artifact (jar file name, JDK module or source directory), and
 `--src <dir>` adds your project's source directories — those hits are textual mentions with
 line numbers. `--context N` shows a short source window around each call site when paired

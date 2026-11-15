@@ -485,6 +485,25 @@ public object DaemonClient {
         },
     )
 
+    public fun annotatedRequest(
+        ref: String,
+        inArtifact: String? = null,
+        exclude: String? = null,
+        limit: Int = 50,
+        context: Int = 0,
+        where: List<String> = emptyList(),
+    ): RpcRequest = RpcRequest(
+        command = RpcCommand.ANNOTATED,
+        query = ref,
+        params = buildMap {
+            if (inArtifact != null) put("in", inArtifact)
+            if (exclude != null) put("exclude", exclude)
+            put("limit", limit.toString())
+            put("context", context.toString())
+            if (where.isNotEmpty()) put("where", where.joinToString(","))
+        },
+    )
+
     public fun hierarchyRequest(
         ref: String,
         up: Boolean = false,

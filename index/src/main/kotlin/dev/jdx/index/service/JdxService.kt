@@ -33,6 +33,7 @@ import dev.jdx.core.model.arrayTypeName
 import dev.jdx.core.model.matchesWhere
 import dev.jdx.core.model.peelAnnotationUseQuery
 import dev.jdx.core.model.renderUse
+import dev.jdx.core.model.resolveAnnotatedQuery
 import dev.jdx.core.model.typeNameFromBinaryName
 import dev.jdx.core.ref.SymbolRefParser
 import dev.jdx.core.ref.SymbolRefParseResult
@@ -3071,6 +3072,55 @@ public object JdxService {
         } finally {
             opened.forEach { it.root.close() }
         }
+    }
+
+    /**
+     * Options for `annotated` (issue #26 dedicated command): always
+     * `--kind annotation` under the hood. [where] AND-merges with any
+     * recipe-supplied clauses from [resolveAnnotatedQuery].
+     */
+    public data class AnnotatedOptions(
+        public val inArtifact: String? = null,
+        public val exclude: String? = null,
+        public val limit: Int = DEFAULT_USAGES_LIMIT,
+        public val contextLines: Int = 0,
+        public val where: List<AnnotationWhere> = emptyList(),
+    )
+
+    /**
+     * Answers `annotated <query>`: every class/member carrying the named
+     * annotation across the workspace's roots (issue #26 dedicated command).
+     *
+     * Thin over [usages] with [UsageKindFilter.ANNOTATION]: recipes
+     * (`deprecated`, `forRemoval`, `test`, `bean`, …) expand first via
+     * [resolveAnnotatedQuery]; annotation-use spelling and bare types then
+     * follow the same peel / resolve path as `usages --kind annotation`.
+     * The listing shape is identical so text/JSON goldens stay shared.
+     */
+    public fun annotated(
+        rawRef: String,
+        roots: RootsSpec,
+        options: AnnotatedOptions = AnnotatedOptions(),
+    ): ServiceOutcome {
+        if (options.limit < 0) {
+            return failure(3, rawRef, "usage error: --limit must be >= 0, got ${options.limit}")
+        }
+        if (options.contextLines < 0) {
+            return failure(3, rawRef, "usage error: --context must be >= 0, got ${options.contextLines}")
+        }
+        val resolved = resolveAnnotatedQuery(rawRef)
+        return usages(
+            resolved.query,
+            roots,
+            UsageOptions(
+                kind = UsageKindFilter.ANNOTATION,
+                inArtifact = options.inArtifact,
+                exclude = options.exclude,
+                limit = options.limit,
+                contextLines = options.contextLines,
+                where = resolved.recipeWhere + options.where,
+            ),
+        )
     }
 
     /**

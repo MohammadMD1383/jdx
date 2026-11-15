@@ -82,6 +82,9 @@ behaviour lives here** (adapters call in, never the reverse). `explicitApi()` is
   spelling (`@Type(k=v)` / `Type(k=v)`) peels into the type ref + where clauses
   (AND-merged with `--where`; leading `@` without `--kind annotation` is exit 3).
   Matching rows carry `UsageHit.annotation` (`@Fqn(k=v,…)` with sorted keys).
+  `annotated` (issue #26 dedicated command) is thin over that path: always
+  annotation kind, plus recipe aliases (`deprecated`/`forRemoval`/`test`/`bean`)
+  via `resolveAnnotatedQuery` before peel/resolve.
   `literals` (issue #86) is live-roots-first like the graph queries: scans `LDC`
   string loads + `String` field `ConstantValue`s and `.properties` resource
   keys/values (`prop` kind; match on key or value). `services` (issue #25) is live-roots-first over base

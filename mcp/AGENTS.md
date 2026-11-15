@@ -7,6 +7,7 @@ twice. `explicitApi()` is on.
 ## Key files
 
 - `McpTools` — the `ALL_MCP_TOOLS` table (one tool per wire command), including
+  `jdx_annotated` (issue #26 annotation-driven view + recipe aliases),
   `jdx_literals` (issue #86 string-constant + `.properties` search), `jdx_services` (issue #25
   `META-INF/services` SPI listing), `jdx_modules` (issue #25 `module-info`
   requires/exports/opens/uses/provides),   `jdx_manifest` (issue #25

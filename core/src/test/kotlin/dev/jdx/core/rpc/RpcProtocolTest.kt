@@ -271,7 +271,7 @@ class RpcProtocolTest {
     fun `wire names are pinned, unique and lowercase`() {
         RpcCommand.entries.map { it.wire } shouldBe listOf(
             "show", "members", "outline", "body", "source", "signature", "doc",
-            "search", "resolve", "ls", "tree", "usages", "hierarchy", "implementors",
+            "search", "resolve", "ls", "tree", "usages", "annotated", "hierarchy", "implementors",
             "callers", "calls", "samples", "literals", "services", "modules", "manifest",
             "resources",
             "diff", "version", "doctor", "health",

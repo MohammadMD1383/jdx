@@ -62,6 +62,12 @@ public enum class RpcCommand(public val wire: String, public val requiresQuery: 
     LS("ls", false),
     TREE("tree", false),
     USAGES("usages", true),
+    /**
+     * Annotation-driven view (issue #26): every class/member carrying the
+     * named annotation (or a recipe alias such as `deprecated` / `forRemoval`
+     * / `test` / `bean`). Same listing shape as `usages --kind annotation`.
+     */
+    ANNOTATED("annotated", true),
     HIERARCHY("hierarchy", true),
     IMPLEMENTORS("implementors", true),
     CALLERS("callers", true),

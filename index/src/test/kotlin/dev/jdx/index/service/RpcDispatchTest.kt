@@ -217,6 +217,25 @@ class RpcDispatchTest {
     }
 
     @Test
+    fun `annotated dispatches with where predicates`() {
+        val request = req(
+            RpcCommand.ANNOTATED,
+            "u.Mark",
+            "where" to "level=1",
+        )
+        val direct = JdxService.annotated(
+            "u.Mark",
+            fixtureRoots(),
+            JdxService.AnnotatedOptions(
+                where = listOf(dev.jdx.core.model.AnnotationWhere("level", "1")),
+            ),
+        )
+        viaWire(request) shouldBe direct.toJson("annotated")
+        direct.exitCode shouldBe 0
+        direct.renderText(false) shouldContain "@u.Mark(level=1)"
+    }
+
+    @Test
     fun `hierarchy dispatches both directions`() {
         val request = req(RpcCommand.HIERARCHY, "h.Middle", "direct" to "true")
         val direct = JdxService.hierarchy(

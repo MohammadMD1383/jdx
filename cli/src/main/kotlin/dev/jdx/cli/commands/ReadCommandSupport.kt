@@ -562,6 +562,19 @@ internal fun defaultUsagesQuery(
     options: JdxService.UsageOptions,
 ): JdxService.ServiceOutcome = JdxService.usages(ref, roots, options)
 
+/** Query behind `annotated`, injectable so command tests run without IO (issue #26). */
+internal typealias AnnotatedQueryFn = (
+    ref: String,
+    roots: JdxService.RootsSpec,
+    options: JdxService.AnnotatedOptions,
+) -> JdxService.ServiceOutcome
+
+internal fun defaultAnnotatedQuery(
+    ref: String,
+    roots: JdxService.RootsSpec,
+    options: JdxService.AnnotatedOptions,
+): JdxService.ServiceOutcome = JdxService.annotated(ref, roots, options)
+
 /** Query behind `hierarchy`/`implementors`, injectable so command tests run without IO (T-032). */
 internal typealias HierarchyQuery = (
     ref: String,
