@@ -147,10 +147,13 @@ class SiteBuilder(private val options: SiteOptions, private val runner: JdxRunne
 
         // Published output must never carry a machine path (AGENTS.md §2.5): a leaked path means
         // an example ran against something on the build machine instead of the sandbox.
+        // Match as a path prefix, not a bare substring: a repo checked out at
+        // `/workspace` must not false-positive on documented `<config-dir>/workspaces/…`.
         val machinePaths = listOf(repo.absolutePath, System.getProperty("user.home"), File(System.getProperty("java.io.tmpdir"), "jdx-site-cwd").path)
             .filter { it.length > 1 }
         val leaks = htmlFiles.filterValues { it != null }.flatMap { (path, content) ->
-            machinePaths.filter { content!!.contains(it) }.map { "$path contains the machine path $it" }
+            machinePaths.filter { containsMachinePath(content!!, it) }
+                .map { "$path contains the machine path $it" }
         }
         if (leaks.isNotEmpty()) throw SiteBuildException("machine paths in output:\n" + leaks.joinToString("\n") { "  - $it" })
 
@@ -246,6 +249,29 @@ class SiteBuilder(private val options: SiteOptions, private val runner: JdxRunne
         fun resource(name: String): String =
             SiteBuilder::class.java.getResource("/site/$name")?.readText()
                 ?: throw SiteBuildException("missing resource /site/$name")
+
+        /**
+         * True when [content] names [machinePath] as a path token, not as a
+         * substring of a longer identifier. A repo checked out at `/workspace`
+         * must not false-positive on documented `…/workspaces/…` or the exit-code
+         * phrase `no index/workspace`.
+         */
+        internal fun containsMachinePath(content: String, machinePath: String): Boolean {
+            var idx = 0
+            while (true) {
+                idx = content.indexOf(machinePath, idx)
+                if (idx < 0) return false
+                val beforeOk = idx == 0 || !isPathIdentChar(content[idx - 1])
+                val after = idx + machinePath.length
+                val afterOk = after >= content.length || !isPathIdentChar(content[after])
+                if (beforeOk && afterOk) return true
+                idx = after
+            }
+        }
+
+        /** Letter / digit / `_` / `-` continue an identifier past a machine-path match. */
+        private fun isPathIdentChar(c: Char): Boolean =
+            c.isLetterOrDigit() || c == '_' || c == '-'
 
         /** Writes [output] to [dir], replacing whatever was there (the dir is build output only). */
         fun write(output: SiteOutput, dir: File) {
