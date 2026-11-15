@@ -1,0 +1,1 @@
+{"jdx":1,"ok":true,"command":"manifest","query":"","result":{"pattern":"","attributes":[{"name":"Implementation-Title","value":"CaseLib","artifact":"manifest-case.jar"},{"name":"Implementation-Version","value":"1.2.3","artifact":"manifest-case.jar"}]},"truncated":{"shown":2,"total":5,"hint":"--limit 5"},"warnings":[],"provenance":[]}

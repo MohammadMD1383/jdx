@@ -33,7 +33,8 @@ import kotlin.system.exitProcess
  * exports / opens / uses / provides). An omitted pattern lists every module;
  * a non-empty pattern matches the module name, an exported/opened package, a
  * `uses`/`provides` service, or a provider class. Exits 1 when nothing matches.
- * Manifest attributes and arbitrary resource extraction are later slices.
+ * Manifest main attributes live under `jdx manifest`; arbitrary resource
+ * extraction is a later slice of issue #25.
  */
 class ModulesCommand(
     private val query: ModulesQuery = ::defaultModulesQuery,

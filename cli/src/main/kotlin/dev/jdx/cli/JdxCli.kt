@@ -16,6 +16,7 @@ import dev.jdx.cli.commands.CallersCommand
 import dev.jdx.cli.commands.CallsCommand
 import dev.jdx.cli.commands.SamplesCommand
 import dev.jdx.cli.commands.LiteralsCommand
+import dev.jdx.cli.commands.ManifestCommand
 import dev.jdx.cli.commands.ModulesCommand
 import dev.jdx.cli.commands.ServicesCommand
 import dev.jdx.cli.commands.DiffCommand
@@ -172,6 +173,7 @@ internal fun buildRoot(terminate: (Int) -> Unit = { kotlin.system.exitProcess(it
         LiteralsCommand(),
         ServicesCommand(),
         ModulesCommand(),
+        ManifestCommand(),
         DiffCommand(),
         BatchCommand(),
         BenchCommand(),

@@ -41,6 +41,13 @@ public class JarArtifact private constructor(
      */
     private val moduleInfoEntry: String?
 
+    /**
+     * Whether this jar holds a base `META-INF/MANIFEST.MF` (issue #25
+     * manifest slice). Kept separately from [resolved]: multi-release
+     * resolution only keeps `.class` entries.
+     */
+    private val hasManifest: Boolean
+
     override val displayName: String = jarPath.fileName.toString()
 
     override val kind: ArtifactKind = ArtifactKind.BINARY_JAR
@@ -88,6 +95,7 @@ public class JarArtifact private constructor(
             .filter { ServiceEntries.isServicePath(it) }
             .associateWith { it }
         moduleInfoEntry = resolved["module-info.class"]
+        hasManifest = files.any { ManifestEntries.isManifestPath(it) }
         warnings = buildList {
             if (MultiRelease.hasVersionedSelection(resolved)) {
                 add(
@@ -149,6 +157,22 @@ public class JarArtifact private constructor(
             ?: throw ArtifactReadException("artifact read error: $displayName!$actual vanished")
         ZipSafety.checkDeclaredSize(actual, entry.size, displayName)
         val bytes = zip.getInputStream(entry).use { ZipSafety.readCapped(it, actual) }
+        return bytes.inputStream()
+    }
+
+    override fun manifestPaths(): List<String> =
+        if (hasManifest) listOf(ManifestEntries.PATH) else emptyList()
+
+    override fun openManifest(path: String): InputStream {
+        val normal = ZipSafety.normalizeEntryName(path)
+            ?: throw ArtifactReadException("artifact read error: rejected unsafe entry name: $path")
+        if (!ManifestEntries.isManifestPath(normal) || !hasManifest) {
+            throw ArtifactReadException("artifact read error: $displayName has no manifest $path")
+        }
+        val entry = zip.getEntry(ManifestEntries.PATH)
+            ?: throw ArtifactReadException("artifact read error: $displayName!${ManifestEntries.PATH} vanished")
+        ZipSafety.checkDeclaredSize(ManifestEntries.PATH, entry.size, displayName)
+        val bytes = zip.getInputStream(entry).use { ZipSafety.readCapped(it, ManifestEntries.PATH) }
         return bytes.inputStream()
     }
 

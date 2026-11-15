@@ -21,7 +21,7 @@ via `JsonEscape` — reuse it, never a second escaper). `explicitApi()` is on.
   algorithm here, heavily commented, no cleverness.
 - `render/` — text + JSON over one result model (`Listing`, `Signatures`, `Body`,
   `Source`, `Doc`, `Usages`, `Hierarchy`, `Calls`, `Samples`, `Literals`,
-  `Services`, `Modules`, `Diff`,
+  `Services`, `Modules`, `Manifests`, `Diff`,
   `Envelope`, `Errors`, `TokenBudget`, `Ansi`, `WarningLines`). Renderers still embed
   `warning …` lines in `renderText` for unit/golden completeness; adapters peel them
   to stderr via `WarningLines` (issue #86). `--json` must carry every entity text

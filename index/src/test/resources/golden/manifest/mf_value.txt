@@ -1,0 +1,3 @@
+manifests matching 'CaseLib'
+manifest-case.jar (1)
+  Implementation-Title: CaseLib

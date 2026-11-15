@@ -272,6 +272,7 @@ class ReferencePages(
             "literals" to "jdx literals 'com.google.gson' --coord $GSON --limit 5 --no-jdk",
             "services" to "jdx services java.sql.Driver --coord org.postgresql:postgresql:42.7.4 --fetch --no-jdk",
             "modules" to "jdx modules java.sql --limit 5",
+            "manifest" to "jdx manifest Implementation --coord $GSON --no-jdk",
             "diff" to "jdx diff com.google.code.gson:gson:2.11.0 $GSON --fetch",
             "batch" to "echo '{\"command\":\"show\",\"query\":\"java.util.Map\"}' | jdx batch",
         )
@@ -283,7 +284,7 @@ class ReferencePages(
             val serving = "MCP, daemon, HTTP & batch" to "docs/serving/"
             listOf("show", "members", "outline", "signature", "doc", "body", "source", "search", "resolve", "ls", "tree", "kotlin")
                 .forEach { put(it, reading) }
-            listOf("usages", "hierarchy", "implementors", "callers", "calls", "samples", "literals", "services", "modules")
+            listOf("usages", "hierarchy", "implementors", "callers", "calls", "samples", "literals", "services", "modules", "manifest")
                 .forEach { put(it, navigating) }
             listOf("daemon", "serve", "mcp", "batch", "bench").forEach { put(it, serving) }
             listOf("ws", "cache").forEach { put(it, "Classpath & workspaces" to "docs/classpath/") }
