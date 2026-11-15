@@ -69,8 +69,9 @@ class AnnotatedCommand(
         "--where",
         help = "Annotation value predicate key=value (repeatable, AND). " +
             "String values may omit surrounding quotes (--where since=99 " +
-            "matches since=\"99\"). Equivalent inline form: " +
-            "jdx annotated 'Type(k=v)'.",
+            "matches since=\"99\"). Dotted keys walk nested annotations " +
+            "(--where nested.k=1); {…} arrays match order-insensitively. " +
+            "Equivalent inline form: jdx annotated 'Type(k=v)'.",
     ).multiple()
 
     private val inArtifact by option(

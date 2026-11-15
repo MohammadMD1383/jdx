@@ -78,13 +78,14 @@ behaviour lives here** (adapters call in, never the reverse). `explicitApi()` is
   invoke-owner matching. `calls` stays bytecode-exact (the invoke names one owner).
   `usages --kind annotation` reads `ClassInfo` annotation metadata (not reference
   edges); `--where key=value` (issue #26) filters by rendered element values (AND;
-  quote-tolerant for strings) and requires `--kind annotation`. Annotation-use
-  spelling (`@Type(k=v)` / `Type(k=v)`) peels into the type ref + where clauses
-  (AND-merged with `--where`; leading `@` without `--kind annotation` is exit 3).
-  Matching rows carry `UsageHit.annotation` (`@Fqn(k=v,…)` with sorted keys).
-  `annotated` (issue #26 dedicated command) is thin over that path: always
-  annotation kind, plus recipe aliases (`deprecated`/`forRemoval`/`test`/`bean`)
-  via `resolveAnnotatedQuery` before peel/resolve.
+  quote-tolerant for strings; dotted nested paths; `{…}` arrays as multisets) and
+  requires `--kind annotation`. Annotation-use spelling (`@Type(k=v)` / `Type(k=v)`)
+  peels into the type ref + where clauses (AND-merged with `--where`; leading `@`
+  without `--kind annotation` is exit 3). Matching rows carry `UsageHit.annotation`
+  (`@Fqn(k=v,…)` with sorted keys, including nested). `annotated` (issue #26
+  dedicated command) is thin over that path: always annotation kind, plus recipe
+  aliases (`deprecated`/`forRemoval`/`test`/`bean`) via `resolveAnnotatedQuery`
+  before peel/resolve. Nested ASM renders also sort keys (parity with `renderUse`).
   `literals` (issue #86) is live-roots-first like the graph queries: scans `LDC`
   string loads + `String` field `ConstantValue`s and `.properties` resource
   keys/values (`prop` kind; match on key or value). `services` (issue #25) is live-roots-first over base

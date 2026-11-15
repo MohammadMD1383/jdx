@@ -105,4 +105,41 @@ class AnnotationMatchPropertyTest {
             lookupAnnotationRecipe(lower.typeRef) shouldBe null
         }
     }
+
+    @Test
+    fun `nested path derived from rendered nested value always matches`(): Unit = runBlocking {
+        checkAll(JDX_PROPERTY_ITERATIONS, arbKey(), arbPairs()) { outerKey, innerPairs ->
+            if (innerPairs.isEmpty()) return@checkAll
+            val inner = AnnotationInfo(typeNameFromBinaryName("com.example.Inner"), innerPairs)
+            val outer = AnnotationInfo(
+                typeNameFromBinaryName("com.example.Outer"),
+                mapOf(outerKey to inner.renderUse()),
+            )
+            for ((key, value) in innerPairs) {
+                val path = AnnotationWhere("$outerKey.$key", value)
+                assert(outer.matchesWhere(listOf(path))) {
+                    "nested path $path must match rendered ${inner.renderUse()}"
+                }
+            }
+        }
+    }
+
+    @Test
+    fun `array clause matches under element shuffle`(): Unit = runBlocking {
+        val arbElement = Arb.bind(Arb.boolean(), Arb.string(1..4, Codepoint.az()), Arb.int(0..99)) {
+                quoted, text, number ->
+            if (quoted) "\"$text\"" else number.toString()
+        }
+        checkAll(JDX_PROPERTY_ITERATIONS, Arb.list(arbElement, 1..5)) { elements ->
+            val stored = elements.joinToString(", ", "{", "}")
+            val shuffled = elements.shuffled().joinToString(", ", "{", "}")
+            val annot = AnnotationInfo(
+                typeNameFromBinaryName("com.example.Mark"),
+                mapOf("tags" to stored),
+            )
+            assert(annot.matchesWhere(listOf(AnnotationWhere("tags", shuffled)))) {
+                "array multiset must ignore order: stored=$stored wanted=$shuffled"
+            }
+        }
+    }
 }

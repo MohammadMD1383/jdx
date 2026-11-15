@@ -86,8 +86,9 @@ class UsagesCommand(
         "--where",
         help = "Annotation value predicate key=value (repeatable; requires --kind annotation). " +
             "Every clause must match (AND). String values may omit the surrounding quotes " +
-            "(--where since=99 matches since=\"99\"). Equivalent inline form: " +
-            "jdx usages 'Type(k=v)' --kind annotation.",
+            "(--where since=99 matches since=\"99\"). Dotted keys walk nested annotations " +
+            "(--where nested.k=1); {…} arrays match order-insensitively. Equivalent inline " +
+            "form: jdx usages 'Type(k=v)' --kind annotation.",
     ).multiple()
 
     private val inArtifact by option(
