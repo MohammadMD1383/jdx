@@ -14,7 +14,8 @@ import java.nio.file.Path
 
 /**
  * Service-level coverage for `jdx literals` (issue #86): hits, miss, regex,
- * ignore-case, limit, artifact filters, empty pattern, no-workspace.
+ * ignore-case, limit, artifact filters, empty pattern, no-workspace, and the
+ * `.properties` resource slice.
  */
 @Tag("tier2")
 class LiteralsServiceTest {
@@ -23,7 +24,7 @@ class LiteralsServiceTest {
         JdxService.RootsSpec(jarSpecs = listOf(jar.toString()), includeJdk = false)
 
     @Test
-    fun `substring finds LDC and ConstantValue`(@TempDir dir: Path) {
+    fun `substring finds LDC ConstantValue and prop hits`(@TempDir dir: Path) {
         val jar = buildLiteralsCaseJar(dir)
         val outcome = JdxService.literals(
             "notification.missing",
@@ -33,15 +34,36 @@ class LiteralsServiceTest {
         listing.hits.map { it.kind to it.fromRef }.toSet() shouldBe setOf(
             "ldc" to "lit.App#run()",
             "const" to "lit.Keys#TITLE",
+            "prop" to "messages/Bundle.properties#notification.missing.plugin.update.sources.title",
         )
         listing.hits.map { it.value }.toSet() shouldBe setOf(
             "notification.missing.plugin.update.sources.title",
+            "Cannot update plugins",
         )
         val ldc = listing.hits.single { it.kind == "ldc" }
         ldc.file shouldBe "App.java"
         ldc.line shouldBe 5
+        val prop = listing.hits.single { it.kind == "prop" }
+        prop.file shouldBe "messages/Bundle.properties"
+        prop.value shouldBe "Cannot update plugins"
         listing.renderText() shouldContain "literals matching 'notification.missing'"
         listing.toJson("literals") shouldContain "\"kind\":\"ldc\""
+        listing.toJson("literals") shouldContain "\"kind\":\"prop\""
+    }
+
+    @Test
+    fun `prop-only key and English value both match`(@TempDir dir: Path) {
+        val jar = buildLiteralsCaseJar(dir)
+        val byKey = (JdxService.literals("resource.only", roots(jar)) as JdxService.ServiceOutcome.LiteralList)
+            .listing
+        byKey.hits.shouldHaveSize(1)
+        byKey.hits.single().kind shouldBe "prop"
+        byKey.hits.single().fromRef shouldBe "messages/Bundle.properties#resource.only.key"
+
+        val byValue = (JdxService.literals("Only in properties", roots(jar)) as JdxService.ServiceOutcome.LiteralList)
+            .listing
+        byValue.hits.shouldHaveSize(1)
+        byValue.hits.single().value shouldBe "Only in properties"
     }
 
     @Test
@@ -85,7 +107,8 @@ class LiteralsServiceTest {
         )
         val listing = (limited as JdxService.ServiceOutcome.LiteralList).listing
         listing.hits.shouldHaveSize(1)
-        listing.truncation!!.total shouldBe 2
+        // ldc + const + prop
+        listing.truncation!!.total shouldBe 3
 
         val onlyOther = JdxService.literals(
             "marker",

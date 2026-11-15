@@ -37,7 +37,7 @@ public val HELP_ROWS: List<HelpRow> = listOf(
     HelpRow("callers <member>", "Call hierarchy (in)", "jdx callers 'Gson#toJson(Object)'"),
     HelpRow("calls <member>", "Call hierarchy (out)", "jdx calls 'Gson#toJson(Object)'"),
     HelpRow("samples <symbol>", "Real call sites as usage examples", "jdx samples 'Gson#toJson(Object)'"),
-    HelpRow("literals <text>", "Search string constants (LDC / ConstantValue)", "jdx literals 'plugin.update'"),
+    HelpRow("literals <text>", "Search string constants (LDC / ConstantValue / .properties)", "jdx literals 'plugin.update'"),
     HelpRow("services [pattern]", "META-INF/services SPI providers", "jdx services java.sql.Driver"),
     HelpRow("modules [pattern]", "JPMS module-info (requires/exports/opens/…)", "jdx modules java.sql"),
     HelpRow("manifest [pattern]", "META-INF/MANIFEST.MF attributes (--entries for JarEntry)", "jdx manifest Multi-Release"),

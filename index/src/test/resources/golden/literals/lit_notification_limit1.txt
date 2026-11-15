@@ -1,4 +1,4 @@
 literals matching 'notification'
 literals-case.jar (1)
   ldc lit.App#run()  "notification.missing.plugin.update.sources.title"  App.java:5
-1 of 2 literals shown (--limit 2 to see more)
+1 of 3 literals shown (--limit 3 to see more)

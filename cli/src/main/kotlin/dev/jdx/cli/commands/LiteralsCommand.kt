@@ -28,10 +28,9 @@ import kotlin.system.exitProcess
  * asks [JdxService] for matching string constants, renders them, and maps the
  * outcome to an exit code (D-015).
  *
- * Searches bytecode `LDC` string loads and `String` field `ConstantValue`s
- * across the workspace. Resource `.properties` files are out of scope for this
- * slice — keys that appear as string constants in class files are found here.
- * Exits 1 when nothing matches.
+ * Searches bytecode `LDC` string loads, `String` field `ConstantValue`s, and
+ * `.properties` resource keys/values across the workspace. Exits 1 when
+ * nothing matches.
  */
 class LiteralsCommand(
     private val query: LiteralsQuery = ::defaultLiteralsQuery,
@@ -45,10 +44,11 @@ class LiteralsCommand(
     override fun help(context: Context): String =
         "Search string constants across the workspace's bytecode roots: every " +
             "LDC string load and String field ConstantValue whose value matches " +
-            "<text> (substring by default). --regex treats <text> as a Java regex; " +
-            "--ignore-case folds substring matches (put (?i) in a --regex pattern). " +
-            "--in/--exclude filter by artifact label; --limit caps rows (default 50). " +
-            "Exits 1 when nothing matches. Does not scan resource .properties files."
+            "<text>, plus every .properties key/value that matches (substring by " +
+            "default). --regex treats <text> as a Java regex; --ignore-case folds " +
+            "substring matches (put (?i) in a --regex pattern). --in/--exclude " +
+            "filter by artifact label; --limit caps rows (default 50). Exits 1 " +
+            "when nothing matches."
 
     private val text by argument(help = "Substring (or --regex pattern) to find in string constants.")
 

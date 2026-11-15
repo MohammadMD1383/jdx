@@ -25,17 +25,26 @@ class LiteralsTest {
         val hits = listOf(
             LiteralHit("a.App#run()", "lib.jar", "ldc", "notification.missing", "App.java", 12),
             LiteralHit("a.Keys#TITLE", "lib.jar", "const", "notification.missing"),
+            LiteralHit(
+                "messages/Bundle.properties#notification.missing",
+                "lib.jar",
+                "prop",
+                "Cannot update plugins",
+                "messages/Bundle.properties",
+            ),
             LiteralHit("b.Other#work()", "other.jar", "ldc", "notification.missing"),
         )
         val listing = buildLiteralListing("notification", hits)
         val text = listing.renderText()
         text shouldContain "literals matching 'notification'"
-        text shouldContain "lib.jar (2)"
+        text shouldContain "lib.jar (3)"
         text shouldContain "other.jar (1)"
         text shouldContain "ldc a.App#run()"
         text shouldContain "\"notification.missing\""
         text shouldContain "App.java:12"
         text shouldContain "const a.Keys#TITLE"
+        text shouldContain "prop messages/Bundle.properties#notification.missing"
+        text shouldContain "\"Cannot update plugins\""
         val json = listing.toJson("literals")
         json shouldContain "\"command\":\"literals\""
         json shouldContain "\"pattern\":\"notification\""
@@ -43,6 +52,7 @@ class LiteralsTest {
         json shouldContain "\"value\":\"notification.missing\""
         json shouldContain "\"file\":\"App.java\""
         json shouldContain "\"line\":12"
+        json shouldContain "\"kind\":\"prop\""
         // Every text entity appears in JSON (D-007).
         for (hit in hits) {
             json shouldContain hit.fromRef

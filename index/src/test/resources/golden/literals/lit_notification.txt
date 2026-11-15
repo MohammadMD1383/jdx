@@ -1,4 +1,5 @@
 literals matching 'notification.missing'
-literals-case.jar (2)
+literals-case.jar (3)
   ldc lit.App#run()  "notification.missing.plugin.update.sources.title"  App.java:5
   const lit.Keys#TITLE  "notification.missing.plugin.update.sources.title"
+  prop messages/Bundle.properties#notification.missing.plugin.update.sources.title  "Cannot update plugins"

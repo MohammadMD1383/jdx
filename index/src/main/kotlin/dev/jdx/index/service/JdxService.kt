@@ -157,6 +157,7 @@ import dev.jdx.index.maven.MavenResolveFn
 import dev.jdx.index.maven.MavenResolver
 import dev.jdx.index.maven.productionMavenResolve
 import dev.jdx.index.refs.LiteralExtractor
+import dev.jdx.index.refs.PropertiesLiteralExtractor
 import dev.jdx.index.refs.ReferenceExtractor
 import java.nio.file.FileSystems
 import java.nio.file.Files
@@ -4579,9 +4580,10 @@ public object JdxService {
     /**
      * Options for `literals`: how to match the text pattern and how much of the
      * workspace to cover. [regex] is `--regex` (full Java regex against the
-     * constant); otherwise a case-sensitive substring. [ignoreCase] folds both
-     * sides for substring matches (ignored under `--regex` — put `(?i)` in the
-     * pattern instead). [inArtifact]/[exclude] filter by artifact label.
+     * constant / property key or value); otherwise a case-sensitive substring.
+     * [ignoreCase] folds both sides for substring matches (ignored under
+     * `--regex` — put `(?i)` in the pattern instead). [inArtifact]/[exclude]
+     * filter by artifact label.
      */
     public data class LiteralOptions(
         public val regex: Boolean = false,
@@ -4593,12 +4595,15 @@ public object JdxService {
 
     /**
      * Answers `literals <text>`: every string constant across the workspace's
-     * bytecode roots whose value matches [rawPattern] (issue #86).
+     * bytecode roots whose value matches [rawPattern], plus every
+     * `.properties` key/value that matches (issue #86).
      *
      * Live-roots scan: each class's `LDC` string loads and `String` field
-     * `ConstantValue`s are extracted with [LiteralExtractor] and filtered by
-     * the pattern — no persistent index. Empty / blank patterns are usage
-     * errors (exit 3); a valid miss is exit 1 with `no literals matching`.
+     * `ConstantValue`s are extracted with [LiteralExtractor]; each
+     * `.properties` resource is parsed with [PropertiesLiteralExtractor]
+     * (match on key **or** value) — no persistent index. Empty / blank
+     * patterns are usage errors (exit 3); a valid miss is exit 1 with
+     * `no literals matching`.
      */
     public fun literals(
         rawPattern: String,
@@ -4635,8 +4640,10 @@ public object JdxService {
 
     /**
      * Serves `literals`: scans every class in every open root for string
-     * constants matching [pattern]. Unreadable classes warn once each
-     * ([WarningCode.CORRUPT_CLASS]) and are skipped.
+     * constants matching [pattern], then every `.properties` resource for
+     * matching keys/values. Unreadable classes warn once each
+     * ([WarningCode.CORRUPT_CLASS]) and are skipped; binary / unreadable
+     * properties files degrade silently (never dump bytes).
      */
     private fun executeLiterals(
         pattern: String,
@@ -4686,6 +4693,39 @@ public object JdxService {
                                 value = occurrence.value,
                                 file = occurrence.sourceFile,
                                 line = occurrence.line,
+                            ),
+                        )
+                    }
+                }
+                // Properties slice (issue #86): resource keys/values that never
+                // appear as class-file constants still answer a literals query.
+                val rootLabel = open.root.displayName
+                if (!matchesArtifactFilter(options.inArtifact, rootLabel) ||
+                    (options.exclude != null && matchesArtifactFilter(options.exclude, rootLabel))
+                ) {
+                    // Artifact filter already decided for this root's classes;
+                    // properties live under the same displayName label.
+                    continue
+                }
+                for (path in open.root.resourceEntryPaths()) {
+                    if (!PropertiesLiteralExtractor.isPropertiesPath(path)) continue
+                    val bytes = try {
+                        open.root.openResource(path).use { it.readBytes() }
+                    } catch (_: Exception) {
+                        continue
+                    }
+                    for (occurrence in PropertiesLiteralExtractor.extract(path, bytes)) {
+                        val keyMatches = matchesLiteralValue(pattern, occurrence.key, options)
+                        val valueMatches = matchesLiteralValue(pattern, occurrence.value, options)
+                        if (!keyMatches && !valueMatches) continue
+                        hits.add(
+                            LiteralHit(
+                                // path#key — copy-pasteable into `resources --cat`.
+                                fromRef = "${occurrence.path}#${occurrence.key}",
+                                artifact = rootLabel,
+                                kind = "prop",
+                                value = occurrence.value,
+                                file = occurrence.path,
                             ),
                         )
                     }

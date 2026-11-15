@@ -165,8 +165,9 @@ jdx diff gson-2.11.0.jar gson-2.14.0.jar --fail-on breaking
 - **Javadoc/KDoc**, including documentation inherited from a supertype.
 - **`jdx samples`** — real call sites from the classpath as usage examples. Evidence instead
   of recollection.
-- **`jdx literals`** — search string constants (`LDC` / `ConstantValue`) across a workspace
-  for resource keys, log messages, and markers (issue #86). No more `unzip | tr | grep`.
+- **`jdx literals`** — search string constants (`LDC` / `ConstantValue`) and
+  `.properties` keys/values across a workspace for resource keys, log messages,
+  and markers (issue #86). No more `unzip | tr | grep`.
 - **`jdx services`** — list `META-INF/services` SPI providers across a workspace
   (issue #25). Answer "who provides `com.foo.Spi`?" without unzipping jars.
 - **`jdx modules`** — list JPMS `module-info` descriptors (requires / exports /

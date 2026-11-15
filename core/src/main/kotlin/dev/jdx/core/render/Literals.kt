@@ -7,13 +7,16 @@ import dev.jdx.core.model.Warning
 public const val DEFAULT_LITERALS_LIMIT: Int = 50
 
 /**
- * One string-constant hit (issue #86): the owning member's canonical ref, the
- * artifact holding it, the kind word (`ldc` for a method-body load, `const`
- * for a field `ConstantValue`), the matched string value, and optional
- * `SourceFile`/`LineNumberTable` location when the class retains debug info.
+ * One string-constant hit (issue #86): the owning member's canonical ref (or
+ * `path#key` for a `.properties` entry), the artifact holding it, the kind
+ * word (`ldc` for a method-body load, `const` for a field `ConstantValue`,
+ * `prop` for a properties-file entry), the matched string value, and optional
+ * `SourceFile`/`LineNumberTable` location when the class retains debug info
+ * (for `prop`, [file] is the resource path and [line] is null).
  *
- * [value] is the raw constant (never quoted here — renderers quote for text/
- * JSON). Empty values are never emitted by the scanner.
+ * [value] is the raw constant / property value (never quoted here — renderers
+ * quote for text/JSON). Empty bytecode constants are never emitted by the
+ * scanner; empty property values are kept when the key matched.
  */
 public data class LiteralHit(
     public val fromRef: String,
