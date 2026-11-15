@@ -10,6 +10,11 @@ package dev.jdx.core.model
  * spelling [dev.jdx.index.asm.AsmClassReader] already emits — Nested and
  * Arr carry real structure so `--where nested.k=1` / `{…}` multisets do not
  * re-peel strings.
+ *
+ * [AnnotationInfo.elements] is ephemeral like Kotlin member views: the SQLite
+ * index persists only the rendered [AnnotationInfo.values] map; live ASM
+ * reads refill the AST. Matching falls back to `values` when `elements` is
+ * empty.
  */
 public sealed interface AnnotationValue {
     /** Deterministic rendered form (parity with ASM `renderValue`). */

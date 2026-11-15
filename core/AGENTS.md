@@ -36,8 +36,9 @@ via `JsonEscape` — reuse it, never a second escaper). `explicitApi()` is on.
   `resolveAnnotatedQuery` for the dedicated `annotated` command
   (`deprecated`/`forRemoval`/`test`/`bean` aliases). Structured
   `AnnotationValue` AST (`Scalar`/`Nested`/`Arr`) lives on
-  `AnnotationInfo.elements` (ASM fills it; store/hand-built fixtures may leave
-  it empty and matching falls back to the rendered `values` map).
+  `AnnotationInfo.elements` (ASM fills it for live reads; the SQLite store
+  persists only the rendered `values` map — same ephemeral shape as Kotlin
+  views; matching falls back to `values` when `elements` is empty).
   `matchesWhere(…, defaults)` merges annotation-element defaults for omitted
   bytecode values; `ClassInfo.annotationElementDefaults()` reads them;
   `renderUse` never invents defaults into the printed use.

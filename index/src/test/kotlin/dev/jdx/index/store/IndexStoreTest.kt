@@ -107,16 +107,10 @@ class IndexStoreTest {
                 val actual = store.loadClass(artifact.id, expected.name.binaryName)
                 if (actual == null) {
                     failures.add("${expected.name.binaryName}: missing after round-trip")
-                } else if (actual != expected.copy(
-                        kotlinMethodViews = emptyMap(),
-                        kotlinProperties = emptyMap(),
-                        kotlinHiddenMethods = emptySet(),
-                        kotlinHiddenFields = emptySet(),
-                    )
-                ) {
-                    // Kotlin member views (T-077) and property views (T-078) ride
-                    // `ClassInfo` for live-root queries but are never persisted
-                    // (no `ktmeta` blob writer yet, D-050) — both sides drop them.
+                } else if (actual != expected.forStoreCompare()) {
+                    // Kotlin member views (T-077/T-078) and AnnotationInfo.elements
+                    // (issue #26 AST) ride ClassInfo for live-root queries but are
+                    // never persisted — both sides drop them via forStoreCompare.
                     failures.add("${expected.name.binaryName}: differs after round-trip")
                 }
             }
@@ -236,12 +230,7 @@ class IndexStoreTest {
             hits.size shouldBe 2
             hits.map { it.artifact.hash } shouldBe listOf("a".repeat(32), "z".repeat(32))
             hits.forEach {
-                it.clazz shouldBe infos.first().copy(
-                    kotlinMethodViews = emptyMap(),
-                    kotlinProperties = emptyMap(),
-                    kotlinHiddenMethods = emptySet(),
-                    kotlinHiddenFields = emptySet(),
-                )
+                it.clazz shouldBe infos.first().forStoreCompare()
             }
             // And a name indexed nowhere reports no hits — a miss, not an error.
             store.findClassesByFqn("com.example.NoSuchThing") shouldBe emptyList()
@@ -298,16 +287,11 @@ class IndexStoreTest {
             artifact.sourcesPath shouldBe "/r-sources.jar"
             store.classCount(artifactId) shouldBe infos.size
             // Spot-check first, middle and last: the whole list was already
-            // pinned exactly by the round-trip test above (views dropped on
-            // both sides there too — the store never persists them, D-050/D-051).
+            // pinned exactly by the round-trip test above (ephemeral fields
+            // dropped on both sides — the store never persists them).
             for (expected in listOf(infos.first(), infos[infos.size / 2], infos.last())) {
                 store.loadClass(artifactId, expected.name.binaryName) shouldBe
-                    expected.copy(
-                        kotlinMethodViews = emptyMap(),
-                        kotlinProperties = emptyMap(),
-                        kotlinHiddenMethods = emptySet(),
-                        kotlinHiddenFields = emptySet(),
-                    )
+                    expected.forStoreCompare()
             }
             // The fixture classes' simple names are searchable in the listing.
             store.listClassFqns(artifactId).toSet() shouldBe infos.map { it.name.binaryName }.toSet()

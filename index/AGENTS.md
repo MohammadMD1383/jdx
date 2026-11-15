@@ -115,6 +115,10 @@ behaviour lives here** (adapters call in, never the reverse). `explicitApi()` is
   (compare contents, never carriers). `KotlinPropertyView.constructorDeclared`
   marks primary-constructor properties so sources-mismatch pairs them through `<init>`
   and still warns on body-declared property removal (issue #14).
+  `AnnotationInfo.elements` (issue #26 `AnnotationValue` AST) is the same shape of
+  ephemeral carrier: ASM fills it for live-root annotation matching; the SQLite
+  `annot` table stores only the rendered `values` map. Store round-trip tests drop
+  both via `forStoreCompare`.
 - `doctor` is refused over the daemon wire (exit 6); the daemon never fetches
   (issue #18 — warm exit 5 for an absent stored `--coord` names cold `--fetch`
   priming / `--jars`, not the cold "Re-run with --fetch" wording).
