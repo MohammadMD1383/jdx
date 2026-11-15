@@ -55,6 +55,68 @@ class AnnotationMatchTest {
     }
 
     @Test
+    fun `matchesWhere walks dotted nested paths`() {
+        // Issue #26 richer modelling: --where nested.k=1 peels @Inner(…).
+        val annot = AnnotationInfo(
+            typeNameFromBinaryName("com.example.Outer"),
+            mapOf(
+                "nested" to "@com.example.Inner(k=1, since=\"99\")",
+                "level" to "1",
+            ),
+        )
+        annot.matchesWhere(listOf(AnnotationWhere("nested.k", "1"))) shouldBe true
+        annot.matchesWhere(listOf(AnnotationWhere("nested.since", "99"))) shouldBe true
+        annot.matchesWhere(listOf(AnnotationWhere("nested.since", "\"99\""))) shouldBe true
+        annot.matchesWhere(
+            listOf(
+                AnnotationWhere("nested.k", "1"),
+                AnnotationWhere("level", "1"),
+            ),
+        ) shouldBe true
+        annot.matchesWhere(listOf(AnnotationWhere("nested.k", "2"))) shouldBe false
+        annot.matchesWhere(listOf(AnnotationWhere("nested.missing", "1"))) shouldBe false
+        annot.matchesWhere(listOf(AnnotationWhere("level.k", "1"))) shouldBe false
+        annot.matchesWhere(listOf(AnnotationWhere("nested.", "1"))) shouldBe false
+        // Full nested value still matches as an opaque string.
+        annot.matchesWhere(
+            listOf(AnnotationWhere("nested", "@com.example.Inner(k=1, since=\"99\")")),
+        ) shouldBe true
+    }
+
+    @Test
+    fun `matchesWhere walks multi-segment nested paths`() {
+        val annot = AnnotationInfo(
+            typeNameFromBinaryName("com.example.Outer"),
+            mapOf("a" to "@com.example.Mid(b=@com.example.Inner(k=1))"),
+        )
+        annot.matchesWhere(listOf(AnnotationWhere("a.b.k", "1"))) shouldBe true
+        annot.matchesWhere(listOf(AnnotationWhere("a.b.k", "2"))) shouldBe false
+        annot.matchesWhere(listOf(AnnotationWhere("a.b", "@com.example.Inner(k=1)"))) shouldBe true
+    }
+
+    @Test
+    fun `matchesWhere compares arrays as order-insensitive multisets`() {
+        val annot = AnnotationInfo(
+            typeNameFromBinaryName("com.example.Mark"),
+            mapOf(
+                "tags" to "{\"a\", \"b\"}",
+                "nums" to "{1, 2, 2}",
+            ),
+        )
+        annot.matchesWhere(listOf(AnnotationWhere("tags", "{\"a\", \"b\"}"))) shouldBe true
+        annot.matchesWhere(listOf(AnnotationWhere("tags", "{\"b\", \"a\"}"))) shouldBe true
+        // Quote tolerance on array elements.
+        annot.matchesWhere(listOf(AnnotationWhere("tags", "{a, b}"))) shouldBe true
+        annot.matchesWhere(listOf(AnnotationWhere("tags", "{b, a}"))) shouldBe true
+        annot.matchesWhere(listOf(AnnotationWhere("tags", "{\"a\", \"c\"}"))) shouldBe false
+        annot.matchesWhere(listOf(AnnotationWhere("tags", "{\"a\"}"))) shouldBe false
+        // Multiset: duplicate elements matter.
+        annot.matchesWhere(listOf(AnnotationWhere("nums", "{2, 1, 2}"))) shouldBe true
+        annot.matchesWhere(listOf(AnnotationWhere("nums", "{1, 2}"))) shouldBe false
+        annot.matchesWhere(listOf(AnnotationWhere("nums", "{1, 2, 2, 2}"))) shouldBe false
+    }
+
+    @Test
     fun `peelAnnotationUseQuery strips at-sign and element parens`() {
         // Issue #26 shortcut: @Fqn(k=v) is the natural spelling for
         // "every use of this annotation with these values".

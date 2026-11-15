@@ -278,6 +278,35 @@ class UsagesServiceTest {
     }
 
     @Test
+    fun `where nested path and array multiset filter annotation values`() {
+        // Issue #26 richer modelling: dotted paths into nested @Inner(…) and
+        // order-insensitive `{…}` array compare.
+        val viaPath = JdxService.annotated(
+            "u.Nest",
+            caseRoots(),
+            JdxService.AnnotatedOptions(where = listOf(AnnotationWhere("inner.level", "1"))),
+        )
+        viaPath.exitCode shouldBe 0
+        usageListOf(viaPath).hits.map { it.fromRef } shouldBe listOf("u.Widget")
+        textOf(viaPath) shouldContain "inner=@u.Mark(level=1)"
+
+        val viaArray = JdxService.annotated(
+            "u.Nest",
+            caseRoots(),
+            JdxService.AnnotatedOptions(where = listOf(AnnotationWhere("tags", "{b, a}"))),
+        )
+        viaArray.exitCode shouldBe 0
+        usageListOf(viaArray).hits.map { it.fromRef } shouldBe listOf("u.Widget")
+
+        val miss = JdxService.annotated(
+            "u.Nest",
+            caseRoots(),
+            JdxService.AnnotatedOptions(where = listOf(AnnotationWhere("inner.level", "99"))),
+        )
+        miss.exitCode shouldBe 1
+    }
+
+    @Test
     fun `annotated forRemoval recipe expands Deprecated predicate`() {
         // Recipe expands before resolve. JDK must be on the classpath so
         // java.lang.Deprecated resolves; --in keeps the fixture jar so JDK's

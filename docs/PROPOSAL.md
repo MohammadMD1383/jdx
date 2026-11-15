@@ -426,12 +426,15 @@ Find Usages across **all workspace jars plus the project's own source dirs**.
 - `--where key=value` (repeatable; requires `--kind annotation`) — annotation
   value predicates (issue #26). Every clause must match the rendered annotation
   element values (AND). String values may omit the surrounding quotes
-  (`--where since=99` matches a stored `"99"`). Matching rows carry the rendered
-  `@Fqn(k=v,…)` use in text and JSON. With `--kind annotation`, the query itself
-  may use annotation-use spelling (`java.lang.Deprecated(forRemoval=true)` on the
-  CLI; `@Deprecated(forRemoval=true)` via MCP/daemon — Clikt reserves `@file`):
-  the optional leading `@` and `(k=v,…)` suffix peel into the type ref + where
-  clauses (AND-merged with any `--where` flags).
+  (`--where since=99` matches a stored `"99"`). Dotted keys walk into nested
+  `@Inner(…)` values (`--where nested.k=1`); `{…}` arrays match as
+  order-insensitive multisets (`{b, a}` ≡ `{a, b}`). Matching rows carry the
+  rendered `@Fqn(k=v,…)` use in text and JSON. With `--kind annotation`, the
+  query itself may use annotation-use spelling
+  (`java.lang.Deprecated(forRemoval=true)` on the CLI; `@Deprecated(forRemoval=true)`
+  via MCP/daemon — Clikt reserves `@file`): the optional leading `@` and
+  `(k=v,…)` suffix peel into the type ref + where clauses (AND-merged with any
+  `--where` flags).
 - `--in <artifact-glob>`, `--exclude <glob>`, `--limit N`, `--context N`
 - Groups by artifact, then by declaring method, with the canonical ref of each call site.
 - `--kind throw` matches `throws` declarations (declaration-level), not `ATHROW` throw sites.
@@ -1315,8 +1318,9 @@ Explicitly out of v1 scope, recorded so they are not lost:
   `jdx usages 'Deprecated(forRemoval=true)' --kind annotation` peels into the
   same type + where clauses (leading `@` OK on MCP/daemon). Dedicated
   `jdx annotated` command + recipe aliases (`deprecated`, `forRemoval`, `test`,
-  `junit5`, `junit4`, `bean`) ship; richer value modelling (arrays / nested
-  annotations beyond the rendered string form) remains open.
+  `junit5`, `junit4`, `bean`) ship. Nested path keys (`--where nested.k=1`) and
+  order-insensitive `{…}` array multisets ship; structured `AnnotationValue`
+  AST / annotation-default merging remain open.
 - **`--since` / API-level reporting** — which JDK release introduced a member.
 - **Dataflow-lite** — `jdx flow <method>` for a simplified reaching-values view.
 - **Multi-release jar variant selection** beyond warning.
@@ -1460,13 +1464,15 @@ resolve   <name> [--limit]
 ls        [package-glob] [--limit]
 tree      [artifact-glob] [--depth --counts --limit]
 usages    --kind call|ref|impl|override|read|write|new|throw|annotation|all
-          --where key=value (repeatable; requires --kind annotation; issue #26)
+          --where key=value (repeatable; requires --kind annotation; issue #26;
+          dotted nested paths; {…} arrays order-insensitive)
           query may also be 'Type(k=v)' with --kind annotation (MCP: '@Type(k=v)')
           --in --exclude --limit --context --src
           [-w …] [--jars …] [--no-jdk] [--json] [--no-color]
 annotated <annotation|recipe|Type(k=v)> (issue #26 dedicated command)
           recipes: deprecated|forRemoval|test|junit5|junit4|bean
-          --where key=value (repeatable) --in --exclude --limit --context --src
+          --where key=value (repeatable; nested paths / array multisets)
+          --in --exclude --limit --context --src
           [-w …] [--jars …] [--no-jdk] [--json] [--no-color]
 hierarchy --up --down --direct --depth N --in --exclude --limit
           [-w …] [--jars …] [--no-jdk] [--json] [--no-color]

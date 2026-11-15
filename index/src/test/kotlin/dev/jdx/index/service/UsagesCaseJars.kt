@@ -80,6 +80,10 @@ internal fun buildLinedUsagesJar(dir: Path): Path {
  *   (`level=1`) and the `u.Other#work()` method (`level=2`) — so
  *   `--kind annotation --where level=1` (issue #26) can assert value filtering
  *   hermetically without the JDK.
+ * - Nested / array predicates (issue #26 richer modelling): `u.Nest` has
+ *   `inner()` → `u.Mark` and `tags()` → `String[]`; `u.Widget` carries
+ *   `@Nest(inner=@Mark(level=1), tags={"a","b"})` so `--where inner.level=1`
+ *   and order-insensitive `--where tags={b, a}` can be asserted.
  */
 internal fun buildUsagesCaseJar(dir: Path): Path {
     val abstractMethod = Opcodes.ACC_PUBLIC or Opcodes.ACC_ABSTRACT
@@ -116,6 +120,17 @@ internal fun buildUsagesCaseJar(dir: Path): Path {
                 }
             },
             "u/Widget.class" to buildClass("u/Widget") {
+                // Nested + array values for issue #26 path / multiset matching.
+                annotate("Lu/Nest;", true).apply {
+                    val nested = visitAnnotation("inner", "Lu/Mark;")
+                    nested.visit("level", 1)
+                    nested.visitEnd()
+                    val tags = visitArray("tags")
+                    tags.visit(null, "a")
+                    tags.visit(null, "b")
+                    tags.visitEnd()
+                    visitEnd()
+                }
                 method(Opcodes.ACC_PUBLIC, "<init>", "()V", null, null) {
                     invoke(Opcodes.INVOKESPECIAL, "java/lang/Object", "<init>", "()V")
                     code(Opcodes.RETURN to null)
@@ -139,6 +154,13 @@ internal fun buildUsagesCaseJar(dir: Path): Path {
                 method(abstractMethod, "level", "()I", null, null) {
                     annotationDefault(0)
                 }
+            },
+            "u/Nest.class" to buildClass(
+                "u/Nest",
+                access = Opcodes.ACC_PUBLIC or Opcodes.ACC_ABSTRACT or Opcodes.ACC_ANNOTATION or Opcodes.ACC_INTERFACE,
+            ) {
+                method(abstractMethod, "inner", "()Lu/Mark;", null, null)
+                method(abstractMethod, "tags", "()[Ljava/lang/String;", null, null)
             },
             "v/Lib.class" to buildClass("v/Lib"),
         ),

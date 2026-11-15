@@ -9,6 +9,11 @@ package dev.jdx.core.model
  * tolerant of a missing pair of quotes around a string value so
  * `--where since=99` matches a stored `"99"`.
  *
+ * Nested elements accept dotted path keys (`--where nested.k=1` peels the
+ * stored `@Inner(…)` value and matches `k` inside). Array values compare as
+ * order-insensitive multisets (`{2, 1}` matches `{1, 2}`), with the same
+ * quote tolerance per element.
+ *
  * Agents may also spell the predicate inline as an annotation use
  * (`@java.lang.Deprecated(forRemoval=true)` / `Deprecated(forRemoval=true)`):
  * [peelAnnotationUseQuery] turns that into a plain type ref plus where
@@ -86,28 +91,86 @@ public fun AnnotationInfo.renderUse(): String {
  * True when every [where] clause matches this annotation's rendered values.
  * An empty [where] always matches. A missing element name fails the clause;
  * value comparison accepts the stored rendered form and an unquoted variant
- * of a quoted string (so `--where since=99` matches `"99"`).
+ * of a quoted string (so `--where since=99` matches `"99"`). Dotted keys
+ * walk into nested `@Inner(…)` values; `{…}` arrays match as multisets.
  */
 public fun AnnotationInfo.matchesWhere(where: List<AnnotationWhere>): Boolean {
     if (where.isEmpty()) return true
-    return where.all { clause ->
-        val stored = values[clause.key] ?: return@all false
-        annotationValueMatches(stored, clause.value)
-    }
+    return where.all { clause -> matchesClause(clause) }
 }
 
 /**
- * Exact match, or unquoted-wanted against a quote-wrapped stored string
- * (and the reverse). Does not invent escapes — only strips one matching
- * quote pair from either side.
+ * Matches one clause against this annotation's rendered values, including
+ * dotted nested paths (`outer.rest`).
+ */
+internal fun AnnotationInfo.matchesClause(clause: AnnotationWhere): Boolean {
+    val dot = clause.key.indexOf('.')
+    if (dot > 0) {
+        val outer = clause.key.substring(0, dot)
+        val rest = clause.key.substring(dot + 1)
+        if (rest.isEmpty()) return false
+        val stored = values[outer] ?: return false
+        val nested = peelNestedAnnotationValue(stored) ?: return false
+        return nested.matchesClause(AnnotationWhere(rest, clause.value))
+    }
+    val stored = values[clause.key] ?: return false
+    return annotationValueMatches(stored, clause.value)
+}
+
+/**
+ * Peels a rendered nested annotation value (`@Fqn` / `@Fqn(k=v,…)`) into an
+ * [AnnotationInfo] for path matching. Null when [stored] is not that shape.
+ */
+internal fun peelNestedAnnotationValue(stored: String): AnnotationInfo? {
+    val trimmed = stored.trim()
+    if (!trimmed.startsWith('@')) return null
+    val peeled = peelAnnotationUseQuery(trimmed)?.getOrNull() ?: return null
+    val pairs = linkedMapOf<String, String>()
+    for (clause in peeled.where) {
+        pairs[clause.key] = clause.value
+    }
+    return AnnotationInfo(typeNameFromBinaryName(peeled.typeRef), pairs)
+}
+
+/**
+ * Exact match, unquoted string tolerance, or order-insensitive array multiset
+ * compare when both sides look like `{…}`. Does not invent escapes — only
+ * strips one matching quote pair from either side of a scalar.
  */
 internal fun annotationValueMatches(stored: String, wanted: String): Boolean {
     if (stored == wanted) return true
     val storedInner = unquoteOnce(stored)
     val wantedInner = unquoteOnce(wanted)
-    return storedInner == wanted ||
+    if (storedInner == wanted ||
         stored == wantedInner ||
         storedInner == wantedInner
+    ) {
+        return true
+    }
+    if (looksLikeArray(stored) && looksLikeArray(wanted)) {
+        return arrayElementsMatch(stored, wanted)
+    }
+    return false
+}
+
+private fun looksLikeArray(raw: String): Boolean =
+    raw.length >= 2 && raw.first() == '{' && raw.last() == '}'
+
+/**
+ * Compares two rendered `{a, b}` arrays as multisets. Each element uses
+ * [annotationValueMatches] so nested arrays / quote variants still pair.
+ */
+private fun arrayElementsMatch(stored: String, wanted: String): Boolean {
+    val storedEls = splitAnnotationElements(stored.substring(1, stored.length - 1))
+    val wantedEls = splitAnnotationElements(wanted.substring(1, wanted.length - 1))
+    if (storedEls.size != wantedEls.size) return false
+    val remaining = storedEls.toMutableList()
+    for (w in wantedEls) {
+        val idx = remaining.indexOfFirst { annotationValueMatches(it, w) }
+        if (idx < 0) return false
+        remaining.removeAt(idx)
+    }
+    return remaining.isEmpty()
 }
 
 private fun unquoteOnce(raw: String): String {

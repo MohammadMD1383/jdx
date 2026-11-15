@@ -30,7 +30,8 @@ via `JsonEscape` — reuse it, never a second escaper). `explicitApi()` is on.
   shows, plus the full uncapped `warnings` array.
 - `model/AnnotationMatch` — `--where key=value` parse + `AnnotationInfo.renderUse` /
   `matchesWhere` + `peelAnnotationUseQuery` for `@Type(k=v)` spelling (issue #26;
-  quote-tolerant string compare, sorted element names, depth-aware element split) +
+  quote-tolerant string compare, sorted element names, depth-aware element split,
+  dotted nested paths, order-insensitive `{…}` array multisets) +
   `ANNOTATION_RECIPES` / `resolveAnnotatedQuery` for the dedicated `annotated`
   command (`deprecated`/`forRemoval`/`test`/`bean` aliases).
 - `rpc/RpcProtocol` — v1 wire: NDJSON requests, deterministic key order, responses

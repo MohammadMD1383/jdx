@@ -497,7 +497,11 @@ public object AsmClassReader {
                 inner[key] = renderValue(flat[index + 1])
                 index += 2
             }
-            val pairs = inner.entries.joinToString(", ") { (key, rendered) -> "$key=$rendered" }
+            // Sort keys like AnnotationInfo.renderUse so nested forms are
+            // byte-identical regardless of visit order (AGENTS.md §2.5).
+            val pairs = inner.entries
+                .sortedBy { it.key }
+                .joinToString(", ") { (key, rendered) -> "$key=$rendered" }
             "@" + mapAnnotationType(value.desc).fqn + if (pairs.isEmpty()) "" else "($pairs)"
         }
         is List<*> -> value.joinToString(", ", "{", "}") { renderValue(it) }

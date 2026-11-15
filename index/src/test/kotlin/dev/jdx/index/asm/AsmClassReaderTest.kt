@@ -217,6 +217,23 @@ class AsmClassReaderTest {
         )
     }
 
+    @Test
+    fun `nested annotation element names render sorted`() {
+        // Visit order z then a — render must still sort (parity with renderUse).
+        val bytes = buildClass("com/example/Annotated") {
+            method(Opcodes.ACC_PUBLIC, "tagged", "()V", null, null) {
+                val writer = annotation("Lcom/example/All;", true)
+                val nested = writer.visitAnnotation("nested", "Lcom/example/N;")
+                nested.visit("z", 2)
+                nested.visit("a", 1)
+                nested.visitEnd()
+                writer.visitEnd()
+            }
+        }
+        val values = ok(bytes).methods.single { it.name == "tagged" }.annotations.single().values
+        values["nested"] shouldBe "@com.example.N(a=1, z=2)"
+    }
+
     // -- failure modes ------------------------------------------------------------
 
     @Test
