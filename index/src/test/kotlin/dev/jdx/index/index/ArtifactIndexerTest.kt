@@ -6,6 +6,7 @@ import dev.jdx.index.artifact.ArtifactTestJars
 import dev.jdx.index.asm.AsmClassReader
 import dev.jdx.index.asm.ClassReadResult
 import dev.jdx.index.asm.buildClass
+import dev.jdx.index.store.forStoreCompare
 import dev.jdx.index.store.sqlite.SqliteIndexStore
 import io.kotest.matchers.collections.shouldContain
 import io.kotest.matchers.shouldBe
@@ -49,24 +50,20 @@ class ArtifactIndexerTest {
             val id = result.artifactId!!
             store.classCount(id) shouldBe result.classCount
             // Every stored class is byte-identical to a live ASM read — the store
-            // adds no interpretation of its own. Kotlin member views (T-077) are
-            // the exception: they ride `ClassInfo` for the live-root queries
-            // but are never persisted (no `ktmeta` blob writer yet, D-050), so
-            // both sides drop them before comparing.
+            // adds no interpretation of its own. Kotlin member views (T-077) and
+            // AnnotationInfo.elements (issue #26 AST) are the exceptions: they
+            // ride `ClassInfo` for live-root queries but are never persisted, so
+            // both sides drop them via forStoreCompare before comparing.
             ArtifactLoader.openJar(binaryJar.toPath()).use { root ->
                 for (entry in root.classEntryPaths()) {
                     val binary = entryToBinary(entry)
                     val bytes = root.openClass(entry).use { it.readBytes() }
                     val expected = (AsmClassReader.read(bytes, binary) as ClassReadResult.Ok).info
                     val stored = store.loadClass(id, binary)
-                    stored shouldBe expected.copy(
-                        kotlinMethodViews = emptyMap(),
-                        kotlinProperties = emptyMap(),
-                        kotlinHiddenMethods = emptySet(),
-                        kotlinHiddenFields = emptySet(),
-                    )
+                    stored shouldBe expected.forStoreCompare()
                     stored?.kotlinMethodViews shouldBe emptyMap()
                     stored?.kotlinProperties shouldBe emptyMap()
+                    stored?.annotations?.all { it.elements.isEmpty() } shouldBe true
                 }
             }
         }

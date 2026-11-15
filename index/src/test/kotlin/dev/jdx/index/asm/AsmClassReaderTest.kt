@@ -1,6 +1,7 @@
 package dev.jdx.index.asm
 
 import dev.jdx.core.model.AccessFlag
+import dev.jdx.core.model.AnnotationValue
 import dev.jdx.core.model.TypeKind
 import dev.jdx.core.model.WarningCode
 import io.kotest.matchers.shouldBe
@@ -232,6 +233,37 @@ class AsmClassReaderTest {
         }
         val values = ok(bytes).methods.single { it.name == "tagged" }.annotations.single().values
         values["nested"] shouldBe "@com.example.N(a=1, z=2)"
+    }
+
+    @Test
+    fun `annotation elements carry structured AnnotationValue AST`() {
+        // Issue #26: AsmClassReader fills AnnotationInfo.elements so matching
+        // walks Nested/Arr without re-peeling rendered strings.
+        val bytes = buildClass("com/example/Annotated") {
+            method(Opcodes.ACC_PUBLIC, "tagged", "()V", null, null) {
+                val writer = annotation("Lcom/example/All;", true)
+                writer.visit("n", 3)
+                val array = writer.visitArray("arr")
+                array.visit(null, 1)
+                array.visit(null, 2)
+                array.visitEnd()
+                val nested = writer.visitAnnotation("nested", "Lcom/example/N;")
+                nested.visit("k", 1)
+                nested.visitEnd()
+                writer.visitEnd()
+            }
+        }
+        val annot = ok(bytes).methods.single { it.name == "tagged" }.annotations.single()
+        annot.elements["n"] shouldBe AnnotationValue.Scalar("3")
+        annot.elements["arr"] shouldBe AnnotationValue.Arr(
+            listOf(AnnotationValue.Scalar("1"), AnnotationValue.Scalar("2")),
+        )
+        val nested = annot.elements["nested"].shouldBeInstanceOf<AnnotationValue.Nested>()
+        nested.type.fqn shouldBe "com.example.N"
+        nested.elements["k"] shouldBe AnnotationValue.Scalar("1")
+        // Rendered map stays derived from the AST.
+        annot.values["nested"] shouldBe nested.render()
+        annot.values["arr"] shouldBe "{1, 2}"
     }
 
     // -- failure modes ------------------------------------------------------------

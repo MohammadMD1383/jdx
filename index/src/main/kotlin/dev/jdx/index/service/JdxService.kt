@@ -29,6 +29,7 @@ import dev.jdx.core.model.Visibility
 import dev.jdx.core.model.kotlinViewKey
 import dev.jdx.core.model.Warning
 import dev.jdx.core.model.WarningCode
+import dev.jdx.core.model.annotationElementDefaults
 import dev.jdx.core.model.arrayTypeName
 import dev.jdx.core.model.matchesWhere
 import dev.jdx.core.model.peelAnnotationUseQuery
@@ -2913,6 +2914,14 @@ public object JdxService {
             // sourced — same pattern as samples).
             val pending = mutableListOf<PendingUsage>()
             val reported = mutableSetOf<String>()
+            // Issue #26: annotation-element defaults from the resolved
+            // annotation type fill omitted bytecode values for `--where`
+            // matching only (renderUse stays explicit-values).
+            val annotationDefaults = if (wantAnnotations && options.where.isNotEmpty()) {
+                target.annotationElementDefaults()
+            } else {
+                emptyMap()
+            }
             opened.forEachIndexed { rootIndex, open ->
                 for (entry in open.root.classEntryPaths()) {
                     val fromBinary = entryToBinary(entry)
@@ -2975,7 +2984,7 @@ public object JdxService {
                         val metaHits = mutableListOf<UsageHit>()
                         collectMetadataUsages(
                             bytes, fromBinary, label, binary, wantThrows, wantAnnotations,
-                            options.where, reported, warnings, metaHits,
+                            options.where, annotationDefaults, reported, warnings, metaHits,
                         )
                         for (hit in metaHits) pending.add(PendingUsage(hit = hit))
                     }
@@ -3146,8 +3155,11 @@ public object JdxService {
      * deferred to future `jdx flow` work), `annotation` rows
      * for the class and each member annotated with it. One row per declaring
      * method / annotated element, kind-led like the edge rows. [where]
-     * (issue #26) keeps only annotation uses whose rendered values match
-     * every clause; matching rows carry [UsageHit.annotation]. Never throws:
+     * (issue #26) keeps only annotation uses whose values match every clause
+     * (structured [dev.jdx.core.model.AnnotationValue] AST when present,
+     * else rendered map); [annotationDefaults] fills elements omitted in
+     * bytecode from the annotation type's `AnnotationDefault`s. Matching
+     * rows carry [UsageHit.annotation] (explicit values only). Never throws:
      * unparseable bytes warn once via [reported] and read as no hits (D-017).
      */
     private fun collectMetadataUsages(
@@ -3158,6 +3170,7 @@ public object JdxService {
         wantThrows: Boolean,
         wantAnnotations: Boolean,
         where: List<AnnotationWhere>,
+        annotationDefaults: Map<String, String>,
         reported: MutableSet<String>,
         warnings: MutableList<Warning>,
         hits: MutableList<UsageHit>,
@@ -3202,7 +3215,7 @@ public object JdxService {
             fun matching(annotations: List<AnnotationInfo>): List<AnnotationInfo> =
                 annotations.filter { annotation ->
                     (annotation.type as? TypeName.ClassType)?.binaryName == targetBinary &&
-                        annotation.matchesWhere(where)
+                        annotation.matchesWhere(where, annotationDefaults)
                 }
             for (annotation in matching(info.annotations)) {
                 hits.add(

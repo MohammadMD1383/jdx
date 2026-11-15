@@ -76,14 +76,16 @@ internal fun buildLinedUsagesJar(dir: Path): Path {
  * - T-075 enrichment: `u.Widget` (concrete, empty) is constructed once by
  *   `u.Factory#create()` (`NEW` + `<init>` call → `--kind new`); `u.Boom`
  *   (exception) is declared in `u.App#risky()`'s `throws` (`--kind throw`);
- *   `u.Mark` (annotation with `int level()`) annotates the `u.Factory` class
- *   (`level=1`) and the `u.Other#work()` method (`level=2`) — so
- *   `--kind annotation --where level=1` (issue #26) can assert value filtering
- *   hermetically without the JDK.
+ *   `u.Mark` (annotation with `int level()` default 0) annotates the
+ *   `u.Factory` class (`level=1`), the `u.Other#work()` method (`level=2`),
+ *   and `u.Boom` with a bare `@Mark` (no elements) — so `--where level=0`
+ *   (issue #26 annotation-default merging) matches Boom via the default while
+ *   `--where level=1` still isolates Factory.
  * - Nested / array predicates (issue #26 richer modelling): `u.Nest` has
  *   `inner()` → `u.Mark` and `tags()` → `String[]`; `u.Widget` carries
  *   `@Nest(inner=@Mark(level=1), tags={"a","b"})` so `--where inner.level=1`
- *   and order-insensitive `--where tags={b, a}` can be asserted.
+ *   and order-insensitive `--where tags={b, a}` can be asserted. Structured
+ *   [dev.jdx.core.model.AnnotationValue] AST is filled by AsmClassReader.
  */
 internal fun buildUsagesCaseJar(dir: Path): Path {
     val abstractMethod = Opcodes.ACC_PUBLIC or Opcodes.ACC_ABSTRACT
@@ -146,7 +148,11 @@ internal fun buildUsagesCaseJar(dir: Path): Path {
                     invoke(Opcodes.INVOKESPECIAL, "u/Widget", "<init>", "()V")
                 }
             },
-            "u/Boom.class" to buildClass("u/Boom", superName = "java/lang/Exception"),
+            "u/Boom.class" to buildClass("u/Boom", superName = "java/lang/Exception") {
+                // Bare @Mark — level omitted; AnnotationDefault 0 fills
+                // `--where level=0` (issue #26 default merging).
+                annotate("Lu/Mark;", true).apply { visitEnd() }
+            },
             "u/Mark.class" to buildClass(
                 "u/Mark",
                 access = Opcodes.ACC_PUBLIC or Opcodes.ACC_ABSTRACT or Opcodes.ACC_ANNOTATION or Opcodes.ACC_INTERFACE,

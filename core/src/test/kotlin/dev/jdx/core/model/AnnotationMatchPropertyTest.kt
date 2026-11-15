@@ -142,4 +142,63 @@ class AnnotationMatchPropertyTest {
             }
         }
     }
+
+    @Test
+    fun `defaults fill omitted keys and never override explicit values`(): Unit = runBlocking {
+        checkAll(JDX_PROPERTY_ITERATIONS, arbKey(), arbRenderedValue(), arbRenderedValue()) {
+                key, explicit, defaulted ->
+            if (explicit == defaulted) return@checkAll
+            val withValue = AnnotationInfo(
+                typeNameFromBinaryName("com.example.Mark"),
+                mapOf(key to explicit),
+            )
+            val bare = AnnotationInfo(typeNameFromBinaryName("com.example.Mark"))
+            val defaults = mapOf(key to defaulted)
+            assert(bare.matchesWhere(listOf(AnnotationWhere(key, defaulted)), defaults)) {
+                "bare use must match via default: key=$key default=$defaulted"
+            }
+            assert(!bare.matchesWhere(listOf(AnnotationWhere(key, explicit)), defaults)) {
+                "bare use must not match a non-default wanted value"
+            }
+            assert(withValue.matchesWhere(listOf(AnnotationWhere(key, explicit)), defaults)) {
+                "explicit value must still match under defaults"
+            }
+            assert(!withValue.matchesWhere(listOf(AnnotationWhere(key, defaulted)), defaults)) {
+                "explicit value must win over a conflicting default"
+            }
+            assert(bare.renderUse() == "@com.example.Mark") {
+                "renderUse must not invent defaults into the printed use"
+            }
+        }
+    }
+
+    @Test
+    fun `structured AnnotationValue render round-trips into matchesWhere`(): Unit = runBlocking {
+        checkAll(JDX_PROPERTY_ITERATIONS, arbKey(), arbPairs()) { outerKey, innerPairs ->
+            if (innerPairs.isEmpty()) return@checkAll
+            val nested = AnnotationValue.Nested(
+                typeNameFromBinaryName("com.example.Inner"),
+                innerPairs.mapValues { AnnotationValue.Scalar(it.value) },
+            )
+            val arr = AnnotationValue.Arr(
+                innerPairs.values.map { AnnotationValue.Scalar(it) },
+            )
+            val annot = annotationInfo(
+                typeNameFromBinaryName("com.example.Outer"),
+                mapOf(outerKey to nested, "tags" to arr),
+            )
+            assert(annot.values[outerKey] == nested.render()) {
+                "values map must derive from AST render"
+            }
+            for ((key, value) in innerPairs) {
+                assert(annot.matchesWhere(listOf(AnnotationWhere("$outerKey.$key", value)))) {
+                    "AST nested path $outerKey.$key must match"
+                }
+            }
+            val shuffled = innerPairs.values.shuffled().joinToString(", ", "{", "}")
+            assert(annot.matchesWhere(listOf(AnnotationWhere("tags", shuffled)))) {
+                "AST array multiset must ignore order"
+            }
+        }
+    }
 }

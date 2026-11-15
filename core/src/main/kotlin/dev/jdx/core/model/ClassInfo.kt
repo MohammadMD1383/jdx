@@ -15,13 +15,19 @@ public enum class TypeKind {
 }
 
 /**
- * An annotation use on a class or member. [values] maps element names to raw rendered
- * values (strings, as the renderer formats them) — full value modelling arrives with the
- * javadoc/KDoc work (M3).
+ * An annotation use on a class or member.
+ *
+ * [values] maps element names to deterministic rendered spellings (the form
+ * agents copy into `--where` / `@Type(k=v)`). [elements] is the structured
+ * [AnnotationValue] AST (issue #26): ASM readers fill both; the SQLite store
+ * and hand-built fixtures may leave [elements] empty and matching falls back
+ * to the rendered map. Prefer [annotationInfo] when constructing from an AST
+ * so the two stay in sync.
  */
 public data class AnnotationInfo(
     public val type: TypeName,
     public val values: Map<String, String> = emptyMap(),
+    public val elements: Map<String, AnnotationValue> = emptyMap(),
 )
 
 /**
