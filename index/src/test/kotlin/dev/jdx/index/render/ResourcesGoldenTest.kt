@@ -12,7 +12,7 @@ import org.junit.jupiter.api.Test
 import org.junit.jupiter.api.fail
 
 /**
- * Golden tests for the resources renderer (issue #25 resource-listing slice).
+ * Golden tests for the resources renderer (issue #25 listing + `--cat`).
  *
  * Rewrite with `./gradlew :index:tier2Test -Pgolden.update=true` — then read
  * the diff before committing.
@@ -27,17 +27,34 @@ class ResourcesGoldenTest {
         val roots = RootsSpec(jarSpecs = listOf(jar.toString()), includeJdk = false)
         val goldenDir = File("src/test/resources/golden/resources")
         val contents = buildMap {
-            fun capture(key: String, pattern: String?, options: ResourceOptions = ResourceOptions()) {
+            fun captureList(key: String, pattern: String?, options: ResourceOptions = ResourceOptions()) {
                 val outcome = JdxService.resources(pattern, roots, options)
                 val listing = (outcome as? JdxService.ServiceOutcome.ResourceList)?.listing
                     ?: fail("resources $pattern: expected ResourceList, got $outcome")
                 put("$key.txt", listing.renderText())
                 put("$key.json", listing.toJson(command = "resources"))
             }
-            capture("res_named", "messages.properties")
-            capture("res_all", null)
-            capture("res_limit2", null, ResourceOptions(limit = 2))
-            capture("res_meta", "META-INF")
+            fun captureCat(key: String, pattern: String, options: ResourceOptions) {
+                val outcome = JdxService.resources(pattern, roots, options)
+                val content = (outcome as? JdxService.ServiceOutcome.ResourceCat)?.content
+                    ?: fail("resources $pattern --cat: expected ResourceCat, got $outcome")
+                put("$key.txt", content.renderText())
+                put("$key.json", content.toJson(command = "resources"))
+            }
+            captureList("res_named", "messages.properties")
+            captureList("res_all", null)
+            captureList("res_limit2", null, ResourceOptions(limit = 2))
+            captureList("res_meta", "META-INF")
+            captureCat(
+                "res_cat",
+                "com/example/messages.properties",
+                ResourceOptions(cat = true),
+            )
+            captureCat(
+                "res_cat_bin",
+                "blob.bin",
+                ResourceOptions(cat = true),
+            )
         }
         GoldenFiles.verifyAll(goldenDir, contents)
     }

@@ -423,6 +423,7 @@ private fun warningCodesOf(outcome: ServiceOutcome): List<WarningCode> = when (o
     is ServiceOutcome.ModuleList -> outcome.listing.warnings.map { it.code }
     is ServiceOutcome.ManifestList -> outcome.listing.warnings.map { it.code }
     is ServiceOutcome.ResourceList -> outcome.listing.warnings.map { it.code }
+    is ServiceOutcome.ResourceCat -> outcome.content.warnings.map { it.code }
     is ServiceOutcome.Diff -> outcome.report.warnings.map { it.code }
     is ServiceOutcome.Failure -> emptyList()
 }
@@ -576,6 +577,14 @@ private fun entitiesOf(outcome: ServiceOutcome): List<String> = when (outcome) {
             add(hit.artifact)
         }
         for (warning in outcome.listing.warnings) add(warning.code.name)
+    }
+    is ServiceOutcome.ResourceCat -> buildList {
+        add(outcome.content.path)
+        add(outcome.content.artifact)
+        // Text shows only the truncated line prefix under --max-lines.
+        for (line in outcome.content.lines) add(line)
+        for (warning in outcome.content.warnings) add(warning.code.name)
+        for (provenance in outcome.content.provenance) add(provenance.artifact)
     }
     is ServiceOutcome.LiteralList -> buildList {
         for (hit in outcome.listing.hits) {

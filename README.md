@@ -175,8 +175,8 @@ jdx diff gson-2.11.0.jar gson-2.14.0.jar --fail-on breaking
   (issue #25): main attributes by default (`Main-Class`, `Multi-Release`, …);
   `--entries` for per-entry (JarEntry) sections.
 - **`jdx resources`** — list non-class resource paths (`META-INF/…`, `.properties`,
-  versioned `META-INF/versions/…` copies, …) across a workspace (issue #25). Listing
-  only — never dumps binaries into context.
+  versioned `META-INF/versions/…` copies, …) across a workspace (issue #25); `--cat`
+  prints the unique match's text (binary payloads refuse to dump bytes).
 - **`jdx diff a.jar b.jar`** — the public-API diff for a dependency upgrade, with every
   difference named as a rule (`MEMBER_REMOVED`, `RETURN_TYPE_CHANGED`, …) at
   `breaking`/`suspicious`/`info`, and a `--fail-on` gate for CI.
@@ -206,8 +206,7 @@ Graph queries re-scan live bytecode roots per query (no persistent-index acceler
 yet). `callers` is override-aware by default (`--exact` for invoke-owner matching);
 `calls` stays bytecode-exact. Full list in
 [GitHub Issues](https://github.com/MohammadMD1383/jdx/issues). Out-of-scope for v1
-(mappings/remap, remaining resources inspection beyond `jdx services`/`jdx modules`/
-`jdx manifest`/`jdx resources`, …) is the phase-2 backlog, also tracked there.
+(mappings/remap, …) is the phase-2 backlog, also tracked there.
 
 ## Documentation
 

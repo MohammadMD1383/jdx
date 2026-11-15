@@ -1,0 +1,5 @@
+com/example/blob.bin
+  artifact: resources-case.jar
+  size: 4 bytes
+  binary: contents not shown (not UTF-8 text)
+next: jdx resources 'com/example/blob.bin' --in resources-case.jar

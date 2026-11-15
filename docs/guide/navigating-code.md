@@ -123,8 +123,13 @@ $ jdx resources META-INF --coord com.google.code.gson:gson:2.14.0 --limit 5 --no
 ```
 
 Omit the pattern to list every non-class resource. A pattern matches the entry path.
-Versioned copies under `META-INF/versions/` are listed as stored. Contents are never
-dumped — listing only.
+Versioned copies under `META-INF/versions/` are listed as stored. Pass `--cat` to print
+the unique match's text (binary / non-UTF-8 payloads refuse to dump bytes; ambiguous
+matches exit 2 with `path --in artifact` candidates):
+
+```console exec
+$ jdx resources META-INF/MANIFEST.MF --cat --coord com.google.code.gson:gson:2.14.0 --no-jdk
+```
 
 ## Limitations
 

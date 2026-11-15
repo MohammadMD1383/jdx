@@ -4,10 +4,10 @@ import dev.jdx.index.artifact.ArtifactTestJars
 import java.nio.file.Path
 
 /**
- * Crafted resource corpus (issue #25 resource-listing slice): controlled
- * non-class entries for `jdx resources` hit/miss/filter/limit tests,
- * including a versioned `META-INF/versions/` path that must appear as
- * stored (not collapsed).
+ * Crafted resource corpus (issue #25): controlled non-class entries for
+ * `jdx resources` hit/miss/filter/limit/`--cat` tests, including a
+ * versioned `META-INF/versions/` path that must appear as stored (not
+ * collapsed) and a binary blob that `--cat` must refuse to dump.
  */
 internal object ResourcesCaseJars {
 
@@ -24,6 +24,8 @@ internal object ResourcesCaseJars {
                 "com/example/messages.properties" to "hello=world\n".toByteArray(),
                 // Versioned resource must be listed with its full path.
                 "META-INF/versions/11/com/example/messages.properties" to "hello=v11\n".toByteArray(),
+                // Binary payload for --cat refusal (NUL in the probe window).
+                "com/example/blob.bin" to byteArrayOf(0x00, 0x01, 0x02, 0xFF.toByte()),
                 "com/example/Main.class" to byteArrayOf(
                     0xCA.toByte(), 0xFE.toByte(), 0xBA.toByte(), 0xBE.toByte(),
                 ),

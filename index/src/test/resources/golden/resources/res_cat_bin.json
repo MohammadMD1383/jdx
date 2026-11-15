@@ -1,0 +1,1 @@
+{"jdx":1,"ok":true,"command":"resources","query":"blob.bin","result":{"path":"com/example/blob.bin","artifact":"resources-case.jar","sizeBytes":4,"binary":true},"warnings":[],"provenance":[{"artifact":"resources-case.jar","origin":"bytecode","file":"com/example/blob.bin"}]}
