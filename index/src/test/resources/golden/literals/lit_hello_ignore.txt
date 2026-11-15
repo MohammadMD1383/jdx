@@ -1,0 +1,3 @@
+literals matching 'hello world'
+literals-case.jar (1)
+  ldc lit.App#run()  "Hello World"  App.java:8

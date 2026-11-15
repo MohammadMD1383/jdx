@@ -26,7 +26,9 @@ behaviour lives here** (adapters call in, never the reverse). `explicitApi()` is
   line/file). Stripped classes (`-g:none`) yield `line == null` — degrade, don't
   fail. `usages --context N` (issue #10) slices paired sources / `--src` files
   around that line (cap [MAX_SAMPLE_SNIPPET_LINES]); missing sources stay
-  location-only.
+  location-only. `refs/LiteralExtractor` — string `LDC` loads + `String` field
+  `ConstantValue`s for `jdx literals` (issue #86); never throws; empty values
+  skipped; first-wins dedup per `(member, kind, value)`.
 - `store/` — `IndexStore` interface + `sqlite/SqliteIndexStore` (WAL, single global
   `<cache-dir>/index/v1.db`, artifact-scoped rows). No SQL outside the impl package.
 - `workspace/` — TOML workspaces, classpath-order shadowing, `DUPLICATE_FQN`,
@@ -59,6 +61,9 @@ behaviour lives here** (adapters call in, never the reverse). `explicitApi()` is
   params. `callers` is override-aware by default (issue #6: subtypes + declaring
   supertypes, param-key match so covariant bridges join); `--exact` restores
   invoke-owner matching. `calls` stays bytecode-exact (the invoke names one owner).
+  `literals` (issue #86) is live-roots-first like the graph queries: scans `LDC`
+  string loads + `String` field `ConstantValue`s only — no `.properties` / resource
+  scan in this slice.
 - `search --kind all` (default) covers types + packages + modules only; `method`/
   `field` are opt-in (slow path parses every in-scope class). A default-kind miss
   carries `SEARCH_MEMBERS_OPT_IN_HINT` as `ErrorResult.detail` (issue #86) — do not

@@ -63,6 +63,18 @@ capped at 15 lines by default (`--max-lines N` to raise it; the truncation marke
 $ jdx samples 'com.google.gson.JsonParser#parseString(String)' --coord com.google.code.gson:gson:2.14.0
 ```
 
+## String constants
+
+To find *which class holds this English string / resource key* without `unzip | tr | grep`
+(issue #86):
+
+```console exec
+$ jdx literals 'com.google.gson' --coord com.google.code.gson:gson:2.14.0 --limit 5 --no-jdk
+```
+
+Matches bytecode `LDC` loads and `String` field `ConstantValue`s. Resource `.properties`
+files are not scanned — keys that appear as class-file constants are found.
+
 ## Limitations
 
 - Graph queries re-scan the bytecode roots on each query (there is no persistent graph index

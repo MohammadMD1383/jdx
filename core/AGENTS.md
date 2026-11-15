@@ -20,11 +20,11 @@ via `JsonEscape` — reuse it, never a second escaper). `explicitApi()` is on.
 - `resolve/MemberResolver` — inheritance + generic substitution; the highest-value
   algorithm here, heavily commented, no cleverness.
 - `render/` — text + JSON over one result model (`Listing`, `Signatures`, `Body`,
-  `Source`, `Doc`, `Usages`, `Hierarchy`, `Calls`, `Samples`, `Diff`, `Envelope`, `Errors`,
-  `TokenBudget`, `Ansi`, `WarningLines`). Renderers still embed `warning …` lines
-  in `renderText` for unit/golden completeness; adapters peel them to stderr via
-  `WarningLines` (issue #86). `--json` must carry every entity text shows, plus
-  the full uncapped `warnings` array.
+  `Source`, `Doc`, `Usages`, `Hierarchy`, `Calls`, `Samples`, `Literals`, `Diff`,
+  `Envelope`, `Errors`, `TokenBudget`, `Ansi`, `WarningLines`). Renderers still embed
+  `warning …` lines in `renderText` for unit/golden completeness; adapters peel them
+  to stderr via `WarningLines` (issue #86). `--json` must carry every entity text
+  shows, plus the full uncapped `warnings` array.
 - `rpc/RpcProtocol` — v1 wire: NDJSON requests, deterministic key order, responses
   **are** the `--json` envelope (no second shape). `decode` never throws.
 - `paths/JdxPaths` — per-OS cache/config/runtime dirs (D-044; table in

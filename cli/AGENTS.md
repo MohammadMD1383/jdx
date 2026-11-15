@@ -105,7 +105,7 @@ is the CLI surface, pinned by help/parity goldens.)
   (Codex tests additionally pin `$CODEX_HOME` via the `codexHome` ctor arg,
   Copilot tests pin `$COPILOT_HOME` via the `copilotHome` ctor arg).
 - `parity/AdapterParityTest` — the §9 contract: CLI `--json` == MCP == HTTP bytes
-  over all 18 read commands + failure branches + a hostile-property case.
+  over all 19 read commands + failure branches + a hostile-property case.
 - `commands/DiffCommand` is the one query with no `RootsSpec`, no `--jars`/`-w`/`--no-jdk`
   and **no `--no-daemon`**: a diff names its own two artifacts, and a warm daemon holds
   nothing a two-artifact comparison can reuse (nor a way to carry a `--fail-on` verdict

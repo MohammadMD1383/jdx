@@ -113,6 +113,7 @@ class AdapterParityTest {
             ParityCase(DaemonClient.callersRequest("dev.jdx.fixtures.Generics#identity"), roots),
             ParityCase(DaemonClient.callsRequest("dev.jdx.fixtures.Generics#identity(java.lang.Object)"), roots),
             ParityCase(DaemonClient.samplesRequest("dev.jdx.fixtures.Generics#identity"), roots),
+            ParityCase(DaemonClient.literalsRequest("dev.jdx", limit = 5), roots),
             // `diff` is shaped like no other read command: it names its own two
             // artifacts (`query` is the OLD side, `new` the candidate, which is
             // exactly what DiffCommand builds) and resolves no classpath, so
@@ -164,9 +165,9 @@ class AdapterParityTest {
     }
 
     @Test
-    fun `all eighteen read commands answer byte-identical envelopes on every adapter`() {
+    fun `all nineteen read commands answer byte-identical envelopes on every adapter`() {
         val cases = readCases()
-        cases.size shouldBe 18
+        cases.size shouldBe 19
         val session = mcpSession()
         val server = httpServer()
         server.start()
@@ -300,7 +301,7 @@ class AdapterParityTest {
 
     @Test
     fun `parity holds over generated hostile requests`(): Unit = runBlocking {
-        readCommands.size shouldBe 18
+        readCommands.size shouldBe 19
         val session = mcpSession()
         val server = httpServer()
         server.start()

@@ -65,9 +65,12 @@ import dev.jdx.core.render.DEFAULT_SAMPLES_LIMIT
 import dev.jdx.core.render.MAX_SAMPLE_SNIPPET_LINES
 import dev.jdx.core.render.DEFAULT_SEARCH_LIMIT
 import dev.jdx.core.render.DEFAULT_TREE_DEPTH
+import dev.jdx.core.render.DEFAULT_LITERALS_LIMIT
 import dev.jdx.core.render.DEFAULT_USAGES_LIMIT
 import dev.jdx.core.render.ErrorResult
 import dev.jdx.core.render.HierarchyListing
+import dev.jdx.core.render.LiteralHit
+import dev.jdx.core.render.LiteralListing
 import dev.jdx.core.render.LsListing
 import dev.jdx.core.render.LsTypeEntry
 import dev.jdx.core.render.MemberListing
@@ -89,6 +92,7 @@ import dev.jdx.core.render.UsageHit
 import dev.jdx.core.render.UsageListing
 import dev.jdx.core.render.buildArtifactTree
 import dev.jdx.core.render.buildHierarchyListing
+import dev.jdx.core.render.buildLiteralListing
 import dev.jdx.core.render.buildLsListing
 import dev.jdx.core.render.buildSearchListing
 import dev.jdx.core.render.buildSampleListing
@@ -124,6 +128,7 @@ import dev.jdx.index.maven.MavenCoords
 import dev.jdx.index.maven.MavenResolveFn
 import dev.jdx.index.maven.MavenResolver
 import dev.jdx.index.maven.productionMavenResolve
+import dev.jdx.index.refs.LiteralExtractor
 import dev.jdx.index.refs.ReferenceExtractor
 import java.nio.file.FileSystems
 import java.nio.file.Files
@@ -317,6 +322,13 @@ public object JdxService {
 
         /** Ranked usage examples (`samples`) — exit 0. */
         public data class SampleList(public val listing: SampleListing) : ServiceOutcome {
+            override val exitCode: Int = 0
+            override fun renderText(color: Boolean): String = listing.renderText(color)
+            override fun toJson(command: String): String = listing.toJson(command)
+        }
+
+        /** String-constant search (`literals`) — exit 0. */
+        public data class LiteralList(public val listing: LiteralListing) : ServiceOutcome {
             override val exitCode: Int = 0
             override fun renderText(color: Boolean): String = listing.renderText(color)
             override fun toJson(command: String): String = listing.toJson(command)
@@ -4497,6 +4509,168 @@ public object JdxService {
         return runCatching {
             (JvmDescriptor.parse(descriptor) as? JvmDescriptor.Method)?.parameters?.size ?: 0
         }.getOrDefault(0)
+    }
+
+    // -- literals (issue #86) ------------------------------------------------------
+
+    /**
+     * Options for `literals`: how to match the text pattern and how much of the
+     * workspace to cover. [regex] is `--regex` (full Java regex against the
+     * constant); otherwise a case-sensitive substring. [ignoreCase] folds both
+     * sides for substring matches (ignored under `--regex` — put `(?i)` in the
+     * pattern instead). [inArtifact]/[exclude] filter by artifact label.
+     */
+    public data class LiteralOptions(
+        public val regex: Boolean = false,
+        public val ignoreCase: Boolean = false,
+        public val inArtifact: String? = null,
+        public val exclude: String? = null,
+        public val limit: Int = DEFAULT_LITERALS_LIMIT,
+    )
+
+    /**
+     * Answers `literals <text>`: every string constant across the workspace's
+     * bytecode roots whose value matches [rawPattern] (issue #86).
+     *
+     * Live-roots scan: each class's `LDC` string loads and `String` field
+     * `ConstantValue`s are extracted with [LiteralExtractor] and filtered by
+     * the pattern — no persistent index. Empty / blank patterns are usage
+     * errors (exit 3); a valid miss is exit 1 with `no literals matching`.
+     */
+    public fun literals(
+        rawPattern: String,
+        roots: RootsSpec,
+        options: LiteralOptions = LiteralOptions(),
+    ): ServiceOutcome {
+        val pattern = rawPattern.trim()
+        if (pattern.isEmpty()) {
+            return failure(3, rawPattern, "usage error: literals needs a non-empty text pattern")
+        }
+        if (options.limit < 0) {
+            return failure(3, pattern, "usage error: --limit must be >= 0, got ${options.limit}")
+        }
+        if (options.regex && !SymbolSearch.isValidRegex(pattern)) {
+            return failure(3, pattern, "usage error: invalid --regex pattern '$pattern'")
+        }
+        if (roots.jarSpecs.isEmpty() && !roots.includeJdk) {
+            return failure(
+                4,
+                pattern,
+                "no workspace: no --jars given, no workspace selected (-w <name>, " +
+                    "JDX_WORKSPACE, jdx ws use) and --no-jdk set " +
+                    "(pass --jars <path>, select a workspace, or drop --no-jdk)",
+            )
+        }
+        return try {
+            executeLiterals(pattern, roots, options)
+        } catch (e: ArtifactReadException) {
+            failure(5, pattern, e.message ?: "artifact read error")
+        } catch (e: Exception) {
+            failure(6, pattern, "internal error: ${e.javaClass.simpleName}: ${e.message ?: "no detail"}")
+        }
+    }
+
+    /**
+     * Serves `literals`: scans every class in every open root for string
+     * constants matching [pattern]. Unreadable classes warn once each
+     * ([WarningCode.CORRUPT_CLASS]) and are skipped.
+     */
+    private fun executeLiterals(
+        pattern: String,
+        roots: RootsSpec,
+        options: LiteralOptions,
+    ): ServiceOutcome {
+        val opened = openRoots(roots)
+        val warnings = mutableListOf<Warning>()
+        val reported = mutableSetOf<String>()
+        val hits = mutableListOf<LiteralHit>()
+        try {
+            for (open in opened) {
+                for (entry in open.root.classEntryPaths()) {
+                    val fromBinary = entryToBinary(entry)
+                    val label = rootLabel(open, fromBinary)
+                    if (!matchesArtifactFilter(options.inArtifact, label) ||
+                        (options.exclude != null && matchesArtifactFilter(options.exclude, label))
+                    ) {
+                        continue
+                    }
+                    val bytes = try {
+                        open.root.openClass(entry).use { it.readBytes() }
+                    } catch (e: Exception) {
+                        if (reported.add(fromBinary)) {
+                            warnings.add(
+                                Warning(
+                                    code = WarningCode.CORRUPT_CLASS,
+                                    message = "cannot read $fromBinary from ${open.root.displayName}: " +
+                                        "${e.message ?: e.javaClass.simpleName}",
+                                    subject = fromBinary,
+                                ),
+                            )
+                        }
+                        continue
+                    }
+                    for (occurrence in LiteralExtractor.extract(bytes)) {
+                        if (!matchesLiteralValue(pattern, occurrence.value, options)) continue
+                        hits.add(
+                            LiteralHit(
+                                fromRef = canonicalFromRef(
+                                    fromBinary,
+                                    occurrence.fromMember,
+                                    occurrence.fromDescriptor,
+                                ),
+                                artifact = label,
+                                kind = occurrence.kind,
+                                value = occurrence.value,
+                                file = occurrence.sourceFile,
+                                line = occurrence.line,
+                            ),
+                        )
+                    }
+                }
+            }
+        } finally {
+            opened.forEach { it.root.close() }
+        }
+        warnings.sortWith(compareBy({ it.code.name }, { it.subject ?: "" }, { it.message }))
+        if (hits.isEmpty()) {
+            return ServiceOutcome.Failure(
+                ErrorResult.notFound(pattern, detail = "no literals matching '$pattern'"),
+            )
+        }
+        // Deterministic: artifact, from-ref, kind, value (D-007).
+        hits.sortWith(
+            compareBy(
+                { it.artifact },
+                { it.fromRef },
+                { it.kind },
+                { it.value },
+            ),
+        )
+        return ServiceOutcome.LiteralList(
+            buildLiteralListing(
+                query = pattern,
+                hits = hits,
+                limit = options.limit,
+                warnings = warnings,
+            ),
+        )
+    }
+
+    /**
+     * Pattern match for one constant value. `--regex` uses [SymbolSearch];
+     * otherwise a case-sensitive (or `--ignore-case`) substring. Never throws.
+     */
+    private fun matchesLiteralValue(
+        pattern: String,
+        value: String,
+        options: LiteralOptions,
+    ): Boolean {
+        if (options.regex) return SymbolSearch.matchesRegex(pattern, value)
+        return if (options.ignoreCase) {
+            value.contains(pattern, ignoreCase = true)
+        } else {
+            value.contains(pattern)
+        }
     }
 
     /**

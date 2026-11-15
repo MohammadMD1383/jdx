@@ -580,6 +580,25 @@ public object DaemonClient {
         },
     )
 
+    public fun literalsRequest(
+        text: String,
+        regex: Boolean = false,
+        ignoreCase: Boolean = false,
+        inArtifact: String? = null,
+        exclude: String? = null,
+        limit: Int = 50,
+    ): RpcRequest = RpcRequest(
+        command = RpcCommand.LITERALS,
+        query = text,
+        params = buildMap {
+            put("regex", regex.toText())
+            put("ignoreCase", ignoreCase.toText())
+            if (inArtifact != null) put("in", inArtifact)
+            if (exclude != null) put("exclude", exclude)
+            put("limit", limit.toString())
+        },
+    )
+
     private fun Boolean.toText(): String = if (this) "true" else "false"
 }
 
