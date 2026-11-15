@@ -16,6 +16,8 @@ import dev.jdx.cli.defaultRoundTrip
 import dev.jdx.cli.effectiveJson
 import dev.jdx.cli.effectiveNoDaemon
 import dev.jdx.cli.effectiveWorkspace
+import dev.jdx.core.model.AnnotationWhere
+import dev.jdx.core.model.parseAnnotationWhere
 import dev.jdx.core.render.ErrorResult
 import dev.jdx.index.service.JdxService
 import dev.jdx.index.workspace.FileWorkspaceStore
@@ -52,6 +54,8 @@ class UsagesCommand(
             "new shows constructor <init> call sites, throw shows methods declaring " +
             "the type in throws (declaration-level, not ATHROW throw sites), " +
             "annotation shows annotated classes and members; " +
+            "--where key=value (repeatable, requires --kind annotation) filters by " +
+            "annotation element values (issue #26 — e.g. --where forRemoval=true); " +
             "source-dir hits are textual mentions (ref only), so call|read|write|new|throw|annotation " +
             "show bytecode-backed edges alone. " +
             "impl|override land with hierarchy (jdx hierarchy, jdx implementors). " +
@@ -71,6 +75,13 @@ class UsagesCommand(
         "impl", "override", "new", "throw", "annotation",
         ignoreCase = true,
     ).default("all")
+
+    private val where by option(
+        "--where",
+        help = "Annotation value predicate key=value (repeatable; requires --kind annotation). " +
+            "Every clause must match (AND). String values may omit the surrounding quotes " +
+            "(--where since=99 matches since=\"99\").",
+    ).multiple()
 
     private val inArtifact by option(
         "--in",
@@ -163,6 +174,22 @@ class UsagesCommand(
             ReadCommandSupport.finish(failure, "usages", json, noColor, terminate)
             return
         }
+        val whereClauses = mutableListOf<AnnotationWhere>()
+        for (raw in where) {
+            val parsed = parseAnnotationWhere(raw)
+            if (parsed.isFailure) {
+                val failure = JdxService.ServiceOutcome.Failure(
+                    ErrorResult.generic(
+                        ref,
+                        exitCode = 3,
+                        message = parsed.exceptionOrNull()!!.message!!,
+                    ),
+                )
+                ReadCommandSupport.finish(failure, "usages", json, noColor, terminate)
+                return
+            }
+            whereClauses.add(parsed.getOrThrow())
+        }
         if (DaemonClient.serveWarmIfReady(
                 request = DaemonClient.usagesRequest(
                     ref = ref,
@@ -171,6 +198,7 @@ class UsagesCommand(
                     exclude = exclude,
                     limit = limit,
                     context = context,
+                    where = where,
                 ),
                 flagWorkspace = effectiveWorkspace(workspace),
                 roots = WarmRoots(
@@ -213,6 +241,7 @@ class UsagesCommand(
                         exclude = exclude,
                         limit = limit,
                         contextLines = context,
+                        where = whereClauses,
                     ),
                 )
                 ReadCommandSupport.finish(outcome, "usages", json, noColor, terminate)

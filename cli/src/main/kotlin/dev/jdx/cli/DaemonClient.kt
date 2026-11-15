@@ -469,6 +469,7 @@ public object DaemonClient {
         exclude: String? = null,
         limit: Int = 50,
         context: Int = 0,
+        where: List<String> = emptyList(),
     ): RpcRequest = RpcRequest(
         command = RpcCommand.USAGES,
         query = ref,
@@ -478,6 +479,9 @@ public object DaemonClient {
             if (exclude != null) put("exclude", exclude)
             put("limit", limit.toString())
             put("context", context.toString())
+            // Repeatable --where arrives comma-joined on the wire (same shape
+            // as --repo); key=value clauses never contain commas.
+            if (where.isNotEmpty()) put("where", where.joinToString(","))
         },
     )
 

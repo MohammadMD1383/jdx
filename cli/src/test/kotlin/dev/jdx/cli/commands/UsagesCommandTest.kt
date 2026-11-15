@@ -1,6 +1,7 @@
 package dev.jdx.cli.commands
 
 import com.github.ajalt.clikt.core.parse
+import dev.jdx.core.model.AnnotationWhere
 import dev.jdx.core.render.buildUsageListing
 import dev.jdx.index.service.JdxService
 import dev.jdx.index.workspace.InMemoryWorkspaceStore
@@ -101,6 +102,33 @@ class UsagesCommandTest {
             limit = 10,
             contextLines = 3,
         )
+    }
+
+    @Test
+    fun `where clauses reach the service under kind annotation`() {
+        val run = run(
+            listOf(
+                "java.lang.Deprecated",
+                "--kind", "annotation",
+                "--where", "forRemoval=true",
+                "--where", "since=99",
+            ),
+        )
+        run.exit shouldBe 0
+        run.options shouldBe JdxService.UsageOptions(
+            kind = JdxService.UsageKindFilter.ANNOTATION,
+            where = listOf(
+                AnnotationWhere("forRemoval", "true"),
+                AnnotationWhere("since", "99"),
+            ),
+        )
+    }
+
+    @Test
+    fun `malformed where is a usage error`() {
+        val run = run(listOf("java.lang.Deprecated", "--kind", "annotation", "--where", "noEquals"))
+        run.exit shouldBe 3
+        run.output shouldContain "key=value"
     }
 
     @Test

@@ -1,5 +1,6 @@
 package dev.jdx.index.service
 
+import dev.jdx.core.model.AnnotationWhere
 import dev.jdx.index.service.JdxService.RootsSpec
 import dev.jdx.index.service.JdxService.ServiceOutcome
 import dev.jdx.index.service.JdxService.UsageKindFilter
@@ -146,6 +147,60 @@ class UsagesServiceTest {
             "annotation u.Factory",
             "annotation u.Other#work()",
         )
+        // Issue #26: every annotation row carries the rendered @use so agents
+        // see the values that matched without a follow-up.
+        listing.hits.single { it.fromRef == "u.Factory" }.annotation shouldBe "@u.Mark(level=1)"
+        listing.hits.single { it.fromRef == "u.Other#work()" }.annotation shouldBe "@u.Mark(level=2)"
+        textOf(outcome) shouldContain "@u.Mark(level=1)"
+        outcome.toJson("usages") shouldContain "\"annotation\":\"@u.Mark(level=1)\""
+    }
+
+    @Test
+    fun `where filters annotation element values`() {
+        val level1 = JdxService.usages(
+            "u.Mark",
+            caseRoots(),
+            UsageOptions(
+                kind = UsageKindFilter.ANNOTATION,
+                where = listOf(AnnotationWhere("level", "1")),
+            ),
+        )
+        level1.exitCode shouldBe 0
+        usageListOf(level1).hits.map { it.fromRef } shouldBe listOf("u.Factory")
+        textOf(level1) shouldContain "@u.Mark(level=1)"
+        textOf(level1) shouldNotContain "u.Other#work()"
+
+        val level2 = JdxService.usages(
+            "u.Mark",
+            caseRoots(),
+            UsageOptions(
+                kind = UsageKindFilter.ANNOTATION,
+                where = listOf(AnnotationWhere("level", "2")),
+            ),
+        )
+        level2.exitCode shouldBe 0
+        usageListOf(level2).hits.map { it.fromRef } shouldBe listOf("u.Other#work()")
+
+        val miss = JdxService.usages(
+            "u.Mark",
+            caseRoots(),
+            UsageOptions(
+                kind = UsageKindFilter.ANNOTATION,
+                where = listOf(AnnotationWhere("level", "99")),
+            ),
+        )
+        miss.exitCode shouldBe 1
+    }
+
+    @Test
+    fun `where without kind annotation is exit 3`() {
+        val outcome = JdxService.usages(
+            "u.Mark",
+            caseRoots(),
+            UsageOptions(where = listOf(AnnotationWhere("x", "1"))),
+        )
+        outcome.exitCode shouldBe 3
+        textOf(outcome) shouldContain "--where requires --kind annotation"
     }
 
     @Test

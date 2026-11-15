@@ -194,6 +194,29 @@ class RpcDispatchTest {
     }
 
     @Test
+    fun `usages dispatches where predicates for annotation kind`() {
+        val request = req(
+            RpcCommand.USAGES,
+            "u.Mark",
+            "kind" to "annotation",
+            "where" to "level=1",
+        )
+        val direct = JdxService.usages(
+            "u.Mark",
+            fixtureRoots(),
+            UsageOptions(
+                kind = JdxService.UsageKindFilter.ANNOTATION,
+                where = listOf(dev.jdx.core.model.AnnotationWhere("level", "1")),
+            ),
+        )
+        viaWire(request) shouldBe direct.toJson("usages")
+        direct.exitCode shouldBe 0
+        direct.renderText(false) shouldContain "u.Factory"
+        direct.renderText(false) shouldContain "@u.Mark(level=1)"
+        direct.renderText(false) shouldNotContain "u.Other#work()"
+    }
+
+    @Test
     fun `hierarchy dispatches both directions`() {
         val request = req(RpcCommand.HIERARCHY, "h.Middle", "direct" to "true")
         val direct = JdxService.hierarchy(

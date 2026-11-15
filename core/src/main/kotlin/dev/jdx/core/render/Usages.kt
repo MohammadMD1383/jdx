@@ -27,6 +27,10 @@ public const val DEFAULT_USAGES_LIMIT: Int = 50
  * (issue #10). Absent when context is off, the class was stripped, or paired
  * sources are missing — degrade, don't fail (same as [SampleHit]). Cap is
  * [MAX_SAMPLE_SNIPPET_LINES] at render time.
+ *
+ * [annotation] is the rendered `@Fqn(k=v, …)` use for `--kind annotation`
+ * rows (issue #26); null for every other edge kind. Text appends it after
+ * the location; JSON carries it when set so the envelope stays complete.
  */
 public data class UsageHit(
     public val fromRef: String,
@@ -36,6 +40,7 @@ public data class UsageHit(
     public val file: String? = null,
     public val line: Int? = null,
     public val snippet: SampleSnippet? = null,
+    public val annotation: String? = null,
 ) {
     /** `File.java:42` when both [file] and [line] are known; otherwise `null`. */
     public fun location(): String? =
@@ -45,6 +50,7 @@ public data class UsageHit(
     public fun textLine(): String = buildString {
         append("  ").append(kind).append(" ").append(fromRef)
         location()?.let { append("  ").append(it) }
+        annotation?.let { append("  ").append(it) }
     }
 
     /**
@@ -57,6 +63,7 @@ public data class UsageHit(
         return buildString {
             append("  ").append(kind).append(" ").append(fromRef)
             location()?.let { append("  ").append(it) }
+            annotation?.let { append("  ").append(it) }
             append(" -> ").append(suffix)
         }
     }
@@ -85,6 +92,7 @@ public data class UsageHit(
         if (file != null) append(",\"file\":").append(JsonEscape.quote(file))
         if (line != null) append(",\"line\":").append(line)
         snippet?.let { append(",\"snippet\":").append(it.toJson(maxSnippetLines)) }
+        if (annotation != null) append(",\"annotation\":").append(JsonEscape.quote(annotation))
         append("}")
     }
 }
