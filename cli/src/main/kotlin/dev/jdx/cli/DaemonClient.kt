@@ -644,6 +644,7 @@ public object DaemonClient {
         inArtifact: String? = null,
         exclude: String? = null,
         limit: Int = 50,
+        entries: Boolean = false,
     ): RpcRequest = RpcRequest(
         command = RpcCommand.MANIFEST,
         query = pattern.orEmpty(),
@@ -653,6 +654,7 @@ public object DaemonClient {
             if (inArtifact != null) put("in", inArtifact)
             if (exclude != null) put("exclude", exclude)
             put("limit", limit.toString())
+            if (entries) put("entries", "true")
         },
     )
 

@@ -394,13 +394,19 @@ public val ALL_MCP_TOOLS: List<McpToolDefinition> = listOf(
     ),
     McpToolDefinition(
         command = RpcCommand.MANIFEST,
-        description = "List META-INF/MANIFEST.MF main attributes across the workspace jars. " +
-            "Omit query to list every attribute; with a query, match the attribute name or " +
-            "value. Does not list per-entry (JarEntry) attributes or extract arbitrary " +
-            "resources (use jdx_resources for paths).",
+        description = "List META-INF/MANIFEST.MF attributes across the workspace jars. " +
+            "Default: main-section attributes. Set entries=true for per-entry (JarEntry) " +
+            "attributes instead. Omit query to list every attribute in that section; with " +
+            "a query, match the attribute name or value (and entry path when entries=true). " +
+            "Does not extract arbitrary resource contents (use jdx_resources for paths).",
         params = listOf(
             optionalQueryParam(),
             workspaceParam(),
+            McpParam(
+                name = "entries",
+                kind = McpParamKind.BOOLEAN,
+                description = "List per-entry (JarEntry) attributes instead of main-section attributes.",
+            ),
             McpParam(name = "regex", kind = McpParamKind.BOOLEAN, description = "Treat query as a Java regex."),
             McpParam(
                 name = "ignoreCase", kind = McpParamKind.BOOLEAN,

@@ -51,4 +51,48 @@ class ManifestEntriesTest {
         val attrs = ManifestEntries.parseMainAttributes(bytes).toMap()
         attrs["Long-Name"] shouldBe "firstsecond"
     }
+
+    @Test
+    fun `parseEntryAttributes returns sorted entry name value rows`() {
+        val bytes = """
+            Manifest-Version: 1.0
+            Main-Class: com.foo.Main
+
+            Name: com/foo/Bar.class
+            SHA-256-Digest: aaa
+            Content-Type: application/java
+
+            Name: META-INF/services/com.foo.Spi
+            SHA-256-Digest: bbb
+
+        """.trimIndent().replace("\n", "\r\n").toByteArray()
+        ManifestEntries.parseEntryAttributes(bytes) shouldBe listOf(
+            ManifestEntryAttribute("META-INF/services/com.foo.Spi", "SHA-256-Digest", "bbb"),
+            ManifestEntryAttribute("com/foo/Bar.class", "Content-Type", "application/java"),
+            ManifestEntryAttribute("com/foo/Bar.class", "SHA-256-Digest", "aaa"),
+        )
+    }
+
+    @Test
+    fun `parseEntryAttributes degrades on empty or corrupt bytes`() {
+        ManifestEntries.parseEntryAttributes(byteArrayOf()) shouldBe emptyList()
+        ManifestEntries.parseEntryAttributes(byteArrayOf(0x00, 0x01, 0x02)) shouldBe emptyList()
+    }
+
+    @Test
+    fun `parseEntryAttributes skips empty sections and ignores main attrs`() {
+        val bytes = """
+            Manifest-Version: 1.0
+            Main-Class: com.foo.Main
+
+            Name: empty/section.class
+
+            Name: com/foo/Bar.class
+            SHA-256-Digest: aaa
+
+        """.trimIndent().replace("\n", "\r\n").toByteArray()
+        ManifestEntries.parseEntryAttributes(bytes) shouldBe listOf(
+            ManifestEntryAttribute("com/foo/Bar.class", "SHA-256-Digest", "aaa"),
+        )
+    }
 }

@@ -5054,7 +5054,8 @@ public object JdxService {
 
     /**
      * Options for `manifest`: how to match the optional pattern and how much of
-     * the workspace to cover. An empty pattern lists every main attribute.
+     * the workspace to cover. An empty pattern lists every attribute in the
+     * selected section (main by default; per-entry with [entries]).
      */
     public data class ManifestOptions(
         public val regex: Boolean = false,
@@ -5062,17 +5063,21 @@ public object JdxService {
         public val inArtifact: String? = null,
         public val exclude: String? = null,
         public val limit: Int = DEFAULT_MANIFEST_LIMIT,
+        /** When true, list per-entry (JarEntry) attributes instead of main. */
+        public val entries: Boolean = false,
     )
 
     /**
-     * Answers `manifest [pattern]`: every base `META-INF/MANIFEST.MF` main
-     * attribute across the workspace's binary roots (issue #25 manifest slice).
+     * Answers `manifest [pattern]`: every base `META-INF/MANIFEST.MF`
+     * attribute across the workspace's binary roots (issue #25).
      *
-     * Live-roots scan — no persistent index, no class load. An empty / blank
-     * [rawPattern] lists every attribute; a non-empty pattern matches the
-     * attribute name **or** value (substring by default). A valid miss is
-     * exit 1. Per-entry (JarEntry) attributes and arbitrary resource
-     * extraction remain later slices.
+     * Live-roots scan — no persistent index, no class load. Default lists
+     * **main** attributes; `--entries` switches to per-entry (JarEntry)
+     * sections (`Name: path` + digests / Content-Type / …). An empty / blank
+     * [rawPattern] lists every attribute in that section; a non-empty pattern
+     * matches the attribute name **or** value (and, with `--entries`, the
+     * entry path) — substring by default. A valid miss is exit 1. Arbitrary
+     * resource content extraction remains a later slice.
      */
     public fun manifest(
         rawPattern: String?,
@@ -5111,8 +5116,8 @@ public object JdxService {
 
     /**
      * Serves `manifest`: walks every open root's [ArtifactRoot.manifestPaths],
-     * parses main attributes, and filters by [pattern]. Unreadable /
-     * corrupt manifests are skipped (degrade, don't fail).
+     * parses main or per-entry attributes, and filters by [pattern].
+     * Unreadable / corrupt manifests are skipped (degrade, don't fail).
      */
     private fun executeManifest(
         pattern: String,
@@ -5129,25 +5134,49 @@ public object JdxService {
                 ) {
                     continue
                 }
-                for (entry in open.root.manifestPaths()) {
+                for (manifestPath in open.root.manifestPaths()) {
                     val bytes = try {
-                        open.root.openManifest(entry).use { it.readBytes() }
+                        open.root.openManifest(manifestPath).use { it.readBytes() }
                     } catch (_: Exception) {
                         continue
                     }
-                    for ((name, value) in ManifestEntries.parseMainAttributes(bytes)) {
-                        if (pattern.isNotEmpty() &&
-                            !matchesManifestPattern(pattern, name, value, options)
-                        ) {
-                            continue
+                    if (options.entries) {
+                        for (row in ManifestEntries.parseEntryAttributes(bytes)) {
+                            if (pattern.isNotEmpty() &&
+                                !matchesManifestPattern(
+                                    pattern,
+                                    row.name,
+                                    row.value,
+                                    options,
+                                    entry = row.entry,
+                                )
+                            ) {
+                                continue
+                            }
+                            hits.add(
+                                ManifestHit(
+                                    name = row.name,
+                                    value = row.value,
+                                    artifact = label,
+                                    entry = row.entry,
+                                ),
+                            )
                         }
-                        hits.add(
-                            ManifestHit(
-                                name = name,
-                                value = value,
-                                artifact = label,
-                            ),
-                        )
+                    } else {
+                        for ((name, value) in ManifestEntries.parseMainAttributes(bytes)) {
+                            if (pattern.isNotEmpty() &&
+                                !matchesManifestPattern(pattern, name, value, options)
+                            ) {
+                                continue
+                            }
+                            hits.add(
+                                ManifestHit(
+                                    name = name,
+                                    value = value,
+                                    artifact = label,
+                                ),
+                            )
+                        }
                     }
                 }
             }
@@ -5162,8 +5191,8 @@ public object JdxService {
             }
             return ServiceOutcome.Failure(ErrorResult.notFound(pattern, detail = detail))
         }
-        // Deterministic: artifact, name (D-007).
-        hits.sortWith(compareBy({ it.artifact }, { it.name }))
+        // Deterministic: artifact, entry (nulls first), name (D-007).
+        hits.sortWith(compareBy({ it.artifact }, { it.entry ?: "" }, { it.name }))
         return ServiceOutcome.ManifestList(
             buildManifestListing(
                 query = pattern,
@@ -5175,16 +5204,19 @@ public object JdxService {
 
     /**
      * Pattern match for one attribute: hits when [pattern] matches the
-     * attribute name **or** value. Never throws.
+     * attribute name **or** value (and optionally the [entry] path). Never
+     * throws.
      */
     private fun matchesManifestPattern(
         pattern: String,
         name: String,
         value: String,
         options: ManifestOptions,
+        entry: String? = null,
     ): Boolean =
         matchesManifestText(pattern, name, options) ||
-            matchesManifestText(pattern, value, options)
+            matchesManifestText(pattern, value, options) ||
+            (entry != null && matchesManifestText(pattern, entry, options))
 
     private fun matchesManifestText(
         pattern: String,
@@ -5220,7 +5252,8 @@ public object JdxService {
      * Live-roots scan — no persistent index, no class load, no content dump.
      * An empty / blank [rawPattern] lists every resource; a non-empty pattern
      * matches the entry path (substring by default). A valid miss is exit 1.
-     * Content extraction and per-entry manifest attributes remain later slices.
+     * Content extraction remains a later slice of issue #25 (per-entry
+     * manifest attributes live on `jdx manifest --entries`).
      * Versioned paths under `META-INF/versions/` are listed as stored.
      */
     public fun resources(

@@ -20,11 +20,21 @@ internal object ManifestCaseJars {
                     Main-Class: com.example.Main
                     Multi-Release: true
 
+                    Name: com/example/Main.class
+                    SHA-256-Digest: abc123digest
+                    Content-Type: application/java-vm
+
+                    Name: META-INF/services/com.example.Spi
+                    SHA-256-Digest: def456digest
+
                 """.trimIndent().replace("\n", "\r\n").toByteArray(),
                 // Versioned copy must be ignored in this slice.
                 "META-INF/versions/11/META-INF/MANIFEST.MF" to """
                     Manifest-Version: 1.0
                     Versioned-Only: yes
+
+                    Name: com/example/Versioned.class
+                    SHA-256-Digest: versioned-only
 
                 """.trimIndent().replace("\n", "\r\n").toByteArray(),
                 "com/example/Main.class" to byteArrayOf(

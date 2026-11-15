@@ -1,0 +1,1 @@
+{"jdx":1,"ok":true,"command":"manifest","query":"Main.class","result":{"pattern":"Main.class","attributes":[{"name":"Content-Type","value":"application/java-vm","artifact":"manifest-case.jar","entry":"com/example/Main.class"},{"name":"SHA-256-Digest","value":"abc123digest","artifact":"manifest-case.jar","entry":"com/example/Main.class"}]},"warnings":[],"provenance":[]}

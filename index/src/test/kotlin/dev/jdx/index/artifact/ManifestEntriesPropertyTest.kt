@@ -48,6 +48,34 @@ class ManifestEntriesPropertyTest {
         checkAll(60, Arb.list(Arb.string(0..64), 0..4)) { chunks ->
             val bytes = chunks.joinToString("").toByteArray()
             ManifestEntries.parseMainAttributes(bytes) // must not throw
+            ManifestEntries.parseEntryAttributes(bytes) // must not throw
+        }
+    }
+
+    @Test
+    fun `parseEntryAttributes never throws and returns sorted rows`(): Unit = runBlocking {
+        val arbSegment = Arb.string(1..8, Codepoint.az())
+        val arbEntry = Arb.bind(arbSegment, arbSegment) { a, b -> "$a/$b.class" }
+        val arbName = Arb.string(1..12, Codepoint.az()).map { it.replaceFirstChar(Char::uppercase) }
+        val arbValue = Arb.string(0..16, Codepoint.az())
+        val arbRow = Arb.bind(arbEntry, arbName, arbValue) { e, n, v -> Triple(e, n, v) }
+        checkAll(60, Arb.list(arbRow, 0..6)) { rows ->
+            val unique = rows.distinctBy { (e, n, _) -> e.lowercase() to n.lowercase() }
+            val byEntry = unique.groupBy { it.first }
+            val bytes = buildString {
+                append("Manifest-Version: 1.0\r\n\r\n")
+                for ((entry, attrs) in byEntry.toSortedMap()) {
+                    append("Name: ").append(entry).append("\r\n")
+                    for ((_, name, value) in attrs) {
+                        append(name).append(": ").append(value).append("\r\n")
+                    }
+                    append("\r\n")
+                }
+            }.toByteArray()
+            val parsed = ManifestEntries.parseEntryAttributes(bytes)
+            parsed.shouldBeSortedBy { "${it.entry}\u0000${it.name}" }
+            parsed.map { Triple(it.entry, it.name, it.value) }.toSet() shouldBe
+                unique.map { Triple(it.first, it.second, it.third) }.toSet()
         }
     }
 }

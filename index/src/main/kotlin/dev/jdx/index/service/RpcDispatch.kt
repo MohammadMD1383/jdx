@@ -107,8 +107,9 @@ import dev.jdx.index.workspace.WorkspaceStore
  *   `ignoreCase`, `in`, `exclude`, `limit` (issue #25).
  * - `modules`: optional query (empty = every module-info), `regex`,
  *   `ignoreCase`, `in`, `exclude`, `limit` (issue #25 module-info slice).
- * - `manifest`: optional query (empty = every main attribute), `regex`,
- *   `ignoreCase`, `in`, `exclude`, `limit` (issue #25 manifest slice).
+ * - `manifest`: optional query (empty = every attribute in section), `entries`,
+ *   `regex`, `ignoreCase`, `in`, `exclude`, `limit` (issue #25; `entries=true`
+ *   selects per-entry JarEntry attributes).
  * - `resources`: optional query (empty = every non-class path), `regex`,
  *   `ignoreCase`, `in`, `exclude`, `limit` (issue #25 resource-listing slice).
  * - `diff`: the query is the *old* artifact and the required `new` param the new
@@ -312,6 +313,7 @@ public fun JdxService.dispatch(request: RpcRequest, roots: RootsSpec): ServiceOu
                 inArtifact = scope.params["in"],
                 exclude = scope.params["exclude"],
                 limit = scope.int("limit", DEFAULT_MANIFEST_LIMIT) ?: return scope.failure(),
+                entries = scope.bool("entries"),
             ),
         )
         RpcCommand.RESOURCES -> resources(

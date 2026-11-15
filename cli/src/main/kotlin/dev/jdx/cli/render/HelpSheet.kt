@@ -40,7 +40,7 @@ public val HELP_ROWS: List<HelpRow> = listOf(
     HelpRow("literals <text>", "Search string constants (LDC / ConstantValue)", "jdx literals 'plugin.update'"),
     HelpRow("services [pattern]", "META-INF/services SPI providers", "jdx services java.sql.Driver"),
     HelpRow("modules [pattern]", "JPMS module-info (requires/exports/opens/…)", "jdx modules java.sql"),
-    HelpRow("manifest [pattern]", "META-INF/MANIFEST.MF main attributes", "jdx manifest Multi-Release"),
+    HelpRow("manifest [pattern]", "META-INF/MANIFEST.MF attributes (--entries for JarEntry)", "jdx manifest Multi-Release"),
     HelpRow("resources [pattern]", "non-class resource paths (listing only)", "jdx resources META-INF"),
     HelpRow("diff <old> <new>", "Public-API diff + binary-compat warnings (upgrades)", "jdx diff gson-2.11.0.jar gson-2.14.0.jar --fail-on breaking"),
     HelpRow("version", "Print the jdx version", "jdx version"),

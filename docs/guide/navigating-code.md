@@ -110,7 +110,8 @@ $ jdx manifest Multi-Release --coord com.google.code.gson:gson:2.14.0 --no-jdk
 ```
 
 Omit the pattern to list every main attribute. A pattern matches the attribute name or
-value. Per-entry (JarEntry) attributes are not listed in this slice.
+value. Pass `--entries` to list per-entry (JarEntry) attributes instead (`Name:`
+sections — digests, Content-Type, …); the pattern then also matches the entry path.
 
 ## Resource paths
 

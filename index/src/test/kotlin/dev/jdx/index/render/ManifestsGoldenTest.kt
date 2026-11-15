@@ -38,6 +38,8 @@ class ManifestsGoldenTest {
             capture("mf_all", null)
             capture("mf_limit2", null, ManifestOptions(limit = 2))
             capture("mf_value", "CaseLib")
+            capture("mf_entries", null, ManifestOptions(entries = true))
+            capture("mf_entries_path", "Main.class", ManifestOptions(entries = true))
         }
         GoldenFiles.verifyAll(goldenDir, contents)
     }
