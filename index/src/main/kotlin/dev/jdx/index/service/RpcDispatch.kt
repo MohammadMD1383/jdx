@@ -11,6 +11,7 @@ import dev.jdx.core.render.DEFAULT_DIFF_LIMIT
 import dev.jdx.core.render.DEFAULT_DOC_MAX_LINES
 import dev.jdx.core.render.DEFAULT_HIERARCHY_LIMIT
 import dev.jdx.core.render.DEFAULT_MEMBER_LIMIT
+import dev.jdx.core.render.DEFAULT_LITERALS_LIMIT
 import dev.jdx.core.render.DEFAULT_SAMPLES_LIMIT
 import dev.jdx.core.render.MAX_SAMPLE_SNIPPET_LINES
 import dev.jdx.core.render.DEFAULT_SEARCH_LIMIT
@@ -34,6 +35,7 @@ import dev.jdx.index.service.JdxService.DiffOptions
 import dev.jdx.index.service.JdxService.DocOptions
 import dev.jdx.index.service.JdxService.HierarchyOptions
 import dev.jdx.index.service.JdxService.KindFilter
+import dev.jdx.index.service.JdxService.LiteralOptions
 import dev.jdx.index.service.JdxService.MemberFilters
 import dev.jdx.index.service.JdxService.MemberView
 import dev.jdx.index.service.JdxService.RootsSpec
@@ -92,6 +94,7 @@ import dev.jdx.index.workspace.WorkspaceStore
  * - `callers`: `depth`, `in`, `exclude`, `limit`, `exact`.
  * - `calls`: `depth`, `in`, `exclude`, `externalOnly`, `limit`.
  * - `samples`: `limit`, `in`, `exclude`, `preferSources`, `maxLines`.
+ * - `literals`: `regex`, `ignoreCase`, `in`, `exclude`, `limit` (issue #86).
  * - `diff`: the query is the *old* artifact and the required `new` param the new
  *   one (a diff has two subjects; the wire has one `query` field, T-040), plus
  *   `fetch`, `repo` (comma-separated `--repo` mirrors), `visibility`
@@ -253,6 +256,16 @@ public fun JdxService.dispatch(request: RpcRequest, roots: RootsSpec): ServiceOu
                 exclude = scope.params["exclude"],
                 preferSources = scope.bool("preferSources"),
                 maxLines = scope.int("maxLines", MAX_SAMPLE_SNIPPET_LINES) ?: return scope.failure(),
+            ),
+        )
+        RpcCommand.LITERALS -> literals(
+            scope.query, roots,
+            LiteralOptions(
+                regex = scope.bool("regex"),
+                ignoreCase = scope.bool("ignoreCase"),
+                inArtifact = scope.params["in"],
+                exclude = scope.params["exclude"],
+                limit = scope.int("limit", DEFAULT_LITERALS_LIMIT) ?: return scope.failure(),
             ),
         )
         RpcCommand.DIFF -> diff(

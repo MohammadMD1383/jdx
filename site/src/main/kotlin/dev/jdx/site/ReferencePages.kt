@@ -269,6 +269,7 @@ class ReferencePages(
             "callers" to "jdx callers 'com.google.gson.Gson#getAdapter(java.lang.Class)' --coord $GSON",
             "calls" to "jdx calls 'com.google.gson.Gson#toJson(java.lang.Object)' --coord $GSON",
             "samples" to "jdx samples 'com.google.gson.JsonParser#parseString(String)' --coord $GSON",
+            "literals" to "jdx literals 'com.google.gson' --coord $GSON --limit 5 --no-jdk",
             "diff" to "jdx diff com.google.code.gson:gson:2.11.0 $GSON --fetch",
             "batch" to "echo '{\"command\":\"show\",\"query\":\"java.util.Map\"}' | jdx batch",
         )
@@ -280,7 +281,8 @@ class ReferencePages(
             val serving = "MCP, daemon, HTTP & batch" to "docs/serving/"
             listOf("show", "members", "outline", "signature", "doc", "body", "source", "search", "resolve", "ls", "tree", "kotlin")
                 .forEach { put(it, reading) }
-            listOf("usages", "hierarchy", "implementors", "callers", "calls", "samples").forEach { put(it, navigating) }
+            listOf("usages", "hierarchy", "implementors", "callers", "calls", "samples", "literals")
+                .forEach { put(it, navigating) }
             listOf("daemon", "serve", "mcp", "batch", "bench").forEach { put(it, serving) }
             listOf("ws", "cache").forEach { put(it, "Classpath & workspaces" to "docs/classpath/") }
             listOf("setup", "help").forEach { put(it, "Use with AI agents" to "docs/ai-agents/") }

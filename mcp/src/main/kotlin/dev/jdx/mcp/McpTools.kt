@@ -337,6 +337,25 @@ public val ALL_MCP_TOOLS: List<McpToolDefinition> = listOf(
         ),
     ),
     McpToolDefinition(
+        command = RpcCommand.LITERALS,
+        description = "Search string constants across bytecode roots (LDC loads and String " +
+            "field ConstantValue). Substring by default; set regex=true for a Java regex. " +
+            "Does not scan resource .properties files.",
+        params = listOf(
+            McpParam(
+                name = "query", kind = McpParamKind.STRING, required = true,
+                description = "Substring (or regex pattern) to find in string constants.",
+            ),
+            workspaceParam(),
+            McpParam(name = "regex", kind = McpParamKind.BOOLEAN, description = "Treat query as a Java regex."),
+            McpParam(
+                name = "ignoreCase", kind = McpParamKind.BOOLEAN,
+                description = "Case-insensitive substring match (ignored under regex; use (?i) there).",
+            ),
+            inParam(), excludeParam(), limitParam(50),
+        ),
+    ),
+    McpToolDefinition(
         command = RpcCommand.DIFF,
         description = "What changed between two artifacts? Public-API diff with named " +
             "binary-compatibility rules (MEMBER_REMOVED, RETURN_TYPE_CHANGED, ...), most " +

@@ -44,6 +44,7 @@ paired; `--engine javap` shows raw bytecode. Decompiled output is always labelle
 | `jdx callers <member>` | Call hierarchy in (`Ctrl+Alt+H`) | `--depth N` (default 1), `--exact` (invoke-owner matching only), `--in` / `--exclude`, `--limit` (50). Methods + constructors only; type/field refs exit 3. Cycle-safe (`…(cycle)`). Override-aware by default (issue #6): includes call sites through overrides and declaring supertypes; constructors/static/private stay exact. |
 | `jdx calls <member>` | Call hierarchy out | `--depth N`, `--external-only` (hide callees in the method's own artifact — dependency view), `--in` / `--exclude`, `--limit` (50). Callees stay bytecode-exact (the invoke names one owner); override expansion is callers-only. |
 | `jdx samples <symbol>` | *(no IDE equivalent)* | `--limit` (default 3), `--max-lines` (default 15; per-snippet code-line cap), `--in` / `--exclude`, `--prefer-sources` (rank snippet-capable callers first). Ranked by exemplariness: non-test before test, non-generated before generated, fuller overloads first. Type refs match calls to any member; field refs exit 3. |
+| `jdx literals <text>` | *(no IDE equivalent)* | Search string constants across bytecode (`LDC` loads + `String` field `ConstantValue`). `--regex`, `--ignore-case` (substring only), `--in` / `--exclude`, `--limit` (50). Case-sensitive substring by default. Does **not** scan resource `.properties` files (keys that appear as class-file constants are found). Exits 1 when nothing matches. Issue #86. |
 
 ## Upgrades: API diff
 

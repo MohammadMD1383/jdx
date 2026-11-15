@@ -9,6 +9,7 @@ import org.objectweb.asm.tree.FieldInsnNode
 import org.objectweb.asm.tree.FieldNode
 import org.objectweb.asm.tree.InsnNode
 import org.objectweb.asm.tree.LabelNode
+import org.objectweb.asm.tree.LdcInsnNode
 import org.objectweb.asm.tree.LineNumberNode
 import org.objectweb.asm.tree.LocalVariableNode
 import org.objectweb.asm.tree.MethodInsnNode
@@ -142,6 +143,15 @@ internal class MethodBuilder(private val node: MethodNode) {
         val label = LabelNode(Label())
         node.instructions.add(label)
         node.instructions.add(LineNumberNode(line, label))
+    }
+
+    /**
+     * Emits an `LDC` of [value] (issue #86 literals corpus): string constants
+     * feed [dev.jdx.index.refs.LiteralExtractor]; class `Type` constants feed
+     * [dev.jdx.index.refs.ReferenceExtractor] type edges.
+     */
+    fun ldc(value: Any): Unit {
+        node.instructions.add(LdcInsnNode(value))
     }
 
     /** Attaches a `LocalVariableTable` spanning the emitted code. */

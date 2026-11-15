@@ -433,6 +433,12 @@ class along the way. `callers` is override-aware by default (issue #6: subtypes 
 declaring supertypes; `--exact` restores invoke-owner matching). `calls` stays
 bytecode-exact — an invoke names one owner.
 
+#### `jdx literals <text>`
+Search string constants across bytecode roots (issue #86): every `LDC` string load and
+`String` field `ConstantValue` whose value matches `<text>` (case-sensitive substring by
+default). `--regex` / `--ignore-case` / `--in` / `--exclude` / `--limit`. Does **not** scan
+resource `.properties` files — keys that appear as class-file constants are found.
+
 #### `jdx samples <symbol>`
 Real call sites as usage examples, source-rendered when sources are available, ranked by
 "exemplariness" (prefers non-test, non-generated, short enclosing methods, and call sites
@@ -906,7 +912,7 @@ back. For the stated goal — *an IDE for agents* — this is the highest-levera
 
 Tools exposed (v1): `jdx_show`, `jdx_members`, `jdx_signature`, `jdx_doc`, `jdx_body`,
 `jdx_source`, `jdx_outline`, `jdx_search`, `jdx_resolve`, `jdx_usages`, `jdx_hierarchy`,
-`jdx_callers`, `jdx_calls`, `jdx_samples`, `jdx_workspace`.
+`jdx_callers`, `jdx_calls`, `jdx_samples`, `jdx_literals`, `jdx_workspace`.
 
 The MCP server holds the index in memory for its lifetime — so it is effectively a
 per-session daemon, and repeated queries are instant.
@@ -957,7 +963,7 @@ A **request** is one line of JSON, newline-terminated (`\n`). Keys are in fixed 
 
 - `command` is one of the read-only queries — `show` `members` `outline` `body` `source`
   `signature` `doc` `search` `resolve` `ls` `tree` `usages` `hierarchy` `implementors`
-  `callers` `calls` `samples` — plus `version`, `doctor` and `health`. The state-changing
+  `callers` `calls` `samples` `literals` — plus `version`, `doctor` and `health`. The state-changing
   commands (`ws`, `cache`) are deliberately **not** on the wire in v1: one client of a shared
   daemon must not be able to reconfigure the others.
 - `params` values are text, the same spelling the CLI flags use. Typed clients (MCP schemas,
@@ -1390,6 +1396,9 @@ calls     --depth N --in --exclude --external-only --limit
           [-w …] [--jars …] [--no-jdk] [--json] [--no-color]
 samples   --limit N --max-lines N --prefer-sources
           [-w …] [--jars …] [--no-jdk] [--json] [--no-color]
+literals  <text> [--regex] [--ignore-case] [--in] [--exclude] [--limit]
+          [-w …] [--jars …] [--no-jdk] [--json] [--no-color]
+          (bytecode string constants only — LDC + String ConstantValue; issue #86)
 diff      <old> <new> [--visibility public|all] [--include-synthetic]
           [--severity all|suspicious|breaking] [--fail-on none|breaking|any]
           [--limit N] [--fetch] [--repo] [--json] [--no-color]

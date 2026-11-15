@@ -64,6 +64,11 @@ public enum class RpcCommand(public val wire: String, public val requiresQuery: 
     CALLERS("callers", true),
     CALLS("calls", true),
     SAMPLES("samples", true),
+    /**
+     * String-constant search across bytecode roots (issue #86): `LDC` loads
+     * and field `ConstantValue`s matching a text / regex pattern.
+     */
+    LITERALS("literals", true),
     DIFF("diff", true),
 
     /** Build identity — answered without touching an index. */

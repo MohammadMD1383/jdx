@@ -604,6 +604,20 @@ internal fun defaultSamplesQuery(
     roots: JdxService.RootsSpec,
     options: JdxService.SampleOptions,
 ): JdxService.ServiceOutcome = JdxService.samples(ref, roots, options)
+
+/** Query behind `literals`, injectable so command tests run without IO (issue #86). */
+internal typealias LiteralsQuery = (
+    pattern: String,
+    roots: JdxService.RootsSpec,
+    options: JdxService.LiteralOptions,
+) -> JdxService.ServiceOutcome
+
+internal fun defaultLiteralsQuery(
+    pattern: String,
+    roots: JdxService.RootsSpec,
+    options: JdxService.LiteralOptions,
+): JdxService.ServiceOutcome = JdxService.literals(pattern, roots, options)
+
 internal typealias SearchQuery = (
     pattern: String,
     roots: JdxService.RootsSpec,

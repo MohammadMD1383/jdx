@@ -1,0 +1,1 @@
+{"jdx":1,"ok":true,"command":"literals","query":"marker","result":{"pattern":"marker","literals":[{"from":"lit.Other#work()","artifact":"literals-case.jar","kind":"ldc","value":"other.marker"}]},"warnings":[],"provenance":[]}

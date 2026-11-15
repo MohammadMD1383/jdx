@@ -165,6 +165,8 @@ jdx diff gson-2.11.0.jar gson-2.14.0.jar --fail-on breaking
 - **Javadoc/KDoc**, including documentation inherited from a supertype.
 - **`jdx samples`** — real call sites from the classpath as usage examples. Evidence instead
   of recollection.
+- **`jdx literals`** — search string constants (`LDC` / `ConstantValue`) across a workspace
+  for resource keys, log messages, and markers (issue #86). No more `unzip | tr | grep`.
 - **`jdx diff a.jar b.jar`** — the public-API diff for a dependency upgrade, with every
   difference named as a rule (`MEMBER_REMOVED`, `RETURN_TYPE_CHANGED`, …) at
   `breaking`/`suspicious`/`info`, and a `--fail-on` gate for CI.

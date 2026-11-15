@@ -1,0 +1,3 @@
+literals matching 'marker'
+literals-case.jar (1)
+  ldc lit.Other#work()  "other.marker"

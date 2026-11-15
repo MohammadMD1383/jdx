@@ -1,0 +1,1 @@
+{"jdx":1,"ok":true,"command":"literals","query":"hello world","result":{"pattern":"hello world","literals":[{"from":"lit.App#run()","artifact":"literals-case.jar","kind":"ldc","value":"Hello World","file":"App.java","line":8}]},"warnings":[],"provenance":[]}

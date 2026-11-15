@@ -10,6 +10,7 @@ import dev.jdx.index.service.JdxService.BodyOptions
 import dev.jdx.index.service.JdxService.CallOptions
 import dev.jdx.index.service.JdxService.DocOptions
 import dev.jdx.index.service.JdxService.HierarchyOptions
+import dev.jdx.index.service.JdxService.LiteralOptions
 import dev.jdx.index.service.JdxService.MemberFilters
 import dev.jdx.index.service.JdxService.MemberView
 import dev.jdx.index.service.JdxService.RootsSpec
@@ -256,6 +257,22 @@ class RpcDispatchTest {
         viaWire(request) shouldBe direct.toJson("samples")
         direct.exitCode shouldBe 0
         viaWire(req(RpcCommand.SAMPLES, query, "maxLines" to "-1")) shouldContain "--max-lines must be >= 0"
+    }
+
+    @Test
+    fun `literals dispatches with ignore-case and limit`() {
+        val query = "dev.jdx"
+        val request = req(
+            RpcCommand.LITERALS, query,
+            "ignoreCase" to "true", "limit" to "5",
+        )
+        val direct = JdxService.literals(
+            query, fixtureRoots(),
+            LiteralOptions(ignoreCase = true, limit = 5),
+        )
+        viaWire(request) shouldBe direct.toJson("literals")
+        viaWire(req(RpcCommand.LITERALS, "", "limit" to "5")) shouldContain "non-empty text pattern"
+        viaWire(req(RpcCommand.LITERALS, query, "limit" to "-1")) shouldContain "--limit must be >= 0"
     }
 
     // -- param errors: exit 3 naming the param -----------------------------------------
