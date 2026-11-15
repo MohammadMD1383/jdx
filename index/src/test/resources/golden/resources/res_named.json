@@ -1,0 +1,1 @@
+{"jdx":1,"ok":true,"command":"resources","query":"messages.properties","result":{"pattern":"messages.properties","resources":[{"path":"META-INF/versions/11/com/example/messages.properties","artifact":"resources-case.jar"},{"path":"com/example/messages.properties","artifact":"resources-case.jar"}]},"warnings":[],"provenance":[]}

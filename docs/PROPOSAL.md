@@ -460,9 +460,18 @@ package, a `uses`/`provides` service, or a provider class (substring by default)
 manifest across the workspace's binary roots (jars and class dirs; `jrt:/` empty). Omit the
 pattern to list every attribute; with a pattern, match the attribute name **or** value
 (substring by default). `--regex` / `--ignore-case` / `--in` / `--exclude` / `--limit`.
-Does **not** list per-entry (JarEntry) attributes or extract arbitrary resources — those
-remain later slices of the same issue. Versioned copies under `META-INF/versions/` are
-ignored (the JVM reads the jar-root manifest).
+Does **not** list per-entry (JarEntry) attributes or extract resource contents (use
+`jdx resources` for paths). Versioned copies under `META-INF/versions/` are ignored (the
+JVM reads the jar-root manifest).
+
+#### `jdx resources [pattern]`
+Non-class resource path listing (issue #25 resource-listing slice): every non-`.class`
+entry across the workspace's binary roots (jars and class dirs; `jrt:/` empty). Omit the
+pattern to list every resource; with a pattern, match the entry path (substring by
+default). `--regex` / `--ignore-case` / `--in` / `--exclude` / `--limit`. Listing only —
+never dumps content into context. Versioned paths under `META-INF/versions/` are listed
+as stored (not collapsed). Content extraction and per-entry manifest attributes remain
+later slices of the same issue.
 
 #### `jdx samples <symbol>`
 Real call sites as usage examples, source-rendered when sources are available, ranked by
@@ -938,7 +947,7 @@ back. For the stated goal — *an IDE for agents* — this is the highest-levera
 Tools exposed (v1): `jdx_show`, `jdx_members`, `jdx_signature`, `jdx_doc`, `jdx_body`,
 `jdx_source`, `jdx_outline`, `jdx_search`, `jdx_resolve`, `jdx_usages`, `jdx_hierarchy`,
 `jdx_callers`, `jdx_calls`, `jdx_samples`, `jdx_literals`, `jdx_services`, `jdx_modules`,
-`jdx_manifest`, `jdx_workspace`.
+`jdx_manifest`, `jdx_resources`, `jdx_workspace`.
 
 The MCP server holds the index in memory for its lifetime — so it is effectively a
 per-session daemon, and repeated queries are instant.
@@ -989,7 +998,7 @@ A **request** is one line of JSON, newline-terminated (`\n`). Keys are in fixed 
 
 - `command` is one of the read-only queries — `show` `members` `outline` `body` `source`
   `signature` `doc` `search` `resolve` `ls` `tree` `usages` `hierarchy` `implementors`
-  `callers` `calls` `samples` `literals` `services` `modules` `manifest` — plus `version`, `doctor` and
+  `callers` `calls` `samples` `literals` `services` `modules` `manifest` `resources` — plus `version`, `doctor` and
   `health`. The state-changing commands (`ws`, `cache`) are deliberately **not** on the wire
   in v1: one client of a shared daemon must not be able to reconfigure the others.
 - `params` values are text, the same spelling the CLI flags use. Typed clients (MCP schemas,
@@ -1264,9 +1273,10 @@ Explicitly out of v1 scope, recorded so they are not lost:
 - **Mappings / remapping** — Minecraft-style obfuscated jars: read Tiny/SRG/ProGuard mapping
   files so `jdx` can answer in either namespace. High value on this particular machine.
 - **Resources & metadata inspection** — ~~`META-INF/services` SPI listing~~ /
-  ~~`module-info` view~~ / ~~manifest main attributes~~ **partial (issue #25:
-  `jdx services` + `jdx modules` + `jdx manifest`)**; still deferred: per-entry
-  (JarEntry) attributes, resource listing and extraction.
+  ~~`module-info` view~~ / ~~manifest main attributes~~ / ~~resource path
+  listing~~ **partial (issue #25: `jdx services` + `jdx modules` +
+  `jdx manifest` + `jdx resources`)**; still deferred: per-entry (JarEntry)
+  attributes, resource content extraction.
 - **Annotation-driven views** — "show me every `@Deprecated(forRemoval=true)` in this
   dependency", "all Spring `@Bean` factories", "all JUnit `@Test`s".
 - **`--since` / API-level reporting** — which JDK release introduced a member.
@@ -1436,6 +1446,9 @@ modules   [pattern] [--regex] [--ignore-case] [--in] [--exclude] [--limit]
 manifest  [pattern] [--regex] [--ignore-case] [--in] [--exclude] [--limit]
           [-w …] [--jars …] [--no-jdk] [--json] [--no-color]
           (META-INF/MANIFEST.MF main attributes; empty pattern lists all; issue #25)
+resources [pattern] [--regex] [--ignore-case] [--in] [--exclude] [--limit]
+          [-w …] [--jars …] [--no-jdk] [--json] [--no-color]
+          (non-class resource paths; listing only; empty pattern lists all; issue #25)
 diff      <old> <new> [--visibility public|all] [--include-synthetic]
           [--severity all|suspicious|breaking] [--fail-on none|breaking|any]
           [--limit N] [--fetch] [--repo] [--json] [--no-color]

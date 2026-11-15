@@ -1,0 +1,6 @@
+resources
+resources-case.jar (4)
+  META-INF/MANIFEST.MF
+  META-INF/services/com.example.Spi
+  META-INF/versions/11/com/example/messages.properties
+  com/example/messages.properties

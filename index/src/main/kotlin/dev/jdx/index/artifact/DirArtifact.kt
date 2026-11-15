@@ -28,6 +28,9 @@ public class DirArtifact private constructor(
     /** Whether [dir] holds a base `META-INF/MANIFEST.MF` (issue #25 manifest). */
     private val hasManifest: Boolean
 
+    /** Non-class resource paths under [dir] (issue #25 resource-listing). */
+    private val resourceEntries: List<String>
+
     override val displayName: String = dir.fileName?.toString() ?: dir.toString()
 
     override val kind: ArtifactKind = ArtifactKind.CLASS_DIR
@@ -43,6 +46,7 @@ public class DirArtifact private constructor(
         }
         val found = mutableListOf<String>()
         val services = mutableListOf<String>()
+        val resources = mutableListOf<String>()
         var moduleInfo = false
         var manifest = false
         Files.walk(dir).use { walk ->
@@ -51,19 +55,22 @@ public class DirArtifact private constructor(
                 val normal = ZipSafety.normalizeEntryName(relative) ?: return@forEach
                 when {
                     normal == "module-info.class" -> moduleInfo = true
-                    ManifestEntries.isManifestPath(normal) -> manifest = true
                     normal.endsWith(".class") -> found.add(normal)
-                    ServiceEntries.isServicePath(normal) -> services.add(normal)
+                    else -> {
+                        resources.add(normal)
+                        if (ServiceEntries.isServicePath(normal)) services.add(normal)
+                        if (ManifestEntries.isManifestPath(normal)) manifest = true
+                    }
                 }
             }
         }
         ZipSafety.checkEntryCount(
-            found.size + services.size +
-                (if (moduleInfo) 1 else 0) + (if (manifest) 1 else 0),
+            found.size + resources.size + (if (moduleInfo) 1 else 0),
             displayName,
         )
         entries = found.sorted()
         serviceEntries = services.sorted()
+        resourceEntries = resources.sorted()
         hasModuleInfo = moduleInfo
         hasManifest = manifest
     }
@@ -104,6 +111,8 @@ public class DirArtifact private constructor(
 
     override fun manifestPaths(): List<String> =
         if (hasManifest) listOf(ManifestEntries.PATH) else emptyList()
+
+    override fun resourceEntryPaths(): List<String> = resourceEntries
 
     override fun openManifest(path: String): InputStream {
         val normal = ZipSafety.normalizeEntryName(path)

@@ -43,9 +43,10 @@ public const val REQUEST_TERMINATOR: Char = '\n'
  * daemon serving several clients cannot have one of them reconfigure the others.
  *
  * [requiresQuery] says whether the command needs a subject at all — `ls`/`tree` default their
- * glob to `*`, `services`/`modules`/`manifest` list every registration/descriptor/attribute
- * when empty (issue #25), and `version`/`doctor`/`health` take none. It lives here so all
- * four adapters validate identically instead of each re-deriving it
+ * glob to `*`, `services`/`modules`/`manifest`/`resources` list every
+ * registration/descriptor/attribute/path when empty (issue #25), and
+ * `version`/`doctor`/`health` take none. It lives here so all four adapters
+ * validate identically instead of each re-deriving it
  * (CONTRIBUTING.md: no logic in adapters).
  */
 public enum class RpcCommand(public val wire: String, public val requiresQuery: Boolean) {
@@ -88,6 +89,12 @@ public enum class RpcCommand(public val wire: String, public val requiresQuery: 
      * when the query is empty. Per-entry attributes are out of this slice.
      */
     MANIFEST("manifest", false),
+    /**
+     * Non-class resource path listing (issue #25 resource-listing slice):
+     * entry paths per jar (or class dir), or every resource when the query
+     * is empty. Listing only — no content extraction in this slice.
+     */
+    RESOURCES("resources", false),
     DIFF("diff", true),
 
     /** Build identity — answered without touching an index. */

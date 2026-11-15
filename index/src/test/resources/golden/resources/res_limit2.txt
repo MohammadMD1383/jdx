@@ -1,0 +1,5 @@
+resources
+resources-case.jar (2)
+  META-INF/MANIFEST.MF
+  META-INF/services/com.example.Spi
+2 of 4 resources shown (--limit 4 to see more)

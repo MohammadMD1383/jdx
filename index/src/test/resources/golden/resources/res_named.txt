@@ -1,0 +1,4 @@
+resources matching 'messages.properties'
+resources-case.jar (2)
+  META-INF/versions/11/com/example/messages.properties
+  com/example/messages.properties

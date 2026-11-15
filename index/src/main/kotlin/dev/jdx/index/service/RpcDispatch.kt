@@ -15,6 +15,7 @@ import dev.jdx.core.render.DEFAULT_LITERALS_LIMIT
 import dev.jdx.core.render.DEFAULT_SAMPLES_LIMIT
 import dev.jdx.core.render.DEFAULT_MANIFEST_LIMIT
 import dev.jdx.core.render.DEFAULT_MODULES_LIMIT
+import dev.jdx.core.render.DEFAULT_RESOURCES_LIMIT
 import dev.jdx.core.render.DEFAULT_SERVICES_LIMIT
 import dev.jdx.core.render.MAX_SAMPLE_SNIPPET_LINES
 import dev.jdx.core.render.DEFAULT_SEARCH_LIMIT
@@ -43,6 +44,7 @@ import dev.jdx.index.service.JdxService.ManifestOptions
 import dev.jdx.index.service.JdxService.MemberFilters
 import dev.jdx.index.service.JdxService.MemberView
 import dev.jdx.index.service.JdxService.ModuleOptions
+import dev.jdx.index.service.JdxService.ResourceOptions
 import dev.jdx.index.service.JdxService.ServiceOptions
 import dev.jdx.index.service.JdxService.RootsSpec
 import dev.jdx.index.service.JdxService.SampleOptions
@@ -107,6 +109,8 @@ import dev.jdx.index.workspace.WorkspaceStore
  *   `ignoreCase`, `in`, `exclude`, `limit` (issue #25 module-info slice).
  * - `manifest`: optional query (empty = every main attribute), `regex`,
  *   `ignoreCase`, `in`, `exclude`, `limit` (issue #25 manifest slice).
+ * - `resources`: optional query (empty = every non-class path), `regex`,
+ *   `ignoreCase`, `in`, `exclude`, `limit` (issue #25 resource-listing slice).
  * - `diff`: the query is the *old* artifact and the required `new` param the new
  *   one (a diff has two subjects; the wire has one `query` field, T-040), plus
  *   `fetch`, `repo` (comma-separated `--repo` mirrors), `visibility`
@@ -308,6 +312,16 @@ public fun JdxService.dispatch(request: RpcRequest, roots: RootsSpec): ServiceOu
                 inArtifact = scope.params["in"],
                 exclude = scope.params["exclude"],
                 limit = scope.int("limit", DEFAULT_MANIFEST_LIMIT) ?: return scope.failure(),
+            ),
+        )
+        RpcCommand.RESOURCES -> resources(
+            scope.query.ifEmpty { null }, roots,
+            ResourceOptions(
+                regex = scope.bool("regex"),
+                ignoreCase = scope.bool("ignoreCase"),
+                inArtifact = scope.params["in"],
+                exclude = scope.params["exclude"],
+                limit = scope.int("limit", DEFAULT_RESOURCES_LIMIT) ?: return scope.failure(),
             ),
         )
         RpcCommand.DIFF -> diff(

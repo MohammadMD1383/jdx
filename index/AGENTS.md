@@ -18,11 +18,15 @@ behaviour lives here** (adapters call in, never the reverse). `explicitApi()` is
   parameter names live there). Rejects class files newer than the *running* JDK.
 -   `artifact/` — `ArtifactLoader` (jars, dirs, `jrt:/`),   `ZipSafety` (traversal +
   zip-bomb caps), `SourcesPairing` (5 pairing rules), `MultiRelease` (warn, don't
-  resolve variants), `ServiceEntries` (issue #25: base `META-INF/services` paths
-  + ServiceLoader file grammar), content-hash artifact identity. Dedup identical
-  resolved roots before querying (same file via glob + explicit path must not
-  double-scan). `ArtifactRoot.serviceEntryPaths` / `openResource` list and read
-  those SPI files (class-scan deliberately drops bare `META-INF/`).
+  resolve variants),   `ServiceEntries` (issue #25: base `META-INF/services` paths
+  + ServiceLoader file grammar), `ResourceEntries` (issue #25: non-class
+  resource path predicate; versioned `META-INF/versions/` listed as stored),
+  content-hash artifact identity. Dedup identical resolved roots before querying
+  (same file via glob + explicit path must not double-scan).
+  `ArtifactRoot.serviceEntryPaths` / `openResource` list and read those SPI
+  files (class-scan deliberately drops bare `META-INF/`).
+  `ArtifactRoot.resourceEntryPaths` lists every non-`.class` entry (listing
+  only — no content extraction in this slice).
   `ArtifactRoot.moduleInfoPaths` / `openModuleInfo` list and read
   `module-info.class` (jar/dir root + every `jrt:/` module; multi-release
   selection for jars). `asm/ModuleInfoReader` parses the Module attribute.
@@ -76,7 +80,10 @@ behaviour lives here** (adapters call in, never the reverse). `explicitApi()` is
   class dir / every `jrt:/` module). `manifest` (issue #25 manifest) is
   live-roots-first over base `META-INF/MANIFEST.MF` main attributes (jar +
   class dir; `jrt:/` empty); versioned copies and per-entry attributes are out
-  of that slice. Arbitrary resource listing/extraction remain deferred.
+  of that slice. `resources` (issue #25 resource-listing) is live-roots-first
+  over every non-`.class` entry (jar + class dir; `jrt:/` empty), including
+  versioned `META-INF/versions/` paths as stored; listing only — content
+  extraction and per-entry attributes remain deferred.
 - `search --kind all` (default) covers types + packages + modules only; `method`/
   `field` are opt-in (slow path parses every in-scope class). A default-kind miss
   carries `SEARCH_MEMBERS_OPT_IN_HINT` as `ErrorResult.detail` (issue #86) — do not

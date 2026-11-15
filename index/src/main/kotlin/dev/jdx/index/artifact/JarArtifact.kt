@@ -48,6 +48,12 @@ public class JarArtifact private constructor(
      */
     private val hasManifest: Boolean
 
+    /**
+     * Every non-class resource path in this jar (issue #25 resource-listing
+     * slice), including versioned `META-INF/versions/…` copies as stored.
+     */
+    private val resourceEntries: List<String>
+
     override val displayName: String = jarPath.fileName.toString()
 
     override val kind: ArtifactKind = ArtifactKind.BINARY_JAR
@@ -96,6 +102,7 @@ public class JarArtifact private constructor(
             .associateWith { it }
         moduleInfoEntry = resolved["module-info.class"]
         hasManifest = files.any { ManifestEntries.isManifestPath(it) }
+        resourceEntries = files.filter { ResourceEntries.isResourcePath(it) }.sorted()
         warnings = buildList {
             if (MultiRelease.hasVersionedSelection(resolved)) {
                 add(
@@ -162,6 +169,8 @@ public class JarArtifact private constructor(
 
     override fun manifestPaths(): List<String> =
         if (hasManifest) listOf(ManifestEntries.PATH) else emptyList()
+
+    override fun resourceEntryPaths(): List<String> = resourceEntries
 
     override fun openManifest(path: String): InputStream {
         val normal = ZipSafety.normalizeEntryName(path)

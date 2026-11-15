@@ -100,6 +100,16 @@ public interface ArtifactRoot : Closeable {
         throw ArtifactReadException("artifact read error: $displayName has no manifest $path")
 
     /**
+     * Every non-class resource entry in this root (issue #25 resource-listing
+     * slice), normalised slash paths, sorted. Includes `META-INF/…`,
+     * `.properties`, and versioned copies under `META-INF/versions/` as
+     * stored — this slice does not collapse multi-release variants.
+     * Empty for roots that carry no non-class files (`jrt:/` today).
+     * Content extraction is a later slice; listing only.
+     */
+    public fun resourceEntryPaths(): List<String> = emptyList()
+
+    /**
      * Content-hash identity of this root: the jar's bytes, the directory's content hash,
      * or the JDK release for `jrt:/`. The index cache key (PROPOSAL.md §10.2).
      */

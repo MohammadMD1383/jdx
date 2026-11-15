@@ -112,6 +112,19 @@ $ jdx manifest Multi-Release --coord com.google.code.gson:gson:2.14.0 --no-jdk
 Omit the pattern to list every main attribute. A pattern matches the attribute name or
 value. Per-entry (JarEntry) attributes are not listed in this slice.
 
+## Resource paths
+
+To answer *which jar holds this `.properties` / `META-INF/…` path?* without
+`unzip -l` loops (issue #25):
+
+```console exec
+$ jdx resources META-INF --coord com.google.code.gson:gson:2.14.0 --limit 5 --no-jdk
+```
+
+Omit the pattern to list every non-class resource. A pattern matches the entry path.
+Versioned copies under `META-INF/versions/` are listed as stored. Contents are never
+dumped — listing only.
+
 ## Limitations
 
 - Graph queries re-scan the bytecode roots on each query (there is no persistent graph index

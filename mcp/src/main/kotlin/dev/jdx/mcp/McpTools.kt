@@ -62,7 +62,7 @@ private fun queryParam(): McpParam = McpParam(
     required = true,
 )
 
-/** An optional query: `ls`/`tree`/`services`/`modules`/`manifest` default it empty (list everything). */
+/** An optional query: `ls`/`tree`/`services`/`modules`/`manifest`/`resources` default it empty (list everything). */
 private fun optionalQueryParam(): McpParam = McpParam(
     name = "query",
     kind = McpParamKind.STRING,
@@ -397,7 +397,24 @@ public val ALL_MCP_TOOLS: List<McpToolDefinition> = listOf(
         description = "List META-INF/MANIFEST.MF main attributes across the workspace jars. " +
             "Omit query to list every attribute; with a query, match the attribute name or " +
             "value. Does not list per-entry (JarEntry) attributes or extract arbitrary " +
-            "resources.",
+            "resources (use jdx_resources for paths).",
+        params = listOf(
+            optionalQueryParam(),
+            workspaceParam(),
+            McpParam(name = "regex", kind = McpParamKind.BOOLEAN, description = "Treat query as a Java regex."),
+            McpParam(
+                name = "ignoreCase", kind = McpParamKind.BOOLEAN,
+                description = "Case-insensitive substring match (ignored under regex; use (?i) there).",
+            ),
+            inParam(), excludeParam(), limitParam(50),
+        ),
+    ),
+    McpToolDefinition(
+        command = RpcCommand.RESOURCES,
+        description = "List non-class resource paths across the workspace jars (META-INF, " +
+            ".properties, versioned META-INF/versions/… copies, …). Omit query to list " +
+            "every resource; with a query, match the entry path. Listing only — does not " +
+            "extract or dump resource contents.",
         params = listOf(
             optionalQueryParam(),
             workspaceParam(),

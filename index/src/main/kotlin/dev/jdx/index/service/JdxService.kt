@@ -68,6 +68,7 @@ import dev.jdx.core.render.DEFAULT_TREE_DEPTH
 import dev.jdx.core.render.DEFAULT_LITERALS_LIMIT
 import dev.jdx.core.render.DEFAULT_MANIFEST_LIMIT
 import dev.jdx.core.render.DEFAULT_MODULES_LIMIT
+import dev.jdx.core.render.DEFAULT_RESOURCES_LIMIT
 import dev.jdx.core.render.DEFAULT_SERVICES_LIMIT
 import dev.jdx.core.render.DEFAULT_USAGES_LIMIT
 import dev.jdx.core.render.ErrorResult
@@ -81,10 +82,13 @@ import dev.jdx.core.render.ModuleListing
 import dev.jdx.core.render.ModulePackageTarget
 import dev.jdx.core.render.ModuleProvide
 import dev.jdx.core.render.ModuleRequire
+import dev.jdx.core.render.ResourceHit
+import dev.jdx.core.render.ResourceListing
 import dev.jdx.core.render.ServiceHit
 import dev.jdx.core.render.ServiceListing
 import dev.jdx.core.render.buildManifestListing
 import dev.jdx.core.render.buildModuleListing
+import dev.jdx.core.render.buildResourceListing
 import dev.jdx.core.render.buildServiceListing
 import dev.jdx.index.artifact.ManifestEntries
 import dev.jdx.index.asm.ModuleInfoReader
@@ -368,6 +372,13 @@ public object JdxService {
 
         /** `META-INF/MANIFEST.MF` main attributes (`manifest`) — exit 0. */
         public data class ManifestList(public val listing: ManifestListing) : ServiceOutcome {
+            override val exitCode: Int = 0
+            override fun renderText(color: Boolean): String = listing.renderText(color)
+            override fun toJson(command: String): String = listing.toJson(command)
+        }
+
+        /** Non-class resource paths (`resources`) — exit 0. */
+        public data class ResourceList(public val listing: ResourceListing) : ServiceOutcome {
             override val exitCode: Int = 0
             override fun renderText(color: Boolean): String = listing.renderText(color)
             override fun toJson(command: String): String = listing.toJson(command)
@@ -5185,6 +5196,127 @@ public object JdxService {
             text.contains(pattern, ignoreCase = true)
         } else {
             text.contains(pattern)
+        }
+    }
+
+    // -- resources (issue #25 resource-listing slice) ------------------------------
+
+    /**
+     * Options for `resources`: how to match the optional pattern and how much
+     * of the workspace to cover. An empty pattern lists every non-class path.
+     */
+    public data class ResourceOptions(
+        public val regex: Boolean = false,
+        public val ignoreCase: Boolean = false,
+        public val inArtifact: String? = null,
+        public val exclude: String? = null,
+        public val limit: Int = DEFAULT_RESOURCES_LIMIT,
+    )
+
+    /**
+     * Answers `resources [pattern]`: every non-class resource path across the
+     * workspace's binary roots (issue #25 resource-listing slice).
+     *
+     * Live-roots scan — no persistent index, no class load, no content dump.
+     * An empty / blank [rawPattern] lists every resource; a non-empty pattern
+     * matches the entry path (substring by default). A valid miss is exit 1.
+     * Content extraction and per-entry manifest attributes remain later slices.
+     * Versioned paths under `META-INF/versions/` are listed as stored.
+     */
+    public fun resources(
+        rawPattern: String?,
+        roots: RootsSpec,
+        options: ResourceOptions = ResourceOptions(),
+    ): ServiceOutcome {
+        val pattern = rawPattern?.trim().orEmpty()
+        if (options.limit < 0) {
+            return failure(3, pattern, "usage error: --limit must be >= 0, got ${options.limit}")
+        }
+        if (options.regex) {
+            if (pattern.isEmpty()) {
+                return failure(3, pattern, "usage error: --regex needs a non-empty pattern")
+            }
+            if (!SymbolSearch.isValidRegex(pattern)) {
+                return failure(3, pattern, "usage error: invalid --regex pattern '$pattern'")
+            }
+        }
+        if (roots.jarSpecs.isEmpty() && !roots.includeJdk) {
+            return failure(
+                4,
+                pattern,
+                "no workspace: no --jars given, no workspace selected (-w <name>, " +
+                    "JDX_WORKSPACE, jdx ws use) and --no-jdk set " +
+                    "(pass --jars <path>, select a workspace, or drop --no-jdk)",
+            )
+        }
+        return try {
+            executeResources(pattern, roots, options)
+        } catch (e: ArtifactReadException) {
+            failure(5, pattern, e.message ?: "artifact read error")
+        } catch (e: Exception) {
+            failure(6, pattern, "internal error: ${e.javaClass.simpleName}: ${e.message ?: "no detail"}")
+        }
+    }
+
+    /**
+     * Serves `resources`: walks every open root's [ArtifactRoot.resourceEntryPaths]
+     * and filters by [pattern]. Listing only — never opens entry bytes.
+     */
+    private fun executeResources(
+        pattern: String,
+        roots: RootsSpec,
+        options: ResourceOptions,
+    ): ServiceOutcome {
+        val opened = openRoots(roots)
+        val hits = mutableListOf<ResourceHit>()
+        try {
+            for (open in opened) {
+                val label = open.root.displayName
+                if (!matchesArtifactFilter(options.inArtifact, label) ||
+                    (options.exclude != null && matchesArtifactFilter(options.exclude, label))
+                ) {
+                    continue
+                }
+                for (path in open.root.resourceEntryPaths()) {
+                    if (pattern.isNotEmpty() && !matchesResourcePattern(pattern, path, options)) {
+                        continue
+                    }
+                    hits.add(ResourceHit(path = path, artifact = label))
+                }
+            }
+        } finally {
+            opened.forEach { it.root.close() }
+        }
+        if (hits.isEmpty()) {
+            val detail = if (pattern.isEmpty()) {
+                "no resources found"
+            } else {
+                "no resources matching '$pattern'"
+            }
+            return ServiceOutcome.Failure(ErrorResult.notFound(pattern, detail = detail))
+        }
+        // Deterministic: artifact, path (D-007).
+        hits.sortWith(compareBy({ it.artifact }, { it.path }))
+        return ServiceOutcome.ResourceList(
+            buildResourceListing(
+                query = pattern,
+                hits = hits,
+                limit = options.limit,
+            ),
+        )
+    }
+
+    /** Pattern match for one resource path. Never throws. */
+    private fun matchesResourcePattern(
+        pattern: String,
+        path: String,
+        options: ResourceOptions,
+    ): Boolean {
+        if (options.regex) return SymbolSearch.matchesRegex(pattern, path)
+        return if (options.ignoreCase) {
+            path.contains(pattern, ignoreCase = true)
+        } else {
+            path.contains(pattern)
         }
     }
 

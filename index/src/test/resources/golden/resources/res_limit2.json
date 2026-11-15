@@ -1,0 +1,1 @@
+{"jdx":1,"ok":true,"command":"resources","query":"","result":{"pattern":"","resources":[{"path":"META-INF/MANIFEST.MF","artifact":"resources-case.jar"},{"path":"META-INF/services/com.example.Spi","artifact":"resources-case.jar"}]},"truncated":{"shown":2,"total":4,"hint":"--limit 4"},"warnings":[],"provenance":[]}
