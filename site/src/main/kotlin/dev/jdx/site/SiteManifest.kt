@@ -41,13 +41,14 @@ object SiteManifest {
     val guides = Section(
         title = "Guides",
         anchor = "guides",
-        summary = "Task-oriented guides: naming symbols, choosing a classpath, reading and navigating code, upgrades, output, and serving.",
+        summary = "Task-oriented guides: naming symbols, choosing a classpath, reading and navigating code, Minecraft mod jars, upgrades, output, and serving.",
         docs = listOf(
             DocSource("docs/guide/symbol-references.md", "docs/symbol-references/", navTitle = "Symbol references"),
             DocSource("docs/guide/classpath.md", "docs/classpath/", navTitle = "Classpath & workspaces"),
             DocSource("docs/guide/reading-code.md", "docs/reading-code/", navTitle = "Reading code"),
             DocSource("docs/guide/navigating-code.md", "docs/navigating-code/", navTitle = "Usages, hierarchy & calls"),
             DocSource("docs/guide/api-diff.md", "docs/api-diff/", navTitle = "API diff for upgrades"),
+            DocSource("docs/guide/minecraft-mods.md", "docs/minecraft-mods/", navTitle = "Minecraft mods"),
             DocSource("docs/guide/output.md", "docs/output/", navTitle = "Output, JSON & exit codes"),
             DocSource("docs/guide/serving.md", "docs/serving/", navTitle = "MCP, daemon, HTTP & batch"),
         ),
