@@ -365,6 +365,12 @@ class McpSessionTest {
         val server = buildMcpServer(session(), "test")
         try {
             server.tools.keys shouldBe ALL_MCP_TOOLS.map { it.toolName }.toSet()
+            for (defined in ALL_MCP_TOOLS) {
+                val registered = server.tools.getValue(defined.toolName).tool
+                registered.description shouldBe defined.description
+                registered.title shouldBe defined.title
+                registered.annotations shouldBe defined.toolAnnotations()
+            }
         } finally {
             kotlinx.coroutines.runBlocking { server.close() }
         }

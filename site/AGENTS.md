@@ -63,8 +63,9 @@ Reference → Advanced). URLs are flat `docs/<slug>/` and must never change once
 - `SiteBuilder.kt` — orchestration, validation, output map. `SiteMain.kt` — entry + preview server.
 - `SiteManifest.kt` — doc → URL → section. `Layout.kt` — HTML shell, head/SEO/social meta, nav.
 - `CliFacts.kt` — everything read from the binary. `ReferencePages.kt` — per-command pages,
-  cheat sheet, MCP tools (+ `EXAMPLES`, executed). `ProductPages.kt` — landing, integrations,
-  FAQ, changelog, docs index, 404.
+  cheat sheet, MCP tools (+ `EXAMPLES`, executed). The MCP tools page copies each
+  parameter's description and, when `tools/list` sends them, its `enum`, `default`
+  and `examples`. `ProductPages.kt` — landing, integrations, FAQ, changelog, docs index, 404.
 - `SeoFiles.kt` (sitemap, robots, llms.txt, llms-full.txt), `StructuredData.kt` (JSON-LD),
   `AiCatalog.kt` (ARD `ai-catalog.json`), `OgImage.kt` (per-page social cards, touch icon).
 - `src/main/resources/site/` — `site.css` (inlined), `site.js` (copy buttons), `favicon.svg`.

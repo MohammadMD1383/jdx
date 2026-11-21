@@ -43,14 +43,19 @@ public fun buildMcpServer(session: McpSession, appVersion: String): Server {
             ),
         ),
         "jdx — an IDE for AI agents: Java/Kotlin structure, sources, usages and " +
-            "call graphs, one precise question per tool. Every answer carries provenance; " +
-            "ambiguous refs list candidates instead of guessing.",
+            "call graphs, one precise question per tool. Every answer is the JSON envelope " +
+            "(the same bytes as --json) and carries provenance. Ambiguous refs list every " +
+            "candidate instead of guessing. Inspected classes are parsed with ASM and never " +
+            "loaded or executed. Decompiled text is marked ⚠ reconstructed. This server " +
+            "never downloads artifacts.",
     )
     for (tool in ALL_MCP_TOOLS) {
         server.addTool(
             name = tool.toolName,
             description = tool.description,
+            title = tool.title,
             inputSchema = tool.inputSchema(),
+            toolAnnotations = tool.toolAnnotations(),
         ) { request ->
             val result = session.callTool(request.name, request.arguments ?: buildJsonObject {})
             CallToolResult(

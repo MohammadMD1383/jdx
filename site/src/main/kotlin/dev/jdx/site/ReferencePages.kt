@@ -163,8 +163,9 @@ class ReferencePages(
                 markdown.append("| Parameter | Type | Description |\n|---|---|---|\n")
                 for (parameter in tool.parameters) {
                     val required = if (parameter.required) " <span class=\"req\">required</span>" else ""
-                    html.append("<tr><td><code>${Html.text(parameter.name)}</code>$required</td><td>${Html.text(parameter.type)}</td><td>${Html.inlineCode(parameter.description)}</td></tr>")
-                    markdown.append("| `${parameter.name}`${if (parameter.required) " (required)" else ""} | ${parameter.type} | ${cell(parameter.description)} |\n")
+                    val detail = parameterDetail(parameter)
+                    html.append("<tr><td><code>${Html.text(parameter.name)}</code>$required</td><td>${Html.text(parameter.type)}</td><td>${Html.inlineCode(detail)}</td></tr>")
+                    markdown.append("| `${parameter.name}`${if (parameter.required) " (required)" else ""} | ${parameter.type} | ${cell(detail)} |\n")
                 }
                 html.append("</tbody></table></div>\n")
                 markdown.append("\n")
@@ -233,6 +234,30 @@ class ReferencePages(
     }
 
     private fun cell(text: String): String = text.replace("|", "\\|")
+
+    /**
+     * The parameter cell: the server's description, plus enum, default and examples
+     * when `tools/list` advertises them. Those live on the JSON Schema, so the page
+     * stays aligned with the MCP definition without restating them by hand.
+     */
+    private fun parameterDetail(parameter: McpParameter): String = buildString {
+        append(parameter.description)
+        if (parameter.enumValues.isNotEmpty()) {
+            append(" Allowed: ")
+            append(parameter.enumValues.joinToString(", "))
+            append('.')
+        }
+        if (parameter.defaultValue != null) {
+            append(" Default: ")
+            append(parameter.defaultValue)
+            append('.')
+        }
+        if (parameter.examples.isNotEmpty()) {
+            append(" Examples: ")
+            append(parameter.examples.joinToString(", "))
+            append('.')
+        }
+    }
 
     private fun firstSentence(text: String): String =
         Regex("""^(.+?[.!?])(\s|$)""").find(text)?.groupValues?.get(1) ?: text

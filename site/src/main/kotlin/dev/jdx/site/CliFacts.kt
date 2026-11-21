@@ -31,7 +31,18 @@ data class HelpRow(val command: String, val summary: String, val example: String
 /** One MCP tool as `jdx mcp` advertises it over `tools/list`. */
 data class McpTool(val name: String, val description: String, val parameters: List<McpParameter>)
 
-data class McpParameter(val name: String, val type: String, val description: String, val required: Boolean)
+data class McpParameter(
+    val name: String,
+    val type: String,
+    val description: String,
+    val required: Boolean,
+    /** JSON Schema `enum`, when the server advertises a closed set of spellings. */
+    val enumValues: List<String> = emptyList(),
+    /** JSON Schema `default`, rendered as text (numbers and booleans included). */
+    val defaultValue: String? = null,
+    /** JSON Schema `examples`. */
+    val examples: List<String> = emptyList(),
+)
 
 /**
  * Everything the site states about the CLI, read from the real binary — never typed by hand.
@@ -164,6 +175,9 @@ class CliFacts(
                             type = property["type"]?.jsonPrimitive?.content ?: "any",
                             description = property["description"]?.jsonPrimitive?.content.orEmpty(),
                             required = name in required,
+                            enumValues = property["enum"]?.jsonArray?.map { it.jsonPrimitive.content }.orEmpty(),
+                            defaultValue = property["default"]?.jsonPrimitive?.content,
+                            examples = property["examples"]?.jsonArray?.map { it.jsonPrimitive.content }.orEmpty(),
                         )
                     },
                 )
