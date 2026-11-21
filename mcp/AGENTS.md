@@ -13,7 +13,15 @@ twice. `explicitApi()` is on.
   requires/exports/opens/uses/provides),   `jdx_manifest` (issue #25
   `META-INF/MANIFEST.MF` attributes, including `entries` for JarEntry
   sections), and `jdx_resources` (issue #25 non-class resource path listing +
-  `cat` content extraction).
+  `cat` content extraction). Descriptions, per-parameter schema (description,
+  enum, default, examples) and tool annotations (`readOnlyHint`,
+  `destructiveHint: false`, `idempotentHint`, `openWorldHint: false`) are
+  served from this table. No tool declares `fetch`; `requestFor` drops unknown
+  keys, so `jdx_diff` coordinates resolve from local caches and every tool is
+  closed-world (issue #18). The site MCP tools page is generated from
+  `tools/list`.
+- Root `glama.json` is the Glama directory listing (`maintainers` only). It is
+  not read at runtime.
 - `McpSession` — per-session daemon: per-call roots, `version`/`health` internal,
   `doctor` refused (exit 6), `isError = ok:false`.
 - `McpServer` — SDK registration + stdio to EOF. `jdx mcp [-w name]`; workspace-bound
