@@ -55,3 +55,4 @@ These are product guarantees, not aspirations — each is enforced by tests:
 1. [Install jdx](installation.md) (one command, JDK 21+).
 2. Run the [quickstart](quickstart.md) — five minutes against the JDK and a Maven library.
 3. [Connect your AI agent](ai-agents.md) over MCP or the CLI.
+4. Inspect a [Minecraft mod jar](minecraft-mods.md): members, mixin callers, and version diffs.
