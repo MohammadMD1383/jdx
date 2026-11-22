@@ -103,6 +103,8 @@ scan members (a miss under the default hints at that flag).
 - `jdx ls 'com.google.*'` — packages with type counts; an exact package lists its types.
 - `jdx tree 'gson*'` — the package tree of an artifact (`--depth`, `--counts`).
 
+Finding which jar holds a class, including a glob of `libs/*.jar` or a Maven coordinate, is [Find which JAR contains a class](find-class-in-jar.md).
+
 ## Kotlin
 
 Kotlin binaries are read through their `@Metadata`, so jdx shows true Kotlin declarations —

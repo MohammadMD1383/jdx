@@ -176,7 +176,7 @@ class SiteBuilder(private val options: SiteOptions, private val runner: JdxRunne
         return Page(
             path = source.path,
             title = rendered.title,
-            headTitle = "${rendered.title} · jdx docs",
+            headTitle = source.headTitle ?: "${rendered.title} · jdx docs",
             description = rendered.description,
             bodyHtml = rendered.html,
             kind = PageKind.DOC,

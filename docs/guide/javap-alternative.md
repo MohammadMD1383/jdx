@@ -98,6 +98,7 @@ From an agent, the same questions are tools on `jdx mcp`. See [An MCP server for
 
 ## Where next
 
+- [Find which JAR contains a class](find-class-in-jar.md) — which file holds a class, across a glob or a coordinate.
 - [Read and decompile a JAR](read-jar-from-terminal.md) — list a jar, open one method, decompile when there are no sources.
 - [Reading code](reading-code.md) — `show`, `outline`, `doc`, and search.
 - [Help AI coding agents understand Java dependencies](reduce-agent-tokens-java.md) — `outline` and `members` before a source dump.
