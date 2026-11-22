@@ -58,7 +58,11 @@ Fat-jar assembly + the `jdx` launchers (POSIX + Windows) + AppCDS archive.
   as a three-OS matrix (Windows builds via `gradlew.bat`, each leg smokes its
   own launcher), publishing per-OS `jdx-<version>-<os>.{tar.gz,zip}` + `.sha256`
   (plus bare Linux aliases for the `install-release.sh` / `jdx upgrade` default
-  URLs) with a per-leg `jdx.jsa` trained on that runner; releases are unsigned
+  URLs) with a per-leg `jdx.jsa` trained on that runner. The Linux leg also
+  packs `jdx-mcp-<version>.mcpb` (+ `.sha256`) and a stamped
+  `jdx-mcp-<version>.server.json` (`scripts/pack-mcpb.py`); that job does not
+  run `mcp-publisher`. Pull requests pack and validate the same bundle in
+  `.github/workflows/mcpb.yml` and upload nothing. Releases are unsigned
   (SmartScreen/Gatekeeper unblock notes in `docs/PROPOSAL.md` §17.2). The remote
   installer `install-release.sh` (repo root) follows the same per-user rules as
   `install.sh`, accepts `.tar.gz` and `.zip` through `--tarball`, and is pinned

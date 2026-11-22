@@ -20,6 +20,9 @@ Then restart the agent. `--scope project` writes into the current checkout (comm
 with your team); `--scope system` writes the user-global config. Setup merges into existing
 config and never clobbers unrelated entries; re-running is a no-op.
 
+Clients that install an MCP Bundle use the release asset instead of this config. See
+[MCP Bundle](installation.md#mcp-bundle). A Java 21+ runtime must be on `PATH` or in `JAVA_HOME`.
+
 Check or undo it at any time:
 
 ```console exec

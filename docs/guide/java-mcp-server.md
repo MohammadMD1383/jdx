@@ -6,6 +6,8 @@ jdx mcp is a Java MCP server and a Kotlin MCP server over stdio: an MCP server f
 
 Install with the [one-line installer](installation.md) (JDK 21 or later). The same server is what [Use with AI agents](ai-agents.md) wires, and what [MCP, daemon, HTTP & batch](serving.md) places next to the daemon and the HTTP API.
 
+Desktop clients that install an MCP Bundle can use the `jdx-mcp-<version>.mcpb` asset from the release instead of a `PATH` entry. The bundle launches `bin/jdx` with argument `mcp` (`bin/jdx.bat` on Windows) and still needs a Java 21+ runtime on `PATH` or in `JAVA_HOME`. See [MCP Bundle](installation.md#mcp-bundle).
+
 ## Config for Claude Code, Cursor, and Codex
 
 `jdx setup` writes the entry. These are the commands on the integration pages. `--scope project` writes into the current checkout. `--scope system` writes the user-global file. Setup merges into an existing config and leaves other servers alone. Re-running is a no-op. Restart the agent after a write.

@@ -15,6 +15,10 @@ name: release
 # Assets per OS (`<os>` is `linux`, `macos`, or `windows`):
 #   jdx-<version>-<os>.tar.gz (+ .sha256)   POSIX-first bundle
 #   jdx-<version>-<os>.zip (+ .sha256)       Explorer/Defender-first bundle
+# The Linux leg also packs one MCP Bundle and a stamped registry server.json
+# (docs/PROPOSAL.md §17.2). It does not publish to the MCP Registry:
+#   jdx-mcp-<version>.mcpb (+ .sha256)
+#   jdx-mcp-<version>.server.json           real fileSha256, ready for mcp-publisher
 # Every bundle keeps the `jdx/` + `jdx/libs/` layout (`jdx`, `jdx.bat`,
 # `jdx.ps1`, `libs/jdx-*-all.jar`, plus `libs/jdx.jsa` trained on THAT runner —
 # the AppCDS archive is host-JDK-specific and a foreign one is ignored via
@@ -217,6 +221,44 @@ jobs:
           done
           ls -la jdx-*
 
+      # One MCP Bundle for every OS: the launchers and the fat jar are
+      # platform-independent, and a foreign AppCDS archive is ignored. The
+      # Linux leg already built this distribution with -PjdxVersion. Packing
+      # here (and not again on the publish job) keeps the sha256 of the
+      # uploaded asset equal to the digest printed below.
+      - name: Set up Node.js
+        if: runner.os == 'Linux'
+        uses: actions/setup-node@v4
+        with:
+          node-version: "22"
+
+      - name: Pack the MCP Bundle
+        if: runner.os == 'Linux'
+        run: |
+          version="${{ steps.version.outputs.version }}"
+          python3 scripts/pack-mcpb.py pack --out "jdx-mcp-${version}.mcpb"
+          python3 scripts/pack-mcpb.py stamp \
+            --mcpb "jdx-mcp-${version}.mcpb" \
+            --version "$version" \
+            --out "jdx-mcp-${version}.server.json"
+          echo "MCP Bundle sha256 (server.json fileSha256):"
+          cat "jdx-mcp-${version}.mcpb.sha256"
+          echo "After this release is public, publish the registry entry with the stamped server.json:"
+          echo "  gh release download ${{ steps.version.outputs.tag }} --pattern 'jdx-mcp-*.server.json' --output server.json"
+          echo "  mcp-publisher login github"
+          echo "  mcp-publisher publish"
+
+      - name: Upload the MCP Bundle
+        if: runner.os == 'Linux'
+        uses: actions/upload-artifact@v4
+        with:
+          name: jdx-mcp-${{ steps.version.outputs.version }}
+          path: |
+            jdx-mcp-*.mcpb
+            jdx-mcp-*.mcpb.sha256
+            jdx-mcp-*.server.json
+          if-no-files-found: error
+
       - name: Upload per-OS assets
         uses: actions/upload-artifact@v4
         with:
@@ -250,10 +292,20 @@ jobs:
         run: |
           tag="${GITHUB_REF_NAME}"
           (cd assets && sha256sum -c jdx-*.sha256)
+          echo "MCP registry fileSha256:"
+          cat assets/jdx-mcp-*.mcpb.sha256
+          echo "Stamped server.json is the release asset jdx-mcp-*.server.json."
+          echo "Publish it after this release exists:"
+          echo "  gh release download ${tag} --pattern 'jdx-mcp-*.server.json' --output server.json"
+          echo "  mcp-publisher login github"
+          echo "  mcp-publisher publish"
           gh release create "$tag" \
             --title "$tag" \
             --generate-notes \
             assets/jdx-*.tar.gz \
             assets/jdx-*.tar.gz.sha256 \
             assets/jdx-*.zip \
-            assets/jdx-*.zip.sha256
+            assets/jdx-*.zip.sha256 \
+            assets/jdx-mcp-*.mcpb \
+            assets/jdx-mcp-*.mcpb.sha256 \
+            assets/jdx-mcp-*.server.json
