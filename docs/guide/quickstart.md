@@ -80,5 +80,6 @@ That is the whole integration — see [Use with AI agents](ai-agents.md).
 
 - [Symbol references](symbol-references.md) — every way to name a class or member.
 - [Reading code](reading-code.md) and [Usages, hierarchy & calls](navigating-code.md).
+- [Read and decompile a JAR](read-jar-from-terminal.md) — list a jar, one method, decompile when there are no sources.
 - [Minecraft mod jars](minecraft-mods.md) — a mapped jar, mixin callers, and a version diff.
 - The [command catalogue](../COMMANDS.md).

@@ -207,7 +207,9 @@ Graph queries re-scan live bytecode roots per query (no persistent-index acceler
 yet). `callers` is override-aware by default (`--exact` for invoke-owner matching);
 `calls` stays bytecode-exact. Full list in
 [GitHub Issues](https://github.com/MohammadMD1383/jdx/issues). Out-of-scope for v1
-(mappings/remap, …) is the phase-2 backlog, also tracked there. To inspect a
+(mappings/remap, …) is the phase-2 backlog, also tracked there. To read or
+decompile a jar from the terminal, see
+[Read and decompile a JAR](docs/guide/read-jar-from-terminal.md). To inspect a
 Minecraft jar, pass the mapped jar your toolchain already produced — see
 [Inspect Minecraft mod jars](docs/guide/minecraft-mods.md).
 
@@ -216,7 +218,7 @@ Minecraft jar, pass the mapped jar your toolchain already produced — see
 | | |
 |---|---|
 | [Website](https://mohammadmd1383.github.io/jdx/) | Guides, generated command and MCP reference, integrations, FAQ |
-| [`docs/guide/`](docs/guide/introduction.md) | User guides: install, quickstart, AI agents, classpath, reading and navigating code, API diff, Minecraft mod jars |
+| [`docs/guide/`](docs/guide/introduction.md) | User guides: install, quickstart, AI agents, classpath, reading and navigating code, decompiling a jar from the terminal, API diff, Minecraft mod jars |
 | [`docs/COMMANDS.md`](docs/COMMANDS.md) | Full command reference (flags, exit codes, symbol grammar) |
 | [`AGENTS.md`](AGENTS.md) (+ per-module `AGENTS.md`) | Contributor notes: architecture rules, gotchas, build/test |
 | [`docs/PROPOSAL.md`](docs/PROPOSAL.md) | Full design specification (Appendix B is the flag reference) |
