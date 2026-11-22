@@ -6,7 +6,8 @@ Wire jdx into Claude Code, Cursor, Codex, GitHub Copilot, Antigravity, OpenCode,
 
 `jdx mcp` is a Model Context Protocol server over stdio. It exposes every query as a typed
 tool, so the agent never fights shell quoting of `#` and `(`, and it keeps the index hot in
-memory for the whole session — repeated questions are instant.
+memory for the whole session — repeated questions are instant. The config those clients
+write, and the tool categories, are in [An MCP server for Java and Kotlin bytecode](java-mcp-server.md).
 
 `jdx setup` writes the right config entry for your agent:
 

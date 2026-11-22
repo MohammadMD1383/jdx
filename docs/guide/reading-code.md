@@ -121,3 +121,5 @@ Without it, Kotlin binaries still render from metadata and source queries degrad
 With the sidecar, file-facade type docs come from the KDoc before `package`, enum entries with
 class bodies answer nested `$ENTRY` queries, and generic extension receivers (`List<T>`) narrow
 against `List` / `java.util.List` parameter keys.
+
+When the reader is an agent and the subject is a dependency, [Help AI coding agents understand Java dependencies](reduce-agent-tokens-java.md) is the short path: `show`, `outline`, `members`, then one `body`.

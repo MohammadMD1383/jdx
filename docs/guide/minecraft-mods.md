@@ -182,6 +182,7 @@ Reference: [`setup`](https://mohammadmd1383.github.io/jdx/docs/reference/setup/)
 ## Where next
 
 - [Read and decompile a JAR](read-jar-from-terminal.md) — list a jar, open one method, decompile when there are no sources.
+- [An MCP server for Java and Kotlin bytecode](java-mcp-server.md) — `jdx mcp` pointed at the mapped jar.
 - [Quickstart](quickstart.md) — the same commands against the JDK and Gson.
 - [API diff for upgrades](api-diff.md) — rules, severities, and `--fail-on`.
 - [Command catalogue](../COMMANDS.md) — every flag.
