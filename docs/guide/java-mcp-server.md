@@ -139,5 +139,6 @@ An agent that can run a shell can skip MCP and call the CLI. Paste `jdx help --a
 - [Use with AI agents](ai-agents.md) — setup, the cheat sheet, and exit codes.
 - [MCP, daemon, HTTP & batch](serving.md) — the other ways to keep jdx warm.
 - [Classpath & workspaces](classpath.md) — `--jars`, `--coord`, and `jdx ws`.
+- [Find which JAR contains a class](find-class-in-jar.md) — `jdx_resolve`, `jdx_search`, `jdx_ls`, and `jdx_tree`.
 - [A javap alternative](javap-alternative.md) — class-file signatures, callers, and decompilation.
 - [Command catalogue](../COMMANDS.md) — every flag.

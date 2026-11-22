@@ -181,6 +181,7 @@ Reference: [`setup`](https://mohammadmd1383.github.io/jdx/docs/reference/setup/)
 
 ## Where next
 
+- [Find which JAR contains a class](find-class-in-jar.md) — which mod jar in a directory holds a class.
 - [Read and decompile a JAR](read-jar-from-terminal.md) — list a jar, open one method, decompile when there are no sources.
 - [An MCP server for Java and Kotlin bytecode](java-mcp-server.md) — `jdx mcp` pointed at the mapped jar.
 - [Quickstart](quickstart.md) — the same commands against the JDK and Gson.

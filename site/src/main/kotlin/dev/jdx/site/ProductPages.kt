@@ -77,6 +77,7 @@ class ProductPages(
             append("<div><h2 id=\"for-agents\">Built for agents, not humans</h2>$agentFeatures</div>")
             append("</div></section>\n")
             append(commandGrid())
+            append(guidesSection())
             append(agentStrip(agents))
             append(demoSection())
             append(faqTeaser(faqQuestions))
@@ -167,6 +168,31 @@ class ProductPages(
             if (name !in facts.commandNames) continue
             append("<li><a href=\"${site.rootRelative(reference.commandPath(name))}\"><code>jdx ${Html.text(row.command)}</code>")
             append("<span>${Html.inlineCode(row.summary)}</span></a></li>")
+        }
+        append("</ul></div></section>\n")
+    }
+
+    /**
+     * Compact links to the task guides. Anchor text is the phrase a search would use;
+     * the span is the one-line description.
+     */
+    private fun guidesSection(): String = buildString {
+        append("<section class=\"band\"><div class=\"wrap\">")
+        append("<h2 id=\"guides\">Guides</h2>")
+        append("<p class=\"section-lead\">Task pages for finding a class, reading a jar, and wiring an agent.</p>")
+        append("<ul class=\"guide-list\">")
+        val guides = listOf(
+            Triple("docs/find-class-in-jar/", "Find which JAR contains a class", "List classes in a jar, and search jar files or Maven dependencies."),
+            Triple("docs/read-jar-from-terminal/", "Read and decompile a JAR from the terminal", "List a jar, open one method, and view source."),
+            Triple("docs/javap-alternative/", "A javap alternative for class files", "Signatures, one method's bytecode, callers, and implementors."),
+            Triple("docs/minecraft-mods/", "Inspect Minecraft mod jars", "Members and mixin callers, without remapping."),
+            Triple("docs/java-mcp-server/", "Java MCP server for JVM bytecode", "Typed tools for Claude Code, Cursor, and Codex."),
+            Triple("docs/reduce-agent-tokens-java/", "Read Java dependencies without a source dump", "Outline and one method body, for a smaller answer."),
+            Triple("docs/api-diff/", "API diff for a Java dependency upgrade", "What a new jar version breaks, as named rules."),
+        )
+        for ((path, title, blurb) in guides) {
+            append("<li><a href=\"${site.rootRelative(path)}\"><strong>${Html.text(title)}</strong>")
+            append("<span>${Html.text(blurb)}</span></a></li>")
         }
         append("</ul></div></section>\n")
     }

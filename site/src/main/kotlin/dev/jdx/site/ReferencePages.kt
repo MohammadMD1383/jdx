@@ -87,6 +87,10 @@ class ReferencePages(
             html.append("<a href=\"${site.rootRelative("docs/reference/")}\">All commands</a></p>\n")
             markdown.append("Guide: [$guideTitle](${site.absolute(guidePath)}) · [All commands](${site.absolute("docs/reference/")})\n")
         }
+        SEE_ALSO[name]?.let { (guideTitle, guidePath) ->
+            html.append("<p>See also: <a href=\"${site.rootRelative(guidePath)}\">${Html.text(guideTitle)}</a></p>\n")
+            markdown.append("\nSee also: [$guideTitle](${site.absolute(guidePath)})\n")
+        }
 
         val path = commandPath(name)
         val headings = buildList {
@@ -322,5 +326,13 @@ class ReferencePages(
             listOf("version", "upgrade", "doctor").forEach { put(it, "Installation" to "docs/installation/") }
             put("diff", "API diff for upgrades" to "docs/api-diff/")
         }
+
+        /** One extra line on the commands this guide is about. */
+        val SEE_ALSO: Map<String, Pair<String, String>> = mapOf(
+            "resolve" to ("Find which JAR contains a class" to "docs/find-class-in-jar/"),
+            "search" to ("Find which JAR contains a class" to "docs/find-class-in-jar/"),
+            "ls" to ("Find which JAR contains a class" to "docs/find-class-in-jar/"),
+            "tree" to ("Find which JAR contains a class" to "docs/find-class-in-jar/"),
+        )
     }
 }

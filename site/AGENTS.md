@@ -57,6 +57,8 @@ codes, or MCP tools.** `pages.yml` runs it on every PR anyway; running it first 
 
 Add one line to `SiteManifest` (section = place in the hierarchy Getting started → Guides →
 Reference → Advanced). URLs are flat `docs/<slug>/` and must never change once published.
+Optional `headTitle` sets the `<title>` tag when the H1 plus ` · jdx docs` is the wrong
+length; the H1 stays the on-page title and the Open Graph title.
 
 ## Key files
 

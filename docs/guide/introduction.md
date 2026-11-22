@@ -56,5 +56,6 @@ These are product guarantees, not aspirations — each is enforced by tests:
 2. Run the [quickstart](quickstart.md) — five minutes against the JDK and a Maven library.
 3. [Connect your AI agent](ai-agents.md) over MCP or the CLI. The [Java and Kotlin MCP server](java-mcp-server.md) guide is the stdio config for Claude Code, Cursor, and Codex.
 4. [Read and decompile a JAR](read-jar-from-terminal.md) from the terminal: list it, open one method, decompile when there are no sources. For class-file signatures next to javap, see [a javap alternative](javap-alternative.md).
-5. [Read Java dependencies without a source dump](reduce-agent-tokens-java.md) — `show`, `outline`, and `members` before one `body`.
-6. Inspect a [Minecraft mod jar](minecraft-mods.md): members, mixin callers, and version diffs.
+5. [Find which JAR contains a class](find-class-in-jar.md) — list the classes in a jar, and search jar files or Maven dependencies.
+6. [Read Java dependencies without a source dump](reduce-agent-tokens-java.md) — `show`, `outline`, and `members` before one `body`.
+7. Inspect a [Minecraft mod jar](minecraft-mods.md): members, mixin callers, and version diffs.

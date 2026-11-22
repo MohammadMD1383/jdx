@@ -20,6 +20,11 @@ object SiteManifest {
         val navTitle: String? = null,
         /** Meta description; defaults to the doc's first paragraph. */
         val description: String? = null,
+        /**
+         * `<title>` when the H1 plus ` · jdx docs` is the wrong length for a search result.
+         * The H1 stays the on-page title and the Open Graph title.
+         */
+        val headTitle: String? = null,
         /** Whether inline `jdx <cmd> --flag` mentions are checked against the real CLI. */
         val lintCommands: Boolean = true,
     )
@@ -41,7 +46,7 @@ object SiteManifest {
     val guides = Section(
         title = "Guides",
         anchor = "guides",
-        summary = "Task-oriented guides: naming symbols, choosing a classpath, reading and navigating code, decompiling a jar, a javap alternative, smaller answers for agents, Minecraft mod jars, upgrades, output, the Java MCP server, and serving.",
+        summary = "Task-oriented guides: naming symbols, choosing a classpath, reading and navigating code, finding which jar contains a class, decompiling a jar, a javap alternative, smaller answers for agents, Minecraft mod jars, upgrades, output, the Java MCP server, and serving.",
         docs = listOf(
             DocSource("docs/guide/symbol-references.md", "docs/symbol-references/", navTitle = "Symbol references"),
             DocSource("docs/guide/classpath.md", "docs/classpath/", navTitle = "Classpath & workspaces"),
@@ -50,6 +55,12 @@ object SiteManifest {
                 "docs/guide/reduce-agent-tokens-java.md",
                 "docs/reduce-agent-tokens-java/",
                 navTitle = "Agent context for Java",
+            ),
+            DocSource(
+                "docs/guide/find-class-in-jar.md",
+                "docs/find-class-in-jar/",
+                navTitle = "Find a class in a JAR",
+                headTitle = "Find which JAR contains a class · jdx",
             ),
             DocSource(
                 "docs/guide/read-jar-from-terminal.md",
