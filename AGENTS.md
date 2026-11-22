@@ -116,6 +116,9 @@ jdx/
 ├── decompile/                 Vineflower + javap engines
 ├── cli/                       Clikt commands, text/JSON renderers
 ├── mcp/                       MCP stdio server
+├── mcpb/manifest.json         MCP Bundle manifest (packed by scripts/pack-mcpb.py; not read at runtime)
+├── scripts/pack-mcpb.py       pack, validate, and stamp the registry bundle
+├── server.json                Official MCP Registry metadata (fileSha256 filled at release)
 ├── server/                    HTTP/JSON API + daemon
 ├── app/                       fat-jar assembly + `jdx` launcher script
 ├── testfixtures/              nasty Java/Kotlin classes → binary jar + -sources.jar

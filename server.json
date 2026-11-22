@@ -1,0 +1,23 @@
+{
+  "$schema": "https://static.modelcontextprotocol.io/schemas/2025-12-11/server.schema.json",
+  "name": "io.github.MohammadMD1383/jdx",
+  "title": "jdx",
+  "description": "IDE for AI agents on JVM code: members, method bodies, usages and call graphs for jars and the JDK",
+  "repository": {
+    "url": "https://github.com/MohammadMD1383/jdx",
+    "source": "github"
+  },
+  "websiteUrl": "https://mohammadmd1383.github.io/jdx/",
+  "version": "0.1.0-SNAPSHOT",
+  "packages": [
+    {
+      "registryType": "mcpb",
+      "identifier": "https://github.com/MohammadMD1383/jdx/releases/download/v0.1.0-SNAPSHOT/jdx-mcp-0.1.0-SNAPSHOT.mcpb",
+      "version": "0.1.0-SNAPSHOT",
+      "fileSha256": "0000000000000000000000000000000000000000000000000000000000000000",
+      "transport": {
+        "type": "stdio"
+      }
+    }
+  ]
+}

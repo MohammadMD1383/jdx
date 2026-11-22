@@ -16,6 +16,10 @@ agent never has to quote `#` or `(` for a shell. The Claude Code, Cursor, and Co
 are in [An MCP server for Java and Kotlin bytecode](java-mcp-server.md). The tool list is on the
 [MCP tools](https://mohammadmd1383.github.io/jdx/docs/reference/mcp-tools/) page.
 
+An [MCP Bundle](installation.md#mcp-bundle) of the same server ships on each release as
+`jdx-mcp-<version>.mcpb`. The host launches `bin/jdx` with argument `mcp` (`bin/jdx.bat` on
+Windows). A Java 21+ runtime must be on `PATH` or in `JAVA_HOME`.
+
 ## Daemon: `jdx daemon`
 
 A background JVM with a hot index, listening on a local socket. While it runs, ordinary `jdx`

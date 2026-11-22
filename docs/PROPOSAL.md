@@ -1180,12 +1180,51 @@ defaults are unchanged, so Linux installs never migrate.
 Tagged pushes (`vX.Y.Z` on `main`) build in `.github/workflows/release.yml` on a
 three-OS matrix (`ubuntu` / `windows` / `macos` — the Windows leg builds through
 `gradlew.bat`, and each leg smoke-tests its own launcher: `jdx.bat` on Windows,
-`./app/build/jdx` elsewhere). Each leg publishes two bundles plus checksums:
+`./app/build/jdx` elsewhere). Each leg publishes two bundles plus checksums.
+The Linux leg also publishes the MCP Bundle and the stamped registry metadata:
 
 | Asset | Contents |
 |---|---|
 | `jdx-<version>-<os>.tar.gz` (+ `.sha256`) | `jdx/` + `jdx/libs/` layout: `jdx`, `jdx.bat`, `jdx.ps1`, `libs/jdx-*-all.jar`, `libs/jdx.jsa` |
 | `jdx-<version>-<os>.zip` (+ `.sha256`) | Same membership (Explorer/Defender-first for Windows) |
+| `jdx-mcp-<version>.mcpb` (+ `.sha256`) | MCP Bundle, built on the Linux leg only. `manifest.json` plus `bin/jdx`, `bin/jdx.bat`, `bin/jdx.ps1`, `bin/libs/jdx-*-all.jar`, and `bin/libs/jdx.jsa` when the build trained one. Hosts launch `bin/jdx mcp` (`bin/jdx.bat mcp` on Windows) over stdio. A Java 21+ runtime must be on `PATH` or in `JAVA_HOME`. Asset URL: `https://github.com/MohammadMD1383/jdx/releases/download/v<version>/jdx-mcp-<version>.mcpb` (the path contains `mcp`, which the Official MCP Registry requires). |
+| `jdx-mcp-<version>.server.json` | Stamped Official MCP Registry metadata for that version: `server.json` with the tag version and the bundle's real sha256. This workflow uploads the file. It leaves publishing to the registry to a maintainer. |
+
+Pull requests run `.github/workflows/mcpb.yml`, which builds the `.mcpb` and runs
+`mcpb validate` and `mcpb pack`. That job uploads nothing.
+
+**Official MCP Registry.** `server.json` at the repository root is the template
+(`name` `io.github.MohammadMD1383/jdx`, `version` the Gradle default
+`0.1.0-SNAPSHOT`, `fileSha256` sixty-four zeros). The version matches how the
+project versions itself: `-PjdxVersion` from the tag `vX.Y.Z` (the `v` stripped),
+otherwise `0.1.0-SNAPSHOT`. The Linux release leg packs `jdx-mcp-<version>.mcpb`
+from that same build and `scripts/pack-mcpb.py stamp` writes
+`jdx-mcp-<version>.server.json`, prints the sha256, and reminds the maintainer
+how to publish. Publishing is a separate step, after the release asset is public
+(the registry checks that the URL answers):
+
+```bash
+gh release download vX.Y.Z --pattern 'jdx-mcp-*.server.json' --output server.json
+mcp-publisher login github
+mcp-publisher publish
+```
+
+The same stamp can be produced locally from a packed bundle:
+
+```bash
+python3 scripts/pack-mcpb.py stamp --mcpb jdx-mcp-X.Y.Z.mcpb --version X.Y.Z --out server.json
+mcp-publisher login github
+mcp-publisher publish
+```
+
+`mcpb/manifest.json` lists every `jdx mcp` tool. `python3 scripts/pack-mcpb.py sync-tools`
+copies names and descriptions from `tools/list` when the server table changes, and
+`pack` fails if the committed list has drifted. The manifest uses server type
+`binary` because the entry point is the launcher script (`bin/jdx`, executable).
+`compatibility.runtimes` in the MCPB schema accepts only `node` and `python`, so
+the Java 21+ / `PATH` / `JAVA_HOME` requirement is stated in the manifest
+description and long description, with `compatibility.platforms` set to
+`darwin`, `win32`, and `linux`.
 
 `<os>` is `linux`, `macos`, or `windows`. The `linux` leg additionally publishes
 bare `jdx-<version>.tar.gz/.zip` aliases (byte copies): that is the URL

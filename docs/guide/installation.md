@@ -65,11 +65,32 @@ user-`PATH` mutation (tests / CI).
 
 Every release ships per-OS bundles — `jdx-<version>-<os>.tar.gz` and `.zip` for `linux`,
 `macos` and `windows`, each with a `.sha256` checksum and a startup-time archive trained on that
-OS.
+OS. It also ships one MCP Bundle, `jdx-mcp-<version>.mcpb`, described below.
 
 Releases are not code-signed, so Windows SmartScreen and macOS Gatekeeper warn on first run.
 Clear the warning with `Unblock-File jdx.bat` (PowerShell) or
 `xattr -d com.apple.quarantine <install-dir>/jdx` (macOS).
+
+## MCP Bundle
+
+Clients that install an [MCP Bundle](https://github.com/modelcontextprotocol/mcpb) (a `.mcpb`
+file) can load jdx from the release asset
+`jdx-mcp-<version>.mcpb` on [GitHub Releases](https://github.com/MohammadMD1383/jdx/releases).
+The bundle carries the POSIX launcher, the Windows launchers, the fat jar, and the startup
+archive, laid out so the host starts `bin/jdx` with argument `mcp` over stdio, and
+`bin/jdx.bat` with argument `mcp` on Windows.
+
+Install a Java 21 or later runtime and leave it on `PATH` or in `JAVA_HOME`. jdx finds that
+runtime the same way the [requirements](#requirements) above describe.
+
+The server still reads a stored workspace. Create one with `jdx ws create` before asking
+about a jar. Wiring for clients that launch a command instead of a bundle is in
+[An MCP server for Java and Kotlin bytecode](java-mcp-server.md).
+
+The [Official MCP Registry](https://registry.modelcontextprotocol.io) entry is
+`io.github.MohammadMD1383/jdx` (`server.json` in the repository). It points at that release
+asset. A maintainer publishes the entry after the release exists; the steps are in
+[the release section of the design spec](../PROPOSAL.md#172-release-assets-and-signing-issue-48).
 
 ## Verify
 

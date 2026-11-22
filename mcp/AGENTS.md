@@ -21,7 +21,20 @@ twice. `explicitApi()` is on.
   closed-world (issue #18). The site MCP tools page is generated from
   `tools/list`.
 - Root `glama.json` is the Glama directory listing (`maintainers` only). It is
-  not read at runtime.
+  not read at runtime. Root `server.json` is the Official MCP Registry template
+  (version is the Gradle default `0.1.0-SNAPSHOT`; `fileSha256` is sixty-four
+  zeros until `scripts/pack-mcpb.py stamp` fills a release copy). It is not
+  read at runtime either.
+- `mcpb/manifest.json` is the MCP Bundle manifest (server type `binary`,
+  entry point `bin/jdx`, Windows override `bin/jdx.bat`, argument `mcp`).
+  Tool names and descriptions are copied from `tools/list`.
+  `python3 scripts/pack-mcpb.py sync-tools` rewrites them;
+  `python3 scripts/pack-mcpb.py pack` fails if they have drifted.
+  The manifest schema's `compatibility.runtimes` accepts only `node` and
+  `python`, so the Java 21+ / `PATH` / `JAVA_HOME` requirement lives in the
+  description and long description. `.github/workflows/mcpb.yml` validates
+  and packs on pull requests and uploads nothing; the Linux leg of
+  `release.yml` uploads `jdx-mcp-<version>.mcpb`.
 - `McpSession` — per-session daemon: per-call roots, `version`/`health` internal,
   `doctor` refused (exit 6), `isError = ok:false`.
 - `McpServer` — SDK registration + stdio to EOF. `jdx mcp [-w name]`; workspace-bound
