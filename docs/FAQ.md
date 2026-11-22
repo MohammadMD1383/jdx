@@ -12,7 +12,7 @@ Any agent that speaks the Model Context Protocol or can run shell commands. `jdx
 
 ## How is it different from javap, unzip and grep?
 
-Those tools answer one low-level question each, so an agent chains several of them and reads large outputs into its context. jdx answers the actual question in one command: only the method you asked for, inherited members resolved transitively with generics, usages across every jar, real source when a sources jar exists, and a labelled decompilation when it does not. On a measured task it used 2 calls and about a quarter of the bytes. See the [README benchmark](https://github.com/MohammadMD1383/jdx#readme).
+Those tools answer one low-level question each, so an agent chains several of them and reads large outputs into its context. jdx answers the actual question in one command: only the method you asked for, inherited members resolved transitively with generics, usages across every jar, real source when a sources jar exists, and a labelled decompilation when it does not. On a measured task it used 2 calls and about a quarter of the bytes. See [Read and decompile a JAR from the terminal](guide/read-jar-from-terminal.md) and the [README benchmark](https://github.com/MohammadMD1383/jdx#readme).
 
 ## Does it run code from the jars it inspects?
 

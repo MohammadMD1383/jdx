@@ -158,7 +158,7 @@ With no pair, jdx decompiles with Vineflower and labels the result `⚠ reconstr
 jdx body '<canonical ref from signature>' --engine javap --jars "$MAPPED_JAR" --no-jdk
 ```
 
-See [Reading code](reading-code.md#sources-decompilation-bytecode).
+The same ladder, with runnable Gson and JDK examples, is in [Read and decompile a JAR from the terminal](read-jar-from-terminal.md). See also [Reading code](reading-code.md#sources-decompilation-bytecode).
 
 ## Nothing in the jar runs
 
@@ -181,6 +181,7 @@ Reference: [`setup`](https://mohammadmd1383.github.io/jdx/docs/reference/setup/)
 
 ## Where next
 
+- [Read and decompile a JAR](read-jar-from-terminal.md) — list a jar, open one method, decompile when there are no sources.
 - [Quickstart](quickstart.md) — the same commands against the JDK and Gson.
 - [API diff for upgrades](api-diff.md) — rules, severities, and `--fail-on`.
 - [Command catalogue](../COMMANDS.md) — every flag.
