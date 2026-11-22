@@ -41,20 +41,35 @@ object SiteManifest {
     val guides = Section(
         title = "Guides",
         anchor = "guides",
-        summary = "Task-oriented guides: naming symbols, choosing a classpath, reading and navigating code, decompiling a jar from the terminal, Minecraft mod jars, upgrades, output, and serving.",
+        summary = "Task-oriented guides: naming symbols, choosing a classpath, reading and navigating code, decompiling a jar, a javap alternative, smaller answers for agents, Minecraft mod jars, upgrades, output, the Java MCP server, and serving.",
         docs = listOf(
             DocSource("docs/guide/symbol-references.md", "docs/symbol-references/", navTitle = "Symbol references"),
             DocSource("docs/guide/classpath.md", "docs/classpath/", navTitle = "Classpath & workspaces"),
             DocSource("docs/guide/reading-code.md", "docs/reading-code/", navTitle = "Reading code"),
             DocSource(
+                "docs/guide/reduce-agent-tokens-java.md",
+                "docs/reduce-agent-tokens-java/",
+                navTitle = "Agent context for Java",
+            ),
+            DocSource(
                 "docs/guide/read-jar-from-terminal.md",
                 "docs/read-jar-from-terminal/",
                 navTitle = "Read and decompile a JAR",
+            ),
+            DocSource(
+                "docs/guide/javap-alternative.md",
+                "docs/javap-alternative/",
+                navTitle = "javap alternative",
             ),
             DocSource("docs/guide/navigating-code.md", "docs/navigating-code/", navTitle = "Usages, hierarchy & calls"),
             DocSource("docs/guide/api-diff.md", "docs/api-diff/", navTitle = "API diff for upgrades"),
             DocSource("docs/guide/minecraft-mods.md", "docs/minecraft-mods/", navTitle = "Minecraft mods"),
             DocSource("docs/guide/output.md", "docs/output/", navTitle = "Output, JSON & exit codes"),
+            DocSource(
+                "docs/guide/java-mcp-server.md",
+                "docs/java-mcp-server/",
+                navTitle = "Java MCP server",
+            ),
             DocSource("docs/guide/serving.md", "docs/serving/", navTitle = "MCP, daemon, HTTP & batch"),
         ),
     )

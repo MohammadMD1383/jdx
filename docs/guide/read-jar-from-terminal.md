@@ -144,6 +144,7 @@ Every command accepts `--json`. Exit codes are in [Output, JSON & exit codes](ou
 
 - [Quickstart](quickstart.md) — the JDK and a Maven coordinate in five minutes.
 - [Installation](installation.md) — Linux, macOS, Windows, and offline installs.
+- [A javap alternative](javap-alternative.md) — class-file signatures, callers, implementors, and where javap still fits.
 - [Reading code](reading-code.md) — `show`, `signature`, `doc`, and search.
 - [Minecraft mods](minecraft-mods.md) — a mapped jar, mixin callers, and a version diff.
 - [Command catalogue](../COMMANDS.md) — every flag.

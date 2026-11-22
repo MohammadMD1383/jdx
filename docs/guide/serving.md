@@ -12,7 +12,8 @@ jdx mcp -w myapp        # serve a named workspace
 MCP clients start it as a child process (`jdx setup` writes that config for you — see
 [Use with AI agents](ai-agents.md)). The server holds the index in memory for the session, so
 repeated queries are instant, and each query is a typed `jdx_*` tool with a JSON schema — the
-agent never has to quote `#` or `(` for a shell. The tool list is on the
+agent never has to quote `#` or `(` for a shell. The Claude Code, Cursor, and Codex snippets
+are in [An MCP server for Java and Kotlin bytecode](java-mcp-server.md). The tool list is on the
 [MCP tools](https://mohammadmd1383.github.io/jdx/docs/reference/mcp-tools/) page.
 
 ## Daemon: `jdx daemon`
