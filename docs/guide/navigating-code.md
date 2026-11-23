@@ -166,3 +166,5 @@ $ jdx resources META-INF/MANIFEST.MF --cat --coord com.google.code.gson:gson:2.1
 - `usages --kind throw` reads `throws` declarations, not `ATHROW` sites (throw-site attribution needs data-flow analysis and is deferred to future work).
 
 Open limitations are tracked in [GitHub Issues](https://github.com/MohammadMD1383/jdx/issues).
+
+Finding a mixin injection point in a mapped Minecraft jar is [Find a Mixin target in Minecraft](minecraft-mixin-targets.md).

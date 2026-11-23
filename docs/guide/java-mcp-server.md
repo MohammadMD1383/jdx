@@ -107,7 +107,7 @@ jdx mcp -w gson
 
 A stored coordinate that is not in `~/.gradle/caches` or `~/.m2` exits 5 on the server. `--fetch` is a CLI flag. See [Classpath & workspaces](classpath.md#named-workspaces).
 
-jdx reads the names stored in the file. v1 does not read mapping files and does not rename classes. For a Minecraft mod, pass the jar Fabric Loom or NeoForge ModDevGradle already wrote with `--jars`. `jdx_diff` compares two artifacts that already share one mapping namespace. A Yarn jar against a Mojmap jar looks like nearly every member was removed and re-added. See [Minecraft mods](minecraft-mods.md).
+jdx reads the names stored in the file. v1 does not read mapping files and does not rename classes. For a Minecraft mod, pass the jar Fabric Loom or NeoForge ModDevGradle already wrote with `--jars`. `jdx_diff` compares two artifacts that already share one mapping namespace. A Yarn jar against a Mojmap jar looks like nearly every member was removed and re-added. See [Minecraft mods](minecraft-mods.md). Picking the class, the descriptor, and an injection point is [Find a Mixin target in Minecraft](minecraft-mixin-targets.md).
 
 The same `members` question, run here against Gson, is what `jdx_members` returns:
 
@@ -142,5 +142,6 @@ An agent that can run a shell can skip MCP and call the CLI. Paste `jdx help --a
 - [MCP, daemon, HTTP & batch](serving.md) — the other ways to keep jdx warm.
 - [Classpath & workspaces](classpath.md) — `--jars`, `--coord`, and `jdx ws`.
 - [Find which JAR contains a class](find-class-in-jar.md) — `jdx_resolve`, `jdx_search`, `jdx_ls`, and `jdx_tree`.
+- [Find a Mixin target in Minecraft](minecraft-mixin-targets.md) — class, type chain, method descriptor, and an injection point.
 - [A javap alternative](javap-alternative.md) — class-file signatures, callers, and decompilation.
 - [Command catalogue](../COMMANDS.md) — every flag.

@@ -120,6 +120,7 @@ Bytecode is parsed with ASM. Inspected classes are never loaded, so no static in
 
 - [Read and decompile a JAR](read-jar-from-terminal.md) — one method, source, or a decompilation, after you know the class.
 - [Minecraft mods](minecraft-mods.md) — the mapped jar, mixin callers, and a version diff.
+- [Find a Mixin target in Minecraft](minecraft-mixin-targets.md) — class, type chain, method descriptor, and an injection point.
 - [An MCP server for Java and Kotlin bytecode](java-mcp-server.md) — `jdx mcp` for Claude Code, Cursor, and Codex.
 - [Classpath & workspaces](classpath.md) — `--jars`, `--coord`, and `jdx ws`.
 - [Command catalogue](../COMMANDS.md) — every flag.
