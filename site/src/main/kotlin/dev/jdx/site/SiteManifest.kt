@@ -46,7 +46,7 @@ object SiteManifest {
     val guides = Section(
         title = "Guides",
         anchor = "guides",
-        summary = "Task-oriented guides: naming symbols, choosing a classpath, reading and navigating code, finding which jar contains a class, decompiling a jar, a javap alternative, smaller answers for agents, Minecraft mod jars, upgrades, output, the Java MCP server, and serving.",
+        summary = "Task-oriented guides: naming symbols, choosing a classpath, reading and navigating code, finding which jar contains a class, decompiling a jar, a javap alternative, smaller answers for agents, Minecraft mod jars, mixin targets, upgrades, output, the Java MCP server, and serving.",
         docs = listOf(
             DocSource("docs/guide/symbol-references.md", "docs/symbol-references/", navTitle = "Symbol references"),
             DocSource("docs/guide/classpath.md", "docs/classpath/", navTitle = "Classpath & workspaces"),
@@ -75,6 +75,12 @@ object SiteManifest {
             DocSource("docs/guide/navigating-code.md", "docs/navigating-code/", navTitle = "Usages, hierarchy & calls"),
             DocSource("docs/guide/api-diff.md", "docs/api-diff/", navTitle = "API diff for upgrades"),
             DocSource("docs/guide/minecraft-mods.md", "docs/minecraft-mods/", navTitle = "Minecraft mods"),
+            DocSource(
+                "docs/guide/minecraft-mixin-targets.md",
+                "docs/minecraft-mixin-targets/",
+                navTitle = "Find a mixin target",
+                headTitle = "Find a Mixin target in Minecraft from the terminal · jdx",
+            ),
             DocSource("docs/guide/output.md", "docs/output/", navTitle = "Output, JSON & exit codes"),
             DocSource(
                 "docs/guide/java-mcp-server.md",

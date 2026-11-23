@@ -80,6 +80,8 @@ jdx callers '<canonical ref from signature>' --exact --limit 30 --jars "$MAPPED_
 
 Pass every jar that might contain a call site. `callers` only accepts methods and constructors; a type or field ref exits 3. `calls` goes the other direction and stays bytecode-exact (the invoke names one owner).
 
+Next: [find a mixin target](minecraft-mixin-targets.md) — the class, its type chain, the signature, the body, and the injection point.
+
 Reference: [`callers`](https://mohammadmd1383.github.io/jdx/docs/reference/callers/), [`calls`](https://mohammadmd1383.github.io/jdx/docs/reference/calls/). More on the graph is in [Usages, hierarchy & calls](navigating-code.md#call-hierarchy-callers-and-calls).
 
 ## Usages
@@ -181,6 +183,7 @@ Reference: [`setup`](https://mohammadmd1383.github.io/jdx/docs/reference/setup/)
 
 ## Where next
 
+- [Find a Mixin target in Minecraft](minecraft-mixin-targets.md) — class, type chain, method descriptor, and an injection point.
 - [Find which JAR contains a class](find-class-in-jar.md) — which mod jar in a directory holds a class.
 - [Read and decompile a JAR](read-jar-from-terminal.md) — list a jar, open one method, decompile when there are no sources.
 - [An MCP server for Java and Kotlin bytecode](java-mcp-server.md) — `jdx mcp` pointed at the mapped jar.

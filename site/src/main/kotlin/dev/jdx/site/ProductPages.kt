@@ -179,13 +179,14 @@ class ProductPages(
     private fun guidesSection(): String = buildString {
         append("<section class=\"band\"><div class=\"wrap\">")
         append("<h2 id=\"guides\">Guides</h2>")
-        append("<p class=\"section-lead\">Task pages for finding a class, reading a jar, and wiring an agent.</p>")
+        append("<p class=\"section-lead\">Task pages for finding a class, reading a jar, picking a mixin target, and wiring an agent.</p>")
         append("<ul class=\"guide-list\">")
         val guides = listOf(
             Triple("docs/find-class-in-jar/", "Find which JAR contains a class", "List classes in a jar, and search jar files or Maven dependencies."),
             Triple("docs/read-jar-from-terminal/", "Read and decompile a JAR from the terminal", "List a jar, open one method, and view source."),
             Triple("docs/javap-alternative/", "A javap alternative for class files", "Signatures, one method's bytecode, callers, and implementors."),
             Triple("docs/minecraft-mods/", "Inspect Minecraft mod jars", "Members and mixin callers, without remapping."),
+            Triple("docs/minecraft-mixin-targets/", "Find a Mixin target in Minecraft from the terminal", "Mixin target method, method descriptor, and injection point."),
             Triple("docs/java-mcp-server/", "Java MCP server for JVM bytecode", "Typed tools for Claude Code, Cursor, and Codex."),
             Triple("docs/reduce-agent-tokens-java/", "Read Java dependencies without a source dump", "Outline and one method body, for a smaller answer."),
             Triple("docs/api-diff/", "API diff for a Java dependency upgrade", "What a new jar version breaks, as named rules."),

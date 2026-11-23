@@ -48,7 +48,7 @@ Yes. jdx is open source under the Apache-2.0 license, and every bundled dependen
 
 ## Can I inspect a Minecraft mod jar?
 
-Yes. Pass the jar your toolchain already mapped (Yarn or Mojmap) with `--jars`. jdx reads those names as stored and does not remap. The [Minecraft mods guide](guide/minecraft-mods.md) covers mixin-target callers, `fabric.mod.json` / `mods.toml`, and diffing two versions that already share one mapping set.
+Yes. Pass the jar your toolchain already mapped (Yarn or Mojmap) with `--jars`. jdx reads those names as stored and does not remap. The [Minecraft mods guide](guide/minecraft-mods.md) covers mixin-target callers, `fabric.mod.json` / `mods.toml`, and diffing two versions that already share one mapping set. The steps before writing a mixin are in [Find a Mixin target in Minecraft](guide/minecraft-mixin-targets.md).
 
 ## How do I report a bug or ask for a feature?
 

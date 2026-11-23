@@ -87,9 +87,38 @@ class ReferencePages(
             html.append("<a href=\"${site.rootRelative("docs/reference/")}\">All commands</a></p>\n")
             markdown.append("Guide: [$guideTitle](${site.absolute(guidePath)}) · [All commands](${site.absolute("docs/reference/")})\n")
         }
-        SEE_ALSO[name]?.let { (guideTitle, guidePath) ->
-            html.append("<p>See also: <a href=\"${site.rootRelative(guidePath)}\">${Html.text(guideTitle)}</a></p>\n")
-            markdown.append("\nSee also: [$guideTitle](${site.absolute(guidePath)})\n")
+        val seeAlso = SEE_ALSO[name].orEmpty()
+        if (seeAlso.isNotEmpty()) {
+            html.append("<p>See also: ")
+            html.append(
+                seeAlso.joinToString(" · ") { (guideTitle, guidePath) ->
+                    "<a href=\"${site.rootRelative(guidePath)}\">${Html.text(guideTitle)}</a>"
+                },
+            )
+            html.append("</p>\n")
+            markdown.append("\nSee also: ")
+            markdown.append(
+                seeAlso.joinToString(" · ") { (guideTitle, guidePath) ->
+                    "[$guideTitle](${site.absolute(guidePath)})"
+                },
+            )
+            markdown.append("\n")
+        }
+        RELATED_COMMANDS[name]?.let { related ->
+            html.append("<p>Related commands: ")
+            html.append(
+                related.joinToString(" · ") { other ->
+                    "<a href=\"${site.rootRelative(commandPath(other))}\"><code>jdx ${Html.text(other)}</code></a>"
+                },
+            )
+            html.append("</p>\n")
+            markdown.append("\nRelated commands: ")
+            markdown.append(
+                related.joinToString(" · ") { other ->
+                    "[`jdx $other`](${site.absolute(commandPath(other))})"
+                },
+            )
+            markdown.append("\n")
         }
 
         val path = commandPath(name)
@@ -327,12 +356,35 @@ class ReferencePages(
             put("diff", "API diff for upgrades" to "docs/api-diff/")
         }
 
-        /** One extra line on the commands this guide is about. */
-        val SEE_ALSO: Map<String, Pair<String, String>> = mapOf(
-            "resolve" to ("Find which JAR contains a class" to "docs/find-class-in-jar/"),
-            "search" to ("Find which JAR contains a class" to "docs/find-class-in-jar/"),
-            "ls" to ("Find which JAR contains a class" to "docs/find-class-in-jar/"),
-            "tree" to ("Find which JAR contains a class" to "docs/find-class-in-jar/"),
+        private val MIXIN_GUIDE = "Find a Mixin target in Minecraft" to "docs/minecraft-mixin-targets/"
+
+        /** Extra guide links. A command may name more than one. */
+        val SEE_ALSO: Map<String, List<Pair<String, String>>> = mapOf(
+            "resolve" to listOf("Find which JAR contains a class" to "docs/find-class-in-jar/"),
+            "search" to listOf("Find which JAR contains a class" to "docs/find-class-in-jar/"),
+            "ls" to listOf("Find which JAR contains a class" to "docs/find-class-in-jar/"),
+            "tree" to listOf("Find which JAR contains a class" to "docs/find-class-in-jar/"),
+            "hierarchy" to listOf(MIXIN_GUIDE),
+            "callers" to listOf(MIXIN_GUIDE),
+            "calls" to listOf(MIXIN_GUIDE),
+            "signature" to listOf(MIXIN_GUIDE),
+            "body" to listOf(MIXIN_GUIDE),
+        )
+
+        /**
+         * Sibling command pages, so a reader (and a crawler) can move between the
+         * reference pages for one task without going back to the catalogue.
+         */
+        val RELATED_COMMANDS: Map<String, List<String>> = mapOf(
+            "search" to listOf("resolve", "members", "hierarchy"),
+            "resolve" to listOf("search", "members", "hierarchy"),
+            "members" to listOf("outline", "signature", "search"),
+            "outline" to listOf("members", "signature", "body"),
+            "signature" to listOf("body", "members", "outline"),
+            "body" to listOf("signature", "callers", "calls"),
+            "hierarchy" to listOf("members", "callers", "resolve"),
+            "callers" to listOf("calls", "body", "hierarchy"),
+            "calls" to listOf("callers", "body", "signature"),
         )
     }
 }

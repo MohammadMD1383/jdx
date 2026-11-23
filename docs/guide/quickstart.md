@@ -84,4 +84,5 @@ That is the whole integration — see [Use with AI agents](ai-agents.md).
 - [Read and decompile a JAR](read-jar-from-terminal.md) — list a jar, one method, decompile when there are no sources.
 - [Read Java dependencies without a source dump](reduce-agent-tokens-java.md) — `show`, `outline`, and one `body`.
 - [Minecraft mod jars](minecraft-mods.md) — a mapped jar, mixin callers, and a version diff.
+- [Find a Mixin target in Minecraft](minecraft-mixin-targets.md) — class, type chain, method descriptor, and an injection point.
 - The [command catalogue](../COMMANDS.md).
