@@ -215,14 +215,16 @@ decompile a jar from the terminal, see
 Minecraft jar, pass the mapped jar your toolchain already produced — see
 [Inspect Minecraft mod jars](docs/guide/minecraft-mods.md). To pick a mixin
 target from that jar, see
-[Find a Mixin target in Minecraft](docs/guide/minecraft-mixin-targets.md).
+[Find a Mixin target in Minecraft](docs/guide/minecraft-mixin-targets.md). To
+compare two mapped Minecraft jars, or two versions of a mod, see
+[See what changed between two Minecraft or mod versions](docs/guide/minecraft-version-diff.md).
 
 ## Documentation
 
 | | |
 |---|---|
 | [Website](https://mohammadmd1383.github.io/jdx/) | Guides, generated command and MCP reference, integrations, FAQ |
-| [`docs/guide/`](docs/guide/introduction.md) | User guides: install, quickstart, AI agents, classpath, reading and navigating code, finding which jar contains a class, decompiling a jar from the terminal, API diff, Minecraft mod jars, mixin targets |
+| [`docs/guide/`](docs/guide/introduction.md) | User guides: install, quickstart, AI agents, classpath, reading and navigating code, finding which jar contains a class, decompiling a jar from the terminal, API diff, Minecraft mod jars, mixin targets, version diffs |
 | [`docs/COMMANDS.md`](docs/COMMANDS.md) | Full command reference (flags, exit codes, symbol grammar) |
 | [`AGENTS.md`](AGENTS.md) (+ per-module `AGENTS.md`) | Contributor notes: architecture rules, gotchas, build/test |
 | [`docs/PROPOSAL.md`](docs/PROPOSAL.md) | Full design specification (Appendix B is the flag reference) |

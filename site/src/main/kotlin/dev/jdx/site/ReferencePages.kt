@@ -358,6 +358,9 @@ class ReferencePages(
 
         private val MIXIN_GUIDE = "Find a Mixin target in Minecraft" to "docs/minecraft-mixin-targets/"
 
+        private val VERSION_DIFF_GUIDE =
+            "See what changed between Minecraft or mod versions" to "docs/minecraft-version-diff/"
+
         /** Extra guide links. A command may name more than one. */
         val SEE_ALSO: Map<String, List<Pair<String, String>>> = mapOf(
             "resolve" to listOf("Find which JAR contains a class" to "docs/find-class-in-jar/"),
@@ -369,6 +372,7 @@ class ReferencePages(
             "calls" to listOf(MIXIN_GUIDE),
             "signature" to listOf(MIXIN_GUIDE),
             "body" to listOf(MIXIN_GUIDE),
+            "diff" to listOf(VERSION_DIFF_GUIDE),
         )
 
         /**

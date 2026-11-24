@@ -171,13 +171,14 @@ Reference: [`setup`](https://mohammadmd1383.github.io/jdx/docs/reference/setup/)
 
 jdx does not remap. It reads whatever names the jar uses, so query the names of the mapping namespace in that jar: the Loom-mapped jar, a Mojmap jar, a Yarn jar, or an obfuscated jar. Reading Tiny, SRG, or ProGuard mappings is phase-2 backlog.
 
-`jdx diff` compares two artifacts that already use the same names. A Yarn jar diffed against a Mojmap jar looks like nearly every member was removed and re-added. Compare two Yarn jars, or two Mojmap jars, or two builds in one namespace. See [Minecraft mods](minecraft-mods.md#diff-two-versions-of-a-mod-or-library-jar) and [API diff for upgrades](api-diff.md).
+`jdx diff` compares two artifacts that already use the same names. A Yarn jar diffed against a Mojmap jar, or an intermediary jar diffed against a named jar, looks like nearly every member was removed and re-added. Compare two Yarn jars, or two Mojmap jars, or two builds in one namespace. See [See what changed between two Minecraft or mod versions](minecraft-version-diff.md), [Minecraft mods](minecraft-mods.md#diff-two-versions-of-a-mod-or-library-jar), and [API diff for upgrades](api-diff.md).
 
 Bytecode is parsed with ASM. Inspected classes are never loaded, so no static initialiser and no other code from the jar runs. jdx writes only inside its own cache, config, and runtime directories. `--jars` reads the file you named and does not download it.
 
 ## Where next
 
 - [Minecraft mods](minecraft-mods.md) — mod metadata, deprecated members, and a version diff.
+- [See what changed between two Minecraft or mod versions](minecraft-version-diff.md) — `diff` two mapped jars, then one member.
 - [Find which JAR contains a class](find-class-in-jar.md) — which file in `mods/*.jar` holds a class.
 - [Read and decompile a JAR](read-jar-from-terminal.md) — one method, source, or a decompilation.
 - [Usages, hierarchy & calls](navigating-code.md) — the rest of the graph.

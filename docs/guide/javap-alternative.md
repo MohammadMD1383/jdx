@@ -84,7 +84,7 @@ jdx diff com.google.code.gson:gson:2.11.0 com.google.code.gson:gson:2.14.0 --sev
 
 The executed Gson comparison is on [API diff for upgrades](api-diff.md).
 
-jdx reads the names stored in the file. v1 does not read mapping files and does not rename classes. Pass the jar Fabric Loom or NeoForge ModDevGradle already wrote with `--jars` on the commands that take a classpath. `diff` only works within one mapping namespace: both sides must already use the same names. A Yarn jar diffed against a Mojmap jar looks like nearly every member was removed and re-added. Compare two Yarn jars, or two Mojmap jars, or two builds of your mod. See [Minecraft mods](minecraft-mods.md).
+jdx reads the names stored in the file. v1 does not read mapping files and does not rename classes. Pass the jar Fabric Loom or NeoForge ModDevGradle already wrote with `--jars` on the commands that take a classpath. `diff` only works within one mapping namespace: both sides must already use the same names. A Yarn jar diffed against a Mojmap jar, or an intermediary jar diffed against a named jar, looks like nearly every member was removed and re-added. Compare two Yarn jars, or two Mojmap jars, or two builds of your mod. See [Minecraft mods](minecraft-mods.md) and [See what changed between two Minecraft or mod versions](minecraft-version-diff.md).
 
 Reference: [`diff`](https://mohammadmd1383.github.io/jdx/docs/reference/diff/).
 
