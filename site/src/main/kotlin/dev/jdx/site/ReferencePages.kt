@@ -372,6 +372,7 @@ class ReferencePages(
             "calls" to listOf(MIXIN_GUIDE),
             "signature" to listOf(MIXIN_GUIDE),
             "body" to listOf(MIXIN_GUIDE),
+            "doc" to listOf("Read Javadoc from a jar in the terminal" to "docs/read-javadoc-from-jar/"),
             "diff" to listOf(VERSION_DIFF_GUIDE),
         )
 

@@ -12,7 +12,7 @@ Any agent that speaks the Model Context Protocol or can run shell commands. `jdx
 
 ## How is it different from javap, unzip and grep?
 
-Those tools answer one low-level question each, so an agent chains several of them and reads large outputs into its context. jdx answers the actual question in one command: only the method you asked for, inherited members resolved transitively with generics, usages across every jar, real source when a sources jar exists, and a labelled decompilation when it does not. On a measured task it used 2 calls and about a quarter of the bytes. See [Find which JAR contains a class](guide/find-class-in-jar.md), [Read and decompile a JAR from the terminal](guide/read-jar-from-terminal.md), [A javap alternative](guide/javap-alternative.md), and the [README benchmark](https://github.com/MohammadMD1383/jdx#readme).
+Those tools answer one low-level question each, so an agent chains several of them and reads large outputs into its context. jdx answers the actual question in one command: only the method you asked for, inherited members resolved transitively with generics, usages across every jar, real source when a sources jar exists, and a labelled decompilation when it does not. On a measured task it used 2 calls and about a quarter of the bytes. See [Find which JAR contains a class](guide/find-class-in-jar.md), [Read and decompile a JAR from the terminal](guide/read-jar-from-terminal.md), [Read Javadoc from a jar](guide/read-javadoc-from-jar.md), [A javap alternative](guide/javap-alternative.md), and the [README benchmark](https://github.com/MohammadMD1383/jdx#readme).
 
 ## Does it run code from the jars it inspects?
 
@@ -20,7 +20,7 @@ No. jdx parses bytecode with ASM and never loads inspected classes, so no static
 
 ## Does it need the library's sources?
 
-No. With a `-sources.jar` (or a source directory, or the JDK's `src.zip`) it shows real source. Without one it decompiles with Vineflower and marks the result as reconstructed, and `--engine javap` shows raw bytecode. When Vineflower returns only a `$VF: Could not decompile…` stub (common for suspend lambdas), the default ladder falls through to `javap` automatically instead of serving the stub. Structure always comes from bytecode, so member lists and signatures are exact either way.
+No. With a `-sources.jar` (or a source directory, or the JDK's `src.zip`) it shows real source. Without one it decompiles with Vineflower and marks the result as reconstructed, and `--engine javap` shows raw bytecode. When Vineflower returns only a `$VF: Could not decompile…` stub (common for suspend lambdas), the default ladder falls through to `javap` automatically instead of serving the stub. Structure always comes from bytecode, so member lists and signatures are exact either way. `jdx doc` reads javadoc from those sources. A library class with no paired `-sources.jar`, and a JDK class whose distribution ships no `src.zip`, each exit 1 and the message names the missing sources. See [Read Javadoc from a jar in the terminal](guide/read-javadoc-from-jar.md).
 
 ## Does it support Kotlin?
 
