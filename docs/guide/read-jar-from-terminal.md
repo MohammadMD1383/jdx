@@ -149,4 +149,5 @@ Every command accepts `--json`. Exit codes are in [Output, JSON & exit codes](ou
 - [Reading code](reading-code.md) — `show`, `signature`, `doc`, and search.
 - [Minecraft mods](minecraft-mods.md) — a mapped jar, mixin callers, and a version diff.
 - [Find a Mixin target in Minecraft](minecraft-mixin-targets.md) — class, type chain, method descriptor, and an injection point.
+- [See what changed between two Minecraft or mod versions](minecraft-version-diff.md) — `diff` two mapped jars, then one member.
 - [Command catalogue](../COMMANDS.md) — every flag.

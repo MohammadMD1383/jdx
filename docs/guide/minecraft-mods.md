@@ -146,7 +146,7 @@ jdx diff old-mod.jar new-mod.jar --visibility all --fail-on breaking
 jdx diff old-library.jar new-library.jar --visibility all --severity breaking --limit 40
 ```
 
-Both sides must already use the same names. jdx does not remap, so a Yarn jar diffed against a Mojmap jar looks like nearly every member was removed and re-added. Compare two Yarn jars, or two Mojmap jars, or two builds of your mod in one namespace. The same command works for two mapped Minecraft jars. The full rule list and the CI sketch are in [API diff for upgrades](api-diff.md).
+Both sides must already use the same names. jdx does not remap, so a Yarn jar diffed against a Mojmap jar, or an intermediary jar diffed against a named jar, looks like nearly every member was removed and re-added. Compare two Yarn jars, or two Mojmap jars, or two builds of your mod in one namespace. The same command works for two mapped Minecraft jars. The walkthrough — the two jars, then `members`, `signature`, and `body` — is [See what changed between two Minecraft or mod versions](minecraft-version-diff.md). The full rule list and the CI sketch are in [API diff for upgrades](api-diff.md).
 
 Reference: [`diff`](https://mohammadmd1383.github.io/jdx/docs/reference/diff/).
 
@@ -184,6 +184,7 @@ Reference: [`setup`](https://mohammadmd1383.github.io/jdx/docs/reference/setup/)
 ## Where next
 
 - [Find a Mixin target in Minecraft](minecraft-mixin-targets.md) — class, type chain, method descriptor, and an injection point.
+- [See what changed between two Minecraft or mod versions](minecraft-version-diff.md) — `diff` two mapped jars, then one member.
 - [Find which JAR contains a class](find-class-in-jar.md) — which mod jar in a directory holds a class.
 - [Read and decompile a JAR](read-jar-from-terminal.md) — list a jar, open one method, decompile when there are no sources.
 - [An MCP server for Java and Kotlin bytecode](java-mcp-server.md) — `jdx mcp` pointed at the mapped jar.

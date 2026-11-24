@@ -56,3 +56,7 @@ In GitHub Actions:
 - name: Public API must not break
   run: jdx diff "com.example:mylib:$(git describe --tags --abbrev=0 | tr -d v)" build/libs/mylib.jar --fetch --fail-on breaking
 ```
+
+## Minecraft and mod jars
+
+`diff` does not remap. Both sides must already use the same names. A Yarn jar against a Mojmap jar, or an intermediary jar against a named jar, looks like nearly every member was removed and re-added. Pass the Loom-mapped jars yourself. The two arguments are the jars; `members`, `signature`, and `body` are the commands that take `--jars`. The walkthrough is [See what changed between two Minecraft or mod versions](minecraft-version-diff.md).

@@ -79,7 +79,7 @@ jdx -w gson outline com.google.gson.Gson --kind method --limit 20
 
 ## Mapped jars
 
-jdx reads the names stored in the file. v1 does not read mapping files and does not rename classes. Pass the jar Fabric Loom or NeoForge ModDevGradle already wrote with `--jars`. `diff` compares two artifacts that already share one mapping namespace. A Yarn jar against a Mojmap jar looks like nearly every member was removed and re-added. See [Minecraft mods](minecraft-mods.md).
+jdx reads the names stored in the file. v1 does not read mapping files and does not rename classes. Pass the jar Fabric Loom or NeoForge ModDevGradle already wrote with `--jars`. `diff` compares two artifacts that already share one mapping namespace. A Yarn jar against a Mojmap jar, or an intermediary jar against a named jar, looks like nearly every member was removed and re-added. See [Minecraft mods](minecraft-mods.md) and [See what changed between two Minecraft or mod versions](minecraft-version-diff.md).
 
 Bytecode is parsed with ASM. Inspected classes are never loaded, so no static initialiser from a dependency runs.
 

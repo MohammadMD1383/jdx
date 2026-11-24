@@ -167,4 +167,4 @@ $ jdx resources META-INF/MANIFEST.MF --cat --coord com.google.code.gson:gson:2.1
 
 Open limitations are tracked in [GitHub Issues](https://github.com/MohammadMD1383/jdx/issues).
 
-Finding a mixin injection point in a mapped Minecraft jar is [Find a Mixin target in Minecraft](minecraft-mixin-targets.md).
+Finding a mixin injection point in a mapped Minecraft jar is [Find a Mixin target in Minecraft](minecraft-mixin-targets.md). Comparing two mapped jars is [See what changed between two Minecraft or mod versions](minecraft-version-diff.md).
