@@ -7,6 +7,7 @@
 [![Release CI](https://github.com/MohammadMD1383/jdx/actions/workflows/release.yml/badge.svg)](https://github.com/MohammadMD1383/jdx/actions/workflows/release.yml)
 [![License](https://img.shields.io/github/license/MohammadMD1383/jdx)](LICENSE)
 [![M8ven Score](https://m8ven.ai/badge/mcp/mohammadmd1383/jdx)](https://m8ven.ai/mcp/mohammadmd1383/jdx)
+[![MohammadMD1383/jdx MCP server](https://glama.ai/mcp/servers/MohammadMD1383/jdx/badges/score.svg)](https://glama.ai/mcp/servers/MohammadMD1383/jdx)
 
 **Website & docs: [mohammadmd1383.github.io/jdx](https://mohammadmd1383.github.io/jdx/)**
 
