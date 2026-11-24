@@ -54,6 +54,8 @@ documented supertype (and says so):
 $ jdx doc 'com.google.gson.JsonParser#parseString(String)' --coord com.google.code.gson:gson:2.14.0
 ```
 
+A Maven coordinate, a JDK class, and a jar with no `-sources.jar` are covered in [Read Javadoc from a jar in the terminal](read-javadoc-from-jar.md).
+
 `body` shows exactly one method — tens of lines instead of a whole file:
 
 ```console exec

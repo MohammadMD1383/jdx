@@ -119,6 +119,7 @@ Bytecode is parsed with ASM. Inspected classes are never loaded, so no static in
 ## Where next
 
 - [Read and decompile a JAR](read-jar-from-terminal.md) — one method, source, or a decompilation, after you know the class.
+- [Read Javadoc from a jar](read-javadoc-from-jar.md) — the comment on that class or method.
 - [Minecraft mods](minecraft-mods.md) — the mapped jar, mixin callers, and a version diff.
 - [Find a Mixin target in Minecraft](minecraft-mixin-targets.md) — class, type chain, method descriptor, and an injection point.
 - [See what changed between two Minecraft or mod versions](minecraft-version-diff.md) — `diff` two mapped jars, then one member.

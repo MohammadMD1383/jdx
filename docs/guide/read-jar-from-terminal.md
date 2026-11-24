@@ -143,6 +143,7 @@ Every command accepts `--json`. Exit codes are in [Output, JSON & exit codes](ou
 ## Where next
 
 - [Find which JAR contains a class](find-class-in-jar.md) — which file holds a class, and the classes in one jar.
+- [Read Javadoc from a jar](read-javadoc-from-jar.md) — the comment on a class or method, from a `-sources.jar`.
 - [Quickstart](quickstart.md) — the JDK and a Maven coordinate in five minutes.
 - [Installation](installation.md) — Linux, macOS, Windows, and offline installs.
 - [A javap alternative](javap-alternative.md) — class-file signatures, callers, implementors, and where javap still fits.
