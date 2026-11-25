@@ -8,7 +8,8 @@ via `JsonEscape` — reuse it, never a second escaper). `explicitApi()` is on.
 
 - `model/` — `ClassInfo` (+ Kotlin views), `MemberInfo`, `TypeName`,
   `GenericSignature`, `JvmDescriptor`, `SymbolRef`, `Reference` (edge kinds),
-  `Warning` (codes), `Provenance`, `KotlinView`.
+  `Warning` (codes), `Provenance` (`Origin.LEXER` is the brace-matched `.kt`
+  body from `--kotlin-mode`, lower confidence than `SOURCES`), `KotlinView`.
 - `diff/` — the public-API diff engine (issue #23): `ApiSnapshot` (what a diff
   compares: kind, visibility, supertypes, members keyed by name + erased parameter
   list), `CompatRule` (~50 named rules, each with a fixed severity — the enum name

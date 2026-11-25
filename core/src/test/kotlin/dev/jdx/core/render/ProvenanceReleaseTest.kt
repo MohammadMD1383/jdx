@@ -38,6 +38,8 @@ class ProvenanceReleaseTest {
         )
         renderSourceLine(provenance, "Api.java", 4, 8) shouldBe
             "source: decompiled by vineflower from app.jar · Api.java:4-8 (release 11)  ⚠ reconstructed"
+        renderSourceLine(provenance.copy(origin = Origin.LEXER), "Api.kt", 4, 8) shouldBe
+            "source: lexer scan of app.jar · Api.kt:4-8 (release 11)  ⚠ brace-matched, not PSI"
         Provenance(artifact = "app.jar", origin = Origin.SOURCES, file = "Api.java", lineRange = 1..3)
             .let { renderSourceLine(it, "Api.java", 1, 3) } shouldBe
             "source: app.jar · Api.java:1-3"

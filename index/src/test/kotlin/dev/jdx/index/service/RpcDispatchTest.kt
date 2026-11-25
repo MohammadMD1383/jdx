@@ -359,6 +359,8 @@ class RpcDispatchTest {
         viaWire(req(RpcCommand.SEARCH, "x", "kind" to "bogus")) shouldContain "--kind 'bogus'"
         viaWire(req(RpcCommand.USAGES, "u.Lib", "kind" to "bogus")) shouldContain "--kind 'bogus'"
         viaWire(req(RpcCommand.BODY, "dev.jdx.fixtures.Generics#identity", "engine" to "bogus")) shouldContain "--engine bogus"
+        viaWire(req(RpcCommand.BODY, "dev.jdx.fixtures.Generics#identity", "kotlinMode" to "bogus")) shouldContain
+            "--kotlin-mode 'bogus'"
     }
 
     @Test

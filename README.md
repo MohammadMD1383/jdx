@@ -191,7 +191,7 @@ jdx diff gson-2.11.0.jar gson-2.14.0.jar --fail-on breaking
   copy-pasteable reference.
 - **Machine-legible outcomes.** Distinct exit codes for *not found*, *ambiguous*,
   *no index*, *bad usage* — branch without parsing prose. `--json` for everything.
-- **Provenance on every answer** — which jar, sources or bytecode, which decompiler.
+- **Provenance on every answer** — which jar, sources, lexer, or bytecode, which decompiler.
 - **`jdx batch`** — many queries, one process, one index load.
 - **Four front-ends over one engine:** one-shot CLI, MCP server, a daemon, and a local HTTP/JSON API.
 - **`jdx help --agent`** — a compact paste-ready block for `CLAUDE.md` / system prompts.

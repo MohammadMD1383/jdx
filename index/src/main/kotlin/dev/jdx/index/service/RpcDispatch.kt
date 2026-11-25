@@ -34,6 +34,7 @@ import dev.jdx.core.render.WarningLines
 import dev.jdx.core.rpc.RpcCommand
 import dev.jdx.core.rpc.RpcRequest
 import dev.jdx.decompile.DecompilerId
+import dev.jdx.sources.KotlinMode
 import dev.jdx.index.cache.CacheService
 import dev.jdx.index.maven.MavenCoords
 import dev.jdx.index.maven.MavenResolver
@@ -171,6 +172,7 @@ public fun JdxService.dispatch(request: RpcRequest, roots: RootsSpec): ServiceOu
                 withSignature = scope.bool("withSignature"),
                 withDoc = scope.bool("withDoc"),
                 engine = if (scope.has("engine")) scope.engineOrNull() ?: return scope.failure() else null,
+                kotlinMode = scope.kotlinMode() ?: return scope.failure(),
             ),
         )
         RpcCommand.SOURCE -> source(
@@ -835,6 +837,15 @@ private class ParamScope(
         val raw = params[wire] ?: return default
         return fromFlag(raw) ?: run {
             fail("usage error: --$flag '$raw' is not valid for $commandWire")
+            null
+        }
+    }
+
+    /** Absent or `psi` keeps the sidecar ladder. Unknown values are a usage error. */
+    fun kotlinMode(): KotlinMode? {
+        val raw = params["kotlinMode"] ?: return KotlinMode.PSI
+        return KotlinMode.fromFlag(raw) ?: run {
+            fail("usage error: --kotlin-mode '$raw' is not valid (psi|lexer|auto)")
             null
         }
     }

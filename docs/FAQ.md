@@ -24,7 +24,7 @@ No. With a `-sources.jar` (or a source directory, or the JDK's `src.zip`) it sho
 
 ## Does it support Kotlin?
 
-Yes. Kotlin binaries are read through their `@Metadata`, so jdx shows real Kotlin declarations — `suspend` functions, properties, default arguments, `@JvmName` mappings. Reading Kotlin sources needs a one-time `jdx kotlin install`. See [Reading code](guide/reading-code.md#kotlin).
+Yes. Kotlin binaries are read through their `@Metadata`, so jdx shows real Kotlin declarations — `suspend` functions, properties, default arguments, `@JvmName` mappings. Reading Kotlin sources precisely needs a one-time `jdx kotlin install`. `jdx body --kotlin-mode lexer` brace-matches a `.kt` member without that install and labels the slice `lexer`. The default is still the sidecar, then a labelled decompilation. See [Reading code](guide/reading-code.md#kotlin).
 
 ## Does it work on my Gradle or Maven project?
 

@@ -18,6 +18,7 @@ import dev.jdx.cli.effectiveNoDaemon
 import dev.jdx.cli.effectiveWorkspace
 import dev.jdx.core.render.ErrorResult
 import dev.jdx.decompile.DecompilerId
+import dev.jdx.sources.KotlinMode
 import dev.jdx.index.service.JdxService
 import dev.jdx.index.workspace.FileWorkspaceStore
 import dev.jdx.index.workspace.WorkspaceStore
@@ -76,6 +77,14 @@ class BodyCommand(
             "paired (default serves sources, falling back to vineflower); javap shows " +
             "the raw bytecode instead.",
     ).choice("vineflower", "javap", ignoreCase = true)
+
+    private val kotlinMode by option(
+        "--kotlin-mode",
+        help = "How to read a .kt body. psi (default) uses the compiler sidecar, then " +
+            "decompile. lexer brace-matches the source without the sidecar and labels " +
+            "provenance lexer. auto uses the sidecar when it parses, otherwise the lexer. " +
+            "jdx source and jdx doc stay on psi. The lexer never downloads anything.",
+    ).choice("psi", "lexer", "auto", ignoreCase = true)
 
     private val withDoc by option(
         "--with-doc",
@@ -150,6 +159,7 @@ class BodyCommand(
             maxLines = maxLines,
             engine = engine,
             withDoc = withDoc,
+            kotlinMode = kotlinMode,
         )
         if (usageError != null) {
             val failure = JdxService.ServiceOutcome.Failure(
@@ -167,6 +177,7 @@ class BodyCommand(
                     withSignature = withSignature,
                     withDoc = withDoc,
                     engine = engine,
+                    kotlinMode = kotlinMode,
                 ),
                 flagWorkspace = effectiveWorkspace(workspace),
                 roots = WarmRoots(jars = jars, coords = coord, repos = repo, fetch = fetch, noJdk = noJdk, release = release),
@@ -207,6 +218,11 @@ class BodyCommand(
                             engine.equals("javap", ignoreCase = true) -> DecompilerId.JAVAP
                             else -> null
                         },
+                        kotlinMode = when {
+                            kotlinMode.equals("lexer", ignoreCase = true) -> KotlinMode.LEXER
+                            kotlinMode.equals("auto", ignoreCase = true) -> KotlinMode.AUTO
+                            else -> KotlinMode.PSI
+                        },
                     ),
                 )
                 ReadCommandSupport.finish(outcome, "body", json, noColor, terminate)
@@ -227,6 +243,7 @@ internal fun validateBodyFlags(
     maxLines: Int,
     engine: String?,
     withDoc: Boolean,
+    kotlinMode: String? = null,
 ): String? {
     if (context < 0) return "usage error: --context must be >= 0, got $context"
     if (maxLines < 0) return "usage error: --max-lines must be >= 0, got $maxLines"
@@ -235,6 +252,9 @@ internal fun validateBodyFlags(
         !engine.equals("javap", ignoreCase = true)
     ) {
         return "usage error: --engine $engine is not a known engine (vineflower|javap)"
+    }
+    if (kotlinMode != null && KotlinMode.fromFlag(kotlinMode) == null) {
+        return "usage error: --kotlin-mode '$kotlinMode' is not valid (psi|lexer|auto)"
     }
     return null
 }

@@ -354,6 +354,7 @@ public object DaemonClient {
         withSignature: Boolean = false,
         withDoc: Boolean = false,
         engine: String? = null,
+        kotlinMode: String? = null,
     ): RpcRequest = RpcRequest(
         command = RpcCommand.BODY,
         query = ref,
@@ -364,6 +365,11 @@ public object DaemonClient {
             put("withSignature", withSignature.toText())
             put("withDoc", withDoc.toText())
             if (engine != null) put("engine", engine.lowercase())
+            // psi is the dispatch default. Omitting it keeps a default warm
+            // request byte-identical to one that never heard of the flag.
+            if (kotlinMode != null && !kotlinMode.equals("psi", ignoreCase = true)) {
+                put("kotlinMode", kotlinMode.lowercase())
+            }
         },
     )
 

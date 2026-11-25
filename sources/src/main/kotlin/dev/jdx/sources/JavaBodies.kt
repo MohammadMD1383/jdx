@@ -9,6 +9,7 @@ import com.github.javaparser.ast.body.BodyDeclaration
 import com.github.javaparser.ast.body.EnumConstantDeclaration
 import com.github.javaparser.ast.body.TypeDeclaration
 import dev.jdx.core.model.MemberSymbolRef
+import dev.jdx.core.model.Origin
 import dev.jdx.core.model.TypeName
 
 /**
@@ -36,6 +37,10 @@ public enum class SourceBodyKind {
  * grammar; otherwise the declared name. Body-less declarations
  * (abstract/native methods, fields) slice to their declaration text, and a
  * multi-declarator field (`int a, b;`) slices to the whole declaration.
+ *
+ * [origin] is [Origin.SOURCES] for JavaParser and Kotlin PSI. The
+ * brace-matching `.kt` fallback sets [Origin.LEXER] so a renderer can
+ * label the slice without treating it as ground-truth PSI.
  */
 public data class SourceBody(
     public val kind: SourceBodyKind,
@@ -46,6 +51,7 @@ public data class SourceBody(
     public val startLine: Int,
     public val endLine: Int,
     public val text: String,
+    public val origin: Origin = Origin.SOURCES,
 )
 
 /**

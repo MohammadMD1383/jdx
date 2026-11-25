@@ -7,6 +7,9 @@ behaviour lives here** (adapters call in, never the reverse). `explicitApi()` is
 
 - `service/JdxService` — every command's implementation; `service/RpcDispatch` —
   wire-command dispatch (same package, keeps the service file untouched).
+  `BodyOptions.kotlinMode` (`--kotlin-mode`, issue #16) is the only query that
+  can open the `.kt` lexer; `source` and `doc` stay on PSI. Absent or `psi`
+  on the wire is the old sidecar ladder.
   `JdxService.diff(old, new, options)` is the one query that takes **no `RootsSpec`**: a
   diff names its own two artifacts, so `daemonRoots` short-circuits to `Ready` for
   `RpcCommand.DIFF` and the dispatch ignores the roots it is handed.

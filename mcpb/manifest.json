@@ -66,7 +66,7 @@
     },
     {
       "name": "jdx_body",
-      "description": "Returns one member's source body, sliced to that member, plus a provenance line naming the artifact and file. context adds lines around the slice; maxLines caps it (default 200). Use it to read an implementation. Use jdx_signature for the declaration only, jdx_doc for javadoc, and jdx_source for the whole file or an arbitrary line window. Paired sources are sliced verbatim. Without them, or when engine is set, the body is decompiled and the provenance line is marked ⚠ reconstructed. An ambiguous ref is error code 2 and lists every candidate. Overload choice is decided from bytecode before sources or a decompiler run. Parses with ASM and never loads or executes the inspected class."
+      "description": "Returns one member's source body, sliced to that member, plus a provenance line naming the artifact and file. context adds lines around the slice; maxLines caps it (default 200). Use it to read an implementation. Use jdx_signature for the declaration only, jdx_doc for javadoc, and jdx_source for the whole file or an arbitrary line window. Paired sources are sliced verbatim. Without them, or when engine is set, the body is decompiled and the provenance line is marked ⚠ reconstructed. kotlinMode selects how a .kt body is read: psi (default) uses the compiler sidecar, lexer brace-matches without it and sets provenance to lexer, and auto uses the sidecar when that parse succeeds and the lexer otherwise. An ambiguous ref is error code 2 and lists every candidate. Overload choice is decided from bytecode before sources or a decompiler run. Parses with ASM and never loads or executes the inspected class."
     },
     {
       "name": "jdx_source",

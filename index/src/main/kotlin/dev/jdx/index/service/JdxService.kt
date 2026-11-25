@@ -548,6 +548,12 @@ public object JdxService {
         public val kotlinUserHome: Path? = null,
         public val kotlinSidecarOs: JdxOs? = null,
         public val kotlinSidecarEnv: Map<String, String>? = null,
+        /**
+         * How a `.kt` body is read (`--kotlin-mode`, issue #16). The default
+         * never opens the lexer, so existing answers stay byte-identical.
+         * `jdx source` and `jdx doc` ignore this and stay on PSI.
+         */
+        public val kotlinMode: dev.jdx.sources.KotlinMode = dev.jdx.sources.KotlinMode.PSI,
     )
 
     /**
@@ -6768,10 +6774,12 @@ public object JdxService {
         val opened = openRoots(roots)
         // One Kotlin parser per command (T-039): cheap to open, and the
         // ~1 s PSI init happens at most once, on the first `.kt` parse.
+        // `--kotlin-mode lexer` never opens the sidecar.
         val ktParser = openKotlinParserFor(
             options.kotlinUserHome,
             options.kotlinSidecarOs,
             options.kotlinSidecarEnv,
+            options.kotlinMode,
         )
         try {
             val binariesByRoot = opened.map { it.root.classEntryPaths().map(::entryToBinary).toSet() }
@@ -7094,17 +7102,19 @@ public object JdxService {
         userHome: Path?,
         os: JdxOs? = null,
         env: Map<String, String>? = null,
+        mode: dev.jdx.sources.KotlinMode = dev.jdx.sources.KotlinMode.PSI,
     ): dev.jdx.sources.KotlinSourceParser {
         val home = userHome
             ?: runCatching { Path.of(System.getProperty("user.home")) }.getOrNull()
             ?: Path.of(".")
         return if (os == null && env == null) {
-            dev.jdx.sources.openKotlinParser(home)
+            dev.jdx.sources.openKotlinParser(home, mode = mode)
         } else {
             dev.jdx.sources.openKotlinParser(
                 home,
                 os ?: dev.jdx.index.kotlin.ambientSidecarOs(),
                 env ?: System.getenv(),
+                mode,
             )
         }
     }
@@ -8288,7 +8298,7 @@ public object JdxService {
                 provenance = listOf(
                     Provenance(
                         artifact = label,
-                        origin = Origin.SOURCES,
+                        origin = body.origin,
                         file = body.file,
                         lineRange = body.startLine..body.endLine,
                         release = release,

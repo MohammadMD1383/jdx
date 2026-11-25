@@ -81,6 +81,25 @@ class BodyBlockTest {
     }
 
     @Test
+    fun `lexer provenance is labelled as a brace match, never as sources or a decompilation`() {
+        val scanned = blockOf().copy(
+            provenance = listOf(
+                Provenance(
+                    artifact = "app-sources.jar",
+                    origin = Origin.LEXER,
+                    file = "com/example/App.kt",
+                    lineRange = 4..6,
+                ),
+            ),
+        )
+        val text = scanned.renderText()
+        text shouldContain "source: lexer scan of app-sources.jar · com/example/Point.java:6-8  ⚠ brace-matched, not PSI"
+        text shouldNotContain "decompiled"
+        text shouldNotContain "source: app-sources.jar ·"
+        scanned.toJson("body") shouldContain "\"origin\":\"lexer\""
+    }
+
+    @Test
     fun `body text is verbatim without indentation`() {
         val text = blockOf().renderText()
         text shouldContain "    public int getX() {"

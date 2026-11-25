@@ -139,6 +139,14 @@ versus
 source: decompiled by vineflower from gson-2.14.0.jar (no sources jar)   ⚠ reconstructed
 ```
 
+A `.kt` body read with `jdx body --kotlin-mode lexer` (or `auto`, when the sidecar
+did not parse the file) is a third label. The bytes are the source file, and the
+span was brace-matched rather than produced by PSI:
+
+```
+source: lexer scan of app-sources.jar · com/example/App.kt:12-18  ⚠ brace-matched, not PSI
+```
+
 An agent that knows a body is decompiled will not quote it as canonical in a code review.
 An agent that does not, will.
 
@@ -365,8 +373,10 @@ Resolution order:
 2. No sources → Vineflower decompilation of just the enclosing class, method extracted.
 3. `--engine javap` → raw JVM instructions.
 
-Flags: `--engine vineflower|javap`, `--with-doc`, `--with-signature`, `--context N`
-(surrounding lines), `--line-numbers`, `--max-lines N`.
+Flags: `--engine vineflower|javap`, `--kotlin-mode psi|lexer|auto` (default `psi`;
+`lexer` brace-matches a `.kt` body without the compiler sidecar and labels
+provenance `lexer`; `auto` uses PSI when that parse succeeds), `--with-doc`,
+`--with-signature`, `--context N` (surrounding lines), `--line-numbers`, `--max-lines N`.
 
 Also accepts a **type** ref, in which case it prints the whole type body — which is exactly
 `jdx source` with the type's range.
@@ -926,6 +936,22 @@ initialise. Therefore it is:
   jar, so a user who never inspects Kotlin sources never downloads it. (`jdx doctor` reports
   whether the Kotlin source module is installed.)
 
+**Offline fallback (issue #16).** `jdx body --kotlin-mode lexer` extracts common
+top-level and member `fun` / `val` / `var` / `class` / `object` / `enum` shapes
+with a small brace-matching lexer and never opens the sidecar. Strings (plain
+and raw), character literals, and comments (including nested block comments)
+are skipped before braces are counted. The slice is labelled `lexer`
+(`⚠ brace-matched, not PSI`), not sources and not a decompilation.
+`auto` uses PSI when the sidecar parses the file and the lexer otherwise.
+The default `psi` is the ladder above, unchanged: no sidecar means
+decompile/`javap`. A scan that cannot keep delimiters balanced degrades the
+same way; a balanced file that had to skip a construct it does not understand
+still serves a member it recovered, and degrades when the asked member is
+among what it skipped. `jdx source` and `jdx doc` stay on PSI. The lexer does
+not download anything; `jdx kotlin install` remains the only sidecar fetch,
+and it stays opt-in. `SOURCES_VERSION_MISMATCH` still warns when the recovered
+declarations and the bytecode disagree.
+
 Java sources use **JavaParser**, which is small and fast and needs none of this.
 
 ---
@@ -1115,6 +1141,8 @@ Never fail where a lesser answer exists — but **always label the fallback**:
 
 ```
 sources jar → decompiled (vineflower) → javap → signatures-only-from-bytecode → not found
+Kotlin .kt body (default --kotlin-mode psi): PSI sidecar → decompiled → javap
+Kotlin .kt body (--kotlin-mode lexer, or auto when PSI did not parse): brace-match → decompiled → javap
 Kotlin metadata → JVM projection
 param names from source → MethodParameters → LocalVariableTable → arg0, arg1
 javadoc on member → inherited javadoc from supertype → none
@@ -1414,7 +1442,7 @@ Explicitly out of v1 scope, recorded so they are not lost:
 
 | Risk | Impact | Mitigation |
 |---|---|---|
-| `kotlin-compiler-embeddable` bloat/startup (~55 MB, ~1 s) | Slow cold path, big install | Side-loaded jar, isolated lazy classloader, warm in daemon, `doctor` reports it. Fallback lexer extractor kept behind a flag. |
+| `kotlin-compiler-embeddable` bloat/startup (~55 MB, ~1 s) | Slow cold path, big install | Side-loaded jar, isolated lazy classloader, warm in daemon, `doctor` reports it. `jdx body --kotlin-mode` `lexer` or `auto` brace-matches `.kt` without the sidecar (default `psi` unchanged). |
 | Decompiler output is wrong or unreadable on hard methods | Agent reasons from bad code | Always labelled as reconstructed; `--engine javap` escape hatch; phase-2 second engine |
 | Index staleness on rapidly-changing project dirs | Wrong answers | Content hashing for jars, per-file mtime for dirs, `--force`, hash in `doctor` |
 | Global SQLite DB grows unbounded | Disk usage | `cache gc`, per-artifact eviction by last-use, `cache info` |
@@ -1539,7 +1567,8 @@ outline   <type> [--kind --static/--instance --access --from --grep
 members   --inherited/--declared --kind --static --instance --access --from
           --grep --with-doc --brief --max-lines --sort --view kotlin|jvm --include-synthetic
           [-w …] [--jars …] [--no-jdk] [--json] [--no-color]
-body      --engine vineflower|javap --with-doc --with-signature --context N
+body      --engine vineflower|javap --kotlin-mode psi|lexer|auto
+          --with-doc --with-signature --context N
           --line-numbers --max-lines
 source    --lines A:B --around <ref> --context N --line-numbers --max-lines
           --engine vineflower|javap

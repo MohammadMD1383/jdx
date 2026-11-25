@@ -355,6 +355,16 @@ private fun memberFilterParams(): List<McpParam> = listOf(
     viewParam(),
 )
 
+private fun kotlinModeParam(): McpParam = enumParam(
+    name = "kotlinMode",
+    description = "How to read a .kt body. psi (default) uses the compiler sidecar, then decompile. " +
+        "lexer brace-matches without the sidecar and sets provenance to lexer. " +
+        "auto uses the sidecar when that parse succeeds, otherwise the lexer. " +
+        "jdx_source and jdx_doc stay on psi. The lexer never downloads anything.",
+    values = listOf("psi", "lexer", "auto"),
+    default = "psi",
+)
+
 private fun engineParam(): McpParam = enumParam(
     name = "engine",
     description = "Reconstruction engine. Omit to prefer paired sources, then Vineflower, then javap. " +
@@ -448,6 +458,9 @@ public val ALL_MCP_TOOLS: List<McpToolDefinition> = listOf(
             javadoc, and jdx_source for the whole file or an arbitrary line window.
             Paired sources are sliced verbatim. Without them, or when engine is set, the body is
             decompiled and the provenance line is marked ⚠ reconstructed.
+            kotlinMode selects how a .kt body is read: psi (default) uses the compiler sidecar,
+            lexer brace-matches without it and sets provenance to lexer, and auto uses the sidecar
+            when that parse succeeds and the lexer otherwise.
             An ambiguous ref is error code 2 and lists every candidate. Overload choice is decided
             from bytecode before sources or a decompiler run.
             Parses with ASM and never loads or executes the inspected class.
@@ -462,6 +475,7 @@ public val ALL_MCP_TOOLS: List<McpToolDefinition> = listOf(
             flagParam("withSignature", "Prepend the member signature line."),
             flagParam("withDoc", "Append the member javadoc."),
             engineParam(),
+            kotlinModeParam(),
         ),
     ),
     McpToolDefinition(

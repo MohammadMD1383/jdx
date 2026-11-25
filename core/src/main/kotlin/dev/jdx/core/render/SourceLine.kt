@@ -26,6 +26,8 @@ public fun renderSourceLine(
             "source: decompiled by vineflower from $artifact · $range$releasePart  ⚠ reconstructed"
         Origin.DECOMPILED_JAVAP ->
             "source: disassembled by javap from $artifact · $range$releasePart  ⚠ reconstructed"
+        Origin.LEXER ->
+            "source: lexer scan of $artifact · $range$releasePart  ⚠ brace-matched, not PSI"
         else -> "source: $artifact · $range$releasePart"
     }
 }
