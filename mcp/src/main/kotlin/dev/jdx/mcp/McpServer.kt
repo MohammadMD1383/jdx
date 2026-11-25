@@ -47,7 +47,10 @@ public fun buildMcpServer(session: McpSession, appVersion: String): Server {
             "(the same bytes as --json) and carries provenance. Ambiguous refs list every " +
             "candidate instead of guessing. Inspected classes are parsed with ASM and never " +
             "loaded or executed. Decompiled text is marked ⚠ reconstructed. This server " +
-            "never downloads artifacts.",
+            "never downloads artifacts. Classpath tools take optional jars and coord arguments " +
+            "(local caches only) and discover, which reads a Gradle or Maven project from the " +
+            "working directory when no stored workspace exists. A stored workspace that exists " +
+            "still answers, and jars and coord merge in front of it.",
     )
     for (tool in ALL_MCP_TOOLS) {
         server.addTool(

@@ -17,8 +17,12 @@ twice. `explicitApi()` is on.
   enum, default, examples) and tool annotations (`readOnlyHint`,
   `destructiveHint: false`, `idempotentHint`, `openWorldHint: false`) are
   served from this table. No tool declares `fetch`; `requestFor` drops unknown
-  keys, so `jdx_diff` coordinates resolve from local caches and every tool is
-  closed-world (issue #18). The site MCP tools page is generated from
+  keys, so `jdx_diff` coordinates and classpath-tool `coord` values resolve
+  from local caches and every tool is closed-world (issue #18). Classpath
+  tools also take `jars`, `coord`, and `discover` (issue #20). Those are
+  root-selection arguments: `splitArgs` lifts them off the wire params and
+  `McpSession` passes them to `daemonRoots`. `diff`, `version`, `doctor`, and
+  `health` do not take them. The site MCP tools page is generated from
   `tools/list`.
 - Root `glama.json` is the Glama directory listing (`maintainers` only). It is
   not read at runtime. Root `server.json` is the Official MCP Registry template
@@ -37,9 +41,13 @@ twice. `explicitApi()` is on.
   `release.yml` uploads `jdx-mcp-<version>.mcpb`.
 - `McpSession` — per-session daemon: per-call roots, `version`/`health` internal,
   `doctor` refused (exit 6), `isError = ok:false`.
-- `McpServer` — SDK registration + stdio to EOF. `jdx mcp [-w name]`; workspace-bound
-  (stored workspace + per-call override only — no auto-discovery, no explicit
-  `--jars`/`--coord`). Answers byte-identical to `--json`.
+- `McpServer` — SDK registration + stdio to EOF. `jdx mcp [-w name] [--discover]`.
+  A stored workspace still wins (per-call `workspace` override included).
+  Classpath tools also accept `jars` and `coord` (CLI `--jars` / `--coord`,
+  local caches only — never `--fetch`) and `discover` for project
+  auto-discovery from the server's working directory when that workspace is
+  not there (issue #20). A missing named workspace, with none of those, is
+  exit 4 naming `jdx ws`. Answers byte-identical to `--json`.
 
 ## Rules (distilled serial-incident log — violate these and every client breaks)
 

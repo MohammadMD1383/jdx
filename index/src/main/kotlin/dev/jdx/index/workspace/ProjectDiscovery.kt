@@ -365,6 +365,52 @@ public object ProjectDiscovery {
             "unavailable"
         }
     }
+
+    /**
+     * The enclosing project's binary roots, or `null` when [workingDir] sits in no
+     * project (T-016). Cache entries live under [cacheBase] and are invalidated by
+     * the build-file fingerprint. Warnings are recomputed from the coordinate parse
+     * even on a cache hit, so a coordinate-less project warns
+     * [WarningCode.PROJECT_DISCOVERY_FALLBACK] either way. Never throws.
+     *
+     * Shared by the CLI (`ReadCommandSupport.discoverProject`) and MCP
+     * (`JdxService.daemonRoots`, issue #20) so the two cannot drift.
+     */
+    public fun discoverQueryRoots(
+        workingDir: Path,
+        cacheBase: Path,
+        gradleFilesRoot: Path?,
+        m2Repo: Path?,
+    ): QueryRoots? {
+        val project = findProjectRoot(workingDir) ?: return null
+        val hash = projectHash(project.root)
+        val cached = ProjectCache.load(cacheBase, hash, project.root)
+        // The cache stores jars only; the fallback warning is re-derived from the
+        // (cheap, no directory walks) coordinate parse so cache hits warn identically.
+        val warnings = if (coordinatesOf(project.root).isEmpty()) {
+            listOf(fallbackWarning(project.root))
+        } else {
+            emptyList()
+        }
+        val definition = cached ?: run {
+            val derived = deriveBinaryRoots(project.root, gradleFilesRoot, m2Repo)
+            WorkspaceDefinition(name = hash, jars = derived.jars, includeJdk = true).also {
+                ProjectCache.save(cacheBase, it, computeFingerprint(project.root))
+            }
+        }
+        return QueryRoots(
+            jars = definition.jars,
+            selection = "auto-discovered project at '${project.root}' (nearest build file: ${project.marker})",
+            warnings = warnings,
+        )
+    }
+
+    /** One auto-discovered project's jars, selection trail, and resolution warnings. */
+    public data class QueryRoots(
+        public val jars: List<String>,
+        public val selection: String,
+        public val warnings: List<Warning>,
+    )
 }
 
 /**

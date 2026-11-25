@@ -4,6 +4,9 @@ import dev.jdx.core.rpc.RpcCommand
 import dev.jdx.core.rpc.RpcRequest
 import io.modelcontextprotocol.kotlin.sdk.types.ToolAnnotations
 import io.modelcontextprotocol.kotlin.sdk.types.ToolSchema
+import kotlinx.serialization.json.JsonArray
+import kotlinx.serialization.json.JsonElement
+import kotlinx.serialization.json.JsonNull
 import kotlinx.serialization.json.JsonObject
 import kotlinx.serialization.json.JsonPrimitive
 import kotlinx.serialization.json.add
@@ -30,8 +33,13 @@ import kotlinx.serialization.json.put
  * Annotations are hints, not enforcement. Every tool is read-only and
  * idempotent. [McpToolDefinition.openWorld] stays false: no tool declares
  * `fetch`, and [requestFor] drops unknown keys, so a coordinate on `jdx_diff`
- * resolves from the local caches only. The daemon/MCP path never downloads
- * (issue #18).
+ * — and a `coord` argument on a classpath tool — resolves from the local
+ * caches only. The daemon/MCP path never downloads (issue #18).
+ *
+ * Classpath tools also take `jars`, `coord`, and `discover` (issue #20). Those
+ * are root-selection arguments, like `workspace`: [requestFor] does not forward
+ * them, and [McpSession] hands them to `daemonRoots`. `diff`, `version`,
+ * `doctor`, and `health` do not take them. `diff` names its own two artifacts.
  */
 public enum class McpParamKind(public val schemaType: String) {
     STRING("string"),
@@ -154,11 +162,77 @@ private fun workspaceParam(): McpParam = McpParam(
     name = "workspace",
     kind = McpParamKind.STRING,
     description = "Named stored workspace to answer from (see `jdx ws`). " +
-        "Default is the workspace this server was started with. Stored workspaces only: " +
-        "this server does not auto-discover a project and does not take jar paths or " +
-        "Maven coordinates on the call.",
+        "Default is the workspace this server was started with. " +
+        "A name that does not exist is error code 4 and names `jdx ws create`. " +
+        "jars, coord, or discover can answer without a stored workspace when this " +
+        "call does not itself set workspace. This server never downloads.",
     examples = listOf("default"),
 )
+
+/**
+ * `--jars` on a classpath tool. Not forwarded to the wire params: it selects
+ * roots, it is not a query flag. Comma-separated because the wire carries one
+ * text value per name (T-040). A JSON array of strings is accepted too.
+ */
+private fun jarsParam(): McpParam = stringParam(
+    name = "jars",
+    description = "Jar files, class directories, or globs, comma-separated — the same values " +
+        "as the CLI --jars flag. A JSON array of strings is also accepted. " +
+        "They merge in front of the selected workspace. When this call does not set workspace " +
+        "and the server's workspace does not exist, these roots are enough on their own " +
+        "(the JDK stays included). A path that itself contains a comma must be the only value.",
+    examples = listOf("libs/app.jar", "build/classes/java/main"),
+)
+
+/**
+ * `--coord` on a classpath tool, local caches only. Not forwarded to the wire
+ * params. `fetch` is intentionally not a parameter (issue #18): an absent
+ * coordinate is exit 5 naming a cold `--fetch`, never a download.
+ */
+private fun coordParam(): McpParam = stringParam(
+    name = "coord",
+    description = "Maven coordinates group:artifact:version, comma-separated — the same values " +
+        "as the CLI --coord flag without --fetch. A JSON array of strings is also accepted. " +
+        "Resolved from the local Gradle and Maven caches only. This server never downloads: " +
+        "a coordinate that is not cached is error code 5 and names a cold " +
+        "`jdx … --coord … --fetch` prime, or pass jars instead. " +
+        "Merges in front of the workspace and behind jars. A malformed coordinate is error code 3.",
+    examples = listOf("com.google.code.gson:gson:2.14.0"),
+)
+
+/**
+ * Opt-in project auto-discovery (T-016) for a call that did not name a
+ * workspace. No schema default: omitting the argument keeps the server's
+ * choice (`jdx mcp --discover` turns it on for the session).
+ */
+private fun discoverParam(): McpParam = McpParam(
+    name = "discover",
+    kind = McpParamKind.BOOLEAN,
+    description = "When true, and this call does not set workspace, and the server's stored " +
+        "workspace does not exist, walk up from the server's working directory for a Gradle or " +
+        "Maven project and use its class output plus dependency jars named in its build files. " +
+        "Never runs Gradle or Maven. A stored workspace that exists wins, and a workspace named " +
+        "on this call wins. Omit to keep the server default (false, unless `jdx mcp` was started " +
+        "with --discover). Pass false to skip discovery for this call. An absent project with no " +
+        "jars or coord is error code 4 naming `jdx ws`.",
+)
+
+/** Tools that read a classpath gain jars, coord, and discover after `workspace`. */
+private val NO_EXPLICIT_ROOTS: Set<RpcCommand> = setOf(
+    RpcCommand.DIFF,
+    RpcCommand.VERSION,
+    RpcCommand.DOCTOR,
+    RpcCommand.HEALTH,
+)
+
+private fun withClasspathRoots(tool: McpToolDefinition): McpToolDefinition {
+    if (tool.command in NO_EXPLICIT_ROOTS) return tool
+    val expanded = tool.params.flatMap { param ->
+        if (param.name == "workspace") listOf(param, jarsParam(), coordParam(), discoverParam())
+        else listOf(param)
+    }
+    return tool.copy(params = expanded)
+}
 
 private fun stringParam(
     name: String,
@@ -300,7 +374,10 @@ private fun ignoreCaseParam(): McpParam = flagParam(
     description = "Case-insensitive substring match. Ignored when regex is true; put (?i) in the pattern there.",
 )
 
-/** Every v1 wire command as a typed MCP tool, in [RpcCommand] order. */
+/**
+ * Every v1 wire command as a typed MCP tool, in [RpcCommand] order.
+ * Classpath tools gain `jars`, `coord`, and `discover` via [withClasspathRoots].
+ */
 public val ALL_MCP_TOOLS: List<McpToolDefinition> = listOf(
     McpToolDefinition(
         command = RpcCommand.SHOW,
@@ -1170,7 +1247,7 @@ public val ALL_MCP_TOOLS: List<McpToolDefinition> = listOf(
             workspaceParam(),
         ),
     ),
-)
+).map(::withClasspathRoots)
 
 /** Looks up a tool by its `jdx_<wire>` name, or returns `null`. Never throws. */
 public fun toolForName(name: String): McpToolDefinition? = ALL_MCP_TOOLS.firstOrNull { it.toolName == name }
@@ -1210,15 +1287,22 @@ private fun McpParam.toSchemaProperty(): JsonObject = buildJsonObject {
 }
 
 /**
+ * Root-selection argument names. Consumed by [McpSession] and [splitArgs],
+ * never forwarded as query params — the dispatch does not know them, and a
+ * classpath is resolved before the query runs.
+ */
+private val ROOT_KEYS: Set<String> = setOf("query", "workspace", "jars", "coord", "discover")
+
+/**
  * Builds the wire [RpcRequest] for this tool from already-scalarised params.
- * `query` and `workspace` are consumed here (subject and root selection);
- * every other entry forwards verbatim as a wire param (D-058). Unknown entries
- * are ignored — the dispatch owns validation and answers exit 3 naming the
- * real problem. Never throws. `fetch` is not a declared param on any tool, so
- * it is dropped here and the call cannot download.
+ * `query`, `workspace`, `jars`, `coord`, and `discover` are consumed here
+ * (subject and root selection); every other entry forwards verbatim as a wire
+ * param (D-058). Unknown entries are ignored — the dispatch owns validation
+ * and answers exit 3 naming the real problem. Never throws. `fetch` is not a
+ * declared param on any tool, so it is dropped here and the call cannot download.
  */
 public fun McpToolDefinition.requestFor(query: String, params: Map<String, String>): RpcRequest {
-    val wireParams = params.filterKeys { key -> key != "query" && key != "workspace" && hasParam(key) }
+    val wireParams = params.filterKeys { key -> key !in ROOT_KEYS && hasParam(key) }
     return RpcRequest(command, query, wireParams)
 }
 
@@ -1239,10 +1323,18 @@ public fun scalarText(value: kotlinx.serialization.json.JsonElement): String? = 
     else -> "__structured__"
 }
 
-/** Splits raw tool arguments into a query, a workspace override and wire params. Never throws. */
+/**
+ * Splits raw tool arguments into a query, root selection, and wire params.
+ * `jars` and `coord` accept a string (comma-separated) or an array of strings.
+ * Never throws.
+ */
 public fun splitArgs(raw: JsonObject): SplitArgs = try {
     var query = ""
     var workspace: String? = null
+    var jars: List<String> = emptyList()
+    var coords: List<String> = emptyList()
+    var discover: Boolean? = null
+    var discoverError: String? = null
     val params = LinkedHashMap<String, String>()
     val structured = mutableListOf<String>()
     for ((key, value) in raw) {
@@ -1250,15 +1342,47 @@ public fun splitArgs(raw: JsonObject): SplitArgs = try {
         when {
             key == "query" && text != null -> query = text
             key == "workspace" && text != null -> workspace = text
+            key == "jars" -> {
+                val parsed = rootValues(value)
+                if (parsed == null) structured.add(key) else jars = parsed
+            }
+            key == "coord" -> {
+                val parsed = rootValues(value)
+                if (parsed == null) structured.add(key) else coords = parsed
+            }
+            key == "discover" && text != null -> when (text.lowercase()) {
+                "true" -> discover = true
+                "false" -> discover = false
+                else -> discoverError = "usage error: --discover must be a boolean, got '$text'"
+            }
             text == null -> Unit // explicit null: absent
             text == "__structured__" -> structured.add(key)
             else -> params[key] = text
         }
     }
-    SplitArgs(query, workspace, params, structured)
+    SplitArgs(query, workspace, params, structured, jars, coords, discover, discoverError)
 } catch (_: Exception) {
     SplitArgs("", null, emptyMap(), emptyList())
 }
+
+/** Comma-separated text, or a JSON array of those strings. `null` means the value is not a list of scalars. */
+private fun rootValues(value: JsonElement): List<String>? = when (value) {
+    is JsonArray -> {
+        val all = ArrayList<String>(value.size)
+        for (element in value) {
+            val one = rootValues(element) ?: return null
+            all.addAll(one)
+        }
+        all
+    }
+    is JsonNull -> emptyList()
+    is JsonPrimitive -> commaSeparated(if (value.isString) value.content else value.toString())
+    else -> null
+}
+
+/** One repeatable root flag's text form (T-040): commas separate values, blanks drop. */
+private fun commaSeparated(text: String): List<String> =
+    text.split(',').map { it.trim() }.filter { it.isNotEmpty() }
 
 /** One call's arguments after [splitArgs]: subject, root override, wire params, hostile keys. */
 public data class SplitArgs(
@@ -1267,4 +1391,12 @@ public data class SplitArgs(
     public val params: Map<String, String>,
     /** Keys whose value was an array or object: exit-3 usage errors naming the param. */
     public val structured: List<String>,
+    /** Explicit jar paths, class directories, or globs (`--jars`). */
+    public val jars: List<String> = emptyList(),
+    /** Explicit Maven coordinates (`--coord`), not yet resolved. */
+    public val coords: List<String> = emptyList(),
+    /** `null` when the call omitted `discover` (the session default applies). */
+    public val discover: Boolean? = null,
+    /** Set when `discover` was present and not a boolean. */
+    public val discoverError: String? = null,
 )

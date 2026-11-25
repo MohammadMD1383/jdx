@@ -150,7 +150,7 @@ Reference: [`usages`](https://mohammadmd1383.github.io/jdx/docs/reference/usages
 
 ## From an AI agent
 
-`jdx setup` writes the MCP config for the agent you name. `jdx mcp` is the stdio server: one typed tool per query (`jdx_search`, `jdx_resolve`, `jdx_hierarchy`, `jdx_members`, `jdx_outline`, `jdx_signature`, `jdx_body`, `jdx_callers`, `jdx_calls`, `jdx_usages`, `jdx_literals`), so the agent does not quote `#` and `(`. The server does not take a jar path. Create a workspace, then start the server on it. `jdx setup` writes `args` as `mcp` only. Add `-w` by hand when the workspace is not `default`.
+`jdx setup` writes the MCP config for the agent you name. `jdx mcp` is the stdio server: one typed tool per query (`jdx_search`, `jdx_resolve`, `jdx_hierarchy`, `jdx_members`, `jdx_outline`, `jdx_signature`, `jdx_body`, `jdx_callers`, `jdx_calls`, `jdx_usages`, `jdx_literals`), so the agent does not quote `#` and `(`. A call may pass `jars` for the mapped jar, or use a stored workspace. `jdx setup` writes `args` as `mcp` only. Add `-w` by hand when the workspace is not `default`.
 
 ```bash
 jdx setup --agent cursor --scope project

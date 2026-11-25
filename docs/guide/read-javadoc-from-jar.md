@@ -103,7 +103,7 @@ Inside a Gradle or Maven project, with no classpath flags, jdx discovers project
 
 ## From an AI agent
 
-The same question is the MCP tool `jdx_doc`. `jdx mcp` does not take a jar path or a Maven coordinate on the call, and it does not auto-discover a project. Create a workspace with the CLI, then start the server on it. A tool call may pass `workspace` to pick another stored name. The server never downloads. Prime a coordinate with `--fetch` first, or pass files you already have.
+The same question is the MCP tool `jdx_doc`. A call may pass `jars` or `coord`, and `discover` true reads a Gradle or Maven project from the server's working directory when no stored workspace exists. A stored workspace still works. A tool call may pass `workspace` to pick another stored name. The server never downloads. Prime a coordinate with `--fetch` first, or pass files you already have as `jars`.
 
 ```bash
 jdx doc com.google.gson.Gson --coord com.google.code.gson:gson:2.14.0 --fetch

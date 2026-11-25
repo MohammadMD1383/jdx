@@ -143,7 +143,7 @@ Inside a Gradle or Maven project, with no classpath flags, jdx discovers project
 
 ## From an AI agent
 
-The same Kotlin view is what an agent gets from `jdx mcp`. `jdx_members` and `jdx_signature` take `view`: `kotlin` (the default) or `jvm`. `jdx_show` is the class card. `jdx_body` is the one member, reconstructed and labelled when the `.kt` slice is unavailable. The server never downloads, and it does not take a jar path or a Maven coordinate on the call. Create a workspace with the CLI, then start the server on it. A tool call may pass `workspace` to pick another stored name. Prime a coordinate with `--fetch` first, or pass files you already have.
+The same Kotlin view is what an agent gets from `jdx mcp`. `jdx_members` and `jdx_signature` take `view`: `kotlin` (the default) or `jvm`. `jdx_show` is the class card. `jdx_body` is the one member, reconstructed and labelled when the `.kt` slice is unavailable. A call may pass `jars` or `coord`, and `discover` true reads a Gradle or Maven project from the server's working directory when no stored workspace exists. The server never downloads. A tool call may pass `workspace` to pick another stored name. Prime a coordinate with `--fetch` first, or pass files you already have as `jars`.
 
 ```bash
 jdx show kotlinx.coroutines.BuildersKt --coord org.jetbrains.kotlinx:kotlinx-coroutines-core-jvm:1.11.0 --fetch

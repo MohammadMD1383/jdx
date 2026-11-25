@@ -43,7 +43,10 @@ needed. With `--fetch`, a missing artifact is downloaded from Maven Central (or 
 mirrors) into the jdx cache, with checksum verification. Network access is opt-in per
 invocation: jdx never downloads anything you did not ask for. The daemon, MCP server, and
 HTTP API never fetch either — prime caches once cold with `--fetch`, or store explicit
-`--jars`, before warm queries against stored `--coord` roots.
+`--jars`, before warm queries against stored `--coord` roots. MCP classpath tools also
+accept `jars` and `coord` on the call (the same values as `--jars` and `--coord`, still
+without a download) and `discover` for project auto-discovery when no stored workspace
+is available. A stored workspace that exists still wins.
 
 ## Named workspaces
 

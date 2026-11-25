@@ -123,7 +123,7 @@ Bytecode is parsed with ASM. Inspected classes are never loaded, so no static in
 
 ## From an AI coding agent
 
-`jdx mcp` speaks MCP on stdin and stdout. The tools for this page are `jdx_signature`, `jdx_source`, and `jdx_body`. The server does not auto-discover a Gradle or Maven project. A call does not take a jar path or a Maven coordinate. The server never downloads. Create the workspace with the CLI, and prime a missing coordinate with `--fetch` first.
+`jdx mcp` speaks MCP on stdin and stdout. The tools for this page are `jdx_signature`, `jdx_source`, and `jdx_body`. A call may pass `jars` (a jar path, class directory, or glob) and `coord` (a Maven coordinate). `discover` true, or `jdx mcp --discover`, reads the Gradle or Maven project in the server's working directory when no stored workspace exists. The server never downloads. A coordinate that is not already in the local caches is error code 5; prime it with `--fetch` on the CLI first, or pass the jar as `jars`. A stored workspace still works, and still wins when it exists.
 
 ```bash
 jdx source com.google.gson.Gson --coord com.google.code.gson:gson:2.14.0 --fetch
@@ -136,7 +136,7 @@ jdx setup --agent codex --scope project
 
 `jdx setup` writes `args` as `mcp` only. Add `-w` by hand when the workspace is not `default`. A tool call may pass `workspace` to pick another stored name. `--scope project` writes into the current checkout. `--scope system` writes the user-global file. The config shapes are in [An MCP server for Java and Kotlin bytecode](java-mcp-server.md).
 
-`jdx_source` takes `query` (a type, such as `com.google.gson.Gson`), `lines` (a 1-based window such as `17:28`), `around`, `context`, `maxLines` (default 200), and `engine`. `lines` and `around` together are code 3. `jdx_body` takes a member `query`. `jdx_signature` prints one line per overload. An ambiguous member is code 2 and lists every candidate. No stored workspace is code 4.
+`jdx_source` takes `query` (a type, such as `com.google.gson.Gson`), `lines` (a 1-based window such as `17:28`), `around`, `context`, `maxLines` (default 200), and `engine`. `lines` and `around` together are code 3. `jdx_body` takes a member `query`. `jdx_signature` prints one line per overload. An ambiguous member is code 2 and lists every candidate. No stored workspace, and no `jars`, `coord`, or discovered project, is code 4.
 
 Reference: [`jdx_source`](https://mohammadmd1383.github.io/jdx/docs/reference/mcp-tools/#jdx_source), [`jdx_body`](https://mohammadmd1383.github.io/jdx/docs/reference/mcp-tools/#jdx_body), [`jdx_signature`](https://mohammadmd1383.github.io/jdx/docs/reference/mcp-tools/#jdx_signature).
 
@@ -160,7 +160,7 @@ Run `jdx source com.example.lib.Client` from the project. jdx uses `group:artifa
 
 ### Can an AI coding agent read a dependency's source through MCP?
 
-Yes. `jdx_source`, `jdx_body`, and `jdx_signature` answer the same questions as the CLI. `jdx mcp` does not auto-discover a project and does not download. Prime the coordinate with `--fetch`, run `jdx ws create gson --coord com.google.code.gson:gson:2.14.0`, then `jdx setup --agent cursor --scope project`. The same setup command covers Claude Code and Codex. The config is [An MCP server for Java and Kotlin bytecode](java-mcp-server.md).
+Yes. `jdx_source`, `jdx_body`, and `jdx_signature` answer the same questions as the CLI. Pass `coord` set to `com.google.code.gson:gson:2.14.0` after a cold `--fetch`, or `discover` true from the project directory when no workspace is stored. The server does not download. `jdx setup --agent cursor --scope project` writes the server config. The same setup command covers Claude Code and Codex. The config is [An MCP server for Java and Kotlin bytecode](java-mcp-server.md).
 
 ## Where next
 
