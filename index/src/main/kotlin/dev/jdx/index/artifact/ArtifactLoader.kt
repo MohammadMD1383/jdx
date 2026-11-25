@@ -22,12 +22,16 @@ public object ArtifactLoader {
      * Opens [path]: directories as [DirArtifact], files as [JarArtifact].
      *
      * @param explicitSources rule-4 `--sources <path>` override, honoured for jars only.
+     * @param release multi-release feature to select. `null` keeps today's rule
+     *   (the running JDK). Directories and `jrt:/` ignore it. Below
+     *   [MultiRelease.MIN_SELECTABLE] throws [ReleaseUsageException] (exit 3).
      * @throws ArtifactReadException when the path names nothing openable (D-015 exit 5
      *   at the service layer).
      */
-    public fun open(path: Path, explicitSources: Path? = null): ArtifactRoot {
+    public fun open(path: Path, explicitSources: Path? = null, release: Int? = null): ArtifactRoot {
+        MultiRelease.requireSelectable(release)
         if (Files.isDirectory(path)) return DirArtifact.open(path)
-        if (Files.isRegularFile(path)) return JarArtifact.open(path, explicitSources)
+        if (Files.isRegularFile(path)) return JarArtifact.open(path, explicitSources, release)
         throw ArtifactReadException("artifact read error: no such artifact: $path")
     }
 
@@ -36,8 +40,10 @@ public object ArtifactLoader {
      *
      * @throws ArtifactReadException when [jar] is not a readable jar.
      */
-    public fun openJar(jar: Path, explicitSources: Path? = null): JarArtifact =
-        JarArtifact.open(jar, explicitSources)
+    public fun openJar(jar: Path, explicitSources: Path? = null, release: Int? = null): JarArtifact {
+        MultiRelease.requireSelectable(release)
+        return JarArtifact.open(jar, explicitSources, release)
+    }
 
     /**
      * Opens a class directory explicitly.

@@ -116,9 +116,7 @@ public data class DiffReport(
     private fun provenanceText(): String = if (provenance.isEmpty()) {
         "source: no provenance recorded"
     } else {
-        provenance.joinToString("\n") { entry ->
-            "source: ${entry.artifact} (${entry.origin.name.lowercase().replace('_', '-')})"
-        }
+        provenance.joinToString("\n") { it.sourceLine() }
     }
 
     /**

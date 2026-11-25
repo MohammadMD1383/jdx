@@ -4,6 +4,7 @@ import dev.jdx.core.model.Warning
 import dev.jdx.core.render.ErrorResult
 import dev.jdx.core.render.TokenBudget
 import dev.jdx.core.render.WarningLines
+import dev.jdx.index.artifact.MultiRelease
 import dev.jdx.index.maven.MavenCoords
 import dev.jdx.index.maven.MavenFetch
 import dev.jdx.index.maven.MavenResolveFn
@@ -70,7 +71,19 @@ internal object ReadCommandSupport {
         mavenFetcher: MavenFetch.Fetcher? = null,
         repos: List<String> = emptyList(),
         srcs: List<String> = emptyList(),
+        release: Int? = null,
     ): RootsOrFailure {
+        if (release != null && release < MultiRelease.MIN_SELECTABLE) {
+            return RootsOrFailure.Failed(
+                JdxService.ServiceOutcome.Failure(
+                    ErrorResult.generic(
+                        "",
+                        exitCode = 3,
+                        message = "usage error: ${MultiRelease.releaseUsageDetail(release)}",
+                    ),
+                ),
+            )
+        }
         val envWorkspace = try {
             getenv("JDX_WORKSPACE")
         } catch (e: SecurityException) {
@@ -219,6 +232,7 @@ internal object ReadCommandSupport {
                         allowFetch = allowFetch,
                         mavenResolve = mavenResolve,
                         srcSpecs = resolved.srcSpecs,
+                        release = release,
                     ),
                 )
             }

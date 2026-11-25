@@ -55,10 +55,7 @@ public data class SignatureBlock(
     private fun provenanceText(): String = if (provenance.isEmpty()) {
         "source: no provenance recorded"
     } else {
-        provenance.joinToString("\n") { entry ->
-            val base = entry.origin.name.lowercase().replace('_', '-')
-            "source: ${entry.artifact} ($base)"
-        }
+        provenance.joinToString("\n") { it.sourceLine() }
     }
 
     /** Full JSON envelope; every text signature and ref appears here structurally (D-007). */

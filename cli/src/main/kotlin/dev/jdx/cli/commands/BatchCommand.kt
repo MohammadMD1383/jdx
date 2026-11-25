@@ -41,7 +41,7 @@ import kotlin.system.exitProcess
  * `--json` is accepted for script uniformity and ignored: output already is
  * envelopes. Roots resolve once, up front, from the same flags the read
  * commands take (`--jars`, `--src`, `-w`, `--no-jdk`, `--coord`, `--repo`,
- * `--fetch`); a root failure serialises as every line's envelope, keeping the
+ * `--fetch`, `--release`); a root failure serialises as every line's envelope, keeping the
  * strict 1:1 line mapping the daemon promises (D-057 §3).
  *
  * `version` and `health` answer internally (no roots involved); `doctor` is
@@ -97,6 +97,8 @@ class BatchCommand(
         help = "Do not include the running JDK's stdlib (included by default).",
     ).flag()
 
+    private val release by releaseOption()
+
     private val coord by option(
         "--coord",
         help = "Maven coordinate root group:artifact:version (repeatable). Resolved from " +
@@ -151,6 +153,7 @@ class BatchCommand(
                 allowFetch = fetch,
                 repos = repo,
                 srcs = srcs,
+                release = release,
             )
         ) {
             is ReadCommandSupport.RootsOrFailure.Ready -> BatchRoots.Ready(resolved.roots)

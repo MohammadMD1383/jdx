@@ -1370,7 +1370,18 @@ Explicitly out of v1 scope, recorded so they are not lost:
   AST (today rows still carry the rendered `@Fqn(k=v,…)` string).
 - **`--since` / API-level reporting** — which JDK release introduced a member.
 - **Dataflow-lite** — `jdx flow <method>` for a simplified reaching-values view.
-- **Multi-release jar variant selection** beyond warning.
+- **Multi-release jar variant selection** — shipped for class answers. The default
+  is unchanged: the highest `META-INF/versions/N` with `9 <= N <=` the running
+  JDK feature (the base entry when none applies), and `MULTI_RELEASE_VARIANT`
+  when a versioned class wins, with the same warning sentence as before.
+  `jdx <cmd> --release N` (alias `--multi-release`, javap's spelling) selects
+  that feature instead. `8` is base entries only; below 8 is exit 3. A versioned
+  winner names its release on provenance (`source: app.jar (bytecode, release 17)`,
+  JSON `"release":17`); a base entry omits the field, so non-MR output stays
+  byte-identical. An explicit value forces the cold path. The warm daemon, MCP
+  and HTTP stay on the running JDK. Resources, services and the manifest still
+  list versioned copies as stored. Listing every variant in one answer is not
+  built.
 - **Scala/Groovy language views.**
 - **Publishing** — Homebrew/AUR packaging, GitHub Releases with a native-image build.
 
@@ -1481,6 +1492,11 @@ the authoritative machine-readable version.)*
                             (repeatable; inert on the daemon/MCP/HTTP warm path)
     --sources <path>        explicitly pair a sources jar
     --jdk / --no-jdk        include the JDK stdlib (default: include)
+    --release, --multi-release <n>
+                            multi-release feature to serve (default: the running
+                            JDK feature; 8 = base entries only; below 8 is exit 3).
+                            On query commands and diff. An explicit value stays
+                            in-process; daemon, MCP and HTTP keep the running JDK.
     --fetch                 allow network fetches from Maven repositories (Central last by default)
     --json                  structured output
     --no-color              disable ANSI even on a TTY

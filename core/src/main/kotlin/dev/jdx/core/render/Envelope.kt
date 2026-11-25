@@ -79,7 +79,8 @@ public fun Warning.toJson(): String = buildString {
 
 /**
  * `{"artifact":"…","origin":"bytecode"}` plus `file`/`lines` when known
- * (source-derived only). Origin prints lowercase, `_` as `-`.
+ * (source-derived only) and `release` when a versioned multi-release entry
+ * answered. Origin prints lowercase, `_` as `-`. A null release is omitted.
  */
 public fun Provenance.toJson(): String = buildString {
     append("{\"artifact\":").append(JsonEscape.quote(artifact))
@@ -87,5 +88,23 @@ public fun Provenance.toJson(): String = buildString {
     if (file != null) append(",\"file\":").append(JsonEscape.quote(file))
     val range = lineRange
     if (file != null && range != null) append(",\"lines\":[").append(range.first).append(",").append(range.last).append("]")
+    if (release != null) append(",\"release\":").append(release)
     append("}")
+}
+
+/**
+ * The `source:` line shared by class cards, member listings, signatures and
+ * diffs. A null [Provenance.release] reproduces the historical spelling
+ * (`source: app.jar (bytecode)`); a versioned winner appends `, release N`.
+ */
+public fun Provenance.sourceLine(): String {
+    val base = origin.name.lowercase().replace('_', '-')
+    val releasePart = if (release == null) "" else ", release $release"
+    val fileName = file ?: return "source: $artifact ($base$releasePart)"
+    val range = lineRange
+    return if (range == null) {
+        "source: $artifact ($base, $fileName$releasePart)"
+    } else {
+        "source: $artifact ($base, $fileName:${range.first}-${range.last}$releasePart)"
+    }
 }

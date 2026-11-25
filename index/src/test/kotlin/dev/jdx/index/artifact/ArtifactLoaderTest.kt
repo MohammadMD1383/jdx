@@ -7,6 +7,7 @@ import io.kotest.matchers.booleans.shouldBeTrue
 import io.kotest.matchers.collections.shouldContain
 import io.kotest.matchers.collections.shouldNotContain
 import io.kotest.matchers.shouldBe
+import io.kotest.matchers.string.shouldContain
 import org.junit.jupiter.api.Tag
 import org.junit.jupiter.api.Test
 import org.junit.jupiter.api.io.TempDir
@@ -227,5 +228,64 @@ class ArtifactLoaderTest {
             // Listing is deterministic: two walks agree exactly.
             root.classEntryPaths() shouldBe root.classEntryPaths().sorted()
         }
+    }
+
+    @Test
+    fun `explicit release equal to this JDK keeps the default warning`(@TempDir temp: Path) {
+        val jar = versionedJar(temp)
+        val running = Runtime.version().feature()
+        val defaultMessage = ArtifactLoader.openJar(jar).use { it.warnings.single().message }
+        val explicit = ArtifactLoader.openJar(jar, release = running).use { root ->
+            root.openClass("com/acme/Thing.class").use { it.readAllBytes() } to root.warnings.single().message
+        }
+        explicit.second shouldBe defaultMessage
+        defaultMessage shouldContain "this JDK ($running)"
+        explicit.first shouldBe "variant-17".toByteArray()
+    }
+
+    @Test
+    fun `release 8 serves the base entry and does not warn`(@TempDir temp: Path) {
+        val jar = versionedJar(temp)
+        ArtifactLoader.openJar(jar, release = 8).use { root ->
+            root.openClass("com/acme/Thing.class").use { it.readAllBytes() } shouldBe
+                ArtifactTestJars.fixtureClassBytes(binaryJar, "dev/jdx/fixtures/Generics.class")
+            root.warnings shouldBe emptyList()
+            root.variantRelease("com/acme/Thing.class") shouldBe null
+        }
+    }
+
+    @Test
+    fun `an explicit release can select a variant the running JDK would skip`(@TempDir temp: Path) {
+        val jar = versionedJar(temp)
+        ArtifactLoader.openJar(jar, release = 9).use { root ->
+            root.openClass("com/acme/Thing.class").use { it.readAllBytes() } shouldBe "variant-9".toByteArray()
+            root.warnings.single().message shouldContain "for release 9"
+            root.variantRelease("com/acme/Thing.class") shouldBe 9
+        }
+        ArtifactLoader.openJar(jar, release = 99).use { root ->
+            root.openClass("com/acme/Thing.class").use { it.readAllBytes() } shouldBe "variant-99".toByteArray()
+            root.variantRelease("com/acme/Thing.class") shouldBe 99
+        }
+    }
+
+    @Test
+    fun `a release below 8 is a usage error before the jar is read`(@TempDir temp: Path) {
+        val jar = versionedJar(temp)
+        val ex = shouldThrow<ReleaseUsageException> { ArtifactLoader.openJar(jar, release = 7) }
+        ex.message shouldContain "--release must be >= 8"
+    }
+
+    private fun versionedJar(temp: Path): Path {
+        val base = ArtifactTestJars.fixtureClassBytes(binaryJar, "dev/jdx/fixtures/Generics.class")
+        return ArtifactTestJars.craftJar(
+            temp.resolve("mr.jar"),
+            mapOf(
+                "META-INF/MANIFEST.MF" to ArtifactTestJars.manifestBytes(multiRelease = true),
+                "com/acme/Thing.class" to base,
+                "META-INF/versions/9/com/acme/Thing.class" to "variant-9".toByteArray(),
+                "META-INF/versions/17/com/acme/Thing.class" to "variant-17".toByteArray(),
+                "META-INF/versions/99/com/acme/Thing.class" to "variant-99".toByteArray(),
+            ),
+        )
     }
 }

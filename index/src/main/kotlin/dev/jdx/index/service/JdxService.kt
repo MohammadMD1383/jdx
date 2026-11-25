@@ -153,6 +153,8 @@ import dev.jdx.index.artifact.ArtifactKind
 import dev.jdx.index.artifact.ArtifactLoader
 import dev.jdx.index.artifact.ArtifactReadException
 import dev.jdx.index.artifact.ArtifactRoot
+import dev.jdx.index.artifact.MultiRelease
+import dev.jdx.index.artifact.ReleaseUsageException
 import dev.jdx.index.artifact.ServiceEntries
 import dev.jdx.index.asm.AsmClassReader
 import dev.jdx.index.asm.ClassReadResult
@@ -210,6 +212,12 @@ public object JdxService {
          * whole-word mentions (`ref` kind); other readers ignore them.
          */
         public val srcSpecs: List<String> = emptyList(),
+        /**
+         * Multi-release feature to select (`--release`). `null` keeps the
+         * running JDK — the historical selection, including its warning text.
+         * Below [dev.jdx.index.artifact.MultiRelease.MIN_SELECTABLE] is exit 3.
+         */
+        public val release: Int? = null,
     ) {
         public companion object {
             /** Converts a resolved workspace selection into the roots a query opens. */
@@ -614,11 +622,11 @@ public object JdxService {
             }
             val binarySpec = artifact.binaryJar.toString()
             val scope = try {
-                ArtifactLoader.open(artifact.binaryJar).use { root -> root.classEntryPaths().map(::entryToBinary).toSet() }
+                ArtifactLoader.open(artifact.binaryJar, release = roots.release).use { root -> root.classEntryPaths().map(::entryToBinary).toSet() }
             } catch (e: ArtifactReadException) {
                 return failure(5, rawRef, e.message ?: "artifact read error")
             } catch (e: Exception) {
-                return failure(6, rawRef, "internal error: ${e.javaClass.simpleName}: ${e.message ?: "no detail"}")
+                return caught(rawRef, e)
             }
             scopedRoots = roots.copy(jarSpecs = listOf(binarySpec) + roots.jarSpecs)
             candidateScope = scope
@@ -628,7 +636,7 @@ public object JdxService {
         } catch (e: ArtifactReadException) {
             failure(5, rawRef, e.message ?: "artifact read error")
         } catch (e: Exception) {
-            failure(6, rawRef, "internal error: ${e.javaClass.simpleName}: ${e.message ?: "no detail"}")
+            caught(rawRef, e)
         }
     }
 
@@ -793,11 +801,11 @@ public object JdxService {
             }
             val binarySpec = artifact.binaryJar.toString()
             val scope = try {
-                ArtifactLoader.open(artifact.binaryJar).use { root -> root.classEntryPaths().map(::entryToBinary).toSet() }
+                ArtifactLoader.open(artifact.binaryJar, release = roots.release).use { root -> root.classEntryPaths().map(::entryToBinary).toSet() }
             } catch (e: ArtifactReadException) {
                 return failure(5, rawRef, e.message ?: "artifact read error")
             } catch (e: Exception) {
-                return failure(6, rawRef, "internal error: ${e.javaClass.simpleName}: ${e.message ?: "no detail"}")
+                return caught(rawRef, e)
             }
             scopedRoots = roots.copy(jarSpecs = listOf(binarySpec) + roots.jarSpecs)
             candidateScope = scope
@@ -807,7 +815,7 @@ public object JdxService {
         } catch (e: ArtifactReadException) {
             failure(5, rawRef, e.message ?: "artifact read error")
         } catch (e: Exception) {
-            failure(6, rawRef, "internal error: ${e.javaClass.simpleName}: ${e.message ?: "no detail"}")
+            caught(rawRef, e)
         }
     }
 
@@ -899,11 +907,11 @@ public object JdxService {
             }
             val binarySpec = artifact.binaryJar.toString()
             val scope = try {
-                ArtifactLoader.open(artifact.binaryJar).use { root -> root.classEntryPaths().map(::entryToBinary).toSet() }
+                ArtifactLoader.open(artifact.binaryJar, release = roots.release).use { root -> root.classEntryPaths().map(::entryToBinary).toSet() }
             } catch (e: ArtifactReadException) {
                 return failure(5, rawRef, e.message ?: "artifact read error")
             } catch (e: Exception) {
-                return failure(6, rawRef, "internal error: ${e.javaClass.simpleName}: ${e.message ?: "no detail"}")
+                return caught(rawRef, e)
             }
             scopedRoots = roots.copy(jarSpecs = listOf(binarySpec) + roots.jarSpecs)
             candidateScope = scope
@@ -913,7 +921,7 @@ public object JdxService {
         } catch (e: ArtifactReadException) {
             failure(5, rawRef, e.message ?: "artifact read error")
         } catch (e: Exception) {
-            failure(6, rawRef, "internal error: ${e.javaClass.simpleName}: ${e.message ?: "no detail"}")
+            caught(rawRef, e)
         }
     }
 
@@ -1008,11 +1016,11 @@ public object JdxService {
             }
             val binarySpec = artifact.binaryJar.toString()
             val scope = try {
-                ArtifactLoader.open(artifact.binaryJar).use { root -> root.classEntryPaths().map(::entryToBinary).toSet() }
+                ArtifactLoader.open(artifact.binaryJar, release = roots.release).use { root -> root.classEntryPaths().map(::entryToBinary).toSet() }
             } catch (e: ArtifactReadException) {
                 return failure(5, rawRef, e.message ?: "artifact read error")
             } catch (e: Exception) {
-                return failure(6, rawRef, "internal error: ${e.javaClass.simpleName}: ${e.message ?: "no detail"}")
+                return caught(rawRef, e)
             }
             scopedRoots = roots.copy(jarSpecs = listOf(binarySpec) + roots.jarSpecs)
             candidateScope = scope
@@ -1022,7 +1030,7 @@ public object JdxService {
         } catch (e: ArtifactReadException) {
             failure(5, rawRef, e.message ?: "artifact read error")
         } catch (e: Exception) {
-            failure(6, rawRef, "internal error: ${e.javaClass.simpleName}: ${e.message ?: "no detail"}")
+            caught(rawRef, e)
         }
     }
 
@@ -1099,11 +1107,11 @@ public object JdxService {
             }
             val binarySpec = artifact.binaryJar.toString()
             val scope = try {
-                ArtifactLoader.open(artifact.binaryJar).use { root -> root.classEntryPaths().map(::entryToBinary).toSet() }
+                ArtifactLoader.open(artifact.binaryJar, release = roots.release).use { root -> root.classEntryPaths().map(::entryToBinary).toSet() }
             } catch (e: ArtifactReadException) {
                 return failure(5, rawRef, e.message ?: "artifact read error")
             } catch (e: Exception) {
-                return failure(6, rawRef, "internal error: ${e.javaClass.simpleName}: ${e.message ?: "no detail"}")
+                return caught(rawRef, e)
             }
             scopedRoots = roots.copy(jarSpecs = listOf(binarySpec) + roots.jarSpecs)
             candidateScope = scope
@@ -1113,12 +1121,27 @@ public object JdxService {
         } catch (e: ArtifactReadException) {
             failure(5, rawRef, e.message ?: "artifact read error")
         } catch (e: Exception) {
-            failure(6, rawRef, "internal error: ${e.javaClass.simpleName}: ${e.message ?: "no detail"}")
+            caught(rawRef, e)
         }
     }
 
     private fun failure(code: Int, query: String, message: String): ServiceOutcome.Failure =
         ServiceOutcome.Failure(ErrorResult.generic(query, message = message, exitCode = code))
+
+    /**
+     * Maps a caught exception to an outcome. A rejected `--release` is exit 3
+     * even when it surfaces inside a block that otherwise means "internal".
+     */
+    private fun caught(query: String, e: Exception): ServiceOutcome.Failure {
+        if (e is ReleaseUsageException) {
+            return failure(3, query, e.message ?: "usage error: --release")
+        }
+        return caught(query, e)
+    }
+
+    /** The versioned feature that supplied [binary] in [opened], or null for a base entry. */
+    private fun classRelease(opened: List<OpenRoot>, winner: Int, binary: String): Int? =
+        opened[winner].root.variantRelease(entryForBinary(binary))
 
     /** An opened root plus its JDK-module lookup (non-null for `jrt:/` only). */
     private data class OpenRoot(
@@ -1215,6 +1238,7 @@ public object JdxService {
                 Provenance(
                     artifact = rootLabel(opened[winner], binary),
                     origin = if (opened[winner].root.kind == ArtifactKind.JRT) Origin.JRT else Origin.BYTECODE,
+                    release = classRelease(opened, winner, binary),
                 ),
             )
             val sortedWarnings = warnings.sortedBy { it.code }
@@ -1352,7 +1376,7 @@ public object JdxService {
                     val key = runCatching { path.toRealPath().toString() }
                         .getOrElse { path.toAbsolutePath().normalize().toString() }
                     if (!seen.add(key)) continue
-                    opened.add(OpenRoot(ArtifactLoader.open(path)))
+                    opened.add(OpenRoot(ArtifactLoader.open(path, release = spec.release)))
                 }
             }
             if (spec.includeJdk) {
@@ -1683,7 +1707,7 @@ public object JdxService {
         } catch (e: ArtifactReadException) {
             failure(5, rawPattern, e.message ?: "artifact read error")
         } catch (e: Exception) {
-            failure(6, rawPattern, "internal error: ${e.javaClass.simpleName}: ${e.message ?: "no detail"}")
+            caught(rawPattern, e)
         }
     }
 
@@ -1711,7 +1735,7 @@ public object JdxService {
         } catch (e: ArtifactReadException) {
             failure(5, rawName, e.message ?: "artifact read error")
         } catch (e: Exception) {
-            failure(6, rawName, "internal error: ${e.javaClass.simpleName}: ${e.message ?: "no detail"}")
+            caught(rawName, e)
         }
     }
 
@@ -1738,7 +1762,7 @@ public object JdxService {
         } catch (e: ArtifactReadException) {
             failure(5, query, e.message ?: "artifact read error")
         } catch (e: Exception) {
-            failure(6, query, "internal error: ${e.javaClass.simpleName}: ${e.message ?: "no detail"}")
+            caught(query, e)
         }
     }
 
@@ -1774,7 +1798,7 @@ public object JdxService {
         } catch (e: ArtifactReadException) {
             failure(5, query, e.message ?: "artifact read error")
         } catch (e: Exception) {
-            failure(6, query, "internal error: ${e.javaClass.simpleName}: ${e.message ?: "no detail"}")
+            caught(query, e)
         }
     }
 
@@ -2351,6 +2375,12 @@ public object JdxService {
         public val severityFilter: SeverityFilter = SeverityFilter.ALL,
         public val failOn: FailOn = FailOn.NONE,
         public val maxFindings: Int = DEFAULT_DIFF_LIMIT,
+        /**
+         * Multi-release feature for both sides (`jdx diff --release`). `null`
+         * keeps the running JDK. The diff footer does not name one class's
+         * release; a versioned winner still warns `MULTI_RELEASE_VARIANT`.
+         */
+        public val release: Int? = null,
     )
 
     /**
@@ -2382,6 +2412,10 @@ public object JdxService {
         options: DiffOptions = DiffOptions(),
     ): ServiceOutcome {
         val query = "${old.spec} -> ${new.spec}"
+        val release = options.release
+        if (release != null && release < MultiRelease.MIN_SELECTABLE) {
+            return failure(3, query, "usage error: ${MultiRelease.releaseUsageDetail(release)}")
+        }
         if (options.maxFindings < 0) {
             return failure(3, query, "usage error: --limit must be >= 0, got ${options.maxFindings}")
         }
@@ -2392,7 +2426,7 @@ public object JdxService {
         } catch (e: ArtifactReadException) {
             failure(5, query, e.message ?: "artifact read error")
         } catch (e: Exception) {
-            failure(6, query, "internal error: ${e.javaClass.simpleName}: ${e.message ?: "no detail"}")
+            caught(query, e)
         }
     }
 
@@ -2447,7 +2481,7 @@ public object JdxService {
 
     /** Reads one resolved side and closes its root. Bytecode only — see [diff]. */
     private fun snapshotOf(side: DiffSide.Ready, options: DiffOptions): ApiSnapshotResult =
-        ArtifactLoader.open(side.jar).use { root ->
+        ArtifactLoader.open(side.jar, release = options.release).use { root ->
             ArtifactSnapshots.of(root, side.label, options.visibility, options.includeSynthetic)
         }
 
@@ -2749,11 +2783,11 @@ public object JdxService {
             }
             val binarySpec = artifact.binaryJar.toString()
             val scope = try {
-                ArtifactLoader.open(artifact.binaryJar).use { root -> root.classEntryPaths().map(::entryToBinary).toSet() }
+                ArtifactLoader.open(artifact.binaryJar, release = roots.release).use { root -> root.classEntryPaths().map(::entryToBinary).toSet() }
             } catch (e: ArtifactReadException) {
                 return failure(5, rawRef, e.message ?: "artifact read error")
             } catch (e: Exception) {
-                return failure(6, rawRef, "internal error: ${e.javaClass.simpleName}: ${e.message ?: "no detail"}")
+                return caught(rawRef, e)
             }
             scopedRoots = roots.copy(jarSpecs = listOf(binarySpec) + roots.jarSpecs)
             candidateScope = scope
@@ -2764,7 +2798,7 @@ public object JdxService {
         } catch (e: ArtifactReadException) {
             failure(5, rawRef, e.message ?: "artifact read error")
         } catch (e: Exception) {
-            failure(6, rawRef, "internal error: ${e.javaClass.simpleName}: ${e.message ?: "no detail"}")
+            caught(rawRef, e)
         }
     }
 
@@ -3382,11 +3416,11 @@ public object JdxService {
             }
             val binarySpec = artifact.binaryJar.toString()
             val scope = try {
-                ArtifactLoader.open(artifact.binaryJar).use { root -> root.classEntryPaths().map(::entryToBinary).toSet() }
+                ArtifactLoader.open(artifact.binaryJar, release = roots.release).use { root -> root.classEntryPaths().map(::entryToBinary).toSet() }
             } catch (e: ArtifactReadException) {
                 return failure(5, rawRef, e.message ?: "artifact read error")
             } catch (e: Exception) {
-                return failure(6, rawRef, "internal error: ${e.javaClass.simpleName}: ${e.message ?: "no detail"}")
+                return caught(rawRef, e)
             }
             scopedRoots = roots.copy(jarSpecs = listOf(binarySpec) + roots.jarSpecs)
             candidateScope = scope
@@ -3396,7 +3430,7 @@ public object JdxService {
         } catch (e: ArtifactReadException) {
             failure(5, rawRef, e.message ?: "artifact read error")
         } catch (e: Exception) {
-            failure(6, rawRef, "internal error: ${e.javaClass.simpleName}: ${e.message ?: "no detail"}")
+            caught(rawRef, e)
         }
     }
 
@@ -3783,11 +3817,11 @@ public object JdxService {
             }
             val binarySpec = artifact.binaryJar.toString()
             val scope = try {
-                ArtifactLoader.open(artifact.binaryJar).use { root -> root.classEntryPaths().map(::entryToBinary).toSet() }
+                ArtifactLoader.open(artifact.binaryJar, release = roots.release).use { root -> root.classEntryPaths().map(::entryToBinary).toSet() }
             } catch (e: ArtifactReadException) {
                 return failure(5, rawRef, e.message ?: "artifact read error")
             } catch (e: Exception) {
-                return failure(6, rawRef, "internal error: ${e.javaClass.simpleName}: ${e.message ?: "no detail"}")
+                return caught(rawRef, e)
             }
             scopedRoots = roots.copy(jarSpecs = listOf(binarySpec) + roots.jarSpecs)
             candidateScope = scope
@@ -3797,7 +3831,7 @@ public object JdxService {
         } catch (e: ArtifactReadException) {
             failure(5, rawRef, e.message ?: "artifact read error")
         } catch (e: Exception) {
-            failure(6, rawRef, "internal error: ${e.javaClass.simpleName}: ${e.message ?: "no detail"}")
+            caught(rawRef, e)
         }
     }
 
@@ -3964,6 +3998,7 @@ public object JdxService {
                 Provenance(
                     artifact = targetArtifact,
                     origin = if (opened[winner].root.kind == ArtifactKind.JRT) Origin.JRT else Origin.BYTECODE,
+                    release = classRelease(opened, winner, binary),
                 ),
             )
             val listing = buildCallListing(
@@ -4387,11 +4422,11 @@ public object JdxService {
             }
             val binarySpec = artifact.binaryJar.toString()
             val scope = try {
-                ArtifactLoader.open(artifact.binaryJar).use { root -> root.classEntryPaths().map(::entryToBinary).toSet() }
+                ArtifactLoader.open(artifact.binaryJar, release = roots.release).use { root -> root.classEntryPaths().map(::entryToBinary).toSet() }
             } catch (e: ArtifactReadException) {
                 return failure(5, rawRef, e.message ?: "artifact read error")
             } catch (e: Exception) {
-                return failure(6, rawRef, "internal error: ${e.javaClass.simpleName}: ${e.message ?: "no detail"}")
+                return caught(rawRef, e)
             }
             scopedRoots = roots.copy(jarSpecs = listOf(binarySpec) + roots.jarSpecs)
             candidateScope = scope
@@ -4401,7 +4436,7 @@ public object JdxService {
         } catch (e: ArtifactReadException) {
             failure(5, rawRef, e.message ?: "artifact read error")
         } catch (e: Exception) {
-            failure(6, rawRef, "internal error: ${e.javaClass.simpleName}: ${e.message ?: "no detail"}")
+            caught(rawRef, e)
         }
     }
 
@@ -4594,6 +4629,7 @@ public object JdxService {
                 Provenance(
                     artifact = targetArtifact,
                     origin = if (opened[winner].root.kind == ArtifactKind.JRT) Origin.JRT else Origin.BYTECODE,
+                    release = classRelease(opened, winner, binary),
                 ),
             )
             return ServiceOutcome.SampleList(
@@ -4750,7 +4786,7 @@ public object JdxService {
         } catch (e: ArtifactReadException) {
             failure(5, pattern, e.message ?: "artifact read error")
         } catch (e: Exception) {
-            failure(6, pattern, "internal error: ${e.javaClass.simpleName}: ${e.message ?: "no detail"}")
+            caught(pattern, e)
         }
     }
 
@@ -4949,7 +4985,7 @@ public object JdxService {
         } catch (e: ArtifactReadException) {
             failure(5, pattern, e.message ?: "artifact read error")
         } catch (e: Exception) {
-            failure(6, pattern, "internal error: ${e.javaClass.simpleName}: ${e.message ?: "no detail"}")
+            caught(pattern, e)
         }
     }
 
@@ -5105,7 +5141,7 @@ public object JdxService {
         } catch (e: ArtifactReadException) {
             failure(5, pattern, e.message ?: "artifact read error")
         } catch (e: Exception) {
-            failure(6, pattern, "internal error: ${e.javaClass.simpleName}: ${e.message ?: "no detail"}")
+            caught(pattern, e)
         }
     }
 
@@ -5279,7 +5315,7 @@ public object JdxService {
         } catch (e: ArtifactReadException) {
             failure(5, pattern, e.message ?: "artifact read error")
         } catch (e: Exception) {
-            failure(6, pattern, "internal error: ${e.javaClass.simpleName}: ${e.message ?: "no detail"}")
+            caught(pattern, e)
         }
     }
 
@@ -5468,7 +5504,7 @@ public object JdxService {
         } catch (e: ArtifactReadException) {
             failure(5, pattern, e.message ?: "artifact read error")
         } catch (e: Exception) {
-            failure(6, pattern, "internal error: ${e.javaClass.simpleName}: ${e.message ?: "no detail"}")
+            caught(pattern, e)
         }
     }
 
@@ -5882,6 +5918,7 @@ public object JdxService {
                         Provenance(
                             artifact = rootLabel(opened[winner], binary),
                             origin = if (opened[winner].root.kind == ArtifactKind.JRT) Origin.JRT else Origin.BYTECODE,
+                            release = classRelease(opened, winner, binary),
                         ),
                     ),
                     warnings = warnings.sortedBy { it.code },
@@ -6150,6 +6187,7 @@ public object JdxService {
                     return docOutcome(
                         directDoc, sources.displayName, binary, canonicalRef,
                         docSubjectOf(directDoc.kind), allWarnings, options, lines, inheritedFrom = null,
+                        release = classRelease(opened, winner, binary),
                     )
                 }
             }
@@ -6164,6 +6202,7 @@ public object JdxService {
                     inherited.doc, inherited.displayName, binary, canonicalRef,
                     docSubjectOf(inherited.doc.kind), allWarnings, options, inherited.lines,
                     inheritedFrom = inherited.superBinary,
+                    release = classRelease(opened, winner, binary),
                 )
             }
             check(memberNotFound || directDoc != null) { "lookup spellings exhausted without a terminal result" }
@@ -6241,6 +6280,7 @@ public object JdxService {
                         docOutcome(
                             doc, sources.displayName, binary, binary,
                             docSubjectOf(doc.kind), allWarnings, options, lines, inheritedFrom = null,
+                            release = classRelease(opened, winner, binary),
                         )
                     }
                 }
@@ -6515,6 +6555,7 @@ public object JdxService {
         options: DocOptions,
         lines: List<String>,
         inheritedFrom: String?,
+        release: Int? = null,
     ): ServiceOutcome {
         return ServiceOutcome.Doc(
             buildDocBlock(
@@ -6531,6 +6572,7 @@ public object JdxService {
                         origin = Origin.SOURCES,
                         file = doc.file,
                         lineRange = doc.startLine..doc.endLine,
+                        release = release,
                     ),
                 ),
                 warnings = warnings.sortedBy { it.code },
@@ -6964,6 +7006,7 @@ public object JdxService {
                             rawRef = rawRef,
                             signature = signatureLine,
                             doc = bodyDoc,
+                            release = classRelease(opened, winner, binary),
                         )
                     }
                     is dev.jdx.sources.JavaBodyResult.MemberNotFound -> {
@@ -7280,6 +7323,7 @@ public object JdxService {
                         )
                     }
                     val fileLines = text.split('\n').map { it.removeSuffix("\r") }
+                    val answered = classRelease(opened, winner, binary)
                     return ServiceOutcome.Body(
                         buildBodyBlock(
                             canonicalRef = matchRefs.singleOrNull() ?: SymbolRefPrinter.print(
@@ -7300,6 +7344,7 @@ public object JdxService {
                                     origin = Origin.DECOMPILED_VINEFLOWER,
                                     file = body.file,
                                     lineRange = body.startLine..body.endLine,
+                                    release = answered,
                                 ),
                             ),
                             warnings = warnings.sortedBy { it.code },
@@ -7388,6 +7433,7 @@ public object JdxService {
                 text = text,
                 options = options,
                 warnings = warnings,
+                release = classRelease(opened, winner, binary),
             )
         }
         return fileSourceOutcome(
@@ -7400,6 +7446,7 @@ public object JdxService {
             origin = Origin.DECOMPILED_VINEFLOWER,
             warnings = warnings,
             options = options,
+            release = classRelease(opened, winner, binary),
         )
     }
 
@@ -7422,6 +7469,7 @@ public object JdxService {
         text: String,
         options: SourceOptions,
         warnings: List<Warning>,
+        release: Int? = null,
     ): ServiceOutcome {
         val decompiledRoot = dev.jdx.sources.MemorySourceRoot(mapOf(javaPathFor(binary) to text))
         var memberNotFound = false
@@ -7460,6 +7508,7 @@ public object JdxService {
                                     origin = Origin.DECOMPILED_VINEFLOWER,
                                     file = body.file,
                                     lineRange = body.startLine..body.endLine,
+                                    release = release,
                                 ),
                             ),
                             warnings = warnings.sortedBy { it.code },
@@ -7578,6 +7627,7 @@ public object JdxService {
                 ),
             )
         val fileLines = splitTextLines(text)
+        val answered = classRelease(opened, winner, binary)
         return ServiceOutcome.Body(
             buildBodyBlock(
                 canonicalRef = matchRefs.singleOrNull() ?: SymbolRefPrinter.print(
@@ -7598,6 +7648,7 @@ public object JdxService {
                         origin = Origin.DECOMPILED_JAVAP,
                         file = javaPathFor(binary),
                         lineRange = section.startLine..section.endLine,
+                        release = answered,
                     ),
                 ),
                 warnings = warnings.sortedBy { it.code },
@@ -7645,6 +7696,7 @@ public object JdxService {
                 text = text,
                 options = options,
                 warnings = warnings,
+                release = classRelease(opened, winner, binary),
             )
         }
         return fileSourceOutcome(
@@ -7657,6 +7709,7 @@ public object JdxService {
             origin = Origin.DECOMPILED_JAVAP,
             warnings = warnings,
             options = options,
+            release = classRelease(opened, winner, binary),
         )
     }
 
@@ -7675,6 +7728,7 @@ public object JdxService {
         text: String,
         options: SourceOptions,
         warnings: List<Warning>,
+        release: Int? = null,
     ): ServiceOutcome {
         // `matchAroundMember` already proved exactly one resolvable member
         // (ambiguity exits 2 there); the first declaration-order match is the
@@ -7706,6 +7760,7 @@ public object JdxService {
                         origin = Origin.DECOMPILED_JAVAP,
                         file = javaPathFor(binary),
                         lineRange = section.startLine..section.endLine,
+                        release = release,
                     ),
                 ),
                 warnings = warnings.sortedBy { it.code },
@@ -7732,6 +7787,7 @@ public object JdxService {
         origin: Origin,
         warnings: List<Warning>,
         options: SourceOptions,
+        release: Int? = null,
     ): ServiceOutcome {
         val (startLine, endLine) = if (window != null) {
             if (window.first > fileLines.size) {
@@ -7761,6 +7817,7 @@ public object JdxService {
                         origin = origin,
                         file = file,
                         lineRange = startLine..endLine,
+                        release = release,
                     ),
                 ),
                 warnings = warnings.sortedBy { it.code },
@@ -7945,6 +8002,7 @@ public object JdxService {
             origin = Origin.SOURCES,
             warnings = allWarnings,
             options = options,
+            release = classRelease(opened, winner, binary),
         )
     }
 
@@ -8114,6 +8172,7 @@ public object JdxService {
                                     origin = Origin.SOURCES,
                                     file = body.file,
                                     lineRange = body.startLine..body.endLine,
+                                    release = classRelease(opened, winner, binary),
                                 ),
                             ),
                             warnings = allWarnings.sortedBy { it.code },
@@ -8208,6 +8267,7 @@ public object JdxService {
         rawRef: String,
         signature: String? = null,
         doc: List<String>? = null,
+        release: Int? = null,
     ): ServiceOutcome {
         val fileLines = try {
             sources.openSource(body.file).use {
@@ -8231,6 +8291,7 @@ public object JdxService {
                         origin = Origin.SOURCES,
                         file = body.file,
                         lineRange = body.startLine..body.endLine,
+                        release = release,
                     ),
                 ),
                 warnings = warnings.sortedBy { it.code },

@@ -16,6 +16,11 @@ facade pair (`KotlinMultifileA`/`B` → `KotlinMultifile` umbrella, issue #12) �
 file-level facade KDoc, generic extensions, and enum-entry class bodies
 (`KotlinTraffic$RED`/`$GREEN`, issue #15).
 
+**The multi-release jar** (`src/mrBase/`, `src/mr11/`, `src/mr17/`, `src/mr21/`,
+issue #29) is a *third* corpus, built by `mrJar` into `build/mr-fixtures/` as
+`mr-fixtures-*.jar` with `Multi-Release: true`. Base `Api`/`Stable`, version 11
+`Api`/`Since11`, version 17 `Api`, version 21 `Only21`. Not `build/libs`.
+
 **The diff pair** (`src/diffV1/`, `src/diffV2/`, `src/diffAbsent/`) is a *second*,
 separate corpus for `jdx diff` (issue #23, `docs/TESTING.md` §11.2): two versions of
 the **same** package `dev.jdx.diffapi`, built into `build/diff-fixtures/`. Read those

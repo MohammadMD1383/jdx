@@ -118,6 +118,8 @@ class ResourcesCommand(
         help = "Do not include the running JDK's stdlib (included by default).",
     ).flag()
 
+    private val release by releaseOption()
+
     private val coord by option(
         "--coord",
         help = "Maven coordinate root group:artifact:version (repeatable). Resolved from " +
@@ -191,7 +193,7 @@ class ResourcesCommand(
                     maxLines = maxLines,
                 ),
                 flagWorkspace = effectiveWorkspace(workspace),
-                roots = WarmRoots(jars = jars, coords = coord, repos = repo, fetch = fetch, noJdk = noJdk),
+                roots = WarmRoots(jars = jars, coords = coord, repos = repo, fetch = fetch, noJdk = noJdk, release = release),
                 noDaemon = effectiveNoDaemon(noDaemon),
                 json = json,
                 terminate = terminate,
@@ -212,6 +214,7 @@ class ResourcesCommand(
             coords = coord,
             allowFetch = fetch,
             repos = repo,
+            release = release,
         )) {
             is ReadCommandSupport.RootsOrFailure.Ready -> {
                 val outcome = query(

@@ -32,7 +32,7 @@ import kotlin.system.exitProcess
  * codes live here; every measurement lives in [BenchRunner].
  *
  * Roots resolve exactly like the read commands (`--jars`, `--src`, `-w`,
- * `--no-jdk`, `--coord`, `--repo`, `--fetch`). When no explicit roots and no
+ * `--no-jdk`, `--coord`, `--repo`, `--fetch`, `--release`). When no explicit roots and no
  * workspace are selected, the `minecraft-client.jar` probe fills in `--jars`
  * (newest `minecraft-client.jar` under `~/.gradle/caches/fabric-loom/`);
  * a missed probe with no roots exits 4 naming `--jars`.
@@ -83,6 +83,8 @@ class BenchCommand(
         "--no-jdk",
         help = "Do not include the running JDK's stdlib (included by default).",
     ).flag()
+
+    private val release by releaseOption()
 
     private val coord by option(
         "--coord",
@@ -139,6 +141,7 @@ class BenchCommand(
                 allowFetch = fetch,
                 repos = repo,
                 srcs = srcs,
+                release = release,
             )
         ) {
             is ReadCommandSupport.RootsOrFailure.Failed -> {

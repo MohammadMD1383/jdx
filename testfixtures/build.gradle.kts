@@ -180,6 +180,57 @@ tasks.named("build") {
     dependsOn(sourcesJar, diffV1Jar, diffV2Jar)
 }
 
+// A small multi-release jar (issue #29). Not the main corpus and not the diff
+// pair: its own directory and base name, so FixtureJars.singleJar still sees
+// exactly one testfixtures-*.jar. Four source sets, one archive:
+// base classes at the root, and the same names (plus version-only classes)
+// under META-INF/versions/11|17|21. Compiled with the module toolchain, so the
+// class-file major stays one this JDK's javap can read.
+val mrBase = sourceSets.create("mrBase") {
+    java.setSrcDirs(listOf("src/mrBase/java"))
+    kotlin.setSrcDirs(emptyList<String>())
+}
+val mr11 = sourceSets.create("mr11") {
+    java.setSrcDirs(listOf("src/mr11/java"))
+    kotlin.setSrcDirs(emptyList<String>())
+}
+val mr17 = sourceSets.create("mr17") {
+    java.setSrcDirs(listOf("src/mr17/java"))
+    kotlin.setSrcDirs(emptyList<String>())
+}
+val mr21 = sourceSets.create("mr21") {
+    java.setSrcDirs(listOf("src/mr21/java"))
+    kotlin.setSrcDirs(emptyList<String>())
+}
+
+val mrJar = tasks.register<Jar>("mrJar") {
+    archiveBaseName.set("mr-fixtures")
+    destinationDirectory.set(layout.buildDirectory.dir("mr-fixtures"))
+    from(mrBase.output)
+    into("META-INF/versions/11") {
+        from(mr11.output)
+    }
+    into("META-INF/versions/17") {
+        from(mr17.output)
+    }
+    into("META-INF/versions/21") {
+        from(mr21.output)
+    }
+    manifest {
+        attributes("Multi-Release" to "true")
+    }
+}
+
+// The corpus wiring depends on :testfixtures:jar. Hanging the MR jar off that
+// task produces it on a clean check without a fifth jar property
+// (verifyFixtureCorpusWiring asserts exactly jar, sourcesJar, diffV1Jar, diffV2Jar).
+tasks.named<Jar>("jar") {
+    dependsOn(mrJar)
+}
+tasks.named("build") {
+    dependsOn(mrJar)
+}
+
 dependencies {
     // Property tests for the shared test helpers (T-054/T-055). Versions live
     // only in the catalog — never inline (T-001 rule).

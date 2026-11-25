@@ -11,7 +11,8 @@ import java.nio.file.Path
  * The three shapes are read uniformly through this interface (T-007): the indexer and every
  * later reader list [classEntryPaths] and pull bytes with [openClass], never caring which
  * shape sits underneath. Paths are normalised `com/foo/Bar.class` slash paths, sorted, with
- * multi-release variants already resolved to the bytes the running JVM would load.
+ * multi-release variants already resolved to the bytes the selected feature would load
+ * (the running JDK, unless the caller passed an explicit release).
  *
  * Reading parses bytes with ASM (T-008) — it never loads the class into this JVM (D-017).
  */
@@ -42,6 +43,13 @@ public interface ArtifactRoot : Closeable {
      *   decompression cap (D-015 exit 5 at the service layer).
      */
     public fun openClass(path: String): InputStream
+
+    /**
+     * The `N` of the `META-INF/versions/N/` entry that [openClass] would read
+     * for [classPath], or `null` when the base entry wins, the path is absent,
+     * or this root has no versioned classes (a directory or `jrt:/`).
+     */
+    public fun variantRelease(classPath: String): Int? = null
 
     /**
      * Every base `META-INF/services/<iface>` entry in this root (issue #25),
