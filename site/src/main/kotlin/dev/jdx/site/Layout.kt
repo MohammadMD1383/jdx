@@ -53,6 +53,11 @@ data class Page(
     /** Repository file the page is generated from (edit link); null for generated pages. */
     val sourcePath: String? = null,
     val lastModified: String? = null,
+    /**
+     * Publication date (`YYYY-MM-DD`) when the page is an article. Sets `og:type` to
+     * `article` and emits `article:published_time`. Docs leave this null.
+     */
+    val published: String? = null,
     val toc: List<HeadingInfo> = emptyList(),
     val breadcrumbs: List<Crumb> = emptyList(),
     val jsonLd: List<Any> = emptyList(),
@@ -111,6 +116,7 @@ class Layout(private val site: SiteContext, private val nav: NavTree) {
         page.markdownPath?.let {
             append("<link rel=\"alternate\" type=\"text/markdown\" href=\"${Html.attr(site.absolute(it))}\" title=\"Markdown version\">\n")
         }
+        append("<link rel=\"alternate\" type=\"application/atom+xml\" href=\"${Html.attr(site.absolute(BlogPages.FEED_PATH))}\" title=\"jdx blog\">\n")
         append("<link rel=\"alternate\" type=\"text/plain\" href=\"${site.absolute("llms.txt")}\" title=\"llms.txt\">\n")
         append("<link rel=\"icon\" href=\"${site.rootRelative("favicon.svg")}\" type=\"image/svg+xml\">\n")
         append("<link rel=\"apple-touch-icon\" href=\"${site.rootRelative("apple-touch-icon.png")}\">\n")
@@ -119,7 +125,7 @@ class Layout(private val site: SiteContext, private val nav: NavTree) {
         append("<meta name=\"theme-color\" content=\"#f7f6f2\" media=\"(prefers-color-scheme: light)\">\n")
         append("<meta name=\"theme-color\" content=\"#0c0e13\" media=\"(prefers-color-scheme: dark)\">\n")
         append("<meta name=\"color-scheme\" content=\"light dark\">\n")
-        val ogType = if (page.kind == PageKind.DOC) "article" else "website"
+        val ogType = if (page.kind == PageKind.DOC || page.published != null) "article" else "website"
         val image = site.absolute(page.ogImagePath)
         append("<meta property=\"og:type\" content=\"$ogType\">\n")
         append("<meta property=\"og:site_name\" content=\"jdx\">\n")
@@ -137,6 +143,7 @@ class Layout(private val site: SiteContext, private val nav: NavTree) {
         append("<meta name=\"twitter:description\" content=\"${Html.attr(page.description)}\">\n")
         append("<meta name=\"twitter:image\" content=\"${Html.attr(image)}\">\n")
         append("<meta name=\"twitter:image:alt\" content=\"${Html.attr(page.title)} — jdx\">\n")
+        page.published?.let { append("<meta property=\"article:published_time\" content=\"${Html.attr(it)}\">\n") }
         page.lastModified?.let { append("<meta property=\"article:modified_time\" content=\"${Html.attr(it)}\">\n") }
         site.googleVerification?.let { append("<meta name=\"google-site-verification\" content=\"${Html.attr(it)}\">\n") }
         site.bingVerification?.let { append("<meta name=\"msvalidate.01\" content=\"${Html.attr(it)}\">\n") }
@@ -163,6 +170,7 @@ class Layout(private val site: SiteContext, private val nav: NavTree) {
             |<nav class="top-nav" aria-label="Main">
             |${link("Docs", "docs/", inDocs && !page.path.startsWith("docs/reference/"))}
             |${link("Reference", "docs/reference/", page.path.startsWith("docs/reference/"))}
+            |${link("Blog", "blog/", page.path.startsWith("blog/"))}
             |${link("Integrations", "integrations/", page.path.startsWith("integrations/"))}
             |${link("FAQ", "faq/", page.path == "faq/").replace("<a ", "<a class=\"secondary\" ")}
             |${link("Changelog", "changelog/", page.path == "changelog/").replace("<a ", "<a class=\"secondary\" ")}
@@ -274,7 +282,7 @@ class Layout(private val site: SiteContext, private val nav: NavTree) {
             |<div class="footer-brand"><a class="brand" href="${site.rootRelative("")}">${Brand.MARK}<span>jdx</span></a>
             |<p>An IDE for AI agents, as a command line tool. Apache-2.0.</p></div>
             |<div><p class="footer-title">Product</p><ul>
-            |${link("Overview", "")}${link("Integrations", "integrations/")}${link("FAQ", "faq/")}${link("Changelog", "changelog/")}
+            |${link("Overview", "")}${link("Blog", "blog/")}${link("Integrations", "integrations/")}${link("FAQ", "faq/")}${link("Changelog", "changelog/")}
             |</ul></div>
             |<div><p class="footer-title">Docs</p><ul>
             |${link("Getting started", "docs/introduction/")}${link("Guides", "docs/#guides")}${link("Reference", "docs/reference/")}
@@ -285,7 +293,7 @@ class Layout(private val site: SiteContext, private val nav: NavTree) {
             |${external("GitHub", site.repoUrl)}${external("Releases", "${site.repoUrl}/releases")}${external("Issues", "${site.repoUrl}/issues")}${external("License", "${site.repoUrl}/blob/main/LICENSE")}
             |</ul></div>
             |<div><p class="footer-title">For agents</p><ul>
-            |${link("llms.txt", "llms.txt")}${link("llms-full.txt", "llms-full.txt")}${link("Sitemap", "sitemap.xml")}${link("Agent cheat sheet", "docs/reference/cheat-sheet/")}
+            |${link("llms.txt", "llms.txt")}${link("llms-full.txt", "llms-full.txt")}${link("Sitemap", "sitemap.xml")}${link("Blog feed", "blog/feed.xml")}${link("Agent cheat sheet", "docs/reference/cheat-sheet/")}
             |</ul></div>
             |</div>
             |<p class="wrap footer-note">Every example on this site is real output from jdx, regenerated on every change.$commit</p>

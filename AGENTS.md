@@ -235,6 +235,7 @@ answer. Nothing else may bend this table.
   generated from README.md, docs/ and the built binary by `site/` and deployed by
   `.github/workflows/pages.yml` on every push to `main` and every release. Never edit it by
   hand; change the source. Hierarchy and URLs live in `site/.../SiteManifest.kt`.
+  Blog posts live in `docs/blog/` and are published at `/blog/` by `BlogPages`.
 
 ## 10. Dogfood rule — built by agents, for agents
 

@@ -3,7 +3,7 @@ package dev.jdx.site
 /**
  * schema.org JSON-LD for search engines and answer engines: what the product is
  * (SoftwareApplication), where a page sits (BreadcrumbList), what a page is (TechArticle),
- * and question/answer pairs (FAQPage). Values come from the same facts the pages render,
+ * question/answer pairs (FAQPage), and a blog post (BlogPosting). Values come from the same facts the pages render,
  * so the structured data cannot disagree with the visible text. A guide adds FAQPage
  * JSON-LD when its Markdown has an `FAQ` section; [Markdown.faqSection] is that text.
  */
@@ -59,6 +59,67 @@ object StructuredData {
         "itemListElement" to trail.mapIndexed { index, (name, path) ->
             linkedMapOf("@type" to "ListItem", "position" to index + 1, "name" to name, "item" to site.absolute(path))
         },
+    )
+
+    /**
+     * A blog post. [published] is the day in the file (`YYYY-MM-DD`), also used as
+     * `dateModified`: that day is the only date the page shows, so the two fields match it.
+     * [imagePath] is the page's social card (`Page.ogImagePath`).
+     */
+    fun blogPosting(
+        site: SiteContext,
+        path: String,
+        title: String,
+        description: String,
+        published: String,
+        imagePath: String,
+    ): Map<String, Any?> = linkedMapOf(
+        "@context" to CONTEXT,
+        "@type" to "BlogPosting",
+        "headline" to title,
+        "description" to description,
+        "datePublished" to published,
+        "dateModified" to published,
+        "url" to site.absolute(path),
+        "mainEntityOfPage" to linkedMapOf("@type" to "WebPage", "@id" to site.absolute(path)),
+        "image" to site.absolute(imagePath),
+        "inLanguage" to "en",
+        "author" to organization(site),
+        "publisher" to publisher(site),
+    )
+
+    /** The `/blog/` index. [posts] are `(headline, path, datePublished)`, newest first. */
+    fun blogIndex(
+        site: SiteContext,
+        description: String,
+        posts: List<Triple<String, String, String>>,
+    ): Map<String, Any?> = linkedMapOf(
+        "@context" to CONTEXT,
+        "@type" to "Blog",
+        "name" to "jdx blog",
+        "description" to description,
+        "url" to site.absolute("blog/"),
+        "blogPost" to posts.map { (title, path, date) ->
+            linkedMapOf(
+                "@type" to "BlogPosting",
+                "headline" to title,
+                "datePublished" to date,
+                "url" to site.absolute(path),
+            )
+        },
+    )
+
+    private fun organization(site: SiteContext): Map<String, Any?> = linkedMapOf(
+        "@type" to "Organization",
+        "name" to "jdx",
+        "url" to site.baseUrl,
+    )
+
+    private fun publisher(site: SiteContext): Map<String, Any?> = linkedMapOf(
+        "@type" to "Organization",
+        "name" to "jdx",
+        "url" to site.baseUrl,
+        "logo" to linkedMapOf("@type" to "ImageObject", "url" to site.absolute("apple-touch-icon.png")),
     )
 
     fun faqPage(questions: List<Pair<String, String>>): Map<String, Any?> = linkedMapOf(

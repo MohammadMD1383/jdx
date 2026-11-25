@@ -2,6 +2,10 @@
 
 ## Unreleased
 
+- The website has a blog. `/blog/` lists posts newest first. Each post is its own
+  page, with a title, date, description, canonical URL, Open Graph tags, and
+  BlogPosting JSON-LD. Posts are in `sitemap.xml`, and `/blog/feed.xml` is an
+  Atom feed. Posts are Markdown files in `docs/blog/`.
 - The v1 daemon, HTTP and MCP wire stays read-only (issue #19). `doctor` is
   refused with exit 6. The daemon says to run the same query without the
   daemon and names `jdx doctor`. HTTP and MCP say to run `jdx doctor` in a

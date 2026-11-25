@@ -35,7 +35,12 @@ class DocRenderer(
     fun render(sourcePath: String, descriptionOverride: String? = null): RenderedDoc {
         val file = File(repoRoot, sourcePath)
         if (!file.isFile) throw SiteBuildException("site manifest lists $sourcePath, which does not exist")
-        val document = Markdown.parse(file.readText())
+        return renderText(sourcePath, file.readText(), descriptionOverride)
+    }
+
+    /** Renders [text] as the contents of [sourcePath]. Link rewriting uses that repository path. */
+    fun renderText(sourcePath: String, text: String, descriptionOverride: String? = null): RenderedDoc {
+        val document = Markdown.parse(text)
         return renderDocument(document, sourcePath, descriptionOverride)
     }
 

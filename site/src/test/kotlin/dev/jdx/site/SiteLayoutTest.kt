@@ -42,6 +42,17 @@ class SiteLayoutTest {
         // depends on the row, so neighbouring topics stopped lining up.
         rule(".command-grid a,.card") shouldNotContain "height:100%"
         rule(".command-grid code,.card code,.card strong") shouldContain "overflow-wrap:anywhere"
+        // The description is a child of the card. overflow-wrap is not inherited (#152).
+        rule(".command-grid span,.card span") shouldContain "min-width:0"
+        rule(".command-grid span,.card span") shouldContain "overflow-wrap:anywhere"
+        rule(".card time") shouldContain "min-width:0"
+        rule(".card time") shouldContain "overflow-wrap:anywhere"
+        rule("h1,h2,h3,h4") shouldContain "overflow-wrap:anywhere"
+        rule(".hero h1,.page-hero h1") shouldContain "overflow-wrap:anywhere"
+        rule(".prose p,.prose li,.prose h1,.prose h2,.prose h3,.prose h4") shouldContain "overflow-wrap:anywhere"
+        rule(".prose :not(pre)>code") shouldContain "overflow-wrap:anywhere"
+        rule(".callout") shouldContain "overflow-wrap:anywhere"
+        rule(".page-meta") shouldContain "overflow-wrap:anywhere"
         rule(".guide-list a") shouldContain "overflow-wrap:anywhere"
         rule(".prose") shouldContain "overflow-wrap:anywhere"
         rule(".prose") shouldContain "min-width:0"
