@@ -40,7 +40,10 @@ public const val REQUEST_TERMINATOR: Char = '\n'
  * The name is the contract — MCP derives `jdx_<wire>` tool names from it (T-043) and HTTP
  * `/v1/<wire>` paths (T-044), so renaming one is a breaking change. State-changing commands
  * (`ws`, `cache`) are deliberately absent from v1: the wire surface is read-only, so a
- * daemon serving several clients cannot have one of them reconfigure the others.
+ * daemon serving several clients cannot have one of them reconfigure the others
+ * (issue #19). [DOCTOR] is named so a client can ask, and the daemon, HTTP and MCP
+ * adapters refuse it with exit 6 — it probes the process it runs in. The CLI and
+ * `jdx batch` answer it in-process. A write-capable wire is a new [RPC_VERSION].
  *
  * [requiresQuery] says whether the command needs a subject at all — `ls`/`tree` default their
  * glob to `*`, `services`/`modules`/`manifest`/`resources` list every
@@ -106,7 +109,11 @@ public enum class RpcCommand(public val wire: String, public val requiresQuery: 
     /** Build identity — answered without touching an index. */
     VERSION("version", false),
 
-    /** Environment report (`jdx doctor`). */
+    /**
+     * Environment report (`jdx doctor`). On the v1 wire the daemon, HTTP and MCP
+     * adapters refuse it (exit 6, issue #19); the one-shot CLI and `jdx batch`
+     * answer it in-process.
+     */
     DOCTOR("doctor", false),
 
     /** Daemon liveness probe; the one command with no CLI equivalent. */

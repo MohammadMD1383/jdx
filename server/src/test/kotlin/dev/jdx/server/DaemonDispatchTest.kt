@@ -164,6 +164,8 @@ class DaemonDispatchTest {
             doctor!! shouldContain "\"ok\":false"
             doctor shouldContain "\"code\":6"
             doctor shouldContain "doctor"
+            doctor shouldContain "run the same query without the daemon"
+            doctor shouldContain "jdx doctor"
             val version = DaemonProbe.roundTrip(socket(), req(RpcCommand.VERSION))
             version shouldNotBe null
             version!! shouldContain "\"version\":\"test-0.0.0\""

@@ -318,7 +318,7 @@ class McpSessionTest {
         val result = session().callTool("jdx_doctor", buildJsonObject {})
         result.isError shouldBe true
         result.text shouldContain "\"code\":6"
-        result.text shouldContain "jdx doctor"
+        result.text shouldContain "run `jdx doctor`"
     }
 
     // -- roots and errors ----------------------------------------------------------------------

@@ -1045,8 +1045,21 @@ A **request** is one line of JSON, newline-terminated (`\n`). Keys are in fixed 
 - `command` is one of the read-only queries — `show` `members` `outline` `body` `source`
   `signature` `doc` `search` `resolve` `ls` `tree` `usages` `hierarchy` `implementors`
   `callers` `calls` `samples` `literals` `services` `modules` `manifest` `resources` — plus `version`, `doctor` and
-  `health`. The state-changing commands (`ws`, `cache`) are deliberately **not** on the wire
-  in v1: one client of a shared daemon must not be able to reconfigure the others.
+  `health`.
+
+**Decision (issue #19): the v1 wire stays read-only.** `ws` and `cache` are deliberately
+**not** on the wire. One client of a shared daemon must not reconfigure the others, and a
+request that names them is an unknown command: refused, not guessed, not applied.
+`doctor` is named so a client can ask. The daemon, HTTP and MCP adapters refuse it with
+exit code **6** and a message that names the fix. The daemon says to run the same query
+without the daemon (`jdx doctor`). HTTP and MCP say to run `jdx doctor` in a shell.
+HTTP maps that exit to status **500** (`statusForExit`). The refusal is honest: `doctor`
+probes the JDK, cache paths, Kotlin sidecar and AppCDS archive of the process it runs in,
+which over the wire would be the server's machine rather than the caller's. `jdx doctor`
+and a `doctor` line in `jdx batch` still answer in-process. `version` and `health` stay
+on the wire; they report the server build and liveness, not that environment. A later
+wire that writes, or that reports a remote environment beyond `version` and `health`,
+is a new `RPC_VERSION`, with Appendix B and parity goldens — not a silent addition to v1.
 - `params` values are text, the same spelling the CLI flags use. Typed clients (MCP schemas,
   HTTP query strings) may send JSON numbers and booleans; the decoder canonicalises them.
 - Decoding is generous where it is safe — surrounding whitespace, a trailing `\r\n`, absent
@@ -1583,8 +1596,14 @@ index     --force -w
 cache     info|gc|clear [--cache-dir --json]  (gc: --dry-run)
 kotlin    install [--repo --force] [--json]
 daemon    start|stop|status|restart --idle <duration>
+          (read-only v1 wire, issue #19: doctor exits 6 — run `jdx doctor`
+           without the daemon; ws and cache are not wire commands)
 serve     [-w …] --port --bind
+          (GET /v1/doctor exits 6, HTTP 500; run `jdx doctor` in a shell.
+           /v1/ws and /v1/cache are unknown commands. issue #19)
 mcp       [-w …] [--discover] (stdio; per-call workspace, jars, coord, discover)
+          (jdx_doctor refuses with exit 6; run `jdx doctor` in a shell.
+           no ws or cache tool. issue #19)
 batch     --json
 bench     [--jars …] [-w …] [--no-jdk] [--iterations N] [--json]
 upgrade   [--version <tag>] [--check] [--repo OWNER/NAME] [--json]

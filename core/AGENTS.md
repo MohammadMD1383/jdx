@@ -44,6 +44,8 @@ via `JsonEscape` — reuse it, never a second escaper). `explicitApi()` is on.
   `renderUse` never invents defaults into the printed use.
 - `rpc/RpcProtocol` — v1 wire: NDJSON requests, deterministic key order, responses
   **are** the `--json` envelope (no second shape). `decode` never throws.
+  Read-only (issue #19): `ws`/`cache` are not commands; `doctor` is named and
+  the serving adapters refuse it (exit 6). The CLI and `batch` answer it.
 - `paths/JdxPaths` — per-OS cache/config/runtime dirs (D-044; table in
   `docs/PROPOSAL.md` §17.1). Pure path math over explicit `home`/`os`/`env`
   inputs — the single `os.name` branch; production callers pass `System` values.

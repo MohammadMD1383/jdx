@@ -33,8 +33,11 @@ are `toJson` bytes verbatim, no second shape. `explicitApi()` is on.
   streams support INET alone — `UnsupportedOperationException` on UNIX channels;
   client read timeout via `Selector`, blocking reads on server threads). When a
   never-throws wrapper fails everywhere at once, suspect its shared primitive first.
-- Malformed/unknown requests stay transport-owned envelopes; `doctor` refused
-  (exit 6); `ws`/`cache` absent from the wire on purpose. The daemon never fetches
+- Malformed/unknown requests stay transport-owned envelopes. The v1 wire stays
+  read-only (issue #19): `doctor` is refused with exit 6 and a message that says
+  to run the same query without the daemon (`jdx doctor`); HTTP maps that exit
+  to status 500 and says to run `jdx doctor` in a shell; `ws`/`cache` are absent
+  from the wire on purpose. The daemon never fetches
   (issue #18): stored `--repo` mirrors are inert; an unresolvable stored `--coord`
   exits 5 naming cold `--fetch` priming (or explicit `--jars`), never "Re-run with
   --fetch" as if the warm query itself could download.

@@ -132,7 +132,7 @@ The server exposes 27 typed tools, one per query. Parameters, enums, and default
 | Compare two artifacts | `jdx_diff` | `diff` |
 | The server itself | `jdx_version`, `jdx_health` | `version`; liveness is `jdx_health` |
 
-`jdx_doctor` is registered and always returns error code 6. It would describe the server's machine, not the client's. Run `jdx doctor` in a shell.
+`jdx_doctor` is registered and always returns error code 6. It would describe the server's machine, not the client's. Run `jdx doctor` in a shell. The daemon and `GET /v1/doctor` refuse the same call (exit 6; HTTP 500). There is no workspace or cache tool on the v1 wire ([issue #19](https://github.com/MohammadMD1383/jdx/issues/19)).
 
 Kotlin binaries are read from `@Metadata`. `jdx_members` and `jdx_signature` default to the Kotlin declaration (`view` `kotlin`); `view` `jvm` is the raw JVM projection. Reading `.kt` sources needs a one-time `jdx kotlin install` on the CLI. See [Reading code](reading-code.md#kotlin).
 

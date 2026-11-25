@@ -1,0 +1,1 @@
+{"jdx":1,"ok":false,"command":"doctor","query":"","error":{"code":6,"message":"daemon cannot answer 'doctor': it reports this machine's environment — run the same query without the daemon (`jdx doctor`)"},"candidates":[],"warnings":[],"provenance":[]}

@@ -42,8 +42,10 @@ public const val DEFAULT_HTTP_PORT: Int = 7070
  *   key except `workspace` forwards verbatim as a D-058 wire param;
  *   `workspace` overrides the server default for that call (the MCP
  *   per-call override, D-060 §2). `version` and `health` answer internally;
- *   `doctor` is refused honestly (it reports the server machine's
- *   environment and `DoctorService` lives in `:cli`).
+ *   `doctor` is refused honestly (issue #19: exit 6, HTTP 500 via
+ *   [statusForExit]; it reports the server machine's environment and
+ *   `DoctorService` lives in `:cli`). The message says to run `jdx doctor`
+ *   in a shell. `ws` and `cache` are not routes.
  * - `POST /v1/batch[?workspace=…]` — NDJSON `RpcRequest` lines in (the
  *   T-040 framing, shared with `jdx batch` stdin), one envelope line per
  *   request out, never aborting the stream on a per-query failure.
