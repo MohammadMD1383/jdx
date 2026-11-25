@@ -15,7 +15,7 @@ Find which jar contains a class, list classes in a jar, search for a class in ja
 
 `jar tf` and `unzip -l` list every zip entry. Finding one class is a `grep` over that listing, repeated for each file under `libs/`, `mods/`, or a Maven cache, or a search in an IDE's external-libraries view. jdx reads class names from bytecode and prints the jar on the same line. Pass a `.jar`, a class directory, or a quoted glob such as `libs/*.jar` or `mods/*.jar`, a Maven coordinate, or a JDK class. jdx needs Java 21 or later. Text is the default, and every command accepts `--json`. Several matches exit 0 and every candidate is printed. Nothing matched exits 1. Install with the [one-line installer](installation.md). Every command output on this page was produced by running that command when the page was built.
 
-Opening one class after you have its name is [Read and decompile a JAR from the terminal](read-jar-from-terminal.md). A Minecraft mod jar is the same workflow, pointed at the mapped jar your build already wrote. See [Minecraft mods](minecraft-mods.md).
+Opening one class after you have its name is [Read and decompile a JAR from the terminal](read-jar-from-terminal.md). Choosing that over JD-GUI or another GUI decompiler is [A JD-GUI alternative](jd-gui-alternative.md). A Minecraft mod jar is the same workflow, pointed at the mapped jar your build already wrote. See [Minecraft mods](minecraft-mods.md).
 
 ## Find which jar contains a class
 
@@ -156,6 +156,7 @@ Yes, in the names stored in the file. jdx does not remap. Point `--jars` at `mod
 ## Where next
 
 - [Read and decompile a JAR](read-jar-from-terminal.md) — one method, source, or a decompilation, after you know the class.
+- [A JD-GUI alternative](jd-gui-alternative.md) — decompile that class without a GUI.
 - [META-INF/services SPI providers](https://mohammadmd1383.github.io/jdx/docs/reference/services/) — `jdx services`.
 - [Read Javadoc from a jar](read-javadoc-from-jar.md) — the comment on that class or method.
 - [Read a Kotlin library API from a compiled jar](kotlin-jar-api.md) — suspend, nullability, and properties from `@Metadata`.

@@ -63,7 +63,7 @@ Reference: [`search`](https://mohammadmd1383.github.io/jdx/docs/reference/search
 
 `jdx body` and `jdx source` prefer a paired `-sources.jar`. For `foo.jar` that is a sibling `foo-sources.jar`, or the same file name in the Gradle or Maven cache layout under that version. `--fetch` downloads the `-sources.jar` with the binary.
 
-With no pair, jdx decompiles with Vineflower and labels the result `⚠ reconstructed`, naming the engine and the jar. `--engine javap` prints the raw bytecode of that one member instead. `--engine vineflower` forces a reconstruction even when sources are paired. When Vineflower returns only a `$VF: Could not decompile…` stub, the default ladder falls through to `javap` instead of serving the stub.
+With no pair, jdx decompiles with Vineflower and labels the result `⚠ reconstructed`, naming the engine and the jar. `--engine javap` prints the raw bytecode of that one member instead. `--engine vineflower` forces a reconstruction even when sources are paired. When Vineflower returns only a `$VF: Could not decompile…` stub, the default ladder falls through to `javap` instead of serving the stub. A desktop decompiler such as JD-GUI is a different comparison: when to click through a window, and when the same reading is a command. That page is [A JD-GUI alternative](jd-gui-alternative.md).
 
 ```console exec max-lines=12
 $ jdx body 'java.util.HashMap#get(java.lang.Object)' --engine javap
@@ -101,6 +101,7 @@ From an agent, the same questions are tools on `jdx mcp`. See [An MCP server for
 - [Find which JAR contains a class](find-class-in-jar.md) — which file holds a class, across a glob or a coordinate.
 - [Read a Kotlin library API from a compiled jar](kotlin-jar-api.md) — suspend, nullability, and properties from `@Metadata`.
 - [Read and decompile a JAR](read-jar-from-terminal.md) — list a jar, open one method, decompile when there are no sources.
+- [A JD-GUI alternative](jd-gui-alternative.md) — decompile a jar without a GUI, and when a desktop decompiler still fits.
 - [Reading code](reading-code.md) — `show`, `outline`, `doc`, and search.
 - [Help AI coding agents understand Java dependencies](reduce-agent-tokens-java.md) — `outline` and `members` before a source dump.
 - [Usages, hierarchy & calls](navigating-code.md) — the rest of the graph.
