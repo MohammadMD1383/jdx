@@ -361,6 +361,9 @@ class ReferencePages(
         private val VERSION_DIFF_GUIDE =
             "See what changed between Minecraft or mod versions" to "docs/minecraft-version-diff/"
 
+        private val KOTLIN_JAR_GUIDE =
+            "Read a Kotlin library API from a compiled jar" to "docs/kotlin-jar-api/"
+
         /** Extra guide links. A command may name more than one. */
         val SEE_ALSO: Map<String, List<Pair<String, String>>> = mapOf(
             "resolve" to listOf("Find which JAR contains a class" to "docs/find-class-in-jar/"),
@@ -370,8 +373,10 @@ class ReferencePages(
             "hierarchy" to listOf(MIXIN_GUIDE),
             "callers" to listOf(MIXIN_GUIDE),
             "calls" to listOf(MIXIN_GUIDE),
-            "signature" to listOf(MIXIN_GUIDE),
+            "signature" to listOf(MIXIN_GUIDE, KOTLIN_JAR_GUIDE),
             "body" to listOf(MIXIN_GUIDE),
+            "members" to listOf(KOTLIN_JAR_GUIDE),
+            "kotlin" to listOf(KOTLIN_JAR_GUIDE),
             "doc" to listOf("Read Javadoc from a jar in the terminal" to "docs/read-javadoc-from-jar/"),
             "diff" to listOf(VERSION_DIFF_GUIDE),
         )

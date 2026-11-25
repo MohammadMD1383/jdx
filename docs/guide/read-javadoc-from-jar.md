@@ -97,7 +97,7 @@ Maven also publishes a `*-javadoc.jar` of HTML pages. `jdx doc` reads the commen
 
 A member that exists in bytecode and has no counterpart in the sources exits 1, and the message names `SOURCES_VERSION_MISMATCH`. When the comment is found and the sources jar disagrees about other members, the comment is still printed and jdx warns `SOURCES_VERSION_MISMATCH`. Bytecode stays the authority for which members exist.
 
-Kotlin binaries still answer `jdx members` and `jdx signature` from `@Metadata`. KDoc is read from `.kt` sources, which needs a one-time `jdx kotlin install`. A class whose sources are Kotlin only, with that sidecar absent, exits 1 and the message names `jdx kotlin install`.
+Kotlin binaries still answer `jdx members` and `jdx signature` from `@Metadata`. KDoc is read from `.kt` sources, which needs a one-time `jdx kotlin install`. A class whose sources are Kotlin only, with that sidecar absent, exits 1 and the message names `jdx kotlin install`. Suspend, nullability, and file facades are [Read a Kotlin library API from a compiled jar](kotlin-jar-api.md).
 
 Inside a Gradle or Maven project, with no classpath flags, jdx discovers project classes and the dependency jars named in the build files. It never runs Gradle or Maven to do that. See [Classpath & workspaces](classpath.md).
 
@@ -149,6 +149,7 @@ Bytecode is parsed with ASM. Inspected classes are never loaded, so no static in
 - [`jdx doc`](https://mohammadmd1383.github.io/jdx/docs/reference/doc/) — every flag, generated from the binary.
 - [Find which JAR contains a class](find-class-in-jar.md) — which file holds a class, and the classes in one jar.
 - [Read and decompile a JAR from the terminal](read-jar-from-terminal.md) — one method, source, or a decompilation.
+- [Read a Kotlin library API from a compiled jar](kotlin-jar-api.md) — suspend, nullability, and properties from `@Metadata`.
 - [Installation](installation.md) — Linux, macOS, Windows, and offline installs.
 - [Reading code](reading-code.md) — `show`, `members`, `signature`, `doc`, and `body`.
 - [Symbol references](symbol-references.md) — how to paste a canonical ref.

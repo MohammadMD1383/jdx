@@ -70,7 +70,7 @@ $ jdx body 'java.util.HashMap#get(java.lang.Object)'
 $ jdx body 'java.util.HashMap#get(java.lang.Object)' --engine javap
 ```
 
-`members` and `signature` always come from bytecode, so those lists stay exact with or without sources. When sources and bytecode disagree, jdx warns `SOURCES_VERSION_MISMATCH` and bytecode wins for structure. Kotlin binaries are read from `@Metadata`. Reading `.kt` sources needs a one-time `jdx kotlin install`, which is one of the few commands that uses the network. See [Reading code](reading-code.md#sources-decompilation-bytecode).
+`members` and `signature` always come from bytecode, so those lists stay exact with or without sources. When sources and bytecode disagree, jdx warns `SOURCES_VERSION_MISMATCH` and bytecode wins for structure. Kotlin binaries are read from `@Metadata`. Reading `.kt` sources needs a one-time `jdx kotlin install`, which is one of the few commands that uses the network. See [Reading code](reading-code.md#sources-decompilation-bytecode). Suspend, nullability, and file facades are [Read a Kotlin library API from a compiled jar](kotlin-jar-api.md).
 
 Reference: [`source`](https://mohammadmd1383.github.io/jdx/docs/reference/source/), [`body`](https://mohammadmd1383.github.io/jdx/docs/reference/body/).
 
@@ -144,6 +144,7 @@ Every command accepts `--json`. Exit codes are in [Output, JSON & exit codes](ou
 
 - [Find which JAR contains a class](find-class-in-jar.md) — which file holds a class, and the classes in one jar.
 - [Read Javadoc from a jar](read-javadoc-from-jar.md) — the comment on a class or method, from a `-sources.jar`.
+- [Read a Kotlin library API from a compiled jar](kotlin-jar-api.md) — suspend, nullability, and properties from `@Metadata`.
 - [Quickstart](quickstart.md) — the JDK and a Maven coordinate in five minutes.
 - [Installation](installation.md) — Linux, macOS, Windows, and offline installs.
 - [A javap alternative](javap-alternative.md) — class-file signatures, callers, implementors, and where javap still fits.
