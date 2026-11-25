@@ -2,7 +2,7 @@
 //
 // `:site` is a build-time tool, never a product module: nothing depends on it and it
 // never reaches the fat jar. It turns the repository's own Markdown (README, docs/,
-// docs/guide/) plus the *real output of the freshly built jdx* into the static site
+// docs/guide/, docs/blog/) plus the *real output of the freshly built jdx* into the static site
 // published by `.github/workflows/pages.yml`. That is the whole anti-drift design:
 //
 //   - command reference pages are generated from `jdx <cmd> --help` / `jdx help --json`,

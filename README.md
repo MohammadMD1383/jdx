@@ -226,7 +226,7 @@ compare two mapped Minecraft jars, or two versions of a mod, see
 
 | | |
 |---|---|
-| [Website](https://mohammadmd1383.github.io/jdx/) | Guides, generated command and MCP reference, integrations, FAQ |
+| [Website](https://mohammadmd1383.github.io/jdx/) | Guides, generated command and MCP reference, integrations, FAQ, blog |
 | [`docs/guide/`](docs/guide/introduction.md) | User guides: install, quickstart, AI agents, classpath, reading and navigating code, finding which jar contains a class, decompiling a jar from the terminal, API diff, Minecraft mod jars, mixin targets, version diffs |
 | [`docs/COMMANDS.md`](docs/COMMANDS.md) | Full command reference (flags, exit codes, symbol grammar) |
 | [`AGENTS.md`](AGENTS.md) (+ per-module `AGENTS.md`) | Contributor notes: architecture rules, gotchas, build/test |

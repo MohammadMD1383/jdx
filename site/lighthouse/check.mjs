@@ -20,7 +20,7 @@ import {appendFileSync, mkdirSync, writeFileSync} from 'node:fs';
 const strict = process.argv.includes('--strict');
 const base = (process.argv.slice(2).find((a) => !a.startsWith('--')) || 'http://127.0.0.1:8000/jdx/').replace(/\/?$/, '/');
 const summaryRows = [];
-const pages = ['', 'docs/', 'docs/quickstart/', 'docs/reference/members/', 'integrations/claude-code/', 'faq/', 'changelog/'];
+const pages = ['', 'docs/', 'docs/quickstart/', 'docs/reference/members/', 'integrations/claude-code/', 'faq/', 'changelog/', 'blog/'];
 const hostRootAudits = new Set(['robots-txt', 'llms-txt']);
 const budgets = {
   categories: {performance: 0.95, accessibility: 1, 'best-practices': 1},

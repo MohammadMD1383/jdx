@@ -32,6 +32,8 @@ class SiteBuilder(private val options: SiteOptions, private val runner: JdxRunne
     fun build(): SiteOutput {
         val repo = options.repoRoot
         val project = ProjectInfo(repo)
+        // Fail a bad post before the fixture download. Ordering is date, then slug.
+        val blogSources = BlogPages.readAll(repo)
         // ProcessJdxRunner retries this `--fetch` on a transient Maven Central failure
         // (FixtureFetch: 4 attempts, 2s/5s/10s). A checksum mismatch is not retried.
         // The message below is the final attempt, same text as a single failure.
@@ -54,7 +56,8 @@ class SiteBuilder(private val options: SiteOptions, private val runner: JdxRunne
             script = resource("site.js"),
         )
 
-        val publishedDocs = SiteManifest.allDocSources.associate { it.sourcePath to it.path }
+        val publishedDocs = SiteManifest.allDocSources.associate { it.sourcePath to it.path } +
+            blogSources.associate { it.sourcePath to it.path }
         val docRenderer = DocRenderer(site, repo, publishedDocs, runner)
         val reference = ReferencePages(site, facts, runner, project.lastModified("cli/src/main/kotlin/dev/jdx/cli"))
         val product = ProductPages(site, repo, facts, docRenderer, reference, project, releases)
@@ -62,9 +65,13 @@ class SiteBuilder(private val options: SiteOptions, private val runner: JdxRunne
         // Run every example up front, in parallel; rendering then hits the runner's memo.
         val docTexts = SiteManifest.allDocSources.associate { it.sourcePath to File(repo, it.sourcePath).readText() }
         val docLines = docTexts.flatMap { (source, text) -> ExecBlocks.commandLines(Markdown.parse(text)).map { source to it } }
+        // Front matter is already stripped, so a `console exec` block in a post is a real example.
+        val blogLines = blogSources.flatMap { source ->
+            ExecBlocks.commandLines(Markdown.parse(source.body)).map { source.sourcePath to it }
+        }
         val generatedLines = (reference.exampleCommandLines() + product.heroCommands).map { "site generator" to it }
-        prerun((docLines + generatedLines).map { it.second })
-        val failedExamples = (docLines + generatedLines).mapNotNull { (source, line) ->
+        prerun((docLines + blogLines + generatedLines).map { it.second })
+        val failedExamples = (docLines + blogLines + generatedLines).mapNotNull { (source, line) ->
             val command = ShellWords.parseJdxCommand(line)
             val expected = ShellWords.expectedExit(line) ?: 0
             val result = runner.run(command.arguments, command.stdin)
@@ -93,6 +100,8 @@ class SiteBuilder(private val options: SiteOptions, private val runner: JdxRunne
         }
         problems += lint.check(Markdown.codeSnippets(Markdown.parse(File(repo, "README.md").readText())), "README.md")
         problems += lint.check(Markdown.codeSnippets(Markdown.parse(docTexts.getValue(SiteManifest.faq.sourcePath))), SiteManifest.faq.sourcePath)
+        val posts = blogSources.map { BlogPages.render(docRenderer, it) }
+        for (post in posts) problems += lint.check(post.rendered.codeSnippets, post.sourcePath)
 
         val commandPages = reference.commandPages()
         val extraReference = listOf(reference.cheatSheetPage(), reference.mcpToolsPage())
@@ -101,6 +110,9 @@ class SiteBuilder(private val options: SiteOptions, private val runner: JdxRunne
         val landing = product.landing(runner, faqQuestions)
         val integrations = listOf(product.integrationsHub()) + facts.setupAgents.map { product.integrationPage(it) }
         val productPages = listOf(landing) + integrations + listOf(product.faqPage(), product.changelogPage())
+        val postPages = BlogPages.postPages(site, posts)
+        val blogIndex = BlogPages.indexPage(site, posts)
+        val blogPages = listOf(blogIndex) + postPages
 
         if (problems.isNotEmpty()) {
             throw SiteBuildException(
@@ -111,7 +123,7 @@ class SiteBuilder(private val options: SiteOptions, private val runner: JdxRunne
 
         val nav = navTree(sectionPages, docsIndex, commandPages, extraReference)
         val docPages = listOf(docsIndex) + sectionPages.values.flatten() + extraReference + commandPages
-        val allPages = productPages + docPages + product.notFoundPage()
+        val allPages = productPages + blogPages + docPages + product.notFoundPage()
         val layout = Layout(site, nav)
 
         val files = sortedMapOf<String, ByteArray>()
@@ -127,14 +139,19 @@ class SiteBuilder(private val options: SiteOptions, private val runner: JdxRunne
         }
         val llmsSections = SiteManifest.sections.map { section ->
             section.title to (sectionPages[section].orEmpty() + if (section == SiteManifest.reference) extraReference + commandPages else emptyList())
-        }
+        } + listOf("Blog" to blogPages)
         val sitemap = SeoFiles.sitemap(site, allPages)
         assertIndexable(site, allPages, htmlFiles, sitemap)
         val text = sortedMapOf(
             "robots.txt" to SeoFiles.robots(site),
             "sitemap.xml" to sitemap,
             "llms.txt" to SeoFiles.llmsTxt(site, llmsSections, productPages),
-            "llms-full.txt" to SeoFiles.llmsFull(site, listOf(landing) + docPages + productPages.drop(1)),
+            "llms-full.txt" to SeoFiles.llmsFull(site, listOf(landing) + docPages + productPages.drop(1) + blogPages),
+            BlogPages.FEED_PATH to BlogPages.atomFeed(
+                site,
+                blogIndex.description,
+                posts.map { BlogPages.FeedEntry(it.title, it.path, it.date, it.description) },
+            ),
             "favicon.svg" to resource("favicon.svg"),
             "ai-catalog.json" to AiCatalog.render(site, facts, reference.cheatSheetPath + "index.md"),
         )

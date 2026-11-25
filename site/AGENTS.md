@@ -17,6 +17,7 @@ The site is **generated from the repository and the freshly built `jdx`**, and t
 | new doc not on the site | `SiteManifestTest` (every `*.md` is published or excluded with a reason) |
 | README marketing section renamed | `Markdown.extractSection` (landing quotes README by heading) |
 | new `jdx setup --agent` value | `ProductPages.AGENT_NAMES` must name it, or the build fails |
+| flag in a blog post | `DocLint`, same check as the docs (`docs/blog/*.md`) |
 | machine paths in output | `SiteBuilder` path-leak check |
 | perf / a11y / SEO / agent-readiness regressions | `site/lighthouse/check.mjs` in `pages.yml` — **warn only** |
 
@@ -64,6 +65,31 @@ Reference → Advanced). URLs are flat `docs/<slug>/` and must never change once
 Optional `headTitle` sets the `<title>` tag when the H1 plus ` · jdx docs` is the wrong
 length; the H1 stays the on-page title and the Open Graph title.
 
+## Adding a blog post
+
+Add `docs/blog/<slug>.md`. The slug is the file name: lowercase letters, digits, and hyphens,
+and it is the URL (`/blog/<slug>/`) forever. The file starts with front matter:
+
+```markdown
+---
+date: YYYY-MM-DD
+---
+```
+
+`date` is the only public date. It is the visible `<time>`, the Open Graph publication time,
+both BlogPosting dates, the sitemap `lastmod`, and the Atom `published`/`updated` (midnight
+UTC, because the file records a day). Change it when readers should see the post as updated.
+The H1 is the title. The first paragraph is the meta description: one or two sentences, at
+most 160 characters, the same words a search result will show. An optional `description`
+key overrides that paragraph for the meta tag only.
+
+`/blog/` lists posts newest first (date descending, then slug). The build also writes
+`/blog/feed.xml` (Atom). Posts are not in the docs sidebar: they are excluded from
+`SiteManifest` so a post cannot take a `/docs/` URL. Link to guides with relative repo
+paths (`../guide/minecraft-mods.md`). A `console exec` block runs, same as a guide; the
+docs build has no Minecraft jar, so those recipes stay `bash` blocks. Do not claim a
+release that is not tagged, and do not claim jdx remaps names.
+
 ## Key files
 
 - `SiteBuilder.kt` — orchestration, validation, output map. `SiteMain.kt` — entry + preview server.
@@ -77,6 +103,7 @@ length; the H1 stays the on-page title and the Open Graph title.
   fails the build. The MCP tools page copies each
   parameter's description and, when `tools/list` sends them, its `enum`, `default`
   and `examples`. `ProductPages.kt` — landing, integrations, FAQ, changelog, docs index, 404.
+- `BlogPages.kt` — `docs/blog/*.md` to `/blog/`, per-post pages, and `blog/feed.xml`.
 - `SeoFiles.kt` (sitemap, robots, llms.txt, llms-full.txt), `StructuredData.kt` (JSON-LD),
   `AiCatalog.kt` (ARD `ai-catalog.json`), `OgImage.kt` (per-page social cards, touch icon).
 - `src/main/resources/site/` — `site.css` (inlined), `site.js` (copy buttons), `favicon.svg`.
