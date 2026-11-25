@@ -46,6 +46,11 @@ jobs:
     if: github.event_name != 'workflow_run' || github.event.workflow_run.conclusion == 'success'
     runs-on: ubuntu-latest
     timeout-minutes: 40
+    # A permissions block is a whitelist. contents: read stays for checkout;
+    # actions: write lets actions/cache save the example-fixture jars.
+    permissions:
+      contents: read
+      actions: write
     steps:
       - name: Check out
         uses: actions/checkout@v4
@@ -68,6 +73,18 @@ jobs:
         run: |
           gh api "repos/${GITHUB_REPOSITORY}/releases?per_page=100" > "$RUNNER_TEMP/releases.json" \
             || echo '[]' > "$RUNNER_TEMP/releases.json"
+
+      # Jars land in the site sandbox (FIXTURE_CACHE_PATH). A hit skips Maven Central.
+      # The key names every coordinate an executed example downloads; FixtureFetchTest
+      # fails if a new one is missing. restore-keys reuses the previous set when a
+      # version is added. A miss still builds, and transient failures are retried.
+      - name: Cache example fixtures
+        uses: actions/cache@v4
+        with:
+          path: site/build/site-work/sandbox/cache/jdx/m2
+          key: site-fixtures-gson-2.11.0-gson-2.14.0-junit-jupiter-api-5.10.2-kotlin-stdlib-2.1.21-kotlinx-coroutines-core-jvm-1.11.0-postgresql-42.7.4-spring-context-6.1.14
+          restore-keys: |
+            site-fixtures-
 
       - name: Build and validate the site
         env:

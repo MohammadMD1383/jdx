@@ -19,7 +19,9 @@ fun main(args: Array<String>) {
     }
     val outputDir = File(arguments.getValue("out"))
     val workDir = File(arguments.getValue("work"))
-    val sandbox = File(workDir, "sandbox").also { it.deleteRecursively(); it.mkdirs() }
+    // Wipe config/home/index, keep the Maven fetch cache so a restored CI cache
+    // (or a second local build) does not download the example fixtures again.
+    val sandbox = prepareSandbox(workDir)
     val options = SiteOptions(
         repoRoot = File(arguments.getValue("repo")),
         outputDir = outputDir,
@@ -44,6 +46,48 @@ fun main(args: Array<String>) {
     } catch (failure: SiteBuildException) {
         System.err.println("site build failed:\n${failure.message}")
         exitProcess(1)
+    }
+}
+
+/**
+ * Maven artifact cache inside the site sandbox (`<cache>/m2` under the runner's
+ * `XDG_CACHE_HOME`). The Pages workflow caches this directory. Relative to the
+ * site work dir (`site/build/site-work`).
+ */
+internal const val FIXTURE_CACHE_PATH: String = "sandbox/cache/jdx/m2"
+
+/**
+ * Recreates `sandbox/` and returns it. The fixture cache at [FIXTURE_CACHE_PATH]
+ * is moved aside and put back: jars there were checksum-verified on the way in,
+ * and everything else (workspaces, config, the index) must not survive a build.
+ */
+internal fun prepareSandbox(workDir: File): File {
+    val sandbox = File(workDir, "sandbox")
+    val artifactCache = File(workDir, FIXTURE_CACHE_PATH)
+    val hold = File(workDir, "fixture-cache-hold")
+    // A cancelled build can leave the jars in the hold directory and nowhere else.
+    if (hold.isDirectory && !artifactCache.exists()) {
+        artifactCache.parentFile.mkdirs()
+        moveDirectory(hold, artifactCache)
+    }
+    if (hold.exists()) hold.deleteRecursively()
+    if (artifactCache.isDirectory) moveDirectory(artifactCache, hold)
+    sandbox.deleteRecursively()
+    sandbox.mkdirs()
+    if (hold.isDirectory) {
+        val restored = File(workDir, FIXTURE_CACHE_PATH)
+        restored.parentFile.mkdirs()
+        moveDirectory(hold, restored)
+    }
+    return sandbox
+}
+
+private fun moveDirectory(from: File, to: File) {
+    try {
+        java.nio.file.Files.move(from.toPath(), to.toPath())
+    } catch (_: Exception) {
+        from.copyRecursively(to, overwrite = true)
+        from.deleteRecursively()
     }
 }
 

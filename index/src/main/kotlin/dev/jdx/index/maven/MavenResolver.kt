@@ -111,13 +111,20 @@ public object MavenResolver {
                     fetchHint = true,
                 )
             }
-            fetch(coordinate, repositories, fetcher)?.let { return Outcome.Resolved(it) }
-            Outcome.Unresolved(
-                "cannot fetch Maven coordinate '${MavenCoords.format(coordinate)}' " +
-                    "from ${repositories.repoBaseUrls.joinToString(", ")} (network unreachable, artifact missing, " +
-                    "or checksum rejected — nothing was written)",
-                fetchHint = false,
-            )
+            when (val fetched = fetch(coordinate, repositories, fetcher)) {
+                is FetchAttempt.Ready -> return Outcome.Resolved(fetched.artifact)
+                // A checksum mismatch is deterministic: the bytes arrived and did not
+                // match. Callers (the site build) must not retry it. Network and
+                // missing-artifact failures keep the combined message.
+                FetchAttempt.ChecksumRejected -> Outcome.Unresolved(
+                    cannotFetchMessage(coordinate, repositories, checksumRejected = true),
+                    fetchHint = false,
+                )
+                FetchAttempt.Unavailable -> Outcome.Unresolved(
+                    cannotFetchMessage(coordinate, repositories, checksumRejected = false),
+                    fetchHint = false,
+                )
+            }
         } catch (e: Exception) {
             Outcome.Unresolved(
                 "cannot resolve Maven coordinate '${MavenCoords.format(coordinate)}': " +
@@ -242,19 +249,32 @@ public object MavenResolver {
 
     // -- fetching ---------------------------------------------------------------
 
+    /** One remote attempt: a verified binary, a checksum mismatch, or anything else. */
+    private sealed interface FetchAttempt {
+        data class Ready(val artifact: ResolvedArtifact) : FetchAttempt
+        data object ChecksumRejected : FetchAttempt
+        data object Unavailable : FetchAttempt
+    }
+
     private fun fetch(
         coordinate: MavenCoordinate,
         repositories: Repositories,
         fetcher: MavenFetch.Fetcher,
-    ): ResolvedArtifact? {
-        val cacheRoot = repositories.fetchCacheRoot ?: return null
+    ): FetchAttempt {
+        val cacheRoot = repositories.fetchCacheRoot ?: return FetchAttempt.Unavailable
         // Custom `--repo` mirrors first, Central last (D-032 §6, T-069): the
         // first base URL serving a checksum-verified binary wins. A binary
-        // fetched from one mirror never falls through to the next.
+        // fetched from one mirror never falls through to the next. A checksum
+        // rejection does fall through, so a bad mirror is not the last word.
+        var checksumRejected = false
         for (repoBaseUrl in repositories.repoBaseUrls) {
-            fetchFrom(coordinate, repoBaseUrl, cacheRoot, fetcher)?.let { return it }
+            when (val attempt = fetchFrom(coordinate, repoBaseUrl, cacheRoot, fetcher)) {
+                is FetchAttempt.Ready -> return attempt
+                FetchAttempt.ChecksumRejected -> checksumRejected = true
+                FetchAttempt.Unavailable -> Unit
+            }
         }
-        return null
+        return if (checksumRejected) FetchAttempt.ChecksumRejected else FetchAttempt.Unavailable
     }
 
     private fun fetchFrom(
@@ -262,16 +282,23 @@ public object MavenResolver {
         repoBaseUrl: String,
         cacheRoot: Path,
         fetcher: MavenFetch.Fetcher,
-    ): ResolvedArtifact? {
+    ): FetchAttempt {
         val binaryName = MavenCoords.binaryFileName(coordinate)
         val binaryUrl = MavenCoords.downloadUrl(coordinate, binaryName, repoBaseUrl)
         val binaryTarget = MavenCoords.m2BinaryPath(cacheRoot, coordinate)
         // A half-written target from a killed earlier run must never read as a hit:
         // only a checksum-verified download lands here, and it lands atomically.
         when (val downloaded = MavenFetch.fetchVerified(binaryUrl, fetcher)) {
-            is MavenFetch.FetchResult.Failed -> return null
+            is MavenFetch.FetchResult.Failed ->
+                return if (isChecksumMismatch(downloaded.failure.reason)) {
+                    FetchAttempt.ChecksumRejected
+                } else {
+                    FetchAttempt.Unavailable
+                }
             is MavenFetch.FetchResult.Ok -> {
-                if (MavenFetch.writeAtomically(binaryTarget, downloaded.bytes) != null) return null
+                if (MavenFetch.writeAtomically(binaryTarget, downloaded.bytes) != null) {
+                    return FetchAttempt.Unavailable
+                }
             }
         }
         // Sources ride alongside, best-effort: a missing `-sources.jar` degrades
@@ -286,16 +313,40 @@ public object MavenResolver {
                 is MavenFetch.FetchResult.Failed -> Unit
             }
         }
-        if (!Files.isRegularFile(binaryTarget)) return null
-        return ResolvedArtifact(
-            binaryJar = binaryTarget.toAbsolutePath().normalize(),
-            sourcesJar = if (Files.isRegularFile(sourcesTarget)) {
-                sourcesTarget.toAbsolutePath().normalize()
-            } else {
-                null
-            },
-            fetched = true,
+        if (!Files.isRegularFile(binaryTarget)) return FetchAttempt.Unavailable
+        return FetchAttempt.Ready(
+            ResolvedArtifact(
+                binaryJar = binaryTarget.toAbsolutePath().normalize(),
+                sourcesJar = if (Files.isRegularFile(sourcesTarget)) {
+                    sourcesTarget.toAbsolutePath().normalize()
+                } else {
+                    null
+                },
+                fetched = true,
+            ),
         )
+    }
+
+    /** MavenFetch's mismatch reason. A missing or non-hex checksum is not this — it may be transient. */
+    private fun isChecksumMismatch(reason: String): Boolean = reason.startsWith("checksum mismatch")
+
+    /**
+     * [checksumRejected] drops the "network unreachable / artifact missing" clause
+     * so a caller can tell a deterministic mismatch from a blip. The network
+     * wording itself stays the combined sentence (nothing was written either way).
+     */
+    private fun cannotFetchMessage(
+        coordinate: MavenCoordinate,
+        repositories: Repositories,
+        checksumRejected: Boolean,
+    ): String {
+        val why = if (checksumRejected) {
+            "checksum rejected — nothing was written"
+        } else {
+            "network unreachable, artifact missing, or checksum rejected — nothing was written"
+        }
+        return "cannot fetch Maven coordinate '${MavenCoords.format(coordinate)}' " +
+            "from ${repositories.repoBaseUrls.joinToString(", ")} ($why)"
     }
 
     private fun describeRoots(repositories: Repositories): String {

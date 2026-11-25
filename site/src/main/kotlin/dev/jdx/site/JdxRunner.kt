@@ -25,6 +25,8 @@ fun interface JdxRunner {
  *
  * Results are memoised by (arguments, stdin): docs repeat commands, and output is
  * deterministic for a fixed build (AGENTS.md §2.5), so re-running would only cost time.
+ * A `--fetch` that fails transiently is retried ([FixtureFetch]) before that memo is
+ * written, so the stored result is the final attempt.
  */
 class ProcessJdxRunner(
     private val launcher: File,
@@ -34,11 +36,38 @@ class ProcessJdxRunner(
 ) : JdxRunner {
     private val memo = ConcurrentHashMap<Pair<List<String>, String?>, JdxResult>()
 
+    /** One lock per command so a parallel prerun does not fetch the same `--fetch` twice. */
+    private val locks = ConcurrentHashMap<Pair<List<String>, String?>, Any>()
+
     private val workingDir: File =
         java.nio.file.Files.createTempDirectory("jdx-site-cwd").toFile().also { it.deleteOnExit() }
 
-    override fun run(arguments: List<String>, stdin: String?): JdxResult =
-        memo.computeIfAbsent(arguments to stdin) { runUncached(arguments, stdin) }
+    override fun run(arguments: List<String>, stdin: String?): JdxResult {
+        val key = arguments to stdin
+        memo[key]?.let { return it }
+        val lock = locks.computeIfAbsent(key) { Any() }
+        synchronized(lock) {
+            memo[key]?.let { return it }
+            val result = if ("--fetch" in arguments) fetchWithRetry(arguments, stdin) else runUncached(arguments, stdin)
+            memo[key] = result
+            return result
+        }
+    }
+
+    /**
+     * Re-runs a `--fetch` when Maven Central blips. The final result, success or
+     * exhausted failure, is what [run] memoises. Checksum mismatches return immediately.
+     */
+    private fun fetchWithRetry(arguments: List<String>, stdin: String?): JdxResult =
+        FixtureFetch.retry(
+            attempt = { runUncached(arguments, stdin) },
+            onRetry = { attempt, delayMs ->
+                System.err.println(
+                    "site: transient fixture fetch failure (attempt $attempt/${FixtureFetch.MAX_ATTEMPTS}); " +
+                        "retrying in ${delayMs / 1000}s",
+                )
+            },
+        )
 
     private fun runUncached(arguments: List<String>, stdin: String?): JdxResult {
         val builder = ProcessBuilder(listOf(launcher.absolutePath) + arguments)
