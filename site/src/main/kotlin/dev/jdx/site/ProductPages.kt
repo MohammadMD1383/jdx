@@ -179,7 +179,7 @@ class ProductPages(
     private fun guidesSection(): String = buildString {
         append("<section class=\"band\"><div class=\"wrap\">")
         append("<h2 id=\"guides\">Guides</h2>")
-        append("<p class=\"section-lead\">Task pages for finding a class, reading a jar, reading its Javadoc, reading a Kotlin API from a jar, picking a mixin target, diffing two versions, and wiring an agent.</p>")
+        append("<p class=\"section-lead\">Task pages for finding a class, reading a jar, decompiling without a GUI, reading its Javadoc, reading a Kotlin API from a jar, picking a mixin target, diffing two versions, and wiring an agent.</p>")
         append("<ul class=\"guide-list\">")
         val guides = listOf(
             Triple("docs/find-class-in-jar/", "Find class in jar", "List classes in a jar, and search jar files or Maven dependencies."),
@@ -187,6 +187,7 @@ class ProductPages(
             Triple("docs/read-javadoc-from-jar/", "Read Javadoc from a jar in the terminal", "Javadoc of a class or method in a jar, a Maven dependency, or the JDK."),
             Triple("docs/kotlin-jar-api/", "Read a Kotlin library API from a compiled jar", "Suspend, nullability, and properties from Kotlin metadata in a jar."),
             Triple("docs/javap-alternative/", "A javap alternative for class files", "Signatures, one method's bytecode, callers, and implementors."),
+            Triple("docs/jd-gui-alternative/", "JD-GUI alternative: decompile a jar without a GUI", "A command line Java decompiler for one class, a search, or one method."),
             Triple("docs/minecraft-mods/", "Inspect a Minecraft mod jar", "Members, source, and a decompiled method, without remapping."),
             Triple("docs/minecraft-mixin-targets/", "Find a Mixin target in Minecraft from the terminal", "Mixin target method, method descriptor, and injection point."),
             Triple("docs/minecraft-version-diff/", "See what changed between two Minecraft or mod versions with jdx diff", "Public API changes between two mapped jars, then one member."),

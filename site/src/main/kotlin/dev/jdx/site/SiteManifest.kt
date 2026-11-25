@@ -46,7 +46,7 @@ object SiteManifest {
     val guides = Section(
         title = "Guides",
         anchor = "guides",
-        summary = "Task-oriented guides: naming symbols, choosing a classpath, reading and navigating code, finding which jar contains a class, decompiling a jar, reading Javadoc from a jar, reading a Kotlin library API from a jar, a javap alternative, smaller answers for agents, Minecraft mod jars, mixin targets, Minecraft and mod version diffs, upgrades, output, the Java MCP server, and serving.",
+        summary = "Task-oriented guides: naming symbols, choosing a classpath, reading and navigating code, finding which jar contains a class, decompiling a jar, reading Javadoc from a jar, reading a Kotlin library API from a jar, a javap alternative, a JD-GUI alternative, smaller answers for agents, Minecraft mod jars, mixin targets, Minecraft and mod version diffs, upgrades, output, the Java MCP server, and serving.",
         docs = listOf(
             DocSource("docs/guide/symbol-references.md", "docs/symbol-references/", navTitle = "Symbol references"),
             DocSource("docs/guide/classpath.md", "docs/classpath/", navTitle = "Classpath & workspaces"),
@@ -83,6 +83,12 @@ object SiteManifest {
                 "docs/guide/javap-alternative.md",
                 "docs/javap-alternative/",
                 navTitle = "javap alternative",
+            ),
+            DocSource(
+                "docs/guide/jd-gui-alternative.md",
+                "docs/jd-gui-alternative/",
+                navTitle = "JD-GUI alternative",
+                headTitle = "JD-GUI alternative — command line Java decompiler · jdx",
             ),
             DocSource("docs/guide/navigating-code.md", "docs/navigating-code/", navTitle = "Usages, hierarchy & calls"),
             DocSource("docs/guide/api-diff.md", "docs/api-diff/", navTitle = "API diff for upgrades"),

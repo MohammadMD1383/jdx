@@ -64,7 +64,7 @@ Without a paired sources jar, jdx decompiles with Vineflower and labels the resu
 $ jdx body 'java.util.HashMap#get(java.lang.Object)'
 ```
 
-`--engine javap` prints raw bytecode instead. `--engine vineflower` forces a reconstruction even when sources are paired. When Vineflower returns only a `$VF: Could not decompile…` stub, the default ladder falls through to `javap` instead of serving the stub.
+`--engine javap` prints raw bytecode instead. `--engine vineflower` forces a reconstruction even when sources are paired. When Vineflower returns only a `$VF: Could not decompile…` stub, the default ladder falls through to `javap` instead of serving the stub. JD-GUI, Recaf, and an IDE decompiler view answer this reading in a window. When to use those, and these commands as a terminal alternative, is [A JD-GUI alternative](jd-gui-alternative.md).
 
 ```console exec max-lines=12
 $ jdx body 'java.util.HashMap#get(java.lang.Object)' --engine javap
@@ -148,6 +148,7 @@ Every command accepts `--json`. Exit codes are in [Output, JSON & exit codes](ou
 - [Quickstart](quickstart.md) — the JDK and a Maven coordinate in five minutes.
 - [Installation](installation.md) — Linux, macOS, Windows, and offline installs.
 - [A javap alternative](javap-alternative.md) — class-file signatures, callers, implementors, and where javap still fits.
+- [A JD-GUI alternative](jd-gui-alternative.md) — a GUI decompiler versus these commands.
 - [Reading code](reading-code.md) — `show`, `signature`, `doc`, and search.
 - [Minecraft mods](minecraft-mods.md) — a mapped jar, mixin callers, and a version diff.
 - [Find a Mixin target in Minecraft](minecraft-mixin-targets.md) — class, type chain, method descriptor, and an injection point.
