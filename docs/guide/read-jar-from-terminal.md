@@ -100,7 +100,7 @@ $ jdx members java.util.HashMap --limit 5
 $ jdx show com.google.gson.Gson --coord com.google.code.gson:gson:2.14.0 --fetch
 ```
 
-Inside a Gradle or Maven project, with no classpath flags, jdx discovers project classes and dependency jars from the build files and the local caches. It never runs Gradle or Maven to do that. See [Classpath & workspaces](classpath.md).
+Inside a Gradle or Maven project, with no classpath flags, jdx discovers project classes and dependency jars from the build files and the local caches. It never runs Gradle or Maven to do that. See [Classpath & workspaces](classpath.md). How to point that discovery at a Maven or Gradle dependency and read its source is [View source code of a Maven dependency](dependency-source.md).
 
 ## Nothing in the jar runs
 
@@ -143,6 +143,7 @@ Every command accepts `--json`. Exit codes are in [Output, JSON & exit codes](ou
 ## Where next
 
 - [Find which JAR contains a class](find-class-in-jar.md) — which file holds a class, and the classes in one jar.
+- [View source code of a Maven dependency](dependency-source.md) — a Maven or Gradle project's dependencies, from the terminal.
 - [Read Javadoc from a jar](read-javadoc-from-jar.md) — the comment on a class or method, from a `-sources.jar`.
 - [Read a Kotlin library API from a compiled jar](kotlin-jar-api.md) — suspend, nullability, and properties from `@Metadata`.
 - [Quickstart](quickstart.md) — the JDK and a Maven coordinate in five minutes.

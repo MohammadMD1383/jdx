@@ -78,6 +78,8 @@ With no workspace selected, jdx walks up from the working directory looking for
 classpath from the project's own sources and build output plus the dependency jars it can find
 in the Gradle and Maven caches. jdx never runs Gradle or Maven to do this; when it cannot pin
 down the exact dependency set it says so with a `PROJECT_DISCOVERY_FALLBACK` warning.
+Reading one class or method of a dependency on that classpath is
+[View source code of a Maven dependency](dependency-source.md).
 
 ## Resolution order
 

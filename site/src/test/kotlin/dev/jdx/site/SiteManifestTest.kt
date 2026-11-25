@@ -60,7 +60,7 @@ class SiteManifestTest {
     }
 
     @Test
-    fun `find-class, minecraft, and JD-GUI guides lead with the query and an FAQ`() {
+    fun `SEO guides lead with the query and an FAQ`() {
         data class Expect(val path: String, val title: String, val headPrefix: String)
         val pages = listOf(
             Expect("docs/guide/find-class-in-jar.md", "Find class in jar", "Find class in jar"),
@@ -73,6 +73,11 @@ class SiteManifestTest {
                 "docs/guide/jd-gui-alternative.md",
                 "JD-GUI alternative: decompile a jar without a GUI",
                 "JD-GUI alternative",
+            ),
+            Expect(
+                "docs/guide/dependency-source.md",
+                "View source code of a Maven dependency",
+                "View source code of a Maven dependency",
             ),
         )
         for (page in pages) {
