@@ -39,6 +39,10 @@ codes, or MCP tools.** `pages.yml` runs it on every PR anyway; running it first 
 
 ## Writing docs
 
+- **FAQ JSON-LD:** an H2 titled `FAQ` (or `Frequently asked questions`) whose questions are
+  H3s is published as FAQPage JSON-LD next to the page's TechArticle. The answer is the
+  plain text under that H3, so the structured data matches the visible page. A question
+  with no prose fails the build.
 - **Executable examples:** a fenced block with info string `console exec` holds `$ jdx ...`
   lines. On the site each runs against the real build and its output replaces whatever is
   written under it. Append `# exit N` to a line that should exit non-zero; `max-lines=N` in

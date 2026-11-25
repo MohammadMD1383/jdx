@@ -4,7 +4,8 @@ package dev.jdx.site
  * schema.org JSON-LD for search engines and answer engines: what the product is
  * (SoftwareApplication), where a page sits (BreadcrumbList), what a page is (TechArticle),
  * and question/answer pairs (FAQPage). Values come from the same facts the pages render,
- * so the structured data cannot disagree with the visible text.
+ * so the structured data cannot disagree with the visible text. A guide adds FAQPage
+ * JSON-LD when its Markdown has an `FAQ` section; [Markdown.faqSection] is that text.
  */
 object StructuredData {
     private const val CONTEXT = "https://schema.org"

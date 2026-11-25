@@ -12,6 +12,8 @@ data class RenderedDoc(
     val markdown: String,
     val headings: List<HeadingInfo>,
     val codeSnippets: List<String>,
+    /** Visible FAQ pairs (H3s under an H2 titled FAQ). Empty when the page has none. */
+    val faq: List<Pair<String, String>> = emptyList(),
 )
 
 /**
@@ -48,7 +50,7 @@ class DocRenderer(
         val headings = Markdown.headings(document)
         val html = toRootRelative(Markdown.renderHtml(document) { destination -> imageSize(destination) })
         val markdown = "# $title\n\n" + Markdown.renderMarkdown(document).trimEnd() + "\n"
-        return RenderedDoc(title, description, html, markdown, headings, snippets)
+        return RenderedDoc(title, description, html, markdown, headings, snippets, Markdown.faqSection(document))
     }
 
     /** Site-absolute URLs are kept in Markdown twins (agents fetch them out of context) but made root-relative in HTML. */

@@ -71,6 +71,69 @@ class MarkdownTest {
     }
 
     @Test
+    fun `faq section is the H3s under an FAQ heading and stops at the next H2`() {
+        val document = Markdown.parse(
+            """
+            # Title
+
+            Intro.
+
+            ## FAQ
+
+            ### How do I find a class?
+
+            Run `jdx resolve Foo --jars 'libs/*.jar'`.
+
+            ### Second?
+
+            Yes.
+
+            ## Where next
+
+            Later.
+            """.trimIndent(),
+        )
+        Markdown.faqSection(document) shouldBe listOf(
+            "How do I find a class?" to "Run jdx resolve Foo --jars 'libs/*.jar'.",
+            "Second?" to "Yes.",
+        )
+    }
+
+    @Test
+    fun `faq answers keep spaces across wrapped lines and list items`() {
+        val document = Markdown.parse(
+            """
+            # T
+
+            ## Frequently asked questions
+
+            ### Wrapped?
+
+            one
+            two
+
+            - alpha
+            - beta
+            """.trimIndent(),
+        )
+        Markdown.faqSection(document) shouldBe listOf("Wrapped?" to "one two alpha beta")
+    }
+
+    @Test
+    fun `a page with no FAQ heading contributes no pairs`() {
+        val document = Markdown.parse("# T\n\n## What is jdx?\n\nAn IDE.\n")
+        Markdown.faqSection(document) shouldBe emptyList()
+    }
+
+    @Test
+    fun `an FAQ question with no prose fails the build`() {
+        val document = Markdown.parse("# T\n\n## FAQ\n\n### Empty?\n\n## Next\n\nnope\n")
+        val failure = runCatching { Markdown.faqSection(document) }.exceptionOrNull()
+        (failure is SiteBuildException) shouldBe true
+        failure!!.message!! shouldContain "Empty?"
+    }
+
+    @Test
     fun `console blocks split prompt, command and output`() {
         val html = Html.codeBlock("$ jdx show Foo\nclass Foo\n[exit 2]", "console", executed = true)
         html shouldContain "<span class=\"cmd\">jdx show Foo</span>"
