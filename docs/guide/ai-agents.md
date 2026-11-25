@@ -54,6 +54,7 @@ $ jdx help --agent
 ```
 
 The full block is on the [agent cheat sheet](https://mohammadmd1383.github.io/jdx/docs/reference/cheat-sheet/) page.
+The command is [This cheat sheet](https://mohammadmd1383.github.io/jdx/docs/reference/help/) (`jdx help`).
 
 ## Tips that make agents better at it
 

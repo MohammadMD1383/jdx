@@ -42,6 +42,8 @@ healthy daemon is not mistaken for an empty one ([issue #4](https://github.com/M
 It shuts itself down after 5 minutes without requests (`--idle 30m`, or `--idle 0` to
 disable). `--no-daemon` on any command forces in-process execution.
 
+Reference: [Warm background JVM (5-min idle shutdown)](https://mohammadmd1383.github.io/jdx/docs/reference/daemon/).
+
 The daemon **never fetches**. Stored `--coord` roots resolve from local caches only;
 stored `--repo` mirrors are inert on the warm path. Prime caches once with a cold
 `--fetch` query (or pass explicit `--jars`) before relying on warm queries — otherwise
@@ -81,6 +83,8 @@ Request lines look like `{"command":"members","query":"…","params":{"limit":"5
 uses the same names as the CLI flags. A failing query rides in its own envelope and never stops
 the stream; the exit code is the highest exit code of any query.
 
+Reference: [Many queries, one process (NDJSON in/out)](https://mohammadmd1383.github.io/jdx/docs/reference/batch/).
+
 ## Performance
 
 | Path | Target |
@@ -91,3 +95,5 @@ the stream; the exit code is the highest exit code of any query.
 
 `jdx bench` runs a fixed workload against your classpath and prints the timings next to these
 targets.
+
+Reference: [Benchmark the read path (timings + §15 targets)](https://mohammadmd1383.github.io/jdx/docs/reference/bench/).

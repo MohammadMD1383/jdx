@@ -109,6 +109,8 @@ Omit the pattern to list every `META-INF/services` registration in the workspace
 pattern matches the service interface FQN or a provider class FQN. `module-info`
 `provides` directives are read by `jdx modules` instead.
 
+Reference: [META-INF/services SPI providers](https://mohammadmd1383.github.io/jdx/docs/reference/services/).
+
 ## JPMS module-info
 
 To answer *what does this module require / export / provide?* without `jmod describe`

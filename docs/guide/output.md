@@ -35,7 +35,7 @@ stdout stays a single parseable object.
 ## JSON output
 
 Add `--json` to any command (before or after the command name). The envelope is the same for
-the CLI, `jdx batch`, the daemon, the HTTP API and MCP, and carries exactly the information of
+the CLI, [many queries, one process](https://mohammadmd1383.github.io/jdx/docs/reference/batch/) (`jdx batch`), the [warm background JVM](https://mohammadmd1383.github.io/jdx/docs/reference/daemon/) (`jdx daemon`), the HTTP API and MCP, and carries exactly the information of
 the text output:
 
 ```console exec

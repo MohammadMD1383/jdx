@@ -78,12 +78,14 @@ class SiteBuilder(private val options: SiteOptions, private val runner: JdxRunne
 
         val lint = DocLint(facts)
         val problems = mutableListOf<String>()
+        val commandCatalogue = reference.commandCatalogue()
         val sectionPages = linkedMapOf<SiteManifest.Section, List<Page>>()
         for (section in SiteManifest.sections) {
             sectionPages[section] = section.docs.map { source ->
                 val rendered = docRenderer.render(source.sourcePath, source.description)
                 if (source.lintCommands) problems += lint.check(rendered.codeSnippets, source.sourcePath)
-                docPage(site, section, source, rendered, project)
+                val catalogue = if (source.path == "docs/reference/") commandCatalogue else null
+                docPage(site, section, source, rendered, project, catalogue)
             }
         }
         problems += lint.check(Markdown.codeSnippets(Markdown.parse(File(repo, "README.md").readText())), "README.md")
@@ -123,9 +125,11 @@ class SiteBuilder(private val options: SiteOptions, private val runner: JdxRunne
         val llmsSections = SiteManifest.sections.map { section ->
             section.title to (sectionPages[section].orEmpty() + if (section == SiteManifest.reference) extraReference + commandPages else emptyList())
         }
+        val sitemap = SeoFiles.sitemap(site, allPages)
+        assertIndexable(site, allPages, htmlFiles, sitemap)
         val text = sortedMapOf(
             "robots.txt" to SeoFiles.robots(site),
-            "sitemap.xml" to SeoFiles.sitemap(site, allPages),
+            "sitemap.xml" to sitemap,
             "llms.txt" to SeoFiles.llmsTxt(site, llmsSections, productPages),
             "llms-full.txt" to SeoFiles.llmsFull(site, listOf(landing) + docPages + productPages.drop(1)),
             "favicon.svg" to resource("favicon.svg"),
@@ -170,20 +174,24 @@ class SiteBuilder(private val options: SiteOptions, private val runner: JdxRunne
         source: SiteManifest.DocSource,
         rendered: RenderedDoc,
         project: ProjectInfo,
+        catalogue: ReferencePages.CommandCatalogue?,
     ): Page {
         val modified = project.lastModified(source.sourcePath)
         val crumbs = listOf(Crumb("Docs", "docs/"), Crumb(section.title, "docs/#${section.anchor}"))
+        val bodyHtml = if (catalogue == null) rendered.html else catalogue.html + rendered.html
+        val markdown = if (catalogue == null) rendered.markdown else insertAfterTitle(rendered.markdown, catalogue.markdown)
+        val toc = if (catalogue == null) rendered.headings else catalogue.headings + rendered.headings
         return Page(
             path = source.path,
             title = rendered.title,
             headTitle = source.headTitle ?: "${rendered.title} · jdx docs",
             description = rendered.description,
-            bodyHtml = rendered.html,
+            bodyHtml = bodyHtml,
             kind = PageKind.DOC,
-            markdown = rendered.markdown,
+            markdown = markdown,
             sourcePath = source.sourcePath,
             lastModified = modified,
-            toc = rendered.headings,
+            toc = toc,
             breadcrumbs = crumbs,
             navTitle = source.navTitle ?: rendered.title,
             jsonLd = listOf(
@@ -191,6 +199,48 @@ class SiteBuilder(private val options: SiteOptions, private val runner: JdxRunne
                 StructuredData.breadcrumbs(site, listOf("Docs" to "docs/", section.title to "docs/#${section.anchor}", rendered.title to source.path)),
             ),
         )
+    }
+
+    /** Puts [insertion] after the Markdown H1 so the page title stays the first line. */
+    private fun insertAfterTitle(markdown: String, insertion: String): String {
+        val split = markdown.indexOf("\n\n")
+        if (split < 0) return markdown.trimEnd() + "\n\n" + insertion.trim() + "\n"
+        return markdown.substring(0, split + 2) + insertion.trim() + "\n\n" + markdown.substring(split + 2)
+    }
+
+    /**
+     * Pages a crawler has failed to discover. They must be in the sitemap, indexable,
+     * and self-canonical. Internal links are what make them discoverable; this only
+     * stops a noindex or a non-self canonical from undoing that.
+     */
+    private fun assertIndexable(
+        site: SiteContext,
+        pages: List<Page>,
+        htmlFiles: Map<String, String?>,
+        sitemap: String,
+    ) {
+        val byPath = pages.associateBy { it.path }
+        val problems = INDEXABLE_PATHS.mapNotNull { path ->
+            val page = byPath[path] ?: return@mapNotNull "$path is not a page"
+            val loc = site.absolute(path)
+            when {
+                page.noIndex -> "$path is noindex"
+                !sitemap.contains("<loc>${Html.text(loc)}</loc>") -> "$path is missing from sitemap.xml"
+                else -> {
+                    val html = htmlFiles[page.outputFile]
+                    when {
+                        html == null -> "$path has no HTML"
+                        html.contains("noindex") -> "$path HTML carries noindex"
+                        !html.contains("<link rel=\"canonical\" href=\"${Html.attr(loc)}\">") ->
+                            "$path canonical is not $loc"
+                        else -> null
+                    }
+                }
+            }
+        }
+        if (problems.isNotEmpty()) {
+            throw SiteBuildException("indexable URLs:\n" + problems.joinToString("\n") { "  - $it" })
+        }
     }
 
     private fun navTree(
@@ -268,6 +318,27 @@ class SiteBuilder(private val options: SiteOptions, private val runner: JdxRunne
                 idx = after
             }
         }
+
+        /**
+         * URLs Search Console has reported as unknown. Published under `docs/`
+         * (`/docs/contributing/`, not `/contributing/`). The build checks each is
+         * in the sitemap, indexable, and self-canonical.
+         */
+        val INDEXABLE_PATHS: List<String> = listOf(
+            "docs/reference/batch/",
+            "docs/reference/bench/",
+            "docs/reference/daemon/",
+            "docs/reference/help/",
+            "docs/reference/services/",
+            "docs/reference/upgrade/",
+            "docs/reference/version/",
+            "docs/reference/ws/",
+            "docs/agents-md/",
+            "docs/contributing/",
+            "docs/design/",
+            "docs/testing/",
+            "docs/kotlin-jar-api/",
+        )
 
         /** Letter / digit / `_` / `-` continue an identifier past a machine-path match. */
         private fun isPathIdentChar(c: Char): Boolean =

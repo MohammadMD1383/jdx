@@ -277,7 +277,9 @@ class Layout(private val site: SiteContext, private val nav: NavTree) {
             |${link("Overview", "")}${link("Integrations", "integrations/")}${link("FAQ", "faq/")}${link("Changelog", "changelog/")}
             |</ul></div>
             |<div><p class="footer-title">Docs</p><ul>
-            |${link("Getting started", "docs/introduction/")}${link("Guides", "docs/#guides")}${link("Reference", "docs/reference/")}${link("Advanced", "docs/#advanced")}
+            |${link("Getting started", "docs/introduction/")}${link("Guides", "docs/#guides")}${link("Reference", "docs/reference/")}
+            |${link("Design specification", "docs/design/")}${link("Testing strategy", "docs/testing/")}
+            |${link("Contributor rules (AGENTS.md)", "docs/agents-md/")}${link("How to contribute", "docs/contributing/")}
             |</ul></div>
             |<div><p class="footer-title">Project</p><ul>
             |${external("GitHub", site.repoUrl)}${external("Releases", "${site.repoUrl}/releases")}${external("Issues", "${site.repoUrl}/issues")}${external("License", "${site.repoUrl}/blob/main/LICENSE")}

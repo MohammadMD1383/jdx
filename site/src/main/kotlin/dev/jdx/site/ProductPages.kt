@@ -264,12 +264,20 @@ class ProductPages(
             append("<p>It exposes ${facts.mcpTools.size} typed tools — see <a href=\"${site.rootRelative(reference.mcpToolsPath)}\">MCP tools</a>.</p>")
             append("<h2 id=\"no-mcp\">No MCP? Use the CLI<a class=\"anchor\" href=\"#no-mcp\" aria-label=\"Link to this section\">#</a></h2>")
             append("<p>Every agent that can run shell commands can use jdx directly. Paste the <a href=\"${site.rootRelative(reference.cheatSheetPath)}\">agent cheat sheet</a> into its instructions.</p>")
+            append("<p>See <a href=\"${site.rootRelative(reference.commandPath("daemon"))}\">${Html.inlineCode(reference.helpSummary("daemon"))}</a> ")
+            append("(<code>jdx daemon</code>), <a href=\"${site.rootRelative(reference.commandPath("batch"))}\">${Html.inlineCode(reference.helpSummary("batch"))}</a> ")
+            append("(<code>jdx batch</code>), and <a href=\"${site.rootRelative(reference.commandPath("ws"))}\">${Html.inlineCode(reference.helpSummary("ws"))}</a> ")
+            append("(<code>jdx ws</code>). The guide is <a href=\"${site.rootRelative("docs/serving/")}\">MCP, daemon, HTTP &amp; batch</a>.</p>")
             append("</div></section>")
         }
         val markdown = buildString {
             append("# jdx for AI coding agents\n\n$description\n\n")
             for (agent in agents) append("- [${agentName(agent)}](${site.absolute(integrationPath(agent))}): `jdx setup --agent $agent --scope project`\n")
-            append("\n## Any MCP client\n\n```json\n$genericConfig\n```\n\nTools: ${site.absolute(reference.mcpToolsPath)}\n")
+            append("\n## Any MCP client\n\n```json\n$genericConfig\n```\n\nTools: ${site.absolute(reference.mcpToolsPath)}\n\n")
+            append("See [${reference.helpSummary("daemon")}](${site.absolute(reference.commandPath("daemon"))}) (`jdx daemon`), ")
+            append("[${reference.helpSummary("batch")}](${site.absolute(reference.commandPath("batch"))}) (`jdx batch`), ")
+            append("and [${reference.helpSummary("ws")}](${site.absolute(reference.commandPath("ws"))}) (`jdx ws`). ")
+            append("The guide is [MCP, daemon, HTTP & batch](${site.absolute("docs/serving/")}).\n")
         }
         return Page(
             path = "integrations/",
@@ -453,6 +461,10 @@ class ProductPages(
             }
             html.append("</ul>\n")
             if (section == SiteManifest.reference) {
+                html.append("<p>Each command's page is linked, with the one-line summary from <code>jdx help</code>, ")
+                html.append("under <a href=\"${site.rootRelative("docs/reference/#command-pages")}\">command pages</a> on the catalogue.</p>\n")
+                markdown.append("\nEach command's page is linked, with the one-line summary from `jdx help`, ")
+                markdown.append("under [command pages](${site.absolute("docs/reference/#command-pages")}) on the catalogue.\n")
                 html.append("<p class=\"command-links\">Commands: ")
                 html.append(commandPages.joinToString(" ") { "<a href=\"${site.rootRelative(it.path)}\"><code>${Html.text(it.navTitle)}</code></a>" })
                 html.append("</p>\n")
