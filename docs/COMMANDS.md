@@ -17,13 +17,19 @@ and `--no-daemon` (force in-process even when the daemon is up).
 | `jdx outline <type>` | File structure (`Ctrl+F12`) | Same filters as `members --declared` (never inherited): `--kind`, `--access`, `--static` / `--instance`, `--grep`, `--include-synthetic`, `--limit`, `--with-doc`, `--brief`, `--max-lines`, `--sort`, `--view` |
 | `jdx signature <member>` | Parameter info (`Ctrl+P`) | `--include-synthetic`, `--view kotlin\|jvm`, `--limit` (50) |
 | `jdx doc <symbol>` | Quick documentation (`Ctrl+Q`) | `--inherited` (default) / `--no-inherited`, `--raw`, `--max-lines` (200). Undocumented members fall back to the nearest documenting supertype. |
-| `jdx body <member>` | Open the method | `--context N`, `--line-numbers`, `--max-lines` (200), `--engine vineflower\|javap`, `--with-doc`, `--with-signature` |
+| `jdx body <member>` | Open the method | `--context N`, `--line-numbers`, `--max-lines` (200), `--engine vineflower\|javap`, `--kotlin-mode psi\|lexer\|auto` (default `psi`), `--with-doc`, `--with-signature` |
 | `jdx source <type>` | Open the file / decompile | `--lines A:B`, `--around '<type>#<member>'` + `--context N`, `--line-numbers`, `--max-lines` (200), `--engine vineflower\|javap` |
 
 `body`/`source` ladder: paired sources → Vineflower reconstruction → `javap` disassembly →
 signatures → not found. `--engine vineflower` forces reconstruction even when sources are
 paired; `--engine javap` shows raw bytecode. Decompiled output is always labelled
-`⚠ reconstructed` with the engine named.
+`⚠ reconstructed` with the engine named. `jdx body --kotlin-mode psi` (the default)
+reads a `.kt` member with the compiler sidecar. `--kotlin-mode lexer` brace-matches
+that member without the sidecar and labels the source line `lexer scan` /
+`⚠ brace-matched, not PSI`. `--kotlin-mode auto` uses the sidecar when that parse
+succeeds and the lexer otherwise. A scan that cannot match braces degrades to the
+same reconstruction ladder. `jdx source` and `jdx doc` stay on the sidecar. The
+lexer does not download anything.
 
 ## Search and browse
 
@@ -154,6 +160,10 @@ Kotlin member bodies and KDoc come from `.kt` sources through a side-loaded
 `kotlin-compiler-embeddable` (never on the compile classpath, never in the fat jar).
 Without the sidecar, `body`/`source`/`doc` over `.kt`-only roots degrade to
 decompile/`javap` — they emit *something* and say what it is, never an error.
+`jdx body --kotlin-mode lexer` (or `auto`, when the sidecar is absent or its parse
+fails) slices common `.kt` shapes without that download. The provenance origin is
+`lexer`, distinct from `sources` and from a decompilation. `SOURCES_VERSION_MISMATCH`
+still warns when the recovered declarations and the bytecode disagree.
 Run `jdx kotlin install` to fetch the sidecar set (SHA-1 checked) from Maven Central;
 `jdx doctor` reports its status. File facades and multi-file parts project through
 `KmPackage` the same way classes use `KmClass` (`suspend`, properties, `@JvmName`);

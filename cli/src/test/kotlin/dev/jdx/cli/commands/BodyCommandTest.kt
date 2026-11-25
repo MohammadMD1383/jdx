@@ -5,6 +5,7 @@ import dev.jdx.core.model.Origin
 import dev.jdx.core.model.Provenance
 import dev.jdx.core.render.buildBodyBlock
 import dev.jdx.decompile.DecompilerId
+import dev.jdx.sources.KotlinMode
 import dev.jdx.index.service.JdxService
 import dev.jdx.index.workspace.InMemoryWorkspaceStore
 import io.kotest.matchers.shouldBe
@@ -99,6 +100,19 @@ class BodyCommandTest {
     }
 
     @Test
+    fun `kotlin-mode reaches the service`() {
+        val lexer = run(listOf("com.example.Point#getX()", "--kotlin-mode", "lexer"))
+        lexer.exit shouldBe 0
+        lexer.options shouldBe JdxService.BodyOptions(kotlinMode = KotlinMode.LEXER)
+        val auto = run(listOf("com.example.Point#getX()", "--kotlin-mode", "AUTO"))
+        auto.exit shouldBe 0
+        auto.options shouldBe JdxService.BodyOptions(kotlinMode = KotlinMode.AUTO)
+        val psi = run(listOf("com.example.Point#getX()", "--kotlin-mode", "psi"))
+        psi.exit shouldBe 0
+        psi.options shouldBe JdxService.BodyOptions()
+    }
+
+    @Test
     fun `with-doc reaches the service`() {
         val run = run(listOf("com.example.Point#getX()", "--with-doc"))
         run.exit shouldBe 0
@@ -129,5 +143,8 @@ class BodyCommandTest {
     @Test
     fun `validateBodyFlags accepts the defaults`() {
         validateBodyFlags(context = 0, maxLines = 200, engine = null, withDoc = false) shouldBe null
+        validateBodyFlags(context = 0, maxLines = 200, engine = null, withDoc = false, kotlinMode = "lexer") shouldBe null
+        validateBodyFlags(context = 0, maxLines = 200, engine = null, withDoc = false, kotlinMode = "nope") shouldBe
+            "usage error: --kotlin-mode 'nope' is not valid (psi|lexer|auto)"
     }
 }

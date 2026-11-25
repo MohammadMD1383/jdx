@@ -180,7 +180,7 @@ jdx decodes `@Metadata` while it renders `jdx members` and `jdx signature`. Ther
 
 ### Does reading a Kotlin jar need jdx kotlin install?
 
-Not for declarations. `jdx members` and `jdx signature` read `@Metadata` with no extra download. `jdx kotlin install` is once, for KDoc and for slicing a `.kt` member. Without it, `jdx doc` on Kotlin sources exits 1 and names the install command, and `jdx body` is labelled `⚠ reconstructed`. The network is that install, plus `--fetch` when you ask to download a coordinate.
+Not for declarations. `jdx members` and `jdx signature` read `@Metadata` with no extra download. `jdx kotlin install` is once, for KDoc and for the precise `.kt` slice. Without it, `jdx doc` on Kotlin sources exits 1 and names the install command, and `jdx body` is labelled `⚠ reconstructed`. That is the default (`--kotlin-mode psi`). `jdx body --kotlin-mode lexer` slices the `.kt` member without the install and labels provenance `lexer`. `--kotlin-mode auto` uses the sidecar when it parses and the lexer when it does not. The network is that install, plus `--fetch` when you ask to download a coordinate. The lexer does not download anything.
 
 ## Where next
 

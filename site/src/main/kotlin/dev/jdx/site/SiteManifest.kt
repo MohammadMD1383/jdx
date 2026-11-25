@@ -195,7 +195,7 @@ object SiteManifest {
      */
     val excludedMarkdown: Map<Regex, String> = mapOf(
         Regex("README\\.md") to "quoted by the landing page (LandingPage) section by section",
-        Regex("CHANGELOG\\.md") to "release notes; the site builds its changelog from GitHub releases",
+        Regex("CHANGELOG\\.md") to "in-repo unreleased notes; the site changelog is generated from GitHub releases",
         Regex("[a-z]+/AGENTS\\.md") to "per-module contributor notes, linked from the repository",
         Regex("\\.github/.*") to "GitHub metadata",
         Regex("site/.*") to "the site generator's own notes",

@@ -5,6 +5,7 @@ import dev.jdx.decompile.DecompileResult
 import dev.jdx.decompile.DecompilerEngine
 import dev.jdx.decompile.DecompilerId
 import dev.jdx.decompile.VineflowerDecompiler
+import dev.jdx.sources.KotlinMode
 import dev.jdx.index.service.JdxService.BodyOptions
 import dev.jdx.index.service.JdxService.DocOptions
 import dev.jdx.index.service.JdxService.RootsSpec
@@ -18,6 +19,8 @@ import io.kotest.matchers.string.shouldNotContain
 import java.io.File
 import java.nio.file.Files
 import java.nio.file.Path
+import java.util.jar.JarEntry
+import java.util.jar.JarOutputStream
 import org.junit.jupiter.api.Assumptions.assumeTrue
 import org.junit.jupiter.api.Tag
 import org.junit.jupiter.api.Test
@@ -247,6 +250,121 @@ class KotlinSourcesServiceTest {
         outcome.exitCode shouldBe 0
         textOf(outcome) shouldContain "reconstructed"
     }
+
+    @Test
+    fun `lexer mode slices a kt body without the sidecar`(
+        @TempDir home: Path,
+        @TempDir cache: Path,
+    ) {
+        val outcome = bodyMode(home, cache, KotlinMode.LEXER, "dev.jdx.fixtures.KotlinMembers#originalName(int)")
+        outcome.exitCode shouldBe 0
+        val text = textOf(outcome)
+        text shouldContain "value * 2"
+        text shouldContain "lexer scan"
+        text shouldNotContain "decompiled by vineflower"
+        outcome.toJson("body") shouldContain "\"origin\":\"lexer\""
+    }
+
+    @Test
+    fun `auto without a sidecar uses the lexer`(
+        @TempDir home: Path,
+        @TempDir cache: Path,
+    ) {
+        val outcome = bodyMode(home, cache, KotlinMode.AUTO, "dev.jdx.fixtures.KotlinMembers#originalName(int)")
+        outcome.exitCode shouldBe 0
+        textOf(outcome) shouldContain "lexer scan"
+        outcome.toJson("body") shouldContain "\"origin\":\"lexer\""
+    }
+
+    @Test
+    fun `auto uses psi when the sidecar parses`(@TempDir home: Path, @TempDir cache: Path) {
+        val outcome = JdxService.body(
+            "dev.jdx.fixtures.KotlinMembers#originalName(int)",
+            fixtureRoots(),
+            BodyOptions(
+                kotlinUserHome = kotlinHome(home),
+                kotlinSidecarOs = ktOs,
+                kotlinSidecarEnv = ktEnv,
+                kotlinMode = KotlinMode.AUTO,
+                decompiler = tempEngine(cache),
+            ),
+        )
+        outcome.exitCode shouldBe 0
+        val text = textOf(outcome)
+        text shouldContain "-sources.jar ·"
+        text shouldNotContain "lexer"
+        outcome.toJson("body") shouldContain "\"origin\":\"sources\""
+    }
+
+    @Test
+    fun `lexer mode stays on the lexer when the sidecar is installed`(
+        @TempDir home: Path,
+        @TempDir cache: Path,
+    ) {
+        val outcome = JdxService.body(
+            "dev.jdx.fixtures.KotlinMembers#originalName(int)",
+            fixtureRoots(),
+            BodyOptions(
+                kotlinUserHome = kotlinHome(home),
+                kotlinSidecarOs = ktOs,
+                kotlinSidecarEnv = ktEnv,
+                kotlinMode = KotlinMode.LEXER,
+                decompiler = tempEngine(cache),
+            ),
+        )
+        outcome.exitCode shouldBe 0
+        textOf(outcome) shouldContain "lexer scan"
+        textOf(outcome) shouldNotContain "decompiled by vineflower"
+        outcome.toJson("body") shouldContain "\"origin\":\"lexer\""
+    }
+
+    @Test
+    fun `an unbalanced kt file degrades to reconstruction under lexer mode`(
+        @TempDir home: Path,
+        @TempDir cache: Path,
+        @TempDir dir: Path,
+    ) {
+        val binary = dir.resolve("shapes.jar")
+        Files.copy(FixtureJars.binaryJar().toPath(), binary)
+        val sources = dir.resolve("shapes-sources.jar")
+        JarOutputStream(Files.newOutputStream(sources)).use { jar ->
+            jar.putNextEntry(JarEntry("dev/jdx/fixtures/KotlinMembers.kt"))
+            jar.write("class KotlinMembers { fun originalName(value: Int): Int = \"".toByteArray())
+            jar.closeEntry()
+        }
+        val outcome = JdxService.body(
+            "dev.jdx.fixtures.KotlinMembers#originalName(int)",
+            RootsSpec(jarSpecs = listOf(binary.toString()), includeJdk = false),
+            BodyOptions(
+                kotlinUserHome = home,
+                kotlinSidecarOs = ktOs,
+                kotlinSidecarEnv = ktEnv,
+                kotlinMode = KotlinMode.LEXER,
+                decompiler = tempEngine(cache),
+            ),
+        )
+        outcome.exitCode shouldBe 0
+        val text = textOf(outcome)
+        text shouldContain "reconstructed"
+        text shouldNotContain "lexer scan"
+    }
+
+    private fun bodyMode(
+        home: Path,
+        cache: Path,
+        mode: KotlinMode,
+        ref: String,
+    ): ServiceOutcome = JdxService.body(
+        ref,
+        fixtureRoots(),
+        BodyOptions(
+            kotlinUserHome = home,
+            kotlinSidecarOs = ktOs,
+            kotlinSidecarEnv = ktEnv,
+            kotlinMode = mode,
+            decompiler = tempEngine(cache),
+        ),
+    )
 
     @Test
     fun `doc without a sidecar names the install hint`(@TempDir home: Path) {

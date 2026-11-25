@@ -123,6 +123,11 @@ jdx kotlin install
 ```
 
 Without it, Kotlin binaries still render from metadata and source queries degrade with a label.
+`jdx body --kotlin-mode lexer` reads a `.kt` member without that install. The source line
+says `lexer scan` and `⚠ brace-matched, not PSI`. `--kotlin-mode auto` uses the sidecar
+when it is installed and that parse succeeds, and the lexer otherwise. The default
+`--kotlin-mode psi` is unchanged: without the sidecar the body is reconstructed.
+`jdx source` and `jdx doc` still need the sidecar. The lexer never contacts the network.
 With the sidecar, file-facade type docs come from the KDoc before `package`, enum entries with
 class bodies answer nested `$ENTRY` queries, and generic extension receivers (`List<T>`) narrow
 against `List` / `java.util.List` parameter keys.

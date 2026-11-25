@@ -96,6 +96,7 @@ class ModelTest {
         Origin.entries.toSet() shouldBe setOf(
             Origin.BYTECODE,
             Origin.SOURCES,
+            Origin.LEXER,
             Origin.DECOMPILED_VINEFLOWER,
             Origin.DECOMPILED_JAVAP,
             Origin.JRT,

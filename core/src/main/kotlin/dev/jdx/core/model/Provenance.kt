@@ -11,6 +11,12 @@ public enum class Origin {
     /** Read from a `.java`/`.kt` source file — bodies, param names, docs. */
     SOURCES,
 
+    /**
+     * Brace-matched `.kt` text (`jdx body --kotlin-mode lexer|auto`).
+     * The bytes are the source file, but the span was not produced by PSI.
+     */
+    LEXER,
+
     /** Reconstructed by the bundled Vineflower engine. */
     DECOMPILED_VINEFLOWER,
 

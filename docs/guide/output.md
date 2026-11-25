@@ -52,7 +52,7 @@ $ jdx members java.util.List --limit 2 --json
 | `result` | the command-specific answer |
 | `truncated` | `shown` / `total` / `hint` when output was cut |
 | `warnings` | `{code, message}` objects |
-| `provenance` | where each answer came from: artifact, origin, file, lines |
+| `provenance` | where each answer came from: artifact, origin (`sources`, `lexer`, `bytecode`, `decompiled-vineflower`, `decompiled-javap`, `jrt`), file, lines |
 
 ## Exit codes
 

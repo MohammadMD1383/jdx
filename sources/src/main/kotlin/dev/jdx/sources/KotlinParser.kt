@@ -1,5 +1,6 @@
 package dev.jdx.sources
 
+import dev.jdx.core.model.Origin
 import java.io.Closeable
 import java.net.URLClassLoader
 import java.nio.file.Path
@@ -42,12 +43,49 @@ public interface KotlinSourceParser : Closeable {
 }
 
 /**
+ * How `jdx body` reads a `.kt` member (issue #16).
+ *
+ * [PSI] is the default and stays byte-identical to the sidecar ladder.
+ * [LEXER] never opens the sidecar. [AUTO] uses PSI when that parse returns
+ * a tree, and the lexer when the sidecar is missing or the parse fails.
+ * `jdx source` and `jdx doc` stay on [PSI].
+ */
+public enum class KotlinMode {
+    PSI,
+    LEXER,
+    AUTO,
+    ;
+
+    public companion object {
+        /** CLI / wire spelling, or null when [raw] is not one of the three. */
+        public fun fromFlag(raw: String): KotlinMode? = when (raw.lowercase()) {
+            "psi" -> PSI
+            "lexer" -> LEXER
+            "auto" -> AUTO
+            else -> null
+        }
+    }
+}
+
+/**
  * Outcome of [KotlinSourceParser.parseKotlin]: a value on every path, never
  * a throw.
  */
 public sealed interface KotlinParse {
-    /** The file parsed (possibly partially); offsets index the given text. */
-    public data class Parsed(public val file: KotlinFile) : KotlinParse
+    /**
+     * The file parsed (possibly partially); offsets index the given text.
+     *
+     * [origin] is [Origin.SOURCES] for PSI and [Origin.LEXER] for the
+     * brace-matching fallback. [confident] is false when a lexer kept the
+     * delimiters balanced but had to skip a construct it does not understand:
+     * a member it recovered is still served, and a member it did not recover
+     * degrades to decompile instead of a sources-mismatch miss.
+     */
+    public data class Parsed(
+        public val file: KotlinFile,
+        public val origin: Origin = Origin.SOURCES,
+        public val confident: Boolean = true,
+    ) : KotlinParse
 
     /** PSI is unusable here — degrade to decompile/javap, never fail. */
     public data class Unavailable(public val detail: String) : KotlinParse
@@ -66,12 +104,25 @@ public sealed interface KotlinParse {
  * [probeKotlinToolchain].
  *
  * Same [os]/[env] seam as [probeKotlinToolchain]: ambient by default, pinned
- * in tests.
+ * in tests. [mode] selects the sidecar, the brace-matching lexer, or PSI
+ * with a lexer fallback. The default [KotlinMode.PSI] never opens the lexer.
  */
 public fun openKotlinParser(
     userHome: Path,
     os: dev.jdx.core.paths.JdxOs = ambientOs(),
     env: Map<String, String> = System.getenv(),
+    mode: KotlinMode = KotlinMode.PSI,
+): KotlinSourceParser = when (mode) {
+    KotlinMode.LEXER -> LexerKotlinParser
+    KotlinMode.AUTO -> AutoKotlinParser(openKotlinPsiParser(userHome, os, env))
+    KotlinMode.PSI -> openKotlinPsiParser(userHome, os, env)
+}
+
+/** The compiler sidecar, ignoring [KotlinMode]. [openKotlinParser] is the entry point. */
+private fun openKotlinPsiParser(
+    userHome: Path,
+    os: dev.jdx.core.paths.JdxOs,
+    env: Map<String, String>,
 ): KotlinSourceParser {
     val status = probeKotlinToolchain(userHome, os, env)
     if (status is KotlinToolchainStatus.Missing) {
@@ -104,6 +155,32 @@ public fun openKotlinParser(
                 "(${status.jar}: ${e.message ?: e.javaClass.simpleName}) — " +
                 "Kotlin sources unavailable (D-008)",
         )
+    }
+}
+
+/**
+ * PSI when that parse returns a tree; the brace-matching lexer otherwise.
+ * Closing releases the sidecar loader and leaves the lexer (a stateless
+ * object) alone.
+ */
+private class AutoKotlinParser(
+    private val psi: KotlinSourceParser,
+) : KotlinSourceParser {
+    override val available: Boolean = true
+    override val detail: String = if (psi.available) psi.detail else LexerKotlinParser.detail
+
+    override fun parseKotlin(text: String, fileName: String): KotlinParse {
+        if (psi.available) {
+            when (val parsed = psi.parseKotlin(text, fileName)) {
+                is KotlinParse.Parsed -> return parsed
+                is KotlinParse.Unavailable, is KotlinParse.Failed -> Unit
+            }
+        }
+        return lexKotlinFile(text, fileName)
+    }
+
+    override fun close() {
+        psi.close()
     }
 }
 

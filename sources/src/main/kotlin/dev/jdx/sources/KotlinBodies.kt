@@ -1,6 +1,7 @@
 package dev.jdx.sources
 
 import dev.jdx.core.model.MemberSymbolRef
+import dev.jdx.core.model.Origin
 import dev.jdx.core.model.TypeName
 
 /**
@@ -129,18 +130,33 @@ private fun findKotlinBodiesOrThrow(
     val text = readKotlinText(root, path) ?: return JavaBodyResult.ParseError(
         "source read error: cannot read $path",
     )
-    val parsed = when (val parsed = parser.parseKotlin(text, path.substringAfterLast('/'))) {
-        is KotlinParse.Parsed -> parsed.file
-        is KotlinParse.Unavailable -> return JavaBodyResult.ParserUnavailable(parsed.detail)
+    val parsed = when (val outcome = parser.parseKotlin(text, path.substringAfterLast('/'))) {
+        is KotlinParse.Parsed -> outcome
+        is KotlinParse.Unavailable -> return JavaBodyResult.ParserUnavailable(outcome.detail)
         is KotlinParse.Failed -> return JavaBodyResult.ParseError(
-            "source read error: $path does not parse: ${parsed.message}",
+            "source read error: $path does not parse: ${outcome.message}",
         )
     }
-    val scope = navigateKotlin(parsed, binary) ?: return JavaBodyResult.MemberNotFound
+    val scope = navigateKotlin(parsed.file, binary)
+    if (scope == null) {
+        if (!parsed.confident) {
+            return JavaBodyResult.ParserUnavailable(
+                "kotlin lexer could not locate $binary in $path; degrading to decompile",
+            )
+        }
+        return JavaBodyResult.MemberNotFound
+    }
     val matches = narrowKotlinBySignature(matchKotlinByName(scope, ref.name, aka), ref)
-    if (matches.isEmpty()) return JavaBodyResult.MemberNotFound
+    if (matches.isEmpty()) {
+        if (!parsed.confident) {
+            return JavaBodyResult.ParserUnavailable(
+                "kotlin lexer could not locate ${ref.name} in $path; degrading to decompile",
+            )
+        }
+        return JavaBodyResult.MemberNotFound
+    }
     val lines = splitKotlinLines(text)
-    val bodies = matches.mapNotNull { sliceKotlinBody(path, lines, text, it) }
+    val bodies = matches.mapNotNull { sliceKotlinBody(path, lines, text, it, parsed.origin) }
     if (bodies.isEmpty()) {
         return JavaBodyResult.ParseError(
             "source read error: $path has no position for ${ref.name}",
@@ -622,6 +638,7 @@ internal fun sliceKotlinBody(
     lines: List<String>,
     text: String,
     decl: KotlinDecl,
+    origin: Origin = Origin.SOURCES,
 ): SourceBody? {
     val range = kotlinLineRange(lines, text, decl) ?: return null
     val (startLine, endLine) = range
@@ -636,6 +653,7 @@ internal fun sliceKotlinBody(
             startLine,
             endLine,
             bodyText,
+            origin,
         )
         KotlinDeclKind.CONSTRUCTOR -> SourceBody(
             SourceBodyKind.CONSTRUCTOR,
@@ -646,6 +664,7 @@ internal fun sliceKotlinBody(
             startLine,
             endLine,
             bodyText,
+            origin,
         )
         KotlinDeclKind.PROPERTY -> SourceBody(
             SourceBodyKind.FIELD,
@@ -656,6 +675,7 @@ internal fun sliceKotlinBody(
             startLine,
             endLine,
             bodyText,
+            origin,
         )
         KotlinDeclKind.ENUM_ENTRY -> SourceBody(
             SourceBodyKind.ENUM_ENTRY,
@@ -666,6 +686,7 @@ internal fun sliceKotlinBody(
             startLine,
             endLine,
             bodyText,
+            origin,
         )
         KotlinDeclKind.CLASS, KotlinDeclKind.OBJECT -> null
     }

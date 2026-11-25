@@ -21,8 +21,14 @@ dependency, never in the fat jar. `explicitApi()` is on.
   the warning names the outer type to query.
 - `KotlinToolchain` — versioned sidecar path probe (`Installed`/`Missing`, never
   throws); `KotlinParser` — isolated-`URLClassLoader` seam (presence-vs-usability
-  split); `KotlinBodies` — real PSI ranges, property-aware (getter/setter →
-  property name). Without the sidecar, degrade to decompile/javap — emit
+  split); `KotlinLexer` — brace-matching `.kt` fallback behind
+  `jdx body --kotlin-mode psi|lexer|auto` (issue #16; default `psi` never
+  opens it). `Origin.LEXER` labels a recovered slice. A balanced file that
+  skipped unknown syntax is not confident: a member it recovered is served,
+  a member it missed degrades to decompile. Unbalanced strings, comments, or
+  braces are unavailable immediately. `KotlinBodies` — real PSI ranges,
+  property-aware (getter/setter → property name). Without the sidecar, and
+  without `--kotlin-mode lexer|auto`, degrade to decompile/javap — emit
   *something* and say what it is. Issue #15: file-level KDoc (preceding
   `package`) is the facade type doc; enum entries with class bodies capture
   children so `Outer$ENTRY` navigates; generic extension receivers (`List<T>`)
