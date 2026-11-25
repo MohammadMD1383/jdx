@@ -6,6 +6,7 @@ import dev.jdx.index.service.JdxService
 import dev.jdx.index.workspace.InMemoryWorkspaceStore
 import io.kotest.matchers.shouldBe
 import io.kotest.matchers.string.shouldContain
+import io.kotest.matchers.string.shouldNotContain
 import kotlinx.serialization.json.Json
 import kotlinx.serialization.json.jsonArray
 import kotlinx.serialization.json.jsonObject
@@ -90,6 +91,68 @@ class BenchServiceTest {
         run.exit shouldBe 0
         val parsed = Json.parseToJsonElement(run.lines.single()).jsonObject
         parsed["command"]?.jsonPrimitive?.content shouldBe "bench"
-        parsed["result"]?.jsonObject?.get("rows")?.jsonArray?.size shouldBe BenchRunner.CASES.size
+        val rows = parsed["result"]?.jsonObject?.get("rows")?.jsonArray ?: error("bench json has no result.rows")
+        rows.size shouldBe BenchRunner.CASES.size
+        rows.map { it.jsonObject["name"]?.jsonPrimitive?.content } shouldBe BenchRunner.CASES.map { it.name }
+        run.lines.single() shouldNotContain "note"
+    }
+
+    @Test
+    fun `include-usages times the live scan and labels the missing index`() {
+        val jar = fixtureJar().absolutePath
+        val roots = JdxService.RootsSpec(jarSpecs = listOf(jar), includeJdk = false)
+
+        val report = BenchRunner.run(
+            "fixture",
+            listOf(jar),
+            roots,
+            JdxService,
+            iterations = 1,
+            includeUsages = true,
+        )
+
+        report.rows.map { it.name } shouldBe BenchRunner.CASES.map { it.name } + "usages"
+        val usages = report.rows.last()
+        usages.targetMs shouldBe BenchRunner.USAGES_TARGET_MS
+        usages.note shouldBe "no indexed path yet (live scan)"
+        usages.withinTarget shouldBe (usages.medianMs <= usages.targetMs)
+        report.rows.dropLast(1).all { it.note == null } shouldBe true
+
+        val run = run(
+            listOf("--jars", jar, "--no-jdk", "--iterations", "1", "--include-usages"),
+        )
+
+        run.exit shouldBe 0
+        val text = run.lines.single()
+        text shouldContain "usages"
+        text shouldContain "note: no indexed path yet (live scan)"
+        text shouldContain "within target"
+    }
+
+    @Test
+    fun `include-usages json keeps the note and exits 0`() {
+        val run = run(
+            listOf(
+                "--jars",
+                fixtureJar().absolutePath,
+                "--no-jdk",
+                "--iterations",
+                "1",
+                "--include-usages",
+                "--json",
+            ),
+        )
+
+        run.exit shouldBe 0
+        val parsed = Json.parseToJsonElement(run.lines.single()).jsonObject
+        parsed["ok"]?.jsonPrimitive?.content shouldBe "true"
+        val rows = parsed["result"]?.jsonObject?.get("rows")?.jsonArray ?: error("bench json has no result.rows")
+        rows.map { it.jsonObject["name"]?.jsonPrimitive?.content } shouldBe
+            BenchRunner.cases(includeUsages = true).map { it.name }
+        val usages = rows.last().jsonObject
+        usages["note"]?.jsonPrimitive?.content shouldBe "no indexed path yet (live scan)"
+        rows.dropLast(1).forEach { row ->
+            row.jsonObject.containsKey("note") shouldBe false
+        }
     }
 }

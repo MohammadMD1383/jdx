@@ -6,6 +6,12 @@
   page, with a title, date, description, canonical URL, Open Graph tags, and
   BlogPosting JSON-LD. Posts are in `sitemap.xml`, and `/blog/feed.xml` is an
   Atom feed. Posts are Markdown files in `docs/blog/`.
+- `jdx bench` still omits the `usages` row unless `--include-usages` is set
+  (issue #11). The opt-in row times the current live scan and is labelled
+  `no indexed path yet (live scan)` in text and JSON. Default output is
+  unchanged. Rows still print `ok`/`OVER` and success still exits 0. The
+  scale fixture is `minecraft-client.jar` under `~/.gradle/caches/fabric-loom/`;
+  gson is the everyday fixture.
 - The v1 daemon, HTTP and MCP wire stays read-only (issue #19). `doctor` is
   refused with exit 6. The daemon says to run the same query without the
   daemon and names `jdx doctor`. HTTP and MCP say to run `jdx doctor` in a

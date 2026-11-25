@@ -92,7 +92,7 @@ no workspace, no `--jars` and no `--no-daemon`, and is answered by the MCP tool
 | `jdx cache info\|gc\|clear` | Index and cache maintenance | `info` (DB location, size, schema, counts); `gc [--dry-run] [--cache-dir …]` (evicts unreferenced + stale artifacts + orphan daemon logs); `clear` (wipes regenerable cache) |
 | `jdx kotlin install` | Fetch the Kotlin PSI sidecar | `--repo …` (repeatable), `--force` (re-download). 7 jars, SHA-1 verified, into `<cache-dir>/kotlin/` (`~/.cache/jdx/kotlin/` on Linux; per-OS defaults in `docs/PROPOSAL.md` §17.1); present jars are skipped, re-runs resume. |
 | `jdx help [--agent] [--json]` | Cheat sheet | `--agent` prints the paste-ready agent block |
-| `jdx bench` | Benchmark the read path | `--iterations N` (default 3, median reported), classpath flags. Fixed `load`/`show`/`members`/`search`/`hierarchy` workload with §15 advisory targets; always exits 0 on success. Falls back to the local `minecraft-client.jar` when no roots are given. |
+| `jdx bench` | Benchmark the read path | `--iterations N` (default 3, median reported), `--include-usages`, classpath flags. Fixed `load`/`show`/`members`/`search`/`hierarchy` workload with §15 advisory targets; rows print `ok`/`OVER` and success always exits 0. The `usages` row stays omitted unless `jdx bench --include-usages`: there is no indexed path yet, so that row times the current live scan and is labelled `no indexed path yet (live scan)` in text and JSON (issue #11). Default output leaves the row out. With no roots given, falls back to `minecraft-client.jar` under `~/.gradle/caches/fabric-loom/` (the scale fixture). Gson, from the local Gradle cache, is the everyday correctness fixture — pass it with `--jars`. |
 
 ## Serving: daemon, MCP, HTTP, batch
 

@@ -59,7 +59,11 @@ public val HELP_ROWS: List<HelpRow> = listOf(
     HelpRow("setup --agent opencode|claude-code|cursor|kilo|cline|codex|copilot|antigravity|windsurf|aider --scope project|system", "Wire jdx into an agent (OpenCode, Claude Code, Cursor, Kilo Code, Cline, Codex CLI, GitHub Copilot CLI, Antigravity, Windsurf, Aider/AiderDesk)", "jdx setup --agent opencode --scope project"),
     HelpRow("mcp", "MCP stdio server (typed jdx_* tools)", "jdx mcp"),
     HelpRow("batch", "Many queries, one process (NDJSON in/out)", "jdx batch --json < queries.ndjson"),
-    HelpRow("bench [--iterations 3]", "Benchmark the read path (timings + §15 targets)", "jdx bench --iterations 1"),
+    HelpRow(
+        "bench [--iterations 3]",
+        "Benchmark the read path (timings + §15 targets; --include-usages times the live scan)",
+        "jdx bench --iterations 1",
+    ),
     HelpRow("help [--agent]", "This cheat sheet", "jdx help --agent"),
 )
 

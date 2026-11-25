@@ -271,5 +271,9 @@ repo first (own source dirs / built jars, third-party jars, the JDK) instead of
 - Rich local test corpus: ~2183 jars in `~/.gradle/caches`, including `-sources.jar`
   artifacts (gson, msal4j, lwjgl, mojang-logging) and a large obfuscated/remapped
   `minecraft-client.jar` under `~/.gradle/caches/fabric-loom/` — the scale/perf
-  benchmark; gson is the everyday correctness fixture.
+  benchmark (`jdx bench` falls back to it when no roots are given); gson is the
+  everyday correctness fixture. `jdx bench` omits the `usages` row unless
+  `--include-usages` (issue #11): the live scan has no indexed path yet, so the
+  opt-in row is labelled `no indexed path yet (live scan)` and default output
+  stays byte-identical.
 - ASM and Vineflower already exist in the local Gradle cache.
