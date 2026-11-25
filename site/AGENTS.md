@@ -91,3 +91,8 @@ length; the H1 stays the on-page title and the Open Graph title.
 - `JAVA_TOOL_OPTIONS` / `_JAVA_OPTIONS` / `JDK_JAVA_OPTIONS`: the launcher tolerates their
   `Picked up ...` banners since #88, but `ProcessJdxRunner` still unsets them — published
   output must never depend on the host's JVM options.
+- Example `--fetch` commands retry a transient Maven Central failure four times
+  (2s, then 5s, then 10s) inside `ProcessJdxRunner` / `FixtureFetch`. A checksum
+  mismatch (the resolver says `checksum rejected` without `network unreachable`)
+  is not retried. The sandbox is recreated every build except `sandbox/cache/jdx/m2`,
+  which `pages.yml` caches so a warm runner does not download those coordinates again.

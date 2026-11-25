@@ -32,6 +32,9 @@ class SiteBuilder(private val options: SiteOptions, private val runner: JdxRunne
     fun build(): SiteOutput {
         val repo = options.repoRoot
         val project = ProjectInfo(repo)
+        // ProcessJdxRunner retries this `--fetch` on a transient Maven Central failure
+        // (FixtureFetch: 4 attempts, 2s/5s/10s). A checksum mismatch is not retried.
+        // The message below is the final attempt, same text as a single failure.
         val prefetch = runner.run(ReferencePages.PREFETCH, null)
         if (prefetch.exitCode != 0) {
             throw SiteBuildException("could not fetch the example fixture (${ReferencePages.GSON}): ${prefetch.stdout}${prefetch.stderr}")

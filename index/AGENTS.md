@@ -55,6 +55,9 @@ behaviour lives here** (adapters call in, never the reverse). `explicitApi()` is
   dedupe, symlink-loop-safe walk; the `active-workspace` file is LF-pinned.
 - `maven/` — `MavenResolver` (local caches first) + `MavenFetch` (opt-in `--fetch`,
   checksum-verified into `<cache-dir>/m2/`); `--repo` mirrors tried before Central.
+  A checksum mismatch is reported as `checksum rejected` with no "network unreachable"
+  clause, so a caller can skip retrying it. Network and missing-artifact failures keep
+  the combined "network unreachable, artifact missing, or checksum rejected" sentence.
 - `diff/ArtifactSnapshots` — one opened root → `ApiSnapshot` + that root's warnings,
   for `jdx diff` (issue #23). Bytecode only (no `SourcesPairing`, no decompiler) and
   degrade-don't-fail: an unparseable or too-new class is skipped with its warning and

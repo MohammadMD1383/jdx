@@ -3,6 +3,7 @@ package dev.jdx.index.maven
 import com.sun.net.httpserver.HttpServer
 import io.kotest.matchers.shouldBe
 import io.kotest.matchers.string.shouldContain
+import io.kotest.matchers.string.shouldNotContain
 import java.io.File
 import java.net.InetSocketAddress
 import java.nio.file.Files
@@ -170,6 +171,10 @@ class MavenResolverTest {
         }
         val outcome = MavenResolver.resolve("com.example:demo:1.0", true, repositories(root), fetcher)
         ((outcome is MavenResolver.Outcome.Unresolved)) shouldBe true
+        val message = (outcome as MavenResolver.Outcome.Unresolved).message
+        // Distinguished from a network blip so callers can skip a retry.
+        message shouldContain "checksum rejected"
+        message shouldNotContain "network unreachable"
         // Nothing half-written may read as a hit afterwards.
         (Files.exists(root.resolve("cache/com/example/demo/1.0/demo-1.0.jar"))) shouldBe false
     }
@@ -278,5 +283,28 @@ class MavenResolverTest {
         val message = (outcome as MavenResolver.Outcome.Unresolved).message
         message shouldContain "http://127.0.0.1:9/first"
         message shouldContain "http://127.0.0.1:9/second"
+        message shouldContain "network unreachable, artifact missing, or checksum rejected — nothing was written"
+    }
+
+    @Test
+    fun `a checksum rejection on one mirror still tries the next`(@TempDir root: Path) {
+        val binary = "from-second".toByteArray(Charsets.UTF_8)
+        val fetcher = MavenFetch.Fetcher { url ->
+            if ("127.0.0.1:9" in url) {
+                if (url.endsWith(".sha1")) "0".repeat(40).toByteArray() else "tampered".toByteArray()
+            } else if (url.endsWith(".sha1")) {
+                "${MavenFetch.sha1Hex(binary)}\n".toByteArray()
+            } else if (url.endsWith("demo-1.0.jar")) {
+                binary
+            } else {
+                null
+            }
+        }
+        val repos = repositories(root).copy(
+            repoBaseUrls = listOf("http://127.0.0.1:9/bad", "http://mirror.test/repo"),
+        )
+        val outcome = MavenResolver.resolve("com.example:demo:1.0", true, repos, fetcher)
+        ((outcome is MavenResolver.Outcome.Resolved)) shouldBe true
+        Files.readAllBytes((outcome as MavenResolver.Outcome.Resolved).artifact.binaryJar) shouldBe binary
     }
 }
