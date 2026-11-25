@@ -42,13 +42,7 @@ public data class ClassCard(
     private fun provenanceText(): String = if (provenance.isEmpty()) {
         "source: no provenance recorded"
     } else {
-        provenance.joinToString("\n") { entry ->
-            val base = entry.origin.name.lowercase().replace('_', '-')
-            val file = entry.file ?: return@joinToString "source: ${entry.artifact} ($base)"
-            val range = entry.lineRange
-            if (range == null) "source: ${entry.artifact} ($base, $file)"
-            else "source: ${entry.artifact} ($base, $file:${range.first}-${range.last})"
-        }
+        provenance.joinToString("\n") { it.sourceLine() }
     }
 
     /** Full JSON envelope; every text fact appears here structurally (D-007). */

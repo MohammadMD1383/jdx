@@ -104,6 +104,11 @@ no workspace, no `--jars` and no `--no-daemon`, and is answered by the MCP tool
 `--repo <url>` (repeatable Maven mirror, tried before Central) ·
 `--fetch` (allow downloads incl. `-sources.jar`, checksum-verified into `<cache-dir>/m2/` (`~/.cache/jdx/m2/` on Linux)) ·
 `--no-jdk` (exclude the running JDK stdlib, included by default via `jrt:/` + `src.zip`) ·
+`--release N` (alias `--multi-release`; highest `META-INF/versions/N` at or below N,
+`8` = base entries only, omitted = the running JDK feature, below 8 exits 3;
+an explicit value stays in-process. `jdx members com.example.Api --release 11`.
+A versioned class names that release on its `source:` line; a base entry does not.
+The warm daemon, MCP and HTTP keep the running-JDK selection) ·
 `-w/--workspace <name>` (also `JDX_WORKSPACE` env or `jdx ws use` default; Gradle/Maven
 project roots auto-discover from the working directory) ·
 `--src <dir>` (only `usages`, `batch`, `bench`, and `ws create`: source dirs scanned textually).

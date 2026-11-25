@@ -20,6 +20,11 @@ import java.util.zip.ZipFile
 public class JarArtifact private constructor(
     private val jarPath: Path,
     private val explicitSources: Path?,
+    /**
+     * Explicit `--release`, or `null` for the running JDK. Held only so the
+     * warning can name the feature that was actually selected.
+     */
+    private val release: Int?,
 ) : ArtifactRoot {
 
     private val zip: ZipFile = ZipFile(jarPath.toFile())
@@ -92,9 +97,12 @@ public class JarArtifact private constructor(
         ZipSafety.checkEntryCount(names.size, displayName)
         ZipSafety.checkTotalSize(knownBytes, displayName)
         val files = names.filter { !it.endsWith("/") }.toSet()
+        val running = Runtime.version().feature()
+        val selected = release ?: running
         resolved = MultiRelease.resolve(
             actualEntries = files,
             multiRelease = isMultiRelease(zip),
+            runtimeVersion = selected,
         )
         // Classic SPI files only — not META-INF/versions/<n>/META-INF/services/…
         serviceEntries = files
@@ -105,17 +113,29 @@ public class JarArtifact private constructor(
         resourceEntries = files.filter { ResourceEntries.isResourcePath(it) }.sorted()
         warnings = buildList {
             if (MultiRelease.hasVersionedSelection(resolved)) {
+                // Omitted flag, and an explicit value equal to this JVM, keep the
+                // historical sentence. A different explicit release names that
+                // release instead — the only deliberate wording change.
+                val feature = if (release == null || release == running) {
+                    "this JDK ($running)"
+                } else {
+                    "release $release"
+                }
                 add(
                     Warning(
                         code = WarningCode.MULTI_RELEASE_VARIANT,
                         message = "multi-release $displayName serves " +
-                            "version-specific variants for this JDK " +
-                            "(${Runtime.version().feature()})",
+                            "version-specific variants for $feature",
                         subject = displayName,
                     ),
                 )
             }
         }.sortedBy { it.code }
+    }
+
+    override fun variantRelease(classPath: String): Int? {
+        val actual = resolved[classPath] ?: return null
+        return MultiRelease.releaseOf(actual)
     }
 
     override fun classEntryPaths(): List<String> =
@@ -208,12 +228,12 @@ public class JarArtifact private constructor(
          * Opens [jar] as an artifact root. Called from [ArtifactLoader]; kept here so
          * every root is created through the one dispatch point.
          */
-        internal fun open(jar: Path, explicitSources: Path?): JarArtifact {
+        internal fun open(jar: Path, explicitSources: Path?, release: Int?): JarArtifact {
             if (!Files.isRegularFile(jar)) {
                 throw ArtifactReadException("artifact read error: no such jar: $jar")
             }
             try {
-                return JarArtifact(jar.toAbsolutePath().normalize(), explicitSources)
+                return JarArtifact(jar.toAbsolutePath().normalize(), explicitSources, release)
             } catch (ex: ArtifactReadException) {
                 throw ex
             } catch (ex: Exception) {

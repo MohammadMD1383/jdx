@@ -31,4 +31,11 @@ public data class Provenance(
     public val origin: Origin,
     public val file: String? = null,
     public val lineRange: IntRange? = null,
+    /**
+     * Multi-release feature of the class entry that answered, when that entry
+     * lives under `META-INF/versions/N/`. `null` for a base entry, a non-MR
+     * jar, a directory, or `jrt:/` — omitted from text and JSON so those
+     * answers stay byte-identical.
+     */
+    public val release: Int? = null,
 )

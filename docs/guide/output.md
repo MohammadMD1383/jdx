@@ -9,7 +9,9 @@ jdx output is designed to be read by a language model with a finite context wind
 - **Grouping headers** instead of repeating the declaring type on every line.
 - **Explicit truncation**: a footer says how much was shown and which flag shows the rest.
 - **Provenance**: a `source:` line names the artifact and whether the answer came from
-  sources, bytecode or a decompiler.
+  sources, bytecode or a decompiler. When the class that answered came from
+  `META-INF/versions/N/`, the line also names that release (`bytecode, release 17`).
+  A base entry omits it.
 - **A `next:` line** on single-entity answers with the most useful follow-up command.
 - **No colour when piped.** ANSI colour only on a terminal (`--no-color` turns it off there too).
   Warm (daemon) answers arrive plain on the wire — the daemon has no TTY — and the CLI

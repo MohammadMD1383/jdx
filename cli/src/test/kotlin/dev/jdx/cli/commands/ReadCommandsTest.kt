@@ -151,6 +151,42 @@ class ReadCommandsTest {
     }
 
     @Test
+    fun `show --release forwards the feature onto the roots`() {
+        var seenRoots: JdxService.RootsSpec? = null
+        captureStdout {
+            ShowCommand(
+                query = { _, roots -> seenRoots = roots; pointCard() },
+                terminate = noExit,
+                discover = noDiscovery,
+                store = emptyStore(),
+                getenv = noEnv,
+            ).parse(listOf("Point", "--jars", "a.jar", "--no-jdk", "--release", "11"))
+        }
+        seenRoots?.release shouldBe 11
+    }
+
+    @Test
+    fun `show --release below 8 exits 3 before the query`() {
+        var queried = false
+        val thrown = try {
+            captureStdout {
+                ShowCommand(
+                    query = { _, _ -> queried = true; pointCard() },
+                    terminate = noExit,
+                    discover = noDiscovery,
+                    store = emptyStore(),
+                    getenv = noEnv,
+                ).parse(listOf("Point", "--release", "7"))
+            }
+            null
+        } catch (e: TestExit) {
+            e
+        }
+        thrown?.code shouldBe 3
+        queried shouldBe false
+    }
+
+    @Test
     fun `show --json after the subcommand prints the envelope`() {
         val output = captureStdout {
             ShowCommand(query = { _, _ -> pointCard() }, terminate = noExit, discover = noDiscovery, store = emptyStore(), getenv = noEnv)

@@ -100,6 +100,8 @@ class DiffCommand(
             "~/.gradle/caches and ~/.m2 only.",
     ).flag()
 
+    private val release by releaseOption()
+
     private val repo by option(
         "--repo",
         help = "Maven repository base URL for --fetch (repeatable). Tried in flag order " +
@@ -150,6 +152,7 @@ class DiffCommand(
                 severityFilter = severityFilter,
                 failOn = failOnMode,
                 maxFindings = limit,
+                release = release,
             ),
         )
         ReadCommandSupport.finish(outcome, "diff", json, noColor, terminate)

@@ -97,10 +97,23 @@ internal object Javap {
         classpath: String,
         binaryName: String,
         timeoutMs: Long = defaultTimeoutMs,
+        multiRelease: Int? = null,
     ): RunOutcome =
         run(
             executable = javap,
-            args = listOf("-p", "-s", "-classpath", classpath, binaryName),
+            args = buildList {
+                add("-p")
+                add("-s")
+                // Flags precede the class name (L-018). javap spells this
+                // `--multi-release`; `javap --release` is an unknown option.
+                if (multiRelease != null) {
+                    add("--multi-release")
+                    add(multiRelease.toString())
+                }
+                add("-classpath")
+                add(classpath)
+                add(binaryName)
+            },
             binaryName = binaryName,
             timeoutMs = timeoutMs,
         )

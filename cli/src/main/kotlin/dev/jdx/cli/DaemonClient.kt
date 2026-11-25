@@ -715,10 +715,15 @@ public data class WarmRoots(
     val fetch: Boolean = false,
     val srcs: List<String> = emptyList(),
     val noJdk: Boolean = false,
+    /**
+     * Explicit `--release`. Non-null forces the cold path: a warm daemon has
+     * already opened its jars at the daemon JVM's feature.
+     */
+    val release: Int? = null,
 ) {
     internal fun hasExplicitRoots(): Boolean =
         jars.isNotEmpty() || coords.isNotEmpty() || repos.isNotEmpty() ||
-            fetch || srcs.isNotEmpty() || noJdk
+            fetch || srcs.isNotEmpty() || noJdk || release != null
 }
 
 /** One request in, one envelope line out; `null` on any failure (never throws). */

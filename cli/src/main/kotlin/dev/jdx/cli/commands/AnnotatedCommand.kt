@@ -117,6 +117,8 @@ class AnnotatedCommand(
         help = "Do not include the running JDK's stdlib (included by default).",
     ).flag()
 
+    private val release by releaseOption()
+
     private val coord by option(
         "--coord",
         help = "Maven coordinate root group:artifact:version (repeatable). Resolved from " +
@@ -196,6 +198,7 @@ class AnnotatedCommand(
                     fetch = fetch,
                     srcs = srcs,
                     noJdk = noJdk,
+                    release = release,
                 ),
                 noDaemon = effectiveNoDaemon(noDaemon),
                 json = json,
@@ -218,6 +221,7 @@ class AnnotatedCommand(
             allowFetch = fetch,
             repos = repo,
             srcs = srcs,
+            release = release,
         )) {
             is ReadCommandSupport.RootsOrFailure.Ready -> {
                 val outcome = query(

@@ -16,6 +16,7 @@ The running JDK's standard library is on every classpath (through `jrt:/`), pair
 | `--fetch` | permission to download `--coord` artifacts; without it, only local caches are used |
 | `--repo <url>` | an extra Maven repository, tried before Maven Central (repeatable) |
 | `--no-jdk` | removes the JDK |
+| `--release N` | multi-release feature to serve (`--multi-release` is the same flag). Omitted, the running JDK feature is used. `8` serves base entries only. Below 8 is a usage error. An explicit value stays in-process |
 
 `jdx usages` additionally takes `--src <dir>` for project source directories.
 

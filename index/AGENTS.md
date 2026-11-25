@@ -24,8 +24,10 @@ behaviour lives here** (adapters call in, never the reverse). `explicitApi()` is
 - `asm/AsmClassReader` — `ClassReader` with `SKIP_FRAMES` (never `SKIP_DEBUG`:
   parameter names live there). Rejects class files newer than the *running* JDK.
 -   `artifact/` — `ArtifactLoader` (jars, dirs, `jrt:/`),   `ZipSafety` (traversal +
-  zip-bomb caps), `SourcesPairing` (5 pairing rules), `MultiRelease` (warn, don't
-  resolve variants),   `ServiceEntries` (issue #25: base `META-INF/services` paths
+  zip-bomb caps), `SourcesPairing` (5 pairing rules), `MultiRelease` (resolve for
+  the running JDK or `--release N`, warn `MULTI_RELEASE_VARIANT` when a versioned
+  class wins; provenance names that release, base entries omit it so default
+  text stays identical),   `ServiceEntries` (issue #25: base `META-INF/services` paths
   + ServiceLoader file grammar), `ResourceEntries` (issue #25: non-class
   resource path predicate; versioned `META-INF/versions/` listed as stored),
   content-hash artifact identity. Dedup identical resolved roots before querying

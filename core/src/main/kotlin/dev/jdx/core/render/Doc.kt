@@ -220,7 +220,9 @@ public data class DocBlock(
     /** Text layout: ref header, source line, doc lines, truncation, warnings, next hint. */
     public fun renderText(color: Boolean = false): String {
         val out = mutableListOf(canonicalRef)
-        var source = "  source: ${provenance.firstOrNull()?.artifact ?: "?"} · $file:$startLine-$endLine"
+        val answered = provenance.firstOrNull()
+        var source = "  source: ${answered?.artifact ?: "?"} · $file:$startLine-$endLine"
+        if (answered?.release != null) source += " (release ${answered.release})"
         if (inheritedFrom != null) source += " (inherited from $inheritedFrom)"
         out.add(source)
         out.addAll(lines)

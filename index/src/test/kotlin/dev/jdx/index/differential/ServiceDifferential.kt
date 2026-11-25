@@ -90,7 +90,12 @@ internal object ServiceDifferential {
      * must fail loudly, never look like a soft skip), and only a completed
      * both-sides read becomes [Comparison.Compared].
      */
-    internal fun compare(jar: File, binaryName: String, javap: String): Comparison {
+    internal fun compare(
+        jar: File,
+        binaryName: String,
+        javap: String,
+        release: Int? = null,
+    ): Comparison {
         // T-065: names the model cannot represent (JFR `A$B$$C` shapes) fail in
         // the ref parser with exit 3 before any bytecode is read — skip them
         // here so the soak counts them as degradation, never as failure. The
@@ -110,7 +115,11 @@ internal object ServiceDifferential {
         val jvmView = isKotlinClass(jar, binaryName)
         val outcome = JdxService.members(
             binaryName,
-            JdxService.RootsSpec(jarSpecs = listOf(jar.absolutePath), includeJdk = false),
+            JdxService.RootsSpec(
+                jarSpecs = listOf(jar.absolutePath),
+                includeJdk = false,
+                release = release,
+            ),
             JdxService.MemberFilters(
                 access = ALL_VISIBILITIES,
                 view = if (jvmView) JdxService.MemberView.JVM else JdxService.MemberView.KOTLIN,
@@ -135,7 +144,7 @@ internal object ServiceDifferential {
         val actualRefs = listing.groups.flatMap { group -> group.rows }
             .map { it.canonicalRef }.toSet()
 
-        val javapLines = when (val outcome = Javap.tryRun(javap, jar.absolutePath, binaryName)) {
+        val javapLines = when (val outcome = Javap.tryRun(javap, jar.absolutePath, binaryName, multiRelease = release)) {
             is Javap.RunOutcome.Ok -> outcome.lines
             is Javap.RunOutcome.Unreadable ->
                 return Comparison.Skipped(

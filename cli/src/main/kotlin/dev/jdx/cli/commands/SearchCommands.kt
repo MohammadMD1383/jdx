@@ -108,6 +108,8 @@ class SearchCommand(
         help = "Do not include the running JDK's stdlib (included by default).",
     ).flag()
 
+    private val release by releaseOption()
+
     private val coord by option(
         "--coord",
         help = "Maven coordinate root group:artifact:version (repeatable). Resolved from " +
@@ -158,7 +160,7 @@ class SearchCommand(
                     limit = limit,
                 ),
                 flagWorkspace = effectiveWorkspace(workspace),
-                roots = WarmRoots(jars = jars, coords = coord, repos = repo, fetch = fetch, noJdk = noJdk),
+                roots = WarmRoots(jars = jars, coords = coord, repos = repo, fetch = fetch, noJdk = noJdk, release = release),
                 noDaemon = effectiveNoDaemon(noDaemon),
                 json = json,
                 terminate = terminate,
@@ -179,6 +181,7 @@ class SearchCommand(
             coords = coord,
             allowFetch = fetch,
             repos = repo,
+            release = release,
         )) {
             is ReadCommandSupport.RootsOrFailure.Ready -> {
                 val outcome = query(
@@ -244,6 +247,8 @@ class ResolveCommand(
         help = "Do not include the running JDK's stdlib (included by default).",
     ).flag()
 
+    private val release by releaseOption()
+
     private val coord by option(
         "--coord",
         help = "Maven coordinate root group:artifact:version (repeatable). Resolved from " +
@@ -286,7 +291,7 @@ class ResolveCommand(
         if (DaemonClient.serveWarmIfReady(
                 request = DaemonClient.resolveRequest(name = name, limit = limit),
                 flagWorkspace = effectiveWorkspace(workspace),
-                roots = WarmRoots(jars = jars, coords = coord, repos = repo, fetch = fetch, noJdk = noJdk),
+                roots = WarmRoots(jars = jars, coords = coord, repos = repo, fetch = fetch, noJdk = noJdk, release = release),
                 noDaemon = effectiveNoDaemon(noDaemon),
                 json = json,
                 terminate = terminate,
@@ -307,6 +312,7 @@ class ResolveCommand(
             coords = coord,
             allowFetch = fetch,
             repos = repo,
+            release = release,
         )) {
             is ReadCommandSupport.RootsOrFailure.Ready -> {
                 val outcome = query(name, resolved.roots, limit)
@@ -362,6 +368,8 @@ class LsCommand(
         help = "Do not include the running JDK's stdlib (included by default).",
     ).flag()
 
+    private val release by releaseOption()
+
     private val coord by option(
         "--coord",
         help = "Maven coordinate root group:artifact:version (repeatable). Resolved from " +
@@ -404,7 +412,7 @@ class LsCommand(
         if (DaemonClient.serveWarmIfReady(
                 request = DaemonClient.lsRequest(packageGlob = packageGlob, limit = limit),
                 flagWorkspace = effectiveWorkspace(workspace),
-                roots = WarmRoots(jars = jars, coords = coord, repos = repo, fetch = fetch, noJdk = noJdk),
+                roots = WarmRoots(jars = jars, coords = coord, repos = repo, fetch = fetch, noJdk = noJdk, release = release),
                 noDaemon = effectiveNoDaemon(noDaemon),
                 json = json,
                 terminate = terminate,
@@ -425,6 +433,7 @@ class LsCommand(
             coords = coord,
             allowFetch = fetch,
             repos = repo,
+            release = release,
         )) {
             is ReadCommandSupport.RootsOrFailure.Ready -> {
                 val outcome = query(packageGlob, resolved.roots, limit)
@@ -490,6 +499,8 @@ class TreeCommand(
         help = "Do not include the running JDK's stdlib (included by default).",
     ).flag()
 
+    private val release by releaseOption()
+
     private val coord by option(
         "--coord",
         help = "Maven coordinate root group:artifact:version (repeatable). Resolved from " +
@@ -537,7 +548,7 @@ class TreeCommand(
                     limit = limit,
                 ),
                 flagWorkspace = effectiveWorkspace(workspace),
-                roots = WarmRoots(jars = jars, coords = coord, repos = repo, fetch = fetch, noJdk = noJdk),
+                roots = WarmRoots(jars = jars, coords = coord, repos = repo, fetch = fetch, noJdk = noJdk, release = release),
                 noDaemon = effectiveNoDaemon(noDaemon),
                 json = json,
                 terminate = terminate,
@@ -558,6 +569,7 @@ class TreeCommand(
             coords = coord,
             allowFetch = fetch,
             repos = repo,
+            release = release,
         )) {
             is ReadCommandSupport.RootsOrFailure.Ready -> {
                 val outcome = query(artifact, resolved.roots, depth, counts, limit)

@@ -20,11 +20,12 @@ public fun renderSourceLine(
 ): String {
     val artifact = provenance?.artifact ?: "?"
     val range = "$file:$startLine-$endLine"
+    val releasePart = if (provenance?.release == null) "" else " (release ${provenance.release})"
     return when (provenance?.origin) {
         Origin.DECOMPILED_VINEFLOWER ->
-            "source: decompiled by vineflower from $artifact · $range  ⚠ reconstructed"
+            "source: decompiled by vineflower from $artifact · $range$releasePart  ⚠ reconstructed"
         Origin.DECOMPILED_JAVAP ->
-            "source: disassembled by javap from $artifact · $range  ⚠ reconstructed"
-        else -> "source: $artifact · $range"
+            "source: disassembled by javap from $artifact · $range$releasePart  ⚠ reconstructed"
+        else -> "source: $artifact · $range$releasePart"
     }
 }
