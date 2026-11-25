@@ -103,6 +103,8 @@ jdx doctor
 index, Kotlin module, startup archive, daemon, workspace and agent setup. It exits `6` when a
 check fails, so scripts can gate on it.
 
+Reference: [Print the jdx version](https://mohammadmd1383.github.io/jdx/docs/reference/version/).
+
 ## Upgrade
 
 Release installs update themselves:
@@ -113,6 +115,7 @@ jdx upgrade             # install it
 jdx upgrade --version v1.2.0
 ```
 
+Reference: [Self-update from GitHub Releases](https://mohammadmd1383.github.io/jdx/docs/reference/upgrade/).
 See the [changelog](https://mohammadmd1383.github.io/jdx/changelog/) for what changed.
 
 ## Build from source
@@ -130,7 +133,7 @@ On Windows (from a checkout):
 ```
 
 The Gradle wrapper is the only build entry point — no system Gradle or Maven is needed. See
-[`CONTRIBUTING.md`](../../CONTRIBUTING.md) for the development loop.
+[how to contribute](../../CONTRIBUTING.md) for the development loop.
 
 ## Uninstall
 

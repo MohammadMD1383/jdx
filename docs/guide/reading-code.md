@@ -112,7 +112,8 @@ Finding which jar holds a class, including a glob of `libs/*.jar` or a Maven coo
 Kotlin binaries are read through their `@Metadata`, so jdx shows true Kotlin declarations —
 `suspend` functions, properties, default arguments, `@JvmName` mappings — rather than the JVM
 projection. `--view jvm` shows the raw JVM view (getters, `Continuation` parameters, mangled
-names) when that is what you need.
+names) when that is what you need. Suspend, nullability, and file facades are
+[Read a Kotlin library API from a compiled jar](kotlin-jar-api.md).
 
 Reading Kotlin *sources* (`body`, `source`, `doc` on `.kt` files) uses the Kotlin compiler's
 parser, which is installed separately on demand to keep jdx small:

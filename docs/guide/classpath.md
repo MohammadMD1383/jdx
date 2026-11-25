@@ -63,6 +63,8 @@ jdx ws use myapp            # default when neither -w nor JDX_WORKSPACE is set
 jdx ws use --clear
 ```
 
+Reference: [Project and library configuration](https://mohammadmd1383.github.io/jdx/docs/reference/ws/).
+
 Explicit `--jars` / `--coord` flags always merge in front of the selected workspace.
 
 ## Project auto-discovery

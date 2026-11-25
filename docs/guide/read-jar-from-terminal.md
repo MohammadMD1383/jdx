@@ -89,7 +89,7 @@ $ jdx services java.sql.Driver --coord org.postgresql:postgresql:42.7.4 --fetch 
 
 Two or more `--cat` matches exit 2 and list `path --in artifact` candidates. Tighten the pattern, or add `--in`, then `--cat` that one path. Binary payloads are not dumped. Nothing matched exits 1. The PostgreSQL coordinate is a separate artifact from Gson, so that command passes `--fetch` as well.
 
-Reference: [`manifest`](https://mohammadmd1383.github.io/jdx/docs/reference/manifest/), [`resources`](https://mohammadmd1383.github.io/jdx/docs/reference/resources/), [`services`](https://mohammadmd1383.github.io/jdx/docs/reference/services/), [`literals`](https://mohammadmd1383.github.io/jdx/docs/reference/literals/).
+Reference: [`manifest`](https://mohammadmd1383.github.io/jdx/docs/reference/manifest/), [`resources`](https://mohammadmd1383.github.io/jdx/docs/reference/resources/), [META-INF/services SPI providers](https://mohammadmd1383.github.io/jdx/docs/reference/services/), [`literals`](https://mohammadmd1383.github.io/jdx/docs/reference/literals/).
 
 ## Maven coordinates and JDK classes
 

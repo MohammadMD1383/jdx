@@ -11,6 +11,11 @@ class ReferencePages(
     private val runner: JdxRunner,
     private val lastModified: String?,
 ) {
+    /** A Related-section target: another command, or a guide/page by its own title. */
+    sealed interface RelatedTarget {
+        data class Command(val name: String) : RelatedTarget
+        data class Page(val anchor: String, val path: String) : RelatedTarget
+    }
     fun commandPath(name: String): String = "docs/reference/$name/"
 
     val cheatSheetPath = "docs/reference/cheat-sheet/"
@@ -81,44 +86,58 @@ class ReferencePages(
         html.append("</details>\n")
         markdown.append("```console\n$helpCommand\n```\n\n")
 
-        RELATED_GUIDES[name]?.let { (guideTitle, guidePath) ->
-            section(html, markdown, "Learn more", "learn-more")
-            html.append("<p>Guide: <a href=\"${site.rootRelative(guidePath)}\">${Html.text(guideTitle)}</a> · ")
-            html.append("<a href=\"${site.rootRelative("docs/reference/")}\">All commands</a></p>\n")
-            markdown.append("Guide: [$guideTitle](${site.absolute(guidePath)}) · [All commands](${site.absolute("docs/reference/")})\n")
-        }
-        val seeAlso = SEE_ALSO[name].orEmpty()
-        if (seeAlso.isNotEmpty()) {
-            html.append("<p>See also: ")
-            html.append(
-                seeAlso.joinToString(" · ") { (guideTitle, guidePath) ->
-                    "<a href=\"${site.rootRelative(guidePath)}\">${Html.text(guideTitle)}</a>"
-                },
-            )
-            html.append("</p>\n")
-            markdown.append("\nSee also: ")
-            markdown.append(
-                seeAlso.joinToString(" · ") { (guideTitle, guidePath) ->
-                    "[$guideTitle](${site.absolute(guidePath)})"
-                },
-            )
-            markdown.append("\n")
-        }
-        RELATED_COMMANDS[name]?.let { related ->
-            html.append("<p>Related commands: ")
-            html.append(
-                related.joinToString(" · ") { other ->
-                    "<a href=\"${site.rootRelative(commandPath(other))}\"><code>jdx ${Html.text(other)}</code></a>"
-                },
-            )
-            html.append("</p>\n")
-            markdown.append("\nRelated commands: ")
-            markdown.append(
-                related.joinToString(" · ") { other ->
-                    "[`jdx $other`](${site.absolute(commandPath(other))})"
-                },
-            )
-            markdown.append("\n")
+        val related = relatedLinks(name)
+        if (related != null) {
+            // Descriptive anchors (the help-sheet summary, or the guide's own title), so a
+            // crawler can tell the pages apart. Replaces the single "Learn more" line.
+            section(html, markdown, "Related", "related")
+            html.append("<ul class=\"command-index\">\n")
+            for (link in related) {
+                html.append("<li><a href=\"${site.rootRelative(link.path)}\">${link.html}</a></li>\n")
+                val suffix = link.commandName?.let { " (`jdx $it`)" }.orEmpty()
+                markdown.append("- [${markdownLinkText(link.markdownLabel)}](${site.absolute(link.path)})$suffix\n")
+            }
+            html.append("</ul>\n")
+        } else {
+            RELATED_GUIDES[name]?.let { (guideTitle, guidePath) ->
+                section(html, markdown, "Learn more", "learn-more")
+                html.append("<p>Guide: <a href=\"${site.rootRelative(guidePath)}\">${Html.text(guideTitle)}</a> · ")
+                html.append("<a href=\"${site.rootRelative("docs/reference/")}\">All commands</a></p>\n")
+                markdown.append("Guide: [$guideTitle](${site.absolute(guidePath)}) · [All commands](${site.absolute("docs/reference/")})\n")
+            }
+            val seeAlso = SEE_ALSO[name].orEmpty()
+            if (seeAlso.isNotEmpty()) {
+                html.append("<p>See also: ")
+                html.append(
+                    seeAlso.joinToString(" · ") { (guideTitle, guidePath) ->
+                        "<a href=\"${site.rootRelative(guidePath)}\">${Html.text(guideTitle)}</a>"
+                    },
+                )
+                html.append("</p>\n")
+                markdown.append("\nSee also: ")
+                markdown.append(
+                    seeAlso.joinToString(" · ") { (guideTitle, guidePath) ->
+                        "[$guideTitle](${site.absolute(guidePath)})"
+                    },
+                )
+                markdown.append("\n")
+            }
+            RELATED_COMMANDS[name]?.let { relatedCommands ->
+                html.append("<p>Related commands: ")
+                html.append(
+                    relatedCommands.joinToString(" · ") { other ->
+                        "<a href=\"${site.rootRelative(commandPath(other))}\"><code>jdx ${Html.text(other)}</code></a>"
+                    },
+                )
+                html.append("</p>\n")
+                markdown.append("\nRelated commands: ")
+                markdown.append(
+                    relatedCommands.joinToString(" · ") { other ->
+                        "[`jdx $other`](${site.absolute(commandPath(other))})"
+                    },
+                )
+                markdown.append("\n")
+            }
         }
 
         val path = commandPath(name)
@@ -128,6 +147,7 @@ class ReferencePages(
             if (help.subcommands.isNotEmpty()) add(HeadingInfo(2, "Subcommands", "subcommands"))
             if (help.options.isNotEmpty()) add(HeadingInfo(2, "Options", "options"))
             if (help.arguments.isNotEmpty()) add(HeadingInfo(2, "Arguments", "arguments"))
+            if (name in RELATED) add(HeadingInfo(2, "Related", "related"))
         }
         return Page(
             path = path,
@@ -237,6 +257,106 @@ class ReferencePages(
         return "$ $line\n" + shown.joinToString("\n")
     }
 
+    /** One descriptive link in a command page's Related list. [html] is the anchor inner HTML. */
+    private data class RelatedLink(
+        val html: String,
+        val markdownLabel: String,
+        val path: String,
+        val commandName: String?,
+    )
+
+    /** The generated "Command pages" block prepended to `/docs/reference/`. */
+    data class CommandCatalogue(val html: String, val markdown: String, val headings: List<HeadingInfo>)
+
+    /**
+     * Grouped links from the command catalogue (`/docs/reference/`) to every command page.
+     * The anchor is the one-line summary `jdx help` prints, plus the command name — never
+     * the bare name alone. Fails the build when a command is missing from [COMMAND_GROUPS]
+     * or from the help sheet, so a new command cannot ship without a descriptive link.
+     */
+    fun commandCatalogue(): CommandCatalogue {
+        val names = facts.commandNames.toSet()
+        val grouped = COMMAND_GROUPS.flatMap { it.second }
+        val duplicates = grouped.groupingBy { it }.eachCount().filterValues { it > 1 }.keys
+        if (duplicates.isNotEmpty()) {
+            throw SiteBuildException("COMMAND_GROUPS lists ${duplicates.sorted()} more than once")
+        }
+        val missing = (names - grouped.toSet()).sorted()
+        val extra = (grouped.toSet() - names).sorted()
+        if (missing.isNotEmpty() || extra.isNotEmpty()) {
+            throw SiteBuildException(
+                "COMMAND_GROUPS does not match `jdx --help` (missing $missing, extra $extra). " +
+                    "Add the command to a group in ReferencePages.",
+            )
+        }
+        val html = StringBuilder()
+        val markdown = StringBuilder()
+        val headings = mutableListOf<HeadingInfo>()
+        val intro = "Each command has its own page, generated from `jdx <command> --help`. " +
+            "The link is the one-line summary `jdx help` prints."
+        html.append("<h2 id=\"command-pages\">Command pages")
+        html.append("<a class=\"anchor\" href=\"#command-pages\" aria-label=\"Link to this section\">#</a></h2>\n")
+        html.append("<p>${Html.inlineCode(intro)}</p>\n")
+        markdown.append("## Command pages\n\n$intro\n\n")
+        headings += HeadingInfo(2, "Command pages", "command-pages")
+        for ((title, commands) in COMMAND_GROUPS) {
+            val id = "command-pages-" + title.lowercase().filter { it.isLetterOrDigit() || it == ' ' }.trim().replace(' ', '-')
+            html.append("<h3 id=\"$id\">${Html.text(title)}")
+            html.append("<a class=\"anchor\" href=\"#$id\" aria-label=\"Link to this section\">#</a></h3>\n")
+            html.append("<ul class=\"command-index\">\n")
+            markdown.append("### $title\n\n")
+            headings += HeadingInfo(3, title, id)
+            for (name in commands) {
+                val summary = helpSummary(name)
+                val path = commandPath(name)
+                html.append("<li><a href=\"${site.rootRelative(path)}\">")
+                html.append("${Html.inlineCode(summary)} (<code>jdx ${Html.text(name)}</code>)</a></li>\n")
+                markdown.append("- [${markdownLinkText(summary)}](${site.absolute(path)}) (`jdx $name`)\n")
+            }
+            html.append("</ul>\n")
+            markdown.append("\n")
+        }
+        return CommandCatalogue(html.toString(), markdown.toString().trimEnd() + "\n", headings)
+    }
+
+    /** The `jdx help` one-liner for [name]. Missing rows fail the build rather than inventing a label. */
+    fun helpSummary(name: String): String =
+        facts.helpRow(name)?.summary
+            ?: throw SiteBuildException("no `jdx help` summary for `$name` — add it to HELP_ROWS")
+
+    /**
+     * 2–5 descriptive links for the commands Google has not discovered from sibling pages.
+     * Command anchors are [helpSummary]; page anchors are that page's own title.
+     */
+    private fun relatedLinks(name: String): List<RelatedLink>? {
+        val targets = RELATED[name] ?: return null
+        if (targets.size !in 2..5) {
+            throw SiteBuildException("`jdx $name` Related section has ${targets.size} links; keep 2–5")
+        }
+        return targets.map { target ->
+            when (target) {
+                is RelatedTarget.Command -> {
+                    if (target.name !in facts.commandNames) {
+                        throw SiteBuildException("Related link from `$name` names unknown command `${target.name}`")
+                    }
+                    val summary = helpSummary(target.name)
+                    RelatedLink(
+                        html = "${Html.inlineCode(summary)} (<code>jdx ${Html.text(target.name)}</code>)",
+                        markdownLabel = summary,
+                        path = commandPath(target.name),
+                        commandName = target.name,
+                    )
+                }
+                is RelatedTarget.Page -> RelatedLink(
+                    html = Html.text(target.anchor),
+                    markdownLabel = target.anchor,
+                    path = target.path,
+                    commandName = null,
+                )
+            }
+        }
+    }
+
     private fun section(html: StringBuilder, markdown: StringBuilder, title: String, id: String) {
         html.append("<h2 id=\"$id\">${Html.text(title)}<a class=\"anchor\" href=\"#$id\" aria-label=\"Link to this section\">#</a></h2>\n")
         markdown.append("## $title\n\n")
@@ -267,6 +387,10 @@ class ReferencePages(
     }
 
     private fun cell(text: String): String = text.replace("|", "\\|")
+
+    /** CommonMark link text: escape the punctuation that would end the link or start code. */
+    private fun markdownLinkText(text: String): String =
+        text.replace("\\", "\\\\").replace("[", "\\[").replace("]", "\\]").replace("`", "\\`")
 
     /**
      * The parameter cell: the server's description, plus enum, default and examples
@@ -374,10 +498,13 @@ class ReferencePages(
             "callers" to listOf(MIXIN_GUIDE),
             "calls" to listOf(MIXIN_GUIDE),
             "signature" to listOf(MIXIN_GUIDE, KOTLIN_JAR_GUIDE),
-            "body" to listOf(MIXIN_GUIDE),
             "members" to listOf(KOTLIN_JAR_GUIDE),
             "kotlin" to listOf(KOTLIN_JAR_GUIDE),
-            "doc" to listOf("Read Javadoc from a jar in the terminal" to "docs/read-javadoc-from-jar/"),
+            "doc" to listOf(
+                "Read Javadoc from a jar in the terminal" to "docs/read-javadoc-from-jar/",
+                KOTLIN_JAR_GUIDE,
+            ),
+            "body" to listOf(MIXIN_GUIDE, KOTLIN_JAR_GUIDE),
             "diff" to listOf(VERSION_DIFF_GUIDE),
         )
 
@@ -385,6 +512,83 @@ class ReferencePages(
          * Sibling command pages, so a reader (and a crawler) can move between the
          * reference pages for one task without going back to the catalogue.
          */
+        /**
+         * Every top-level command, in the same groups as `docs/COMMANDS.md`. The catalogue
+         * page links each one with its `jdx help` summary. A command missing here fails the build.
+         */
+        val COMMAND_GROUPS: List<Pair<String, List<String>>> = listOf(
+            "Read" to listOf("show", "members", "outline", "signature", "doc", "body", "source"),
+            "Search and browse" to listOf("search", "resolve", "ls", "tree"),
+            "Graph" to listOf(
+                "usages", "annotated", "hierarchy", "implementors", "callers", "calls",
+                "samples", "literals", "services", "modules", "manifest", "resources",
+            ),
+            "API diff" to listOf("diff"),
+            "Environment" to listOf("version", "upgrade", "doctor", "setup", "ws", "cache", "kotlin", "help", "bench"),
+            "Serving" to listOf("daemon", "mcp", "serve", "batch"),
+        )
+
+        private fun cmd(name: String) = RelatedTarget.Command(name)
+        private fun page(anchor: String, path: String) = RelatedTarget.Page(anchor, path)
+
+        /**
+         * Commands reported as unknown to Google. Each list is 2–5 links: related commands
+         * (anchor = the `jdx help` summary) and the guide that already demonstrates the command
+         * (anchor = that guide's title).
+         */
+        val RELATED: Map<String, List<RelatedTarget>> = mapOf(
+            "batch" to listOf(
+                cmd("daemon"),
+                cmd("serve"),
+                cmd("mcp"),
+                page("MCP, daemon, HTTP & batch", "docs/serving/"),
+                page("An MCP server for Java and Kotlin bytecode", "docs/java-mcp-server/"),
+            ),
+            "bench" to listOf(
+                page("MCP, daemon, HTTP & batch", "docs/serving/#performance"),
+                cmd("daemon"),
+                cmd("members"),
+                cmd("search"),
+            ),
+            "daemon" to listOf(
+                page("MCP, daemon, HTTP & batch", "docs/serving/"),
+                page("An MCP server for Java and Kotlin bytecode", "docs/java-mcp-server/"),
+                cmd("batch"),
+                cmd("serve"),
+                cmd("mcp"),
+            ),
+            "help" to listOf(
+                page("Agent cheat sheet", "docs/reference/cheat-sheet/"),
+                page("Use with AI agents", "docs/ai-agents/"),
+                cmd("setup"),
+                cmd("mcp"),
+            ),
+            "services" to listOf(
+                page("Usages, hierarchy & calls", "docs/navigating-code/#spi--serviceloader-registrations"),
+                page("Find which JAR contains a class", "docs/find-class-in-jar/"),
+                cmd("modules"),
+                cmd("resources"),
+            ),
+            "upgrade" to listOf(
+                cmd("version"),
+                page("Installation", "docs/installation/"),
+                page("Changelog", "changelog/"),
+                cmd("doctor"),
+            ),
+            "version" to listOf(
+                cmd("upgrade"),
+                page("Installation", "docs/installation/"),
+                cmd("doctor"),
+            ),
+            "ws" to listOf(
+                page("Classpath & workspaces", "docs/classpath/"),
+                page("An MCP server for Java and Kotlin bytecode", "docs/java-mcp-server/"),
+                cmd("batch"),
+                cmd("daemon"),
+                cmd("cache"),
+            ),
+        )
+
         val RELATED_COMMANDS: Map<String, List<String>> = mapOf(
             "search" to listOf("resolve", "members", "hierarchy"),
             "resolve" to listOf("search", "members", "hierarchy"),

@@ -119,6 +119,7 @@ Bytecode is parsed with ASM. Inspected classes are never loaded, so no static in
 ## Where next
 
 - [Read and decompile a JAR](read-jar-from-terminal.md) — one method, source, or a decompilation, after you know the class.
+- [META-INF/services SPI providers](https://mohammadmd1383.github.io/jdx/docs/reference/services/) — `jdx services`.
 - [Read Javadoc from a jar](read-javadoc-from-jar.md) — the comment on that class or method.
 - [Read a Kotlin library API from a compiled jar](kotlin-jar-api.md) — suspend, nullability, and properties from `@Metadata`.
 - [Minecraft mods](minecraft-mods.md) — the mapped jar, mixin callers, and a version diff.

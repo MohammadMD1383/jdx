@@ -7,12 +7,12 @@ jdx is a tool for AI agents that is itself written almost entirely by AI agents,
 Each contribution starts from a cold context. Nothing an earlier agent "knew" survives unless
 it is written down, so the repository is organised to be resumable by a stranger:
 
-- [`AGENTS.md`](../../AGENTS.md) is the entry point: what the project is, the non-negotiable
+- [The contributor rules (AGENTS.md)](../../AGENTS.md) are the entry point: what the project is, the non-negotiable
   principles, decisions the owner has locked (and how to reverse one), exit codes, build and
   test rules.
 - Every module has its own `AGENTS.md` with its key files, invariants and known gotchas — an
   agent reads only the notes for the code it touches.
-- [`CONTRIBUTING.md`](../../CONTRIBUTING.md) defines "done" for a command: behaviour, adapters,
+- [How to contribute](../../CONTRIBUTING.md) defines "done" for a command: behaviour, adapters,
   text and JSON renderers, exit codes, truncation, golden tests, a generative test family,
   documentation and an issue update.
 - [GitHub Issues](https://github.com/MohammadMD1383/jdx/issues) are the roadmap and the list
@@ -34,7 +34,7 @@ family for every behaviour, on top of examples:
 - **Mutation testing** — the core must kill at least 80 % of mutants; line-coverage gates on
   the other engine modules.
 
-The full strategy is in the [testing guide](../TESTING.md).
+The full strategy is in the [testing strategy](../TESTING.md). The design those rules implement is the [design specification](../PROPOSAL.md).
 
 ## Dogfooding
 

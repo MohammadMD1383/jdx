@@ -65,7 +65,12 @@ length; the H1 stays the on-page title and the Open Graph title.
 - `SiteBuilder.kt` — orchestration, validation, output map. `SiteMain.kt` — entry + preview server.
 - `SiteManifest.kt` — doc → URL → section. `Layout.kt` — HTML shell, head/SEO/social meta, nav.
 - `CliFacts.kt` — everything read from the binary. `ReferencePages.kt` — per-command pages,
-  cheat sheet, MCP tools (+ `EXAMPLES`, executed). The MCP tools page copies each
+  cheat sheet, MCP tools (+ `EXAMPLES`, executed). The command catalogue page
+  (`docs/COMMANDS.md` → `/docs/reference/`) gets a generated "Command pages" section:
+  every command, grouped, linked with its `jdx help` one-line summary. Commands in
+  `RELATED` get a "Related" section (2–5 descriptive anchors) instead of the single
+  learn-more line. A command missing from `COMMAND_GROUPS` or from the help sheet
+  fails the build. The MCP tools page copies each
   parameter's description and, when `tools/list` sends them, its `enum`, `default`
   and `examples`. `ProductPages.kt` — landing, integrations, FAQ, changelog, docs index, 404.
 - `SeoFiles.kt` (sitemap, robots, llms.txt, llms-full.txt), `StructuredData.kt` (JSON-LD),
