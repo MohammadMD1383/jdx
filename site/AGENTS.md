@@ -85,6 +85,11 @@ length; the H1 stays the on-page title and the Open Graph title.
 
 - CSS is inlined into every page on purpose (one request, no render-blocking). Keep it small;
   no web fonts, no frameworks, no client-side rendering.
+- Card grids and prose wrap long tokens (`overflow-wrap: anywhere`, `min-width: 0`,
+  `minmax(min(100%, …), 1fr)`). A usage line, URL, or descriptor must stay inside its card
+  and must not widen the page (#133). Command labels insert a `<wbr>` after each `|` so the
+  break prefers the bar. Do not put `height: 100%` back on a card link: the percentage height
+  makes the row height cyclical and the topics stop sharing a top edge (#132).
 - Every page gets an `index.md` twin; agents read Markdown far better than HTML.
 - `robots.txt` / `llms.txt` only count at a host root. On `github.io/jdx/` they are ignored by
   crawlers; a custom domain (`SITE_BASE_URL` repo variable) fixes that and writes `CNAME`.

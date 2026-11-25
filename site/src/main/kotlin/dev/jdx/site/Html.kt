@@ -45,6 +45,14 @@ object Html {
     fun inlineCode(value: String): String =
         value.split('`').mapIndexed { index, part -> if (index % 2 == 1) "<code>${text(part)}</code>" else text(part) }
             .joinToString("")
+
+    /**
+     * Escaped text with a wrap opportunity after every `|`. Usage lines such as
+     * `jdx setup --agent opencode|claude-code|…` are one token to the browser; without a
+     * break they paint out of the card (issue #133). The break is a `<wbr>`, so copying
+     * the label still yields the original command.
+     */
+    fun withSoftBreaks(value: String): String = text(value).replace("|", "|<wbr>")
 }
 
 /** Minimal JSON writer for JSON-LD. Deterministic key order. */

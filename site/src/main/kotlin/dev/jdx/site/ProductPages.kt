@@ -166,7 +166,7 @@ class ProductPages(
         for (row in facts.helpRows) {
             val name = row.command.substringBefore(' ')
             if (name !in facts.commandNames) continue
-            append("<li><a href=\"${site.rootRelative(reference.commandPath(name))}\"><code>jdx ${Html.text(row.command)}</code>")
+            append("<li><a href=\"${site.rootRelative(reference.commandPath(name))}\"><code>${Html.withSoftBreaks("jdx ${row.command}")}</code>")
             append("<span>${Html.inlineCode(row.summary)}</span></a></li>")
         }
         append("</ul></div></section>\n")
