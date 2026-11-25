@@ -15,8 +15,10 @@ import java.nio.file.Path
  *
  * §15 targets are advisory: rows print `ok`/`OVER` but the report never
  * fails — machine variance gates nothing (the `verifyTier1Budget`
- * precedent). `usages` stays out: the live scan has no indexed path yet
- * (D-043), so a `≤ 150 ms` row would only document the known gap.
+ * precedent). `usages` stays out of [CASES] (issue #11): the live scan has
+ * no indexed path yet (D-043), so a `≤ 150 ms` row would only document the
+ * known gap. [cases] appends it only when the caller passes
+ * `--include-usages`, and that row carries [USAGES_LIVE_SCAN_NOTE].
  *
  * Timings are inherently non-deterministic (the disciplined exception to
  * AGENTS.md, like `doctor` sizes); case order, labels and targets are
@@ -29,7 +31,10 @@ public object BenchRunner {
     /** One benchmarked operation and its §15 target in milliseconds. */
     public data class Case(val name: String, val targetMs: Long)
 
-    /** The fixed workload, in presentation order. */
+    /**
+     * The fixed workload, in presentation order. `usages` is not here: the
+     * default table stays byte-identical until an indexed path exists.
+     */
     public val CASES: List<Case> = listOf(
         Case("load", 8000),
         Case("show", 250),
@@ -38,12 +43,36 @@ public object BenchRunner {
         Case("hierarchy", 250),
     )
 
-    /** One timed case: the median over the iterations and whether it met its target. */
+    /** §15 `usages` over 20k classes. Meaningful once an indexed path exists. */
+    public const val USAGES_TARGET_MS: Long = 150
+
+    /**
+     * Label on the opt-in usages row. The live scan has no indexed path yet,
+     * so the row only documents that gap (issue #11).
+     */
+    public const val USAGES_LIVE_SCAN_NOTE: String = "no indexed path yet (live scan)"
+
+    /** The usages row, appended by [cases] only when the caller opts in. */
+    public val USAGES_CASE: Case = Case("usages", USAGES_TARGET_MS)
+
+    /**
+     * [CASES], plus [USAGES_CASE] when [includeUsages] is set. Default is
+     * the five-row workload, so a bench with the flag off cannot grow a row.
+     */
+    public fun cases(includeUsages: Boolean): List<Case> =
+        if (includeUsages) CASES + USAGES_CASE else CASES
+
+    /**
+     * One timed case: the median over the iterations and whether it met its
+     * target. [note] is set only on the opt-in usages row; null keeps the
+     * default row byte-identical in text and JSON.
+     */
     public data class Row(
         val name: String,
         val targetMs: Long,
         val medianMs: Long,
         val withinTarget: Boolean,
+        val note: String? = null,
     )
 
     /** The full report: what was measured and how many classes it covered. */
@@ -116,21 +145,32 @@ public object BenchRunner {
         return (clock() - start) / 1_000_000
     }
 
-    /** Runs one case [iterations] times and folds the timings into a [Row]. */
-    public fun runCase(name: String, targetMs: Long, iterations: Int, block: () -> Any?): Row {
+    /**
+     * Runs one case [iterations] times and folds the timings into a [Row].
+     * [note] is carried through unchanged — it never affects the median.
+     */
+    public fun runCase(
+        name: String,
+        targetMs: Long,
+        iterations: Int,
+        note: String? = null,
+        block: () -> Any?,
+    ): Row {
         val timings = ArrayList<Long>(iterations)
         repeat(iterations) {
             timings.add(timeOnce(System::nanoTime, block))
         }
         val medianMs = median(timings)
-        return Row(name, targetMs, medianMs, medianMs <= targetMs)
+        return Row(name, targetMs, medianMs, medianMs <= targetMs, note)
     }
 
     /**
      * Runs the full workload: `load` re-opens the [jarSpecs] artifacts and
      * ASM-reads every class (the "first index" proxy); the query cases run
-     * through [service] over [roots]. Returns the report; throws on
-     * unreadable artifacts.
+     * through [service] over [roots]. [includeUsages] appends a `usages` row
+     * that calls the current live scan ([JdxService.usages]) and labels it
+     * [USAGES_LIVE_SCAN_NOTE]. Returns the report; throws on unreadable
+     * artifacts. A slow row is `OVER`; this function does not fail the run.
      */
     public fun run(
         label: String,
@@ -138,14 +178,16 @@ public object BenchRunner {
         roots: JdxService.RootsSpec,
         service: JdxService = JdxService,
         iterations: Int = 3,
+        includeUsages: Boolean = false,
     ): Report {
         val jarPaths = expandSpecs(jarSpecs)
         val names = listClassNames(jarSpecs)
         require(names.isNotEmpty()) { "no classes to benchmark in $label" }
         val refs = sampleRefs(names)
         val showRef = refs[0]
-        val rows = ArrayList<Row>(CASES.size)
-        for (case in CASES) {
+        val selected = cases(includeUsages)
+        val rows = ArrayList<Row>(selected.size)
+        for (case in selected) {
             val row = when (case.name) {
                 "load" -> runCase(case.name, case.targetMs, iterations) {
                     for (jar in jarPaths) {
@@ -169,6 +211,11 @@ public object BenchRunner {
                 }
                 "hierarchy" -> runCase(case.name, case.targetMs, iterations) {
                     service.hierarchy(showRef, roots)
+                }
+                "usages" -> runCase(case.name, case.targetMs, iterations, note = USAGES_LIVE_SCAN_NOTE) {
+                    // Live-roots scan (D-043). The result is discarded; the
+                    // row only times the scan and names the missing index.
+                    service.usages(showRef, roots)
                 }
                 else -> runCase(case.name, case.targetMs, iterations) { }
             }

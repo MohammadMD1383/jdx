@@ -39,7 +39,10 @@ import kotlin.system.exitProcess
  *
  * §15 targets are advisory: rows print `ok`/`OVER` but success always exits
  * 0 — machine variance gates nothing (the `verifyTier1Budget` precedent).
- * Always runs in-process (no daemon path — the point is cold timing).
+ * The usages row stays omitted unless `--include-usages` (issue #11): there
+ * is no indexed path yet, so that row times the live scan and is labelled
+ * "no indexed path yet (live scan)". Always runs in-process (no daemon path
+ * — the point is cold timing).
  *
  * Exits: 0 measured · 1 no classes to benchmark · 3 usage error (bad
  * `--iterations`) · 4 no roots · 5 artifact read error · 6 internal error.
@@ -50,8 +53,16 @@ class BenchCommand(
     private val getenv: (String) -> String? = { name -> System.getenv(name) },
     private val discover: ProjectDiscoveryFn? = null,
     private val minecraftProbe: () -> Path? = ::defaultMinecraftProbe,
-    private val bench: (label: String, jarSpecs: List<String>, roots: JdxService.RootsSpec, iterations: Int) -> BenchRunner.Report =
-        { label, jarSpecs, roots, iterations -> BenchRunner.run(label, jarSpecs, roots, JdxService, iterations) },
+    private val bench: (
+        label: String,
+        jarSpecs: List<String>,
+        roots: JdxService.RootsSpec,
+        iterations: Int,
+        includeUsages: Boolean,
+    ) -> BenchRunner.Report =
+        { label, jarSpecs, roots, iterations, includeUsages ->
+            BenchRunner.run(label, jarSpecs, roots, JdxService, iterations, includeUsages)
+        },
     private val printer: (String) -> Unit = ::println,
 ) : CoreCliktCommand(name = "bench") {
     override fun help(context: Context): String =
@@ -59,8 +70,12 @@ class BenchCommand(
             "against the resolved roots and print the timing table with PROPOSAL.md §15 targets. " +
             "Roots resolve like the read commands (--jars plus the selected workspace plus the JDK " +
             "unless --no-jdk); with no explicit roots and no workspace selected, the local " +
-            "minecraft-client.jar is used when present. Targets are advisory: success always " +
-            "exits 0. Example: jdx bench --iterations 1."
+            "minecraft-client.jar under ~/.gradle/caches/fabric-loom/ is used when present " +
+            "(the scale fixture; gson is the everyday fixture, pass it with --jars). " +
+            "Targets are advisory: rows print ok or OVER and success always exits 0. " +
+            "The usages row is omitted unless --include-usages, which times the current " +
+            "live scan and labels it \"no indexed path yet (live scan)\". " +
+            "Example: jdx bench --iterations 1."
 
     private val jars by option(
         "--jars",
@@ -105,6 +120,14 @@ class BenchCommand(
         "--iterations",
         help = "Runs per case; the median is reported (default 3).",
     ).int().default(3)
+
+    private val includeUsages by option(
+        "--include-usages",
+        help = "Also time usages against the §15 ≤150 ms target. Off by default: there is " +
+            "no indexed path yet, so the row only documents that gap. It runs the current " +
+            "live scan and is labelled \"no indexed path yet (live scan)\" in text and JSON. " +
+            "The row still prints ok or OVER, and success still exits 0.",
+    ).flag()
 
     private val json by option(
         "--json",
@@ -157,7 +180,7 @@ class BenchCommand(
                 }
                 val label = roots.jarSpecs.map { Path.of(it).fileName?.toString() ?: it }.sorted().joinToString(",")
                 try {
-                    val report = bench(label, roots.jarSpecs, roots, iterations)
+                    val report = bench(label, roots.jarSpecs, roots, iterations, includeUsages)
                     val result = benchResult(report)
                     if (effectiveJson(json)) printer(result.toJson()) else printer(result.renderText())
                 } catch (e: IllegalArgumentException) {

@@ -1119,7 +1119,14 @@ Additional measures:
   `-Xlog:cds=off` keeps a stale AppCDS archive's mismatch notice off stderr, where it
   reads like a crash for a command that then works fine.
 - A `jdx bench` command, tagged out of normal test runs, measuring against the local
-  `minecraft-client.jar` so regressions are caught.
+  `minecraft-client.jar` under `~/.gradle/caches/fabric-loom/` (the scale fixture;
+  gson from the local Gradle cache is the everyday correctness fixture, passed with
+  `--jars`) so regressions are caught. The default workload is `load` / `show` /
+  `members` / `search` / `hierarchy`. The `usages` row stays omitted unless
+  `--include-usages` (issue #11): without an indexed path the ≤150 ms target would
+  only document the known live-scan gap, so the opt-in row runs that live scan and
+  is labelled `no indexed path yet (live scan)` in text and JSON. Default output
+  leaves the row out. Rows print `ok`/`OVER`; success still exits 0.
 
 ---
 
@@ -1634,7 +1641,11 @@ mcp       [-w …] [--discover] (stdio; per-call workspace, jars, coord, discove
           (jdx_doctor refuses with exit 6; run `jdx doctor` in a shell.
            no ws or cache tool. issue #19)
 batch     --json
-bench     [--jars …] [-w …] [--no-jdk] [--iterations N] [--json]
+bench     [--jars …] [-w …] [--no-jdk] [--iterations N] [--include-usages] [--json]
+          (usages row omitted by default — no indexed path yet; --include-usages
+           times the live scan and labels it "no indexed path yet (live scan)".
+           Scale fixture: minecraft-client.jar under ~/.gradle/caches/fabric-loom/;
+           everyday fixture: gson. issue #11)
 upgrade   [--version <tag>] [--check] [--repo OWNER/NAME] [--json]
 setup     --agent opencode|claude-code|cursor|kilo|cline|codex|copilot|antigravity|windsurf|aider --scope project|system [--check] [--remove] [--json]
           (agent-config home: $JDX_SETUP_HOME > $HOME > $USERPROFILE > user.home — issue #85)

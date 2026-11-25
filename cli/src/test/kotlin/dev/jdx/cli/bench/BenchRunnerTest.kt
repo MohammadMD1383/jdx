@@ -5,7 +5,9 @@ import dev.jdx.cli.render.renderText
 import dev.jdx.cli.render.toJson
 import io.kotest.matchers.shouldBe
 import io.kotest.matchers.string.shouldContain
+import io.kotest.matchers.string.shouldNotContain
 import io.kotest.property.Arb
+import io.kotest.property.arbitrary.boolean
 import io.kotest.property.arbitrary.list
 import io.kotest.property.arbitrary.long
 import io.kotest.property.arbitrary.string
@@ -72,6 +74,21 @@ class BenchRunnerTest {
         BenchRunner.CASES.map { it.name } shouldBe listOf("load", "show", "members", "search", "hierarchy")
         BenchRunner.CASES.first { it.name == "load" }.targetMs shouldBe 8000
         BenchRunner.CASES.filter { it.name != "load" }.map { it.targetMs }.toSet() shouldBe setOf(250L)
+        BenchRunner.USAGES_LIVE_SCAN_NOTE shouldBe "no indexed path yet (live scan)"
+        BenchRunner.USAGES_CASE shouldBe BenchRunner.Case("usages", 150)
+    }
+
+    @Test
+    fun `usages joins the workload only when asked`(): Unit = runBlocking {
+        checkAll(200, Arb.boolean()) { includeUsages ->
+            val cases = BenchRunner.cases(includeUsages)
+            cases.take(BenchRunner.CASES.size) shouldBe BenchRunner.CASES
+            if (includeUsages) {
+                cases shouldBe BenchRunner.CASES + BenchRunner.USAGES_CASE
+            } else {
+                cases shouldBe BenchRunner.CASES
+            }
+        }
     }
 
     @Test
@@ -87,12 +104,43 @@ class BenchRunnerTest {
         )
         val text = benchResult(report).renderText()
 
-        text.lines().first() shouldBe "jdx bench demo.jar (10 classes, 3 iterations)"
-        text shouldContain "load"
-        text shouldContain "100 ms"
-        text shouldContain "(target ≤ 8000 ms)  ok"
-        text shouldContain "(target ≤ 250 ms)  OVER"
-        text.lines().last() shouldBe "1/2 within target"
+        text shouldBe """
+            jdx bench demo.jar (10 classes, 3 iterations)
+              load     100 ms  (target ≤ 8000 ms)  ok
+              show     999 ms  (target ≤ 250 ms)  OVER
+            1/2 within target
+        """.trimIndent()
+        text shouldNotContain "note:"
+    }
+
+    @Test
+    fun `a usages note is labelled in text and json and the row still reports over`() {
+        val report = BenchRunner.Report(
+            label = "demo.jar",
+            classCount = 10,
+            iterations = 1,
+            rows = listOf(
+                BenchRunner.Row("load", 8000, 100, true),
+                BenchRunner.Row("usages", 150, 400, false, BenchRunner.USAGES_LIVE_SCAN_NOTE),
+            ),
+        )
+        val rendered = benchResult(report)
+        val text = rendered.renderText()
+
+        text shouldBe """
+            jdx bench demo.jar (10 classes, 1 iterations)
+              load       100 ms  (target ≤ 8000 ms)  ok
+              usages     400 ms  (target ≤ 150 ms)  OVER
+            note: no indexed path yet (live scan)
+            1/2 within target
+        """.trimIndent()
+
+        val parsed = Json.parseToJsonElement(rendered.toJson()).jsonObject
+        parsed["ok"]?.jsonPrimitive?.content shouldBe "true"
+        val rows = parsed["result"]?.jsonObject?.get("rows")?.jsonArray ?: error("bench json has no result.rows")
+        rows[0].jsonObject.keys shouldBe setOf("name", "targetMs", "medianMs", "withinTarget")
+        rows[1].jsonObject["note"]?.jsonPrimitive?.content shouldBe "no indexed path yet (live scan)"
+        rows[1].jsonObject["withinTarget"]?.jsonPrimitive?.content shouldBe "false"
     }
 
     @Test
@@ -107,6 +155,7 @@ class BenchRunnerTest {
 
         parsed["command"]?.jsonPrimitive?.content shouldBe "bench"
         parsed["ok"]?.jsonPrimitive?.content shouldBe "true"
+        benchResult(report).toJson() shouldNotContain "note"
         val result = parsed["result"]?.jsonObject ?: error("bench json has no result")
         result["label"]?.jsonPrimitive?.content shouldBe "demo.jar"
         val rows = result["rows"]?.jsonArray ?: error("bench json has no result.rows")
@@ -126,6 +175,25 @@ class BenchRunnerTest {
             )
             benchResult(report).renderText() shouldBe benchResult(report).renderText()
             benchResult(report).toJson() shouldBe benchResult(report).toJson()
+            benchResult(report).renderText() shouldNotContain "note:"
+        }
+    }
+
+    @Test
+    fun `the live-scan note appears exactly when the row carries it`(): Unit = runBlocking {
+        checkAll(100, Arb.boolean()) { withNote ->
+            val note = if (withNote) BenchRunner.USAGES_LIVE_SCAN_NOTE else null
+            val report = BenchRunner.Report(
+                label = "jar",
+                classCount = 1,
+                iterations = 1,
+                rows = listOf(BenchRunner.Row("usages", 150, 10, true, note)),
+            )
+            val text = benchResult(report).renderText()
+            val json = benchResult(report).toJson()
+            text.contains("no indexed path yet (live scan)") shouldBe withNote
+            json.contains("no indexed path yet (live scan)") shouldBe withNote
+            text shouldContain "ok"
         }
     }
 }

@@ -208,7 +208,13 @@ The daemon, HTTP and MCP wire is read-only: `doctor` is refused (exit 6; run
 `jdx doctor`) and `ws` / `cache` are not on the wire
 ([issue #19](https://github.com/MohammadMD1383/jdx/issues/19)).
 Graph queries re-scan live bytecode roots per query (no persistent-index acceleration
-yet). `callers` is override-aware by default (`--exact` for invoke-owner matching);
+yet). `jdx bench` keeps the `usages` row omitted unless `--include-usages`: without an
+indexed path that row would only time the live scan, so the opt-in row is labelled
+`no indexed path yet (live scan)` in text and JSON, still prints `ok`/`OVER`, and
+success still exits 0 (issue #11). Default output leaves the row out. The scale
+fixture is `minecraft-client.jar` under `~/.gradle/caches/fabric-loom/` (the jar
+`jdx bench` uses when no roots are given). Gson, from the local Gradle cache, is
+the everyday correctness fixture. `callers` is override-aware by default (`--exact` for invoke-owner matching);
 `calls` stays bytecode-exact. Full list in
 [GitHub Issues](https://github.com/MohammadMD1383/jdx/issues). Out-of-scope for v1
 (mappings/remap, …) is the phase-2 backlog, also tracked there. To find which jar contains a class, see

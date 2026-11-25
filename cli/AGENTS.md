@@ -25,7 +25,12 @@ is the CLI surface, pinned by help/parity goldens.)
   as cold — issue #17); piped warm stays byte-identical to the wire. `--json`
   bytes are untouched by budgets or colour.
 - `bench/BenchRunner` + `render/BenchSheet` — fixed workload, median of iterations,
-  advisory targets (never gate). `service/DoctorService` — injectable probes
+  advisory targets (never gate). The `usages` row stays out unless `--include-usages`
+  (issue #11): that row times `JdxService.usages` (live scan, no indexed path yet)
+  and is labelled `no indexed path yet (live scan)` in text and JSON. Default
+  output omits the row, so it stays byte-identical. Scale fixture is
+  `minecraft-client.jar` under `~/.gradle/caches/fabric-loom/`; gson is the
+  everyday fixture. `service/DoctorService` — injectable probes
   (workspace store, socket health, AppCDS archive + fat jar paths) so tests never
   touch the real home; `javap` probing covers `$JAVA_HOME/bin` and Windows
   `.exe`/`.cmd`/`.bat` (`osName` seam); the `appcds` row is stat-only

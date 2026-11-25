@@ -6,7 +6,9 @@ import dev.jdx.index.service.JdxService
 import dev.jdx.index.workspace.InMemoryWorkspaceStore
 import io.kotest.matchers.shouldBe
 import io.kotest.matchers.string.shouldContain
+import io.kotest.matchers.string.shouldNotContain
 import kotlinx.serialization.json.Json
+import kotlinx.serialization.json.jsonArray
 import kotlinx.serialization.json.jsonObject
 import kotlinx.serialization.json.jsonPrimitive
 import org.junit.jupiter.api.Test
@@ -35,9 +37,10 @@ class BenchCommandTest {
 
     private fun run(
         args: List<String>,
-        bench: (String, List<String>, JdxService.RootsSpec, Int) -> BenchRunner.Report = { label, _, _, iterations ->
-            fixedReport().copy(label = label, iterations = iterations)
-        },
+        bench: (String, List<String>, JdxService.RootsSpec, Int, Boolean) -> BenchRunner.Report =
+            { label, _, _, iterations, _ ->
+                fixedReport().copy(label = label, iterations = iterations)
+            },
     ): Run {
         val printed = mutableListOf<String>()
         val exit = try {
@@ -88,8 +91,9 @@ class BenchCommandTest {
         val seen = mutableListOf<Int>()
         val run = run(
             listOf("--jars", "/fake/x.jar", "--no-jdk", "--iterations", "2"),
-            bench = { label, specs, _, iterations ->
+            bench = { label, specs, _, iterations, includeUsages ->
                 specs shouldBe listOf("/fake/x.jar")
+                includeUsages shouldBe false
                 seen.add(iterations)
                 fixedReport().copy(label = label, iterations = iterations)
             },
@@ -115,7 +119,7 @@ class BenchCommandTest {
     fun `an unreadable artifact exits 5`() {
         val run = run(
             listOf("--jars", "/fake/x.jar", "--no-jdk"),
-            bench = { _, _, _, _ -> throw dev.jdx.index.artifact.ArtifactReadException("artifact read error: boom") },
+            bench = { _, _, _, _, _ -> throw dev.jdx.index.artifact.ArtifactReadException("artifact read error: boom") },
         )
 
         run.exit shouldBe 5
@@ -126,10 +130,99 @@ class BenchCommandTest {
     fun `an empty jar exits 1`() {
         val run = run(
             listOf("--jars", "/fake/x.jar", "--no-jdk"),
-            bench = { _, _, _, _ -> throw IllegalArgumentException("no classes to benchmark in x.jar") },
+            bench = { _, _, _, _, _ -> throw IllegalArgumentException("no classes to benchmark in x.jar") },
         )
 
         run.exit shouldBe 1
         run.lines.single() shouldContain "no classes"
+    }
+
+    @Test
+    fun `help names the opt-in usages row and the live-scan note`() {
+        val help = requireNotNull(
+            BenchCommand(
+                terminate = { throw TestExit(it) },
+                store = InMemoryWorkspaceStore(),
+                getenv = noEnv,
+                discover = noDiscovery,
+                minecraftProbe = noProbe,
+            ).getFormattedHelp(),
+        )
+
+        help shouldContain "--include-usages"
+        help shouldContain "no indexed path yet (live scan)"
+    }
+
+    @Test
+    fun `include-usages is forwarded and an over row still exits 0`() {
+        val seen = mutableListOf<Boolean>()
+        val run = run(
+            listOf("--jars", "/fake/x.jar", "--no-jdk", "--include-usages"),
+            bench = { _, _, _, _, includeUsages ->
+                seen.add(includeUsages)
+                BenchRunner.Report(
+                    label = "x.jar",
+                    classCount = 4,
+                    iterations = 1,
+                    rows = listOf(
+                        BenchRunner.Row("show", 250, 3, true),
+                        BenchRunner.Row(
+                            "usages",
+                            BenchRunner.USAGES_TARGET_MS,
+                            400,
+                            withinTarget = false,
+                            note = BenchRunner.USAGES_LIVE_SCAN_NOTE,
+                        ),
+                    ),
+                )
+            },
+        )
+
+        run.exit shouldBe 0
+        seen shouldBe listOf(true)
+        run.lines.single() shouldContain "OVER"
+        run.lines.single() shouldContain "note: no indexed path yet (live scan)"
+    }
+
+    @Test
+    fun `default bench output omits the usages note`() {
+        val run = run(listOf("--jars", "/fake/x.jar", "--no-jdk"))
+
+        run.exit shouldBe 0
+        run.lines.single() shouldNotContain "usages"
+        run.lines.single() shouldNotContain "no indexed path yet"
+    }
+
+    @Test
+    fun `include-usages json carries the note and stays ok`() {
+        val run = run(
+            listOf("--jars", "/fake/x.jar", "--no-jdk", "--json", "--include-usages"),
+            bench = { _, _, _, _, includeUsages ->
+                includeUsages shouldBe true
+                BenchRunner.Report(
+                    label = "x.jar",
+                    classCount = 4,
+                    iterations = 1,
+                    rows = listOf(
+                        BenchRunner.Row(
+                            "usages",
+                            150,
+                            400,
+                            withinTarget = false,
+                            note = "no indexed path yet (live scan)",
+                        ),
+                    ),
+                )
+            },
+        )
+
+        run.exit shouldBe 0
+        val parsed = Json.parseToJsonElement(run.lines.single()).jsonObject
+        parsed["ok"]?.jsonPrimitive?.content shouldBe "true"
+        val row = parsed["result"]?.jsonObject?.get("rows")?.jsonArray?.single()?.jsonObject
+            ?: error("bench json has no usages row")
+        row["name"]?.jsonPrimitive?.content shouldBe "usages"
+        row["withinTarget"]?.jsonPrimitive?.content shouldBe "false"
+        row["note"]?.jsonPrimitive?.content shouldBe "no indexed path yet (live scan)"
     }
 }

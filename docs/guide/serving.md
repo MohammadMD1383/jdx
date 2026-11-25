@@ -107,7 +107,22 @@ Reference: [Many queries, one process (NDJSON in/out)](https://mohammadmd1383.gi
 | Warm query (daemon or MCP) | ≤ 20 ms |
 | Re-run on an unchanged workspace | ~0 (content-hash short-circuit) |
 
-`jdx bench` runs a fixed workload against your classpath and prints the timings next to these
-targets.
+`jdx bench` runs a fixed `load` / `show` / `members` / `search` / `hierarchy` workload
+against your classpath and prints each timing next to its target as `ok` or `OVER`.
+Those rows are advisory: a slow machine still exits 0. The `usages` row stays omitted
+unless you pass `--include-usages`. There is no indexed path yet, so that row only
+times the current live scan and is labelled `no indexed path yet (live scan)` in the
+text table and in JSON. It still prints `ok` or `OVER`, and the command still exits 0.
+Default output leaves the row out, so a bench without the flag is unchanged.
+
+```bash
+jdx bench --iterations 1
+jdx bench --include-usages --iterations 1
+```
+
+The scale fixture is `minecraft-client.jar` under `~/.gradle/caches/fabric-loom/`
+(used when you pass no roots). Gson, from the local Gradle cache, is the everyday
+correctness fixture — point `--jars` at it when you want a small jar instead of the
+obfuscated client.
 
 Reference: [Benchmark the read path (timings + §15 targets)](https://mohammadmd1383.github.io/jdx/docs/reference/bench/).
