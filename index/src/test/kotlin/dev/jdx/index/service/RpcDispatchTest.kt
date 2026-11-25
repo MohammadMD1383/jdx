@@ -1,5 +1,6 @@
 package dev.jdx.index.service
 
+import dev.jdx.core.model.WarningCode
 import dev.jdx.core.render.TokenBudget
 import dev.jdx.core.render.WarningLines
 import dev.jdx.core.rpc.RpcCommand
@@ -29,6 +30,7 @@ import io.kotest.matchers.string.shouldContain
 import io.kotest.matchers.string.shouldNotContain
 import io.kotest.property.Arb
 import io.kotest.property.arbitrary.bind
+import io.kotest.property.arbitrary.boolean
 import io.kotest.property.arbitrary.list
 import io.kotest.property.arbitrary.map
 import io.kotest.property.arbitrary.of
@@ -37,7 +39,9 @@ import io.kotest.property.checkAll
 import kotlinx.coroutines.runBlocking
 import org.junit.jupiter.api.Tag
 import org.junit.jupiter.api.Test
+import org.junit.jupiter.api.io.TempDir
 import java.nio.file.Files
+import java.nio.file.Path
 
 /**
  * Tier 2: the daemon's query dispatch (T-082) over real artifacts — the fixture
@@ -548,6 +552,228 @@ class RpcDispatchTest {
         line shouldNotContain "Re-run with --fetch"
     }
 
+    // -- explicit roots (issue #20): MCP jars / coord / discover, daemon stays fetch-free ----
+
+    @Test
+    fun `empty explicit roots match the workspace-only resolution`() {
+        val store = InMemoryWorkspaceStore()
+        val jar = ArtifactTestJars.binaryJar().absolutePath
+        store.save(WorkspaceDefinition(name = "fx", jars = listOf(jar), includeJdk = false))
+        val plain = JdxService.daemonRoots("fx", "q", store)
+        val overlaid = JdxService.daemonRoots("fx", "q", store, explicit = ExplicitRoots())
+        overlaid shouldBe plain
+        val missing = JdxService.daemonRoots("nope", "q", store)
+        val missingOverlaid = JdxService.daemonRoots("nope", "q", store, explicit = ExplicitRoots())
+        (missing as DaemonRoots.Failed).outcome.toJson("show") shouldBe
+            (missingOverlaid as DaemonRoots.Failed).outcome.toJson("show")
+    }
+
+    @Test
+    fun `explicit jars merge in front of a stored workspace and do not fetch`() {
+        val store = InMemoryWorkspaceStore()
+        store.save(WorkspaceDefinition(name = "fx", jars = listOf("ws.jar"), includeJdk = false))
+        when (
+            val resolved = JdxService.daemonRoots(
+                "fx",
+                "q",
+                store,
+                explicit = ExplicitRoots(jars = listOf(" extra.jar ", "", "other.jar")),
+            )
+        ) {
+            is DaemonRoots.Ready -> {
+                resolved.roots.jarSpecs shouldBe listOf("extra.jar", "other.jar", "ws.jar")
+                resolved.roots.includeJdk shouldBe false
+                resolved.roots.allowFetch shouldBe false
+            }
+            is DaemonRoots.Failed -> throw AssertionError("expected Ready, got $resolved")
+        }
+    }
+
+    @Test
+    fun `explicit jars answer when the workspace is missing and the call did not name one`() {
+        val store = InMemoryWorkspaceStore()
+        when (
+            val resolved = JdxService.daemonRoots(
+                "default",
+                "q",
+                store,
+                explicit = ExplicitRoots(jars = listOf("only.jar"), allowMissingWorkspace = true),
+            )
+        ) {
+            is DaemonRoots.Ready -> {
+                resolved.roots.jarSpecs shouldBe listOf("only.jar")
+                resolved.roots.includeJdk shouldBe true
+                resolved.roots.allowFetch shouldBe false
+            }
+            is DaemonRoots.Failed -> throw AssertionError("expected Ready, got $resolved")
+        }
+    }
+
+    @Test
+    fun `a missing workspace without explicit roots stays exit 4`() {
+        val outcome = JdxService.daemonRoots(
+            "nope",
+            "q",
+            InMemoryWorkspaceStore(),
+            explicit = ExplicitRoots(allowMissingWorkspace = true),
+        )
+        (outcome is DaemonRoots.Failed) shouldBe true
+        val line = (outcome as DaemonRoots.Failed).outcome.toJson("show")
+        line shouldContain "\"code\":4"
+        line shouldContain "no such workspace 'nope'"
+        line shouldContain "jdx ws create"
+    }
+
+    @Test
+    fun `an illegal workspace name is exit 4 even with jars`() {
+        val outcome = JdxService.daemonRoots(
+            "bad name",
+            "q",
+            InMemoryWorkspaceStore(),
+            explicit = ExplicitRoots(
+                jars = listOf("a.jar"),
+                discover = true,
+                allowMissingWorkspace = true,
+            ),
+        )
+        val line = (outcome as DaemonRoots.Failed).outcome.toJson("show")
+        line shouldContain "\"code\":4"
+        line shouldContain "invalid workspace name"
+    }
+
+    @Test
+    fun `a malformed explicit coordinate is exit 3 before any workspace lookup`() {
+        val store = InMemoryWorkspaceStore()
+        store.save(WorkspaceDefinition(name = "fx", jars = listOf("ws.jar")))
+        val outcome = JdxService.daemonRoots(
+            "fx",
+            "q",
+            store,
+            explicit = ExplicitRoots(coords = listOf("not-a-coordinate")),
+        )
+        val line = (outcome as DaemonRoots.Failed).outcome.toJson("show")
+        line shouldContain "\"code\":3"
+        line shouldContain "invalid Maven coordinate"
+    }
+
+    @Test
+    fun `an uncached explicit coordinate is exit 5 and never fetches`() {
+        val store = InMemoryWorkspaceStore()
+        store.save(WorkspaceDefinition(name = "fx", jars = listOf("ws.jar"), includeJdk = false))
+        val outcome = JdxService.daemonRoots(
+            "fx",
+            "q",
+            store,
+            explicit = ExplicitRoots(coords = listOf("nope:nope:1.0")),
+        )
+        val failed = outcome as DaemonRoots.Failed
+        failed.outcome.renderText(false) shouldContain "The daemon never fetches"
+        failed.outcome.renderText(false) shouldContain "nope:nope:1.0"
+        failed.outcome.toJson("show") shouldContain "\"code\":5"
+        failed.outcome.toJson("show") shouldNotContain "Re-run with --fetch"
+    }
+
+    @Test
+    fun `discovery fills a missing workspace from the working directory`(@TempDir temp: Path) {
+        val root = temp.resolve("proj")
+        Files.createDirectories(root.resolve("build/classes/java/main"))
+        Files.writeString(root.resolve("pom.xml"), "<project></project>\n")
+        val nested = root.resolve("nested").also { Files.createDirectories(it) }
+        when (
+            val resolved = JdxService.daemonRoots(
+                "default",
+                "q",
+                InMemoryWorkspaceStore(),
+                explicit = ExplicitRoots(
+                    discover = true,
+                    allowMissingWorkspace = true,
+                    workingDir = nested,
+                    cacheBase = temp.resolve("auto"),
+                    gradleFilesRoot = temp.resolve("no-gradle"),
+                    m2Repo = temp.resolve("no-m2"),
+                ),
+            )
+        ) {
+            is DaemonRoots.Ready -> {
+                resolved.roots.jarSpecs shouldBe listOf(root.resolve("build/classes/java/main").toString())
+                resolved.roots.includeJdk shouldBe true
+                resolved.roots.allowFetch shouldBe false
+                resolved.roots.extraWarnings.map { it.code } shouldBe listOf(WarningCode.PROJECT_DISCOVERY_FALLBACK)
+            }
+            is DaemonRoots.Failed -> throw AssertionError("expected Ready, got $resolved")
+        }
+    }
+
+    @Test
+    fun `discovery that finds no project stays exit 4 and names jdx ws`(@TempDir temp: Path) {
+        val empty = temp.resolve("empty").also { Files.createDirectories(it) }
+        val outcome = JdxService.daemonRoots(
+            "default",
+            "q",
+            InMemoryWorkspaceStore(),
+            explicit = ExplicitRoots(
+                discover = true,
+                allowMissingWorkspace = true,
+                workingDir = empty,
+                cacheBase = temp.resolve("auto"),
+                gradleFilesRoot = temp.resolve("no-gradle"),
+                m2Repo = temp.resolve("no-m2"),
+            ),
+        )
+        val line = (outcome as DaemonRoots.Failed).outcome.toJson("show")
+        line shouldContain "\"code\":4"
+        line shouldContain "no such workspace 'default'"
+        line shouldContain "jdx ws create"
+        line shouldContain "found no Gradle or Maven project"
+    }
+
+    @Test
+    fun `a stored workspace wins over discovery`(@TempDir temp: Path) {
+        val root = temp.resolve("proj")
+        Files.createDirectories(root.resolve("build/classes/java/main"))
+        Files.writeString(root.resolve("settings.gradle"), "rootProject.name = \"demo\"\n")
+        val store = InMemoryWorkspaceStore()
+        store.save(WorkspaceDefinition(name = "fx", jars = listOf("ws.jar"), includeJdk = false))
+        when (
+            val resolved = JdxService.daemonRoots(
+                "fx",
+                "q",
+                store,
+                explicit = ExplicitRoots(
+                    discover = true,
+                    allowMissingWorkspace = true,
+                    workingDir = root,
+                    cacheBase = temp.resolve("auto"),
+                    gradleFilesRoot = temp.resolve("no-gradle"),
+                    m2Repo = temp.resolve("no-m2"),
+                ),
+            )
+        ) {
+            is DaemonRoots.Ready -> {
+                resolved.roots.jarSpecs shouldBe listOf("ws.jar")
+                resolved.roots.includeJdk shouldBe false
+                resolved.roots.extraWarnings shouldBe emptyList()
+            }
+            is DaemonRoots.Failed -> throw AssertionError("expected Ready, got $resolved")
+        }
+    }
+
+    @Test
+    fun `diff ignores explicit roots and a missing workspace`() {
+        when (
+            val resolved = JdxService.daemonRoots(
+                "no-such-workspace",
+                "a.jar",
+                InMemoryWorkspaceStore(),
+                RpcCommand.DIFF,
+                ExplicitRoots(jars = listOf("extra.jar"), coords = listOf("nope:nope:1.0"), discover = true),
+            )
+        ) {
+            is DaemonRoots.Ready -> resolved.roots shouldBe RootsSpec()
+            is DaemonRoots.Failed -> throw AssertionError("expected Ready, got $resolved")
+        }
+    }
+
     // -- generating family -----------------------------------------------------------------
 
     private val hostileChars: List<Char> = listOf(
@@ -600,6 +826,31 @@ class RpcDispatchTest {
             val first: ServiceOutcome = JdxService.dispatch(request, roots)
             val second: ServiceOutcome = JdxService.dispatch(request, roots)
             first.toJson(request.command.wire) shouldBe second.toJson(request.command.wire)
+        }
+    }
+
+    @Test
+    fun `explicit roots are total for hostile jar text`(): Unit = runBlocking {
+        val store = InMemoryWorkspaceStore()
+        checkAll(80, arbHostileString(0..24), arbHostileString(0..32), Arb.boolean()) { workspace, jar, allow ->
+            val outcome = JdxService.daemonRoots(
+                workspace,
+                "q",
+                store,
+                explicit = ExplicitRoots(
+                    jars = listOf(jar),
+                    allowMissingWorkspace = allow,
+                    discover = false,
+                ),
+            )
+            when (outcome) {
+                is DaemonRoots.Ready -> outcome.roots.allowFetch shouldBe false
+                is DaemonRoots.Failed -> {
+                    val line = outcome.outcome.toJson("show")
+                    line shouldNotContain "\n"
+                    line shouldContain "\"jdx\":1"
+                }
+            }
         }
     }
 }

@@ -7,7 +7,12 @@ The one-shot CLI starts in about a quarter of a second. When an agent asks dozen
 ```bash
 jdx mcp                 # serve the default workspace over stdio
 jdx mcp -w myapp        # serve a named workspace
+jdx mcp --discover      # when that workspace is missing, use the project in this directory
 ```
+
+A stored workspace still wins. Classpath tools also take `jars` and `coord` (local caches
+only; the server never downloads) and `discover` for one call. A missing workspace with
+none of those exits 4 and names `jdx ws`.
 
 MCP clients start it as a child process (`jdx setup` writes that config for you — see
 [Use with AI agents](ai-agents.md)). The server holds the index in memory for the session, so

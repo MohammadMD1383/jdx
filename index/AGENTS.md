@@ -10,6 +10,13 @@ behaviour lives here** (adapters call in, never the reverse). `explicitApi()` is
   `JdxService.diff(old, new, options)` is the one query that takes **no `RootsSpec`**: a
   diff names its own two artifacts, so `daemonRoots` short-circuits to `Ready` for
   `RpcCommand.DIFF` and the dispatch ignores the roots it is handed.
+  `ExplicitRoots` (issue #20) is the MCP-only overlay: `jars` / `coord` merge in
+  front of a stored workspace, and `discover` fills in only when that workspace
+  is missing and the caller set `allowMissingWorkspace`. Empty `ExplicitRoots`
+  — what the unix daemon and HTTP server pass — is the old workspace-only
+  resolution. `allowFetch` stays false on every daemon root (issue #18).
+  `ProjectDiscovery.discoverQueryRoots` is the shared auto-discovery step
+  (CLI `ReadCommandSupport.discoverProject` delegates here).
 - `diff/ArtifactSnapshots` — artifact → `ApiSnapshot`: sorted `classEntryPaths()`,
   `AsmClassReader` per class, and every `UnsupportedVersion`/`Corrupt` skipped with its
   warning rather than failing the artifact. Structure only — a diff never pairs sources

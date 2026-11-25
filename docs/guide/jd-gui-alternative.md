@@ -81,7 +81,7 @@ On a Minecraft jar, jdx reads the names stored in the file. It does not remap. P
 
 ## From an AI coding agent
 
-`jdx mcp` speaks MCP on stdin and stdout. Each query is a typed tool, including `jdx_show`, `jdx_source`, `jdx_body`, and `jdx_search`. The server never downloads. Prime a missing coordinate with `--fetch` on the CLI first, or pass jars you already have.
+`jdx mcp` speaks MCP on stdin and stdout. Each query is a typed tool, including `jdx_show`, `jdx_source`, `jdx_body`, and `jdx_search`. The server never downloads. Pass `jars` or `coord` on the call, or prime a missing coordinate with `--fetch` on the CLI first. `discover` true reads a Gradle or Maven project from the server's working directory when no workspace is stored.
 
 ```bash
 jdx setup --agent claude-code --scope project

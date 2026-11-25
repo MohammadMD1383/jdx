@@ -34,6 +34,8 @@ import dev.jdx.core.render.WarningLines
 import dev.jdx.core.rpc.RpcCommand
 import dev.jdx.core.rpc.RpcRequest
 import dev.jdx.decompile.DecompilerId
+import dev.jdx.index.cache.CacheService
+import dev.jdx.index.maven.MavenCoords
 import dev.jdx.index.maven.MavenResolver
 import dev.jdx.index.service.JdxService.AnnotatedOptions
 import dev.jdx.index.service.JdxService.ArtifactSpec
@@ -60,8 +62,11 @@ import dev.jdx.index.service.JdxService.SourceOptions
 import dev.jdx.index.service.JdxService.UsageKindFilter
 import dev.jdx.index.service.JdxService.UsageOptions
 import dev.jdx.index.workspace.FileWorkspaceStore
+import dev.jdx.index.workspace.ProjectDiscovery
 import dev.jdx.index.workspace.WorkspaceResolver
 import dev.jdx.index.workspace.WorkspaceStore
+import java.nio.file.Path
+import java.nio.file.Paths
 
 /**
  * The daemon's query dispatch (T-082): one [RpcRequest] in, one [ServiceOutcome] out.
@@ -457,6 +462,36 @@ internal fun daemonCoordReadError(failed: MavenResolver.ResolveAllOutcome.Failed
 }
 
 /**
+ * Optional roots an MCP call adds on top of the stored workspace (issue #20).
+ *
+ * Defaults leave [JdxService.daemonRoots] byte-identical to the workspace-only
+ * daemon and HTTP path. The unix-socket daemon and `jdx serve` pass nothing
+ * here: they still serve the stored workspace only, and they still never fetch.
+ *
+ * [jars] and [coords] mirror CLI `--jars` and `--coord`. Coordinates resolve
+ * from the local caches only — [allowFetch][JdxService.RootsSpec.allowFetch]
+ * stays false (issue #18). A missing coordinate is exit 5 naming a cold
+ * `--fetch` prime, not a download.
+ *
+ * [discover] mirrors project auto-discovery, and only as a stand-in for a
+ * workspace that is not there. A workspace that loads still wins.
+ * [allowMissingWorkspace] is the MCP rule for "this call did not name a
+ * workspace": explicit jars, coordinates, or discovery may answer instead of
+ * exit 4. An explicit workspace name that does not exist stays exit 4, jars
+ * or not — the same as CLI `-w missing --jars …`.
+ */
+public data class ExplicitRoots(
+    public val jars: List<String> = emptyList(),
+    public val coords: List<String> = emptyList(),
+    public val discover: Boolean = false,
+    public val allowMissingWorkspace: Boolean = false,
+    public val workingDir: Path = Paths.get(""),
+    public val cacheBase: Path? = null,
+    public val gradleFilesRoot: Path? = null,
+    public val m2Repo: Path? = null,
+)
+
+/**
  * Resolves the roots the daemon serves for one named workspace (T-082): the stored
  * workspace's jars plus its coordinates (local caches only — the daemon never
  * fetches, so stored `--repo` mirrors are inert here), its `srcs`, and the JDK
@@ -472,14 +507,33 @@ internal fun daemonCoordReadError(failed: MavenResolver.ResolveAllOutcome.Failed
  * ask for it ("compare these two jars"). An empty [RootsSpec] is exactly what
  * `diff` ignores, so nothing is lost by answering it with one. `null` (the
  * default) keeps every other command's behaviour byte-identical to before.
+ *
+ * [explicit] is the MCP extension (issue #20). Empty defaults — what the unix
+ * daemon and HTTP server pass — keep the paragraph above true.
  */
 public fun JdxService.daemonRoots(
     workspace: String,
     query: String,
     store: WorkspaceStore = FileWorkspaceStore.system(),
     command: RpcCommand? = null,
+    explicit: ExplicitRoots = ExplicitRoots(),
 ): DaemonRoots {
     if (command == RpcCommand.DIFF) return DaemonRoots.Ready(RootsSpec())
+    val explicitJars = explicit.jars.map { it.trim() }.filter { it.isNotEmpty() }
+    val explicitCoords = explicit.coords.map { it.trim() }.filter { it.isNotEmpty() }
+    for (text in explicitCoords) {
+        if (MavenCoords.parse(text) == null) {
+            return DaemonRoots.Failed(
+                ServiceOutcome.Failure(
+                    ErrorResult.generic(
+                        query,
+                        exitCode = 3,
+                        message = "usage error: ${MavenCoords.invalidReason(text)}",
+                    ),
+                ),
+            )
+        }
+    }
     val resolved = WorkspaceResolver.resolve(
         flagWorkspace = workspace,
         loadWorkspace = store::load,
@@ -492,37 +546,136 @@ public fun JdxService.daemonRoots(
         },
     )
     return when (resolved) {
-        is WorkspaceResolver.Result.success -> {
-            val value = resolved.value
-            when (val coords = MavenResolver.resolveAll(value.coords, allowFetch = false)) {
-                is MavenResolver.ResolveAllOutcome.Ok -> DaemonRoots.Ready(
-                    RootsSpec(
-                        jarSpecs = value.jarSpecs + coords.artifacts.map { it.binaryJar.toString() },
-                        includeJdk = value.includeJdk,
-                        extraWarnings = value.warnings,
-                        allowFetch = false,
-                        srcSpecs = value.srcSpecs,
-                    ),
-                )
-                is MavenResolver.ResolveAllOutcome.Failed -> DaemonRoots.Failed(
-                    ServiceOutcome.Failure(
-                        ErrorResult.generic(
-                            query,
-                            exitCode = 5,
-                            message = daemonCoordReadError(coords),
-                        ),
-                    ),
-                )
+        is WorkspaceResolver.Result.success ->
+            workspaceReady(query, resolved.value, explicitJars, explicitCoords)
+        is WorkspaceResolver.Result.failure -> {
+            val standAlone = explicit.allowMissingWorkspace &&
+                (explicitJars.isNotEmpty() || explicitCoords.isNotEmpty() || explicit.discover)
+            // Only a missing name can fall through. A corrupt file or an illegal
+            // name is still exit 4 with the resolver's own message.
+            if (!standAlone || !resolved.error.message.startsWith("no such workspace ")) {
+                missingWorkspace(query, resolved.error.message)
+            } else {
+                standAloneRoots(query, explicit, explicitJars, explicitCoords, resolved.error.message)
             }
         }
-        is WorkspaceResolver.Result.failure ->
-            DaemonRoots.Failed(
-                ServiceOutcome.Failure(
-                    ErrorResult.generic(query, exitCode = 4, message = resolved.error.message),
-                ),
-            )
     }
 }
+
+/** Stored workspace plus explicit jars and coordinates in CLI merge order. */
+private fun workspaceReady(
+    query: String,
+    value: WorkspaceResolver.ResolvedRoots,
+    explicitJars: List<String>,
+    explicitCoords: List<String>,
+): DaemonRoots {
+    // No explicit roots: one resolve of the stored coordinates, same shape as
+    // before issue #20. A new branch here would change jar order or the
+    // function identity inside RootsSpec.
+    if (explicitJars.isEmpty() && explicitCoords.isEmpty()) {
+        return when (val coords = MavenResolver.resolveAll(value.coords, allowFetch = false)) {
+            is MavenResolver.ResolveAllOutcome.Ok -> DaemonRoots.Ready(
+                RootsSpec(
+                    jarSpecs = value.jarSpecs + coords.artifacts.map { it.binaryJar.toString() },
+                    includeJdk = value.includeJdk,
+                    extraWarnings = value.warnings,
+                    allowFetch = false,
+                    srcSpecs = value.srcSpecs,
+                ),
+            )
+            is MavenResolver.ResolveAllOutcome.Failed -> coordFailure(query, coords)
+        }
+    }
+    val front = when (val coords = MavenResolver.resolveAll(explicitCoords, allowFetch = false)) {
+        is MavenResolver.ResolveAllOutcome.Ok -> coords.artifacts.map { it.binaryJar.toString() }
+        is MavenResolver.ResolveAllOutcome.Failed -> return coordFailure(query, coords)
+    }
+    val stored = when (val coords = MavenResolver.resolveAll(value.coords, allowFetch = false)) {
+        is MavenResolver.ResolveAllOutcome.Ok -> coords.artifacts.map { it.binaryJar.toString() }
+        is MavenResolver.ResolveAllOutcome.Failed -> return coordFailure(query, coords)
+    }
+    return DaemonRoots.Ready(
+        RootsSpec(
+            // CLI order: explicit --jars, explicit --coord jars, workspace jars, stored coords.
+            jarSpecs = explicitJars + front + value.jarSpecs + stored,
+            includeJdk = value.includeJdk,
+            extraWarnings = value.warnings,
+            allowFetch = false,
+            srcSpecs = value.srcSpecs,
+        ),
+    )
+}
+
+/**
+ * Answers from explicit jars, explicit coordinates, and (when asked) the
+ * project that encloses [ExplicitRoots.workingDir]. The JDK stays included,
+ * matching a CLI invocation with no `--no-jdk` and no workspace.
+ */
+private fun standAloneRoots(
+    query: String,
+    explicit: ExplicitRoots,
+    explicitJars: List<String>,
+    explicitCoords: List<String>,
+    missingMessage: String,
+): DaemonRoots {
+    val discovered = if (explicit.discover) {
+        val cache = explicit.cacheBase ?: CacheService.defaultCacheRoot().resolve("auto")
+        val gradle = explicit.gradleFilesRoot ?: defaultGradleFilesRoot()
+        val m2 = explicit.m2Repo ?: defaultM2Repo()
+        ProjectDiscovery.discoverQueryRoots(
+            explicit.workingDir.toAbsolutePath(),
+            cache,
+            gradle,
+            m2,
+        )
+    } else {
+        null
+    }
+    if (discovered == null && explicitJars.isEmpty() && explicitCoords.isEmpty()) {
+        val extra = if (explicit.discover) {
+            " Project auto-discovery from the working directory found no Gradle or Maven project."
+        } else {
+            ""
+        }
+        return missingWorkspace(query, missingMessage + extra)
+    }
+    val coordJars = when (val coords = MavenResolver.resolveAll(explicitCoords, allowFetch = false)) {
+        is MavenResolver.ResolveAllOutcome.Ok -> coords.artifacts.map { it.binaryJar.toString() }
+        is MavenResolver.ResolveAllOutcome.Failed -> return coordFailure(query, coords)
+    }
+    return DaemonRoots.Ready(
+        RootsSpec(
+            jarSpecs = explicitJars + coordJars + (discovered?.jars ?: emptyList()),
+            includeJdk = true,
+            extraWarnings = discovered?.warnings ?: emptyList(),
+            allowFetch = false,
+        ),
+    )
+}
+
+private fun coordFailure(query: String, failed: MavenResolver.ResolveAllOutcome.Failed): DaemonRoots =
+    DaemonRoots.Failed(
+        ServiceOutcome.Failure(
+            ErrorResult.generic(query, exitCode = 5, message = daemonCoordReadError(failed)),
+        ),
+    )
+
+private fun missingWorkspace(query: String, message: String): DaemonRoots =
+    DaemonRoots.Failed(
+        ServiceOutcome.Failure(
+            ErrorResult.generic(query, exitCode = 4, message = message),
+        ),
+    )
+
+/** `~/.gradle/caches/modules-2/files-2.1`, or null when `user.home` cannot be read. */
+private fun defaultGradleFilesRoot(): Path? = runCatching {
+    Paths.get(System.getProperty("user.home")).resolve(".gradle/caches/modules-2/files-2.1")
+}.getOrNull()
+
+/** `~/.m2/repository`, or null when `user.home` cannot be read. */
+private fun defaultM2Repo(): Path? = runCatching {
+    Paths.get(System.getProperty("user.home")).resolve(".m2/repository")
+}.getOrNull()
 
 // -- param parsing (per-call scope; no shared state, so concurrent dispatches are safe) ---
 

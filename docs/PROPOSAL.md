@@ -988,6 +988,16 @@ Tools exposed (v1): `jdx_show`, `jdx_members`, `jdx_signature`, `jdx_doc`, `jdx_
 The MCP server holds the index in memory for its lifetime — so it is effectively a
 per-session daemon, and repeated queries are instant.
 
+Classpath tools accept optional `jars` and `coord` arguments (the CLI `--jars` /
+`--coord` values; comma-separated or a JSON array) and `discover` (project
+auto-discovery from the server's working directory). `jdx mcp --discover` turns
+discovery on for the session. A stored workspace that exists still wins, including
+a per-call `workspace`. Explicit jars and coordinates merge in front of it. When
+the call does not name a workspace and the server's workspace is missing, jars,
+coord, or discovery answer on their own; otherwise a missing name is exit 4 naming
+`jdx ws`. Coordinates resolve from local caches only — MCP never fetches (issue
+#18). `diff`, `version`, `doctor`, and `health` do not take these arguments.
+
 ### 14.3 Daemon — `jdx daemon`
 A background JVM holding a hot index (and, once touched, a warm Kotlin PSI environment),
 listening on a **unix domain socket** at `<runtime-dir>/jdx/<workspace-hash>.sock`
@@ -1558,7 +1568,7 @@ cache     info|gc|clear [--cache-dir --json]  (gc: --dry-run)
 kotlin    install [--repo --force] [--json]
 daemon    start|stop|status|restart --idle <duration>
 serve     [-w …] --port --bind
-mcp       [-w …] (stdio; per-call workspace override)
+mcp       [-w …] [--discover] (stdio; per-call workspace, jars, coord, discover)
 batch     --json
 bench     [--jars …] [-w …] [--no-jdk] [--iterations N] [--json]
 upgrade   [--version <tag>] [--check] [--repo OWNER/NAME] [--json]

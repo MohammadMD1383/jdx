@@ -69,6 +69,35 @@ class McpToolsTest {
         }
     }
 
+    @Test
+    fun `classpath tools take optional jars coord and discover`() {
+        val bare = setOf(RpcCommand.DIFF, RpcCommand.VERSION, RpcCommand.DOCTOR, RpcCommand.HEALTH)
+        for (tool in ALL_MCP_TOOLS) {
+            val names = tool.params.map { it.name }
+            if (tool.command in bare) {
+                names.contains("jars") shouldBe false
+                names.contains("coord") shouldBe false
+                names.contains("discover") shouldBe false
+            } else {
+                val jars = tool.params.first { it.name == "jars" }
+                val coord = tool.params.first { it.name == "coord" }
+                val discover = tool.params.first { it.name == "discover" }
+                jars.required shouldBe false
+                coord.required shouldBe false
+                discover.required shouldBe false
+                jars.kind shouldBe McpParamKind.STRING
+                coord.kind shouldBe McpParamKind.STRING
+                discover.kind shouldBe McpParamKind.BOOLEAN
+                discover.defaultJson shouldBe null
+                // Root selection sits with workspace, before the query flags.
+                val workspaceAt = names.indexOf("workspace")
+                names[workspaceAt + 1] shouldBe "jars"
+                names[workspaceAt + 2] shouldBe "coord"
+                names[workspaceAt + 3] shouldBe "discover"
+            }
+        }
+    }
+
     // -- schema generation -----------------------------------------------------------------
 
     @Test
@@ -173,7 +202,17 @@ class McpToolsTest {
         val tool = ALL_MCP_TOOLS.first { it.command == RpcCommand.MEMBERS }
         val request = tool.requestFor(
             "com.Example",
-            mapOf("query" to "ignored", "workspace" to "ws", "kind" to "method", "limit" to "5", "bogus" to "x"),
+            mapOf(
+                "query" to "ignored",
+                "workspace" to "ws",
+                "jars" to "a.jar",
+                "coord" to "g:a:1",
+                "discover" to "true",
+                "fetch" to "true",
+                "kind" to "method",
+                "limit" to "5",
+                "bogus" to "x",
+            ),
         )
         request.command shouldBe RpcCommand.MEMBERS
         request.query shouldBe "com.Example"
@@ -196,6 +235,35 @@ class McpToolsTest {
         split.workspace shouldBe "ws"
         split.params shouldBe mapOf("limit" to "5", "withDoc" to "true")
         split.structured shouldContainExactlyInAnyOrder listOf("kind", "grep")
+        split.jars shouldBe emptyList()
+        split.coords shouldBe emptyList()
+        split.discover shouldBe null
+    }
+
+    @Test
+    fun `splitArgs accepts comma-separated and array roots and a discover boolean`() {
+        val args = buildJsonObject {
+            put("query", "com.Example")
+            put("jars", " a.jar , b.jar ")
+            put("coord", buildJsonArray {
+                add("com.google.code.gson:gson:2.14.0")
+                add(" org.example:lib:1.0 ")
+            })
+            put("discover", true)
+        }
+        val split = splitArgs(args)
+        split.jars shouldBe listOf("a.jar", "b.jar")
+        split.coords shouldBe listOf("com.google.code.gson:gson:2.14.0", "org.example:lib:1.0")
+        split.discover shouldBe true
+        split.discoverError shouldBe null
+        split.params shouldBe emptyMap()
+        split.structured shouldBe emptyList()
+
+        val bad = splitArgs(buildJsonObject { put("discover", "sometimes") })
+        bad.discoverError shouldBe "usage error: --discover must be a boolean, got 'sometimes'"
+
+        val hostile = splitArgs(buildJsonObject { put("jars", buildJsonObject { put("path", "a.jar") }) })
+        hostile.structured shouldBe listOf("jars")
     }
 
     @Test

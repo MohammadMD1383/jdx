@@ -75,7 +75,7 @@ jdx ws create gson --coord com.google.code.gson:gson:2.14.0
 jdx -w gson outline com.google.gson.Gson --kind method --limit 20
 ```
 
-`jdx mcp` answers from a stored workspace and does not auto-discover a project. The config for Claude Code, Cursor, and Codex is [An MCP server for Java and Kotlin bytecode](java-mcp-server.md). Wiring and the cheat sheet are in [Use with AI agents](ai-agents.md). Classpath rules are in [Classpath & workspaces](classpath.md).
+`jdx mcp` answers from a stored workspace when one exists. A call may pass `jars` or `coord`, or `discover` true to read the project in the server's working directory when no workspace is stored. The server never downloads. The config for Claude Code, Cursor, and Codex is [An MCP server for Java and Kotlin bytecode](java-mcp-server.md). Wiring and the cheat sheet are in [Use with AI agents](ai-agents.md). Classpath rules are in [Classpath & workspaces](classpath.md).
 
 ## Mapped jars
 

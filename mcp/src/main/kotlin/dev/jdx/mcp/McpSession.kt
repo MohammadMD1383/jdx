@@ -4,11 +4,14 @@ import dev.jdx.core.render.JsonEscape
 import dev.jdx.core.rpc.RPC_VERSION
 import dev.jdx.core.rpc.RpcCommand
 import dev.jdx.index.service.DaemonRoots
+import dev.jdx.index.service.ExplicitRoots
 import dev.jdx.index.service.JdxService
 import dev.jdx.index.service.daemonRoots
 import dev.jdx.index.service.dispatch
 import dev.jdx.index.workspace.FileWorkspaceStore
 import dev.jdx.index.workspace.WorkspaceStore
+import java.nio.file.Path
+import java.nio.file.Paths
 import java.util.concurrent.atomic.AtomicLong
 import java.util.concurrent.TimeUnit
 import kotlinx.serialization.json.Json
@@ -28,6 +31,13 @@ import kotlinx.serialization.json.jsonPrimitive
  * missing workspace reads as exit 4 naming the fix rather than a silent
  * fallback to other roots.
  *
+ * A call may also pass `jars` and `coord`, and opt into project auto-discovery
+ * with `discover` (issue #20). Those mirror CLI `--jars` and `--coord`.
+ * Coordinates stay local-cache only: this server never fetches (issue #18).
+ * Discovery runs only when the call did not name a workspace and the server's
+ * workspace is not there. A workspace that exists still wins. [discoverByDefault]
+ * is `jdx mcp --discover`.
+ *
  * `version` and `health` are answered internally in the daemon's envelope
  * shapes (same key order, so clients read either server alike);
  * `indexedArtifacts` stays 0 by design with `indexMode=live-roots-first`
@@ -44,6 +54,11 @@ public class McpSession(
     public val appVersion: String = "dev",
     private val store: WorkspaceStore = FileWorkspaceStore.system(),
     private val service: JdxService = JdxService,
+    private val discoverByDefault: Boolean = false,
+    private val workingDir: Path = Paths.get("").toAbsolutePath(),
+    private val discoveryCache: Path? = null,
+    private val gradleFilesRoot: Path? = null,
+    private val m2Repo: Path? = null,
 ) {
     private val startNanos: Long = System.nanoTime()
     private val queriesServed: AtomicLong = AtomicLong(0)
@@ -75,6 +90,7 @@ public class McpSession(
             val param = split.structured.sorted().first()
             return fail(tool, split.query, 3, "usage error: --$param must be a string, number or boolean")
         }
+        split.discoverError?.let { return fail(tool, split.query, 3, it) }
         return when (tool.command) {
             RpcCommand.VERSION -> ok(
                 tool, split.query,
@@ -95,6 +111,7 @@ public class McpSession(
                     request.query,
                     store,
                     request.command,
+                    explicitRoots(split),
                 )) {
                     is DaemonRoots.Ready ->
                         of(tool, service.dispatch(request, resolved.roots).toJson(request.command.wire))
@@ -108,6 +125,29 @@ public class McpSession(
     /** The workspace this call answers from: the tool argument wins over the server default. */
     private fun effectiveWorkspace(split: SplitArgs): String =
         split.workspace?.trim()?.takeIf { it.isNotEmpty() } ?: workspace
+
+    /**
+     * Root overrides for this call. A workspace named on the call is required:
+     * a miss stays exit 4 even when jars are present (CLI `-w`). The server's
+     * own workspace may be absent when the call brought jars, a coordinate, or
+     * discovery — that is how a session works with no `jdx ws create`.
+     */
+    private fun explicitRoots(split: SplitArgs): ExplicitRoots {
+        val callNamedWorkspace = !split.workspace.isNullOrBlank()
+        val discover = if (callNamedWorkspace) false else (split.discover ?: discoverByDefault)
+        val allowMissing = !callNamedWorkspace &&
+            (split.jars.isNotEmpty() || split.coords.isNotEmpty() || discover)
+        return ExplicitRoots(
+            jars = split.jars,
+            coords = split.coords,
+            discover = discover,
+            allowMissingWorkspace = allowMissing,
+            workingDir = workingDir,
+            cacheBase = discoveryCache,
+            gradleFilesRoot = gradleFilesRoot,
+            m2Repo = m2Repo,
+        )
+    }
 
     private fun ok(tool: McpToolDefinition, query: String, resultJson: String): McpResult =
         McpResult(okEnvelope(tool.command.wire, query, resultJson), false)

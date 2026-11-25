@@ -10,14 +10,20 @@ import dev.jdx.testsupport.fixtures.FixtureJars
 import io.kotest.matchers.shouldBe
 import io.kotest.matchers.string.shouldContain
 import io.kotest.matchers.string.shouldNotContain
+import java.nio.file.Files
+import java.nio.file.Path
+import java.nio.file.Paths
 import kotlinx.serialization.json.Json
+import kotlinx.serialization.json.add
 import kotlinx.serialization.json.booleanOrNull
+import kotlinx.serialization.json.buildJsonArray
 import kotlinx.serialization.json.buildJsonObject
 import kotlinx.serialization.json.jsonObject
 import kotlinx.serialization.json.jsonPrimitive
 import kotlinx.serialization.json.put
 import org.junit.jupiter.api.Tag
 import org.junit.jupiter.api.Test
+import org.junit.jupiter.api.io.TempDir
 
 /**
  * Tier 2: the MCP session over the real fixture jar (T-043).
@@ -42,8 +48,23 @@ class McpSessionTest {
         }
     }
 
-    private fun session(workspace: String = "fx"): McpSession =
-        McpSession(workspace = workspace, appVersion = "test", store = fixtureStore())
+    private fun session(
+        workspace: String = "fx",
+        discover: Boolean = false,
+        workingDir: Path = Paths.get("").toAbsolutePath(),
+        cache: Path? = null,
+        gradle: Path? = null,
+        m2: Path? = null,
+    ): McpSession = McpSession(
+        workspace = workspace,
+        appVersion = "test",
+        store = fixtureStore(),
+        discoverByDefault = discover,
+        workingDir = workingDir,
+        discoveryCache = cache,
+        gradleFilesRoot = gradle,
+        m2Repo = m2,
+    )
 
     private fun envelopeOf(text: String) = lenientJson.parseToJsonElement(text).jsonObject
 
@@ -308,6 +329,141 @@ class McpSessionTest {
         result.isError shouldBe true
         result.text shouldContain "\"code\":4"
         result.text shouldContain "no such workspace 'nope'"
+    }
+
+    @Test
+    fun `jars answer without a stored workspace and match dispatch`() {
+        val jar = FixtureJars.binaryJar().absolutePath
+        val query = "dev.jdx.fixtures.Generics"
+        val result = session("nope").callTool(
+            "jdx_show",
+            buildJsonObject {
+                put("query", query)
+                put("jars", jar)
+            },
+        )
+        val roots = JdxService.RootsSpec(jarSpecs = listOf(jar), includeJdk = true)
+        val expected = JdxService.dispatch(RpcRequest(RpcCommand.SHOW, query), roots).toJson("show")
+        result.text shouldBe expected
+        result.isError shouldBe false
+    }
+
+    @Test
+    fun `an array of jars is accepted`() {
+        val jar = FixtureJars.binaryJar().absolutePath
+        val result = session("nope").callTool(
+            "jdx_show",
+            buildJsonObject {
+                put("query", "dev.jdx.fixtures.Generics")
+                put("jars", buildJsonArray { add(jar) })
+            },
+        )
+        result.isError shouldBe false
+        result.text shouldContain "\"command\":\"show\""
+    }
+
+    @Test
+    fun `a workspace named on the call is required even when jars are passed`() {
+        val result = session().callTool(
+            "jdx_show",
+            buildJsonObject {
+                put("query", "dev.jdx.fixtures.Generics")
+                put("workspace", "nope")
+                put("jars", FixtureJars.binaryJar().absolutePath)
+            },
+        )
+        result.isError shouldBe true
+        result.text shouldContain "\"code\":4"
+        result.text shouldContain "no such workspace 'nope'"
+        result.text shouldContain "jdx ws create"
+    }
+
+    @Test
+    fun `a malformed coord is exit 3 and an uncached coord is exit 5 without fetching`() {
+        val malformed = session().callTool(
+            "jdx_show",
+            args("dev.jdx.fixtures.Generics", "coord" to "not-a-coordinate"),
+        )
+        malformed.isError shouldBe true
+        malformed.text shouldContain "\"code\":3"
+        malformed.text shouldContain "invalid Maven coordinate"
+
+        val missing = session().callTool(
+            "jdx_show",
+            args("dev.jdx.fixtures.Generics", "coord" to "nope:nope:1.0"),
+        )
+        missing.isError shouldBe true
+        missing.text shouldContain "\"code\":5"
+        missing.text shouldContain "The daemon never fetches"
+        missing.text shouldNotContain "Re-run with --fetch"
+    }
+
+    @Test
+    fun `discover reads the project when the server workspace is missing`(@TempDir temp: Path) {
+        val root = temp.resolve("proj")
+        Files.createDirectories(root.resolve("build/classes/java/main"))
+        Files.writeString(root.resolve("pom.xml"), "<project></project>\n")
+        val result = session(
+            workspace = "nope",
+            workingDir = root,
+            cache = temp.resolve("auto"),
+            gradle = temp.resolve("no-gradle"),
+            m2 = temp.resolve("no-m2"),
+        ).callTool(
+            "jdx_show",
+            args("java.lang.Object", "discover" to true),
+        )
+        result.isError shouldBe false
+        result.text shouldContain "PROJECT_DISCOVERY_FALLBACK"
+        result.text shouldContain "\"command\":\"show\""
+    }
+
+    @Test
+    fun `the server discover flag is the call default`(@TempDir temp: Path) {
+        val empty = temp.resolve("empty").also { Files.createDirectories(it) }
+        val result = session(
+            workspace = "nope",
+            discover = true,
+            workingDir = empty,
+            cache = temp.resolve("auto"),
+            gradle = temp.resolve("no-gradle"),
+            m2 = temp.resolve("no-m2"),
+        ).callTool("jdx_show", args("java.lang.Object"))
+        result.isError shouldBe true
+        result.text shouldContain "\"code\":4"
+        result.text shouldContain "jdx ws create"
+        result.text shouldContain "found no Gradle or Maven project"
+    }
+
+    @Test
+    fun `a stored workspace wins over discover`(@TempDir temp: Path) {
+        val root = temp.resolve("proj")
+        Files.createDirectories(root.resolve("build/classes/java/main"))
+        Files.writeString(root.resolve("settings.gradle"), "rootProject.name = \"demo\"\n")
+        val result = session(
+            workspace = "fx",
+            workingDir = root,
+            cache = temp.resolve("auto"),
+            gradle = temp.resolve("no-gradle"),
+            m2 = temp.resolve("no-m2"),
+        ).callTool(
+            "jdx_show",
+            args("dev.jdx.fixtures.Generics", "discover" to true),
+        )
+        result.isError shouldBe false
+        result.text shouldContain "dev.jdx.fixtures.Generics"
+        result.text shouldNotContain "PROJECT_DISCOVERY_FALLBACK"
+    }
+
+    @Test
+    fun `discover must be a boolean`() {
+        val result = session().callTool(
+            "jdx_show",
+            args("dev.jdx.fixtures.Generics", "discover" to "sometimes"),
+        )
+        result.isError shouldBe true
+        result.text shouldContain "\"code\":3"
+        result.text shouldContain "--discover"
     }
 
     @Test

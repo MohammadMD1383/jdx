@@ -11,9 +11,7 @@ import dev.jdx.index.maven.MavenResolver
 import dev.jdx.index.maven.productionMavenResolve
 import dev.jdx.index.service.JdxService
 import dev.jdx.index.workspace.FileWorkspaceStore
-import dev.jdx.index.workspace.ProjectCache
 import dev.jdx.index.workspace.ProjectDiscovery
-import dev.jdx.index.workspace.WorkspaceDefinition
 import dev.jdx.index.workspace.WorkspaceResolver
 import dev.jdx.index.workspace.WorkspaceStore
 import java.nio.file.Path
@@ -262,27 +260,10 @@ internal object ReadCommandSupport {
         gradleFilesRoot: Path?,
         m2Repo: Path?,
     ): DiscoveredRoots? {
-        val project = ProjectDiscovery.findProjectRoot(workingDir) ?: return null
-        val hash = ProjectDiscovery.projectHash(project.root)
-        val cached = ProjectCache.load(cacheBase, hash, project.root)
-        // The cache stores jars only; the fallback warning is re-derived from the
-        // (cheap, no directory walks) coordinate parse so cache hits warn identically.
-        val warnings = if (ProjectDiscovery.coordinatesOf(project.root).isEmpty()) {
-            listOf(ProjectDiscovery.fallbackWarning(project.root))
-        } else {
-            emptyList()
-        }
-        val definition = cached ?: run {
-            val derived = ProjectDiscovery.deriveBinaryRoots(project.root, gradleFilesRoot, m2Repo)
-            WorkspaceDefinition(name = hash, jars = derived.jars, includeJdk = true).also {
-                ProjectCache.save(cacheBase, it, ProjectDiscovery.computeFingerprint(project.root))
-            }
-        }
-        return DiscoveredRoots(
-            jars = definition.jars,
-            selection = "auto-discovered project at '${project.root}' (nearest build file: ${project.marker})",
-            warnings = warnings,
-        )
+        // One implementation, shared with MCP root resolution (issue #20).
+        val found = ProjectDiscovery.discoverQueryRoots(workingDir, cacheBase, gradleFilesRoot, m2Repo)
+            ?: return null
+        return DiscoveredRoots(jars = found.jars, selection = found.selection, warnings = found.warnings)
     }
 
     /** Default `<cache-dir>/auto` off the per-OS cache root (D-044). */

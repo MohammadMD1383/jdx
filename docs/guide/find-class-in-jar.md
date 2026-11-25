@@ -109,7 +109,7 @@ Quote the glob. `--no-jdk` keeps `java.*` out of the tree. The docs build has no
 
 ## From an AI agent
 
-The same four questions are MCP tools: `jdx_resolve`, `jdx_search`, `jdx_ls`, and `jdx_tree`. `jdx mcp` does not take a jar path or a Maven coordinate on the call, and it does not auto-discover a project. Create a workspace with the CLI, then start the server on it. A tool call may pass `workspace` to pick another stored name. The server never downloads. Prime a coordinate with `--fetch` first, or pass files you already have.
+The same four questions are MCP tools: `jdx_resolve`, `jdx_search`, `jdx_ls`, and `jdx_tree`. A call may pass `jars` or `coord`, and `discover` true reads a Gradle or Maven project from the server's working directory when no stored workspace exists. A stored workspace still works. A tool call may pass `workspace` to pick another stored name. The server never downloads. Prime a coordinate with `--fetch` first, or pass files you already have as `jars`.
 
 ```bash
 jdx ws create libs --jars 'libs/*.jar' --no-jdk

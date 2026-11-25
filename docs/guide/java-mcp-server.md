@@ -67,7 +67,11 @@ Reference: [`setup`](https://mohammadmd1383.github.io/jdx/docs/reference/setup/)
 
 ## Point the server at a jar
 
-`jdx mcp` with no `-w` serves the stored workspace named `default`. A tool call may name another stored workspace. The server does not auto-discover a Gradle or Maven project, and a call does not take a jar path or a Maven coordinate. Create the workspace with the CLI first. A missing name exits 4 and names the fix.
+`jdx mcp` with no `-w` serves the stored workspace named `default` when that workspace exists. A tool call may name another stored workspace. A call may also pass `jars` (jar paths, class directories, or globs, comma-separated) and `coord` (Maven coordinates, comma-separated). Those merge in front of the workspace, the same way `--jars` and `--coord` do on the CLI. When the call does not name a workspace and the server's workspace does not exist, `jars` or `coord` are enough on their own.
+
+`discover` true, or `jdx mcp --discover`, walks up from the server's working directory for a Gradle or Maven project when no stored workspace is available. jdx never runs Gradle or Maven to do that. A stored workspace that exists wins over discovery. A missing workspace, with no jars, no coord, and no project, exits 4 and names `jdx ws`.
+
+The server never downloads. `coord` resolves from `~/.gradle/caches` and `~/.m2` only. Prime a missing coordinate with `--fetch` on the CLI first, or pass `jars` for a file you already have.
 
 ```bash
 jdx ws create default --jars path/to/app.jar
@@ -97,7 +101,7 @@ args = ["mcp", "-w", "app"]
 
 `jdx setup` itself always writes `args` as `mcp` only. Add `-w` by hand when the jar is not the workspace named `default`.
 
-The server never downloads. Prime a coordinate once with the CLI, or pass a file you already have:
+The server never downloads. Prime a coordinate once with the CLI and serve that workspace, or pass `coord` or `jars` on the call:
 
 ```bash
 jdx show com.google.gson.Gson --coord com.google.code.gson:gson:2.14.0 --fetch
