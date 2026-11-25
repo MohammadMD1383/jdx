@@ -15,9 +15,10 @@ import dev.jdx.index.workspace.WorkspaceStore
  * foreground server runs with.
  *
  * `health` and `version` stay on the T-041 internals (no index involved);
- * `doctor` is refused honestly — it reports the caller's machine environment and
- * `DoctorService` lives in `:cli`, which this module cannot depend on
- * (`:cli` already depends on `:server`). Every other command resolves the
+ * `doctor` is refused honestly (issue #19) — it reports the caller's machine
+ * environment and `DoctorService` lives in `:cli`, which this module cannot
+ * depend on (`:cli` already depends on `:server`). The message names the fix:
+ * run the same query without the daemon (`jdx doctor`). Every other command resolves the
  * daemon's workspace roots per request and dispatches to the same `JdxService`
  * methods the one-shot CLI calls; responses are `ServiceOutcome.toJson(wire)`
  * verbatim, so warm answers are byte-identical to cold ones (D-056 §1).
@@ -43,7 +44,7 @@ public fun jdxServiceHandler(
                 query = request.query,
                 code = 6,
                 message = "daemon cannot answer 'doctor': it reports this machine's environment — " +
-                    "run the same query without the daemon",
+                    "run the same query without the daemon (`jdx doctor`)",
             )
             else -> when (val resolved = JdxService.daemonRoots(workspace, request.query, store, request.command)) {
                 is DaemonRoots.Ready ->

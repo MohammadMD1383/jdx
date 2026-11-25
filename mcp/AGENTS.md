@@ -40,7 +40,8 @@ twice. `explicitApi()` is on.
   and packs on pull requests and uploads nothing; the Linux leg of
   `release.yml` uploads `jdx-mcp-<version>.mcpb`.
 - `McpSession` — per-session daemon: per-call roots, `version`/`health` internal,
-  `doctor` refused (exit 6), `isError = ok:false`.
+  `doctor` refused (exit 6, issue #19; the message says to run `jdx doctor` in
+  a shell), `isError = ok:false`. `ws`/`cache` are not tools.
 - `McpServer` — SDK registration + stdio to EOF. `jdx mcp [-w name] [--discover]`.
   A stored workspace still wins (per-call `workspace` override included).
   Classpath tools also accept `jars` and `coord` (CLI `--jars` / `--coord`,

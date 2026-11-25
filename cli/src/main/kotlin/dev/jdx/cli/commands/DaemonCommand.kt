@@ -53,7 +53,9 @@ class DaemonCommand : CoreCliktCommand(name = "daemon") {
             "(start, stop, status, restart). The daemon shuts itself down after --idle " +
             "without requests (default 5m, 0 disables). Warm text on the wire is always " +
             "plain (no TTY); the CLI re-colorizes it locally on a terminal unless " +
-            "--no-color (issue #17)."
+            "--no-color (issue #17). The v1 wire is read-only (issue #19): doctor is " +
+            "refused with exit 6 (run the same query without the daemon: `jdx doctor`) " +
+            "and ws/cache are not wire commands."
 
     override fun run() = Unit
 }

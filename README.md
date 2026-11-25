@@ -204,6 +204,9 @@ command; `jdx help --agent` prints the compact agent block.
 
 ## Known limitations (by design)
 
+The daemon, HTTP and MCP wire is read-only: `doctor` is refused (exit 6; run
+`jdx doctor`) and `ws` / `cache` are not on the wire
+([issue #19](https://github.com/MohammadMD1383/jdx/issues/19)).
 Graph queries re-scan live bytecode roots per query (no persistent-index acceleration
 yet). `callers` is override-aware by default (`--exact` for invoke-owner matching);
 `calls` stays bytecode-exact. Full list in

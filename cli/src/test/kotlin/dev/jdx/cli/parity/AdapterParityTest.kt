@@ -300,6 +300,8 @@ class AdapterParityTest {
                 pairs.toMap().filterKeys { it != "query" && it != "workspace" }
             }
 
+    // `doctor` is on the wire and refused, not dispatched (issue #19). Its
+    // envelopes differ per adapter on purpose; ReadOnlyWireGoldenTest pins them.
     private val readCommands: List<RpcCommand> = RpcCommand.entries.filter {
         it != RpcCommand.VERSION && it != RpcCommand.DOCTOR && it != RpcCommand.HEALTH
     }

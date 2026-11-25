@@ -30,7 +30,9 @@ class ServeCommand(
         "Serve the HTTP/JSON API: GET /v1/<command>?query=…&<param>=… for each jdx query, " +
             "POST /v1/batch for NDJSON batches, GET /v1/health as a liveness probe. Answers " +
             "are the exact --json envelopes over one stored workspace (default: default), " +
-            "bound to localhost by default. Blocks until interrupted."
+            "bound to localhost by default. Blocks until interrupted. doctor is refused " +
+            "(exit 6, HTTP 500); run `jdx doctor` in a shell. ws and cache are not HTTP " +
+            "commands (issue #19)."
 
     private val workspace by option(
         "-w",

@@ -237,6 +237,8 @@ class HttpServerTest {
             val refused = get(server, "/doctor")
             refused.body() shouldContain "\"code\":6"
             refused.body() shouldContain "doctor"
+            refused.body() shouldContain "run `jdx doctor`"
+            refused.statusCode() shouldBe statusForExit(6)
             refused.statusCode() shouldBe 500
 
             val unknown = get(server, "/frobnicate?query=x")

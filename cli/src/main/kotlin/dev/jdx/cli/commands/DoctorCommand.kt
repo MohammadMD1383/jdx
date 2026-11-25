@@ -25,7 +25,9 @@ class DoctorCommand(
     override fun help(context: Context): String =
         "Check the jdx environment and report one ok/warn/fail row per check " +
             "(JDK, javap, cache, config, index, Kotlin module, AppCDS archive, daemon, workspace, agent setup). " +
-            "Exits 6 if any check fails. With --json, print the same report in the JSON envelope."
+            "Exits 6 if any check fails. Runs in this process only: the daemon, HTTP API and MCP " +
+            "refuse doctor (exit 6; HTTP 500) and tell you to run `jdx doctor` (issue #19). " +
+            "With --json, print the same report in the JSON envelope."
 
     private val json by option(
         "--json",

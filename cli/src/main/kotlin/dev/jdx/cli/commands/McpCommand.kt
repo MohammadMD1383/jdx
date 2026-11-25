@@ -21,7 +21,9 @@ class McpCommand : CoreCliktCommand(name = "mcp") {
             "schema, for agents that speak Model Context Protocol. Holds the workspace in " +
             "memory for the session, so repeated queries are instant. Tool calls may pass jars, " +
             "coord, or discover when no stored workspace exists. MCP clients spawn this " +
-            "as a child process and talk JSON-RPC over stdin/stdout. This server never downloads."
+            "as a child process and talk JSON-RPC over stdin/stdout. This server never downloads. " +
+            "jdx_doctor refuses with exit 6; run `jdx doctor` in a shell. ws and cache are " +
+            "not tools (issue #19)."
 
     private val workspace by option(
         "-w",

@@ -288,6 +288,11 @@ class RpcProtocolTest {
         RpcCommand.fromWire("nope") shouldBe null
         RpcCommand.fromWire("") shouldBe null
         RpcCommand.fromWire("Show") shouldBe null
+        // Issue #19: state-changing commands stay off the v1 wire. A request that
+        // names them fails decode (unknown command), never a guessed mutation.
+        RpcCommand.fromWire("ws") shouldBe null
+        RpcCommand.fromWire("cache") shouldBe null
+        RpcCommand.entries.none { it.wire == "ws" || it.wire == "cache" } shouldBe true
     }
 
     @Test

@@ -42,9 +42,11 @@ import kotlinx.serialization.json.jsonPrimitive
  * shapes (same key order, so clients read either server alike);
  * `indexedArtifacts` stays 0 by design with `indexMode=live-roots-first`
  * (issues #4 / #5) — live roots, no persistent index
- * (the D-043 precedent the daemon documents). `doctor` is refused honestly:
- * it reports the caller's machine environment and `DoctorService` lives in
- * `:cli`, which this module cannot depend on (`:cli` depends on `:mcp`).
+ * (the D-043 precedent the daemon documents). `doctor` is refused honestly
+ * (issue #19, exit 6): it reports the caller's machine environment and
+ * `DoctorService` lives in `:cli`, which this module cannot depend on
+ * (`:cli` depends on `:mcp`). The message says to run `jdx doctor` in a shell.
+ * `ws` and `cache` are not tools.
  *
  * Every entry point is total: hostile arguments read as exit-coded envelopes,
  * never throws.

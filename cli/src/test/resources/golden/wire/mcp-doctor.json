@@ -1,0 +1,1 @@
+{"jdx":1,"ok":false,"command":"doctor","query":"","error":{"code":6,"message":"mcp cannot answer 'doctor': it reports this machine's environment — run `jdx doctor` in a shell"},"candidates":[],"warnings":[],"provenance":[]}

@@ -55,6 +55,15 @@ stored `--repo` mirrors are inert on the warm path. Prime caches once with a col
 an absent coordinate exits `5` with that hint
 ([issue #18](https://github.com/MohammadMD1383/jdx/issues/18)).
 
+The v1 wire is read-only ([issue #19](https://github.com/MohammadMD1383/jdx/issues/19)).
+`doctor` is refused with exit code 6. The daemon says to run the same query
+without the daemon (`jdx doctor`). HTTP and MCP say to run `jdx doctor` in a
+shell, and `GET /v1/doctor` is HTTP 500. `jdx doctor`, and a `doctor` line in
+`jdx batch`, still run in the calling process — that is the process that can
+see the JDK, caches and sidecar. `ws` and `cache` are not commands on the wire;
+a client that sends them is refused as an unknown command, not applied.
+`version` and `health` stay: they report the server, not the caller's machine.
+
 Warm text on the wire is always plain (the daemon has no TTY). The one-shot CLI
 re-colorizes that text locally when stdout is a terminal and `--no-color` is off —
 same gate as cold — so demos match while piped warm stays byte-identical to piped
