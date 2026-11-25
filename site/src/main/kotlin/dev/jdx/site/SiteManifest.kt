@@ -46,7 +46,7 @@ object SiteManifest {
     val guides = Section(
         title = "Guides",
         anchor = "guides",
-        summary = "Task-oriented guides: naming symbols, choosing a classpath, reading and navigating code, finding which jar contains a class, decompiling a jar, reading Javadoc from a jar, a javap alternative, smaller answers for agents, Minecraft mod jars, mixin targets, Minecraft and mod version diffs, upgrades, output, the Java MCP server, and serving.",
+        summary = "Task-oriented guides: naming symbols, choosing a classpath, reading and navigating code, finding which jar contains a class, decompiling a jar, reading Javadoc from a jar, reading a Kotlin library API from a jar, a javap alternative, smaller answers for agents, Minecraft mod jars, mixin targets, Minecraft and mod version diffs, upgrades, output, the Java MCP server, and serving.",
         docs = listOf(
             DocSource("docs/guide/symbol-references.md", "docs/symbol-references/", navTitle = "Symbol references"),
             DocSource("docs/guide/classpath.md", "docs/classpath/", navTitle = "Classpath & workspaces"),
@@ -72,6 +72,12 @@ object SiteManifest {
                 "docs/read-javadoc-from-jar/",
                 navTitle = "Read Javadoc from a jar",
                 headTitle = "Read Javadoc from a jar in the terminal · jdx",
+            ),
+            DocSource(
+                "docs/guide/kotlin-jar-api.md",
+                "docs/kotlin-jar-api/",
+                navTitle = "Kotlin API from a jar",
+                headTitle = "Read a Kotlin library API from a compiled jar · jdx",
             ),
             DocSource(
                 "docs/guide/javap-alternative.md",
