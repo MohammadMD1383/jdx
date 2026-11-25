@@ -60,7 +60,7 @@ object SiteManifest {
                 "docs/guide/find-class-in-jar.md",
                 "docs/find-class-in-jar/",
                 navTitle = "Find a class in a JAR",
-                headTitle = "Find which JAR contains a class · jdx",
+                headTitle = "Find class in jar — which jar contains a class · jdx",
             ),
             DocSource(
                 "docs/guide/read-jar-from-terminal.md",
@@ -86,7 +86,12 @@ object SiteManifest {
             ),
             DocSource("docs/guide/navigating-code.md", "docs/navigating-code/", navTitle = "Usages, hierarchy & calls"),
             DocSource("docs/guide/api-diff.md", "docs/api-diff/", navTitle = "API diff for upgrades"),
-            DocSource("docs/guide/minecraft-mods.md", "docs/minecraft-mods/", navTitle = "Minecraft mods"),
+            DocSource(
+                "docs/guide/minecraft-mods.md",
+                "docs/minecraft-mods/",
+                navTitle = "Minecraft mods",
+                headTitle = "Inspect Minecraft mod jar from the terminal · jdx",
+            ),
             DocSource(
                 "docs/guide/minecraft-mixin-targets.md",
                 "docs/minecraft-mixin-targets/",

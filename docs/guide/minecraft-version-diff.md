@@ -12,6 +12,8 @@ jdx reads the names stored in the file. v1 does not read mapping files and does 
 
 `diff` only works within one mapping namespace. Both sides must already use the same names. Compare two Yarn jars, or two Mojmap jars, or two intermediary jars, or two builds of your mod that were compiled in one namespace. A Yarn jar against a Mojmap jar, and an intermediary jar against a named jar, share almost no names, so the report looks like nearly every member was removed and re-added. That comparison is meaningless. A named jar uses Yarn or Mojmap names. An intermediary jar uses intermediary names.
 
+If you do not yet know which file holds a class, [Find class in jar](find-class-in-jar.md) searches a directory of jars and prints the file name on the same line.
+
 The two arguments of `diff` are the artifacts. Each one is a jar file, a class directory, a glob, or a Maven coordinate. There is no classpath, so `diff` has no `--jars`, no `-w`, and no `--no-jdk`. It needs no workspace, and it runs in an empty directory. `members`, `signature`, and `body` are the commands that take `--jars`.
 
 Quote a glob so the shell does not expand it. A glob that resolves to anything but one artifact exits 3: a diff compares two artifacts, and it has nowhere to put a set. A path that is missing, or a coordinate that is not in the local caches and was not given `--fetch`, exits 5.

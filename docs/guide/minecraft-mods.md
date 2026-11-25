@@ -1,4 +1,16 @@
-# Inspect Minecraft mod jars from the terminal with jdx
+# Inspect a Minecraft mod jar from the terminal
+
+Inspect a Minecraft mod jar with jdx: list members, read the source, or decompile one method from the terminal. Pass the Loom-mapped jar. jdx does not remap.
+
+## Quick answer
+
+Pass the Loom-mapped jar with `--jars`. `jdx members` lists methods, `jdx source` reads or decompiles a class, and `jdx body` returns one method. jdx does not remap, so a diff only means something inside one mapping namespace. How `--jars` is passed is [Classpath & workspaces](classpath.md). The same read and decompile commands on any jar are [Read and decompile a JAR from the terminal](read-jar-from-terminal.md). The ref you paste is a [symbol reference](symbol-references.md).
+
+```bash
+jdx members net.minecraft.world.item.ItemStack --declared --kind method --limit 20 --jars "$MAPPED_JAR" --no-jdk
+jdx source net.minecraft.world.item.ItemStack --lines 1:80 --jars "$MAPPED_JAR" --no-jdk
+jdx body '<canonical ref from signature>' --jars "$MAPPED_JAR" --no-jdk
+```
 
 Inspect a Minecraft mod jar from the terminal with jdx: members, method bodies, mixin-target callers, and API diffs, without remapping or a full decompile.
 
@@ -180,6 +192,32 @@ jdx mcp -w mc
 `--scope project` writes into the current checkout; `--scope system` writes the user-global file. Other agents, the cheat sheet from `jdx help --agent`, and the tool list are in [Use with AI agents](ai-agents.md).
 
 Reference: [`setup`](https://mohammadmd1383.github.io/jdx/docs/reference/setup/), [`mcp`](https://mohammadmd1383.github.io/jdx/docs/reference/mcp/), [MCP tools](https://mohammadmd1383.github.io/jdx/docs/reference/mcp-tools/).
+
+## FAQ
+
+### How do I inspect a Minecraft mod jar from the terminal?
+
+Pass the Loom-mapped jar: `jdx members net.minecraft.world.item.ItemStack --declared --kind method --jars "$MAPPED_JAR" --no-jdk`. jdx prints the methods stored in that file. It does not remap names, and it does not decompile the whole jar into a tree of files.
+
+### How do I read Minecraft mod source from the terminal?
+
+`jdx source net.minecraft.world.item.ItemStack --lines 1:80 --jars "$MAPPED_JAR" --no-jdk` prints a line range. When a sibling `-sources.jar` is paired, that text is the real source. With no pair, jdx decompiles with Vineflower and labels the result reconstructed.
+
+### How do I decompile a Minecraft mod jar from the terminal?
+
+`jdx body '<canonical ref from signature>' --jars "$MAPPED_JAR" --no-jdk` decompiles one method when no sources jar is paired. `jdx source` decompiles the class in that same case. `--engine javap` prints raw bytecode instead of Vineflower. You pass the jar you already have; jdx does not download it.
+
+### Does jdx remap Minecraft names?
+
+No. jdx reads the names stored in the file and does not rename classes. Yarn, Mojmap, and obfuscated names come back as they appear. Reading Tiny, SRG, or ProGuard mappings is phase-2 backlog. Pass the jar Fabric Loom or NeoForge ModDevGradle already wrote with `--jars`. A diff is only meaningful within one mapping namespace: compare two Yarn jars, or two Mojmap jars, not a Yarn jar against a Mojmap jar.
+
+### Can I do this without an IDE?
+
+Yes. jdx runs in the terminal. It needs JDK 21 or later and the jar you already have. Bytecode is parsed with ASM, and inspected classes are never loaded, so no mod code runs.
+
+### Which jar do I pass to see Yarn or Mojmap names?
+
+The jar Fabric Loom or NeoForge ModDevGradle already wrote, via `--jars`. An obfuscated jar stays obfuscated. jdx does not remap it. Finding which file in a directory holds a class is [Find class in jar](find-class-in-jar.md).
 
 ## Where next
 

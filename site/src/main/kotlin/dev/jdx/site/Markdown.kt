@@ -6,13 +6,16 @@ import org.commonmark.node.AbstractVisitor
 import org.commonmark.node.Code
 import org.commonmark.node.Document
 import org.commonmark.node.FencedCodeBlock
+import org.commonmark.node.HardLineBreak
 import org.commonmark.node.Heading
 import org.commonmark.node.HtmlBlock
 import org.commonmark.node.Image
 import org.commonmark.node.IndentedCodeBlock
 import org.commonmark.node.Link
+import org.commonmark.node.ListItem
 import org.commonmark.node.Node
 import org.commonmark.node.Paragraph
+import org.commonmark.node.SoftLineBreak
 import org.commonmark.node.Text
 import org.commonmark.parser.Parser
 import org.commonmark.renderer.html.HtmlNodeRendererContext
@@ -57,6 +60,75 @@ object Markdown {
     fun firstParagraph(document: Document): String? =
         children(document).filterIsInstance<Paragraph>().firstOrNull()?.let(::plainText)
             ?.replace(Regex("\\s+"), " ")?.trim()
+
+    /**
+     * Question/answer pairs under an H2 titled `FAQ` or `Frequently asked questions`.
+     * Each H3 is a question; the plain text until the next heading is the answer.
+     * That text is what FAQPage JSON-LD publishes, so it has to be the words on the page.
+     * A question with no prose fails the build rather than emitting an empty answer.
+     * Pages with no such heading return an empty list.
+     */
+    fun faqSection(document: Node): List<Pair<String, String>> {
+        val result = mutableListOf<Pair<String, String>>()
+        var inFaq = false
+        var question: String? = null
+        val answer = StringBuilder()
+        fun flush() {
+            val asked = question ?: return
+            val text = answer.toString().replace(Regex("\\s+"), " ").trim()
+            if (text.isEmpty()) {
+                throw SiteBuildException("FAQ question \"$asked\" has no answer text")
+            }
+            result += asked to text
+            answer.clear()
+        }
+        for (node in children(document)) {
+            when {
+                node is Heading && node.level <= 2 -> {
+                    if (question != null) flush()
+                    question = null
+                    inFaq = node.level == 2 && isFaqHeading(plainText(node))
+                }
+                !inFaq -> Unit
+                node is Heading && node.level == 3 -> {
+                    if (question != null) flush()
+                    question = plainText(node).trim()
+                    answer.clear()
+                }
+                node is Heading -> {
+                    if (question != null) flush()
+                    question = null
+                }
+                question != null -> answer.append(answerText(node))
+            }
+        }
+        if (question != null) flush()
+        return result
+    }
+
+    private fun isFaqHeading(text: String): Boolean {
+        val title = text.trim()
+        return title.equals("FAQ", ignoreCase = true) ||
+            title.equals("Frequently asked questions", ignoreCase = true)
+    }
+
+    /** Visible words of one block, with a space where a wrapped line or a list item breaks. */
+    private fun answerText(node: Node): String = buildString {
+        node.accept(object : AbstractVisitor() {
+            override fun visit(text: Text) { append(text.literal) }
+            override fun visit(code: Code) { append(code.literal) }
+            override fun visit(softLineBreak: SoftLineBreak) { append(' ') }
+            override fun visit(hardLineBreak: HardLineBreak) { append(' ') }
+            override fun visit(paragraph: Paragraph) {
+                visitChildren(paragraph)
+                append(' ')
+            }
+            override fun visit(listItem: ListItem) {
+                visitChildren(listItem)
+                append(' ')
+            }
+        })
+    }
 
     fun children(node: Node): List<Node> {
         val result = mutableListOf<Node>()

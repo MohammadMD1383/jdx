@@ -32,6 +32,10 @@ jdx outline PluginUtils --jars a.jar --jars b.jar
 $ jdx ls com.google.gson.stream --coord com.google.code.gson:gson:2.14.0
 ```
 
+Finding which jar in that set contains a class is [Find class in jar](find-class-in-jar.md).
+Passing the Loom-mapped Minecraft jar with the same `--jars` flag is
+[Inspect a Minecraft mod jar](minecraft-mods.md).
+
 ### Maven coordinates
 
 Coordinates resolve from `~/.gradle/caches` and `~/.m2` first — usually no download is

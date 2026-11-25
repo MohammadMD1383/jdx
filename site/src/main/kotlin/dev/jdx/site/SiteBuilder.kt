@@ -194,10 +194,12 @@ class SiteBuilder(private val options: SiteOptions, private val runner: JdxRunne
             toc = toc,
             breadcrumbs = crumbs,
             navTitle = source.navTitle ?: rendered.title,
-            jsonLd = listOf(
-                StructuredData.techArticle(site, source.path, rendered.title, rendered.description, modified),
-                StructuredData.breadcrumbs(site, listOf("Docs" to "docs/", section.title to "docs/#${section.anchor}", rendered.title to source.path)),
-            ),
+            jsonLd = buildList {
+                add(StructuredData.techArticle(site, source.path, rendered.title, rendered.description, modified))
+                add(StructuredData.breadcrumbs(site, listOf("Docs" to "docs/", section.title to "docs/#${section.anchor}", rendered.title to source.path)))
+                // The pairs are the visible FAQ text (Markdown.faqSection), same block the /faq/ page uses.
+                if (rendered.faq.isNotEmpty()) add(StructuredData.faqPage(rendered.faq))
+            },
         )
     }
 

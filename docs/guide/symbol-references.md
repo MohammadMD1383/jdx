@@ -69,6 +69,11 @@ candidate with its kind and artifact, and several candidates are a success:
 $ jdx resolve JsonParser --coord com.google.code.gson:gson:2.14.0
 ```
 
+When that simple name is all you have and you need the jar it lives in, the same
+listing is [Find class in jar](find-class-in-jar.md). A Minecraft name is the same
+kind of ref, spelled the way the jar you pass already spells it. jdx does not remap.
+See [Inspect a Minecraft mod jar](minecraft-mods.md).
+
 ## Round-tripping
 
 `parse(print(ref)) == ref` is a tested property: every reference jdx prints — in `members`,

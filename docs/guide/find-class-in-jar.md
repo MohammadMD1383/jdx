@@ -1,4 +1,15 @@
-# Find which JAR contains a class, and list a JAR's classes, from the terminal
+# Find class in jar
+
+Find which jar contains a class with jdx. Search jar files, a Maven coordinate, or the JDK and print the jar file name on the same line as each class.
+
+## Quick answer
+
+`jdx resolve` takes an exact class name and prints the jar file name on the same line. `jdx search` takes a glob or a partial name. Quote the glob so the shell does not expand it. The classpath flags are [Classpath & workspaces](classpath.md). The printed name is a [symbol reference](symbol-references.md). Opening that class is [Read and decompile a JAR from the terminal](read-jar-from-terminal.md).
+
+```bash
+jdx resolve com.example.App --jars 'libs/*.jar' --no-jdk
+jdx search 'App*' --kind class --jars 'libs/*.jar' --no-jdk
+```
 
 Find which jar contains a class, list classes in a jar, search for a class in jar files, or find class in Maven dependencies, from the terminal.
 
@@ -115,6 +126,32 @@ jdx setup --agent codex --scope project
 Reference: [`jdx_resolve`](https://mohammadmd1383.github.io/jdx/docs/reference/mcp-tools/#jdx_resolve), [`jdx_search`](https://mohammadmd1383.github.io/jdx/docs/reference/mcp-tools/#jdx_search), [`jdx_ls`](https://mohammadmd1383.github.io/jdx/docs/reference/mcp-tools/#jdx_ls), [`jdx_tree`](https://mohammadmd1383.github.io/jdx/docs/reference/mcp-tools/#jdx_tree).
 
 Bytecode is parsed with ASM. Inspected classes are never loaded, so no static initialiser from the jar runs.
+
+## FAQ
+
+### How do I find which jar contains a class?
+
+Run `jdx resolve com.example.App --jars 'libs/*.jar' --no-jdk`. jdx reads class names from bytecode and prints the jar file name on the same line as the class. Several matches exit 0, and each row is a candidate. Nothing matched exits 1.
+
+### How do I search for a class in jar files?
+
+`jdx search 'App*' --kind class --jars 'libs/*.jar' --no-jdk` matches a glob or a partial name across every jar in the glob. `--kind class` keeps classes. Quote the glob. An unquoted expansion exits 3.
+
+### Can I find a class in a jar without an IDE?
+
+Yes. jdx is a command-line tool. `jdx resolve` and `jdx search` answer from a jar, a directory of jars, a Maven coordinate, or the JDK. You do not need an IDE project.
+
+### How do I list the classes in a jar from the terminal?
+
+`jdx search '*' --kind class --in 'app*' --jars path/to/app.jar --no-jdk` prints class names. `jdx tree 'app*' --counts --jars path/to/app.jar --no-jdk` prints the package tree. `jdx ls com.example --jars path/to/app.jar --no-jdk` lists the types in one package, each with the jar file name.
+
+### How do I find a class in a Maven dependency?
+
+Pass the coordinate. `jdx resolve com.example.App --coord com.example:app:1.0 --fetch --no-jdk` looks in `~/.gradle/caches` and `~/.m2` first. `--fetch` is what allows a download. Without it, only local caches are used.
+
+### Does this work on a Minecraft mod jar?
+
+Yes, in the names stored in the file. jdx does not remap. Point `--jars` at `mods/*.jar`, or at the jar Fabric Loom or NeoForge ModDevGradle already wrote. The rest of that workflow is [Inspect a Minecraft mod jar](minecraft-mods.md).
 
 ## Where next
 

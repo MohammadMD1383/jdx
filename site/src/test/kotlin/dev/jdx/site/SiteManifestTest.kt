@@ -2,6 +2,7 @@ package dev.jdx.site
 
 import io.kotest.matchers.collections.shouldBeEmpty
 import io.kotest.matchers.collections.shouldBeUnique
+import io.kotest.matchers.shouldBe
 import org.junit.jupiter.api.Tag
 import org.junit.jupiter.api.Test
 import java.io.File
@@ -55,6 +56,37 @@ class SiteManifestTest {
                 lenient.run(arguments, stdin).copy(exitCode = exit)
             }
             DocRenderer(site, repo, published, runner).render(source.sourcePath, source.description)
+        }
+    }
+
+    @Test
+    fun `find-class and minecraft guides lead with the query and an FAQ`() {
+        data class Expect(val path: String, val title: String, val headPrefix: String)
+        val pages = listOf(
+            Expect("docs/guide/find-class-in-jar.md", "Find class in jar", "Find class in jar"),
+            Expect(
+                "docs/guide/minecraft-mods.md",
+                "Inspect a Minecraft mod jar from the terminal",
+                "Inspect Minecraft mod jar",
+            ),
+        )
+        for (page in pages) {
+            val source = SiteManifest.allDocSources.first { it.sourcePath == page.path }
+            val head = source.headTitle ?: error("${page.path} needs a headTitle")
+            head.startsWith(page.headPrefix) shouldBe true
+            (head.length <= 60) shouldBe true
+            val document = Markdown.parse(File(repo, page.path).readText())
+            Markdown.title(document) shouldBe page.title
+            val description = Markdown.firstParagraph(document) ?: error("${page.path} needs an opening paragraph")
+            description.contains("jdx") shouldBe true
+            (description.length in 140..160) shouldBe true
+            ("Quick answer" in Markdown.headings(document).map { it.text }) shouldBe true
+            val faq = Markdown.faqSection(document)
+            (faq.size in 4..6) shouldBe true
+            faq.forEach { (question, answer) ->
+                question.endsWith("?") shouldBe true
+                answer.isNotEmpty() shouldBe true
+            }
         }
     }
 }

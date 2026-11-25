@@ -182,12 +182,12 @@ class ProductPages(
         append("<p class=\"section-lead\">Task pages for finding a class, reading a jar, reading its Javadoc, reading a Kotlin API from a jar, picking a mixin target, diffing two versions, and wiring an agent.</p>")
         append("<ul class=\"guide-list\">")
         val guides = listOf(
-            Triple("docs/find-class-in-jar/", "Find which JAR contains a class", "List classes in a jar, and search jar files or Maven dependencies."),
+            Triple("docs/find-class-in-jar/", "Find class in jar", "List classes in a jar, and search jar files or Maven dependencies."),
             Triple("docs/read-jar-from-terminal/", "Read and decompile a JAR from the terminal", "List a jar, open one method, and view source."),
             Triple("docs/read-javadoc-from-jar/", "Read Javadoc from a jar in the terminal", "Javadoc of a class or method in a jar, a Maven dependency, or the JDK."),
             Triple("docs/kotlin-jar-api/", "Read a Kotlin library API from a compiled jar", "Suspend, nullability, and properties from Kotlin metadata in a jar."),
             Triple("docs/javap-alternative/", "A javap alternative for class files", "Signatures, one method's bytecode, callers, and implementors."),
-            Triple("docs/minecraft-mods/", "Inspect Minecraft mod jars", "Members and mixin callers, without remapping."),
+            Triple("docs/minecraft-mods/", "Inspect a Minecraft mod jar", "Members, source, and a decompiled method, without remapping."),
             Triple("docs/minecraft-mixin-targets/", "Find a Mixin target in Minecraft from the terminal", "Mixin target method, method descriptor, and injection point."),
             Triple("docs/minecraft-version-diff/", "See what changed between two Minecraft or mod versions with jdx diff", "Public API changes between two mapped jars, then one member."),
             Triple("docs/java-mcp-server/", "Java MCP server for JVM bytecode", "Typed tools for Claude Code, Cursor, and Codex."),
